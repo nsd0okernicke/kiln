@@ -47,7 +47,7 @@ function Build-AgentCommand {
 
     switch ($Agent) {
         "claude" {
-            return "claude --model claude-haiku-4-5-20251001 --permission-mode bypassPermissions --mcp-config ./claude.json -n '$DisplayName'"
+            return "claude --model claude-haiku-4-5-20251001 --permission-mode bypassPermissions --mcp-config ./.mcp.json -n '$DisplayName'"
         }
         "copilot" {
             # Copilot auto-detects mcp-config.json from ~/.copilot/

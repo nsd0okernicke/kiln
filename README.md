@@ -104,7 +104,7 @@ my-project/
 ├── .claude/                      # Claude Code configuration
 │   ├── settings.json             # MCP and permission settings
 │   └── .gitignore
-├── claude.json                   # MCP server configuration
+├── .mcp.json                     # MCP server configuration (for Copilot agents)
 ├── .gitignore                    # Git exclusions
 └── README.md                     # Project brief (optional, from example)
 ```

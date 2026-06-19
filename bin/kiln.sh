@@ -355,9 +355,9 @@ prepare_worktrees() {
       }
     fi
 
-    # Create claude.json in worktree root with MCP server configuration
+    # Create .mcp.json in worktree root with MCP server configuration
     local db_path="$STATE_DIR/messages.db"
-    cat > "$worktree_path/claude.json" << EOF
+    cat > "$worktree_path/.mcp.json" << EOF
 {
   "name": "kiln-$role",
   "mcpServers": {
@@ -472,7 +472,7 @@ launch_role() {
 
   case "$agent" in
     claude)
-      launch_cmd="export PATH='$SCRIPT_DIR':\$PATH && cd '$role_worktree' && claude --mcp-config ./claude.json --append-system-prompt-file '$prompt_file' --permission-mode acceptEdits -n 'Kiln ${display}' \"\$(cat '$prompt_file')\""
+      launch_cmd="export PATH='$SCRIPT_DIR':\$PATH && cd '$role_worktree' && claude --mcp-config ./.mcp.json --append-system-prompt-file '$prompt_file' --permission-mode acceptEdits -n 'Kiln ${display}' \"\$(cat '$prompt_file')\""
       ;;
     codex)
       launch_cmd="export PATH='$SCRIPT_DIR':\$PATH && cd '$role_worktree' && codex -C '$role_worktree' \"\$(cat '$prompt_file')\""

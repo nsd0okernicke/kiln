@@ -48,7 +48,7 @@ When you receive the instruction "I am running the selftest prompt. Begin the co
    - Note: The {ID} format matches the SQL-generated ID: `strftime('%Y%m%d%H%M%S','now')||'-'||substr(hex(randomblob(4)),1,8)`
 
 3. **Send the message to the next agent using MCP**:
-   - The `Kiln-db` MCP server is configured in `claude.json` and should be automatically available
+   - The `Kiln-db` MCP server is configured in `.mcp.json` and should be automatically available
    - Use the `Kiln-db` MCP `write_query` tool with this SQL (use the `$BRANCH` from step 2):
      ```sql
      INSERT INTO messages 

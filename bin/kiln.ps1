@@ -318,8 +318,8 @@ function Prepare-Worktrees {
         $json = Get-ClaudeConfigJson
         Set-Content -Path $worktreeSettingsFile -Value $json -Encoding UTF8
 
-        # Create claude.json in worktree root with MCP server configuration
-        $claudeJsonPath = Join-Path $worktreePath "claude.json"
+        # Create .mcp.json in worktree root with MCP server configuration
+        $claudeJsonPath = Join-Path $worktreePath ".mcp.json"
         $dbPath = Join-Path $STATE_DIR "messages.db"
         $dbPathEscaped = $dbPath -replace '\\', '\\'
         $claudeJson = @"
@@ -334,7 +334,7 @@ function Prepare-Worktrees {
 }
 "@
         Set-Content -Path $claudeJsonPath -Value $claudeJson -Encoding UTF8
-        Write-Verbose "Created claude.json in worktree $role"
+        Write-Verbose "Created .mcp.json in worktree $role"
 
         # Create tmp directory for handoff files
         $tmpDir = Join-Path $worktreePath "tmp"
@@ -539,7 +539,7 @@ function Build-AgentCommand {
 
     switch ($agent) {
         "claude" {
-            $claudeCmd = "claude --model claude-haiku-4-5-20251001 --permission-mode bypassPermissions --mcp-config ./claude.json -n 'Kiln $displayName'"
+            $claudeCmd = "claude --model claude-haiku-4-5-20251001 --permission-mode bypassPermissions --mcp-config ./.mcp.json -n 'Kiln $displayName'"
             if ($DebugMode) {
                 $claudeCmd += " $debugFlags"
             }
