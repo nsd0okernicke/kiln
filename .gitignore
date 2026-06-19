@@ -1,0 +1,22 @@
+# Development artifacts
+plan.md
+
+# Kiln runtime (ephemeral, per-user)
+.kiln/
+.worktrees/
+
+# OS
+.DS_Store
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# Node
+node_modules/

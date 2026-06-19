@@ -1,1 +1,831 @@
-# kiln
+# Kiln
+
+**An orchestration platform that turns swarms of AI agents into reliable, professional software engineers.**
+
+Kiln launches a config-driven multi-agent swarm, each agent working in its own git worktree with role-specific instructions and cross-agent communication. Works on Windows (PowerShell + Windows Terminal / WezTerm), macOS/Linux (zsh + tmux), and is Git-aware: sub-branches are created per worktree, all state lives in `.kiln/`, and handoffs are tracked in `logbook.md`.
+
+---
+
+## Quick Start
+
+The fastest way to get a working Kiln project: run the install script.
+
+### 1. Create a New Project
+
+**Windows (PowerShell):**
+```powershell
+.\bin\kiln-init.ps1 -Target C:\path\to\my-project
+cd C:\path\to\my-project
+```
+
+**Unix/macOS:**
+```bash
+./bin/kiln-init.sh /path/to/my-project
+cd /path/to/my-project
+```
+
+This scaffolds a complete Kiln project with configuration, role files, and git initialization.
+
+### 2. (Optional) Use an Example
+
+Include an example project brief by adding the `-Example` flag:
+
+**Windows:**
+```powershell
+.\bin\kiln-init.ps1 -Target C:\path\to\library-hub -Example library-hub
+```
+
+**Unix/macOS:**
+```bash
+./bin/kiln-init.sh /path/to/library-hub --example library-hub
+```
+
+### 3. Launch the Swarm
+
+**Windows:**
+```powershell
+.\bin\kiln.ps1 -WorkingDir .
+```
+
+**Unix/macOS:**
+```bash
+./bin/kiln.sh .
+```
+
+That's it. Kiln will create git worktrees, generate role files, and launch agents in your configured terminal.
+
+See **"Running Kiln"** below for more options and customization.
+
+---
+
+## What Kiln Does
+
+Kiln is a lightweight orchestration layer that:
+
+- Launches a **config-driven swarm** — specify each agent's role, AI tool/backend (claude/copilot/codex/grok), and workspace (main directory or isolated worktree)
+  - Uses framework defaults from `kiln/profiles.yaml`
+  - Projects can override by creating `kiln.profiles.yaml` at the root
+- Creates one **terminal window/tab per role** — observe all agents in real time
+  - Windows: Windows Terminal or WezTerm tabs/panes
+  - Unix/macOS: tmux sessions + Terminal.app or WezTerm
+- Reads role behavior from `kiln/roles/<role>.md` files and a layered `kiln/constitution/` (workflow, engineering, project)
+- Creates one **git worktree per agent** (except those using `@current`) under `.worktrees/` so agents don't collide — agents using `@current` work in the project root on the current branch
+- Supports per-role **agent backends**: `claude`, `copilot`, `codex`, or `grok` — configure via `agent` field in profiles
+- Creates **inter-agent messaging** via SQLite at `.kiln/messages.db` with MCP server access
+- Keeps all swarm state in `.kiln/` (logs, sessions, message database) — gitignored and ephemeral
+
+### Project Structure Created by `kiln-init`
+
+When you run `kiln-init`, it scaffolds a new Kiln project with:
+
+```text
+my-project/
+├── kiln/                         # Kiln configuration (version-controlled)
+│   ├── constitution/
+│   │   ├── workflow.md           # Handoff protocol
+│   │   ├── engineering.md        # Tech stack & quality gates
+│   │   └── project.md            # Project-specific rules
+│   ├── roles/                    # Role definitions for your agents
+│   │   ├── specifier.md
+│   │   ├── coder.md
+│   │   ├── refactorer.md
+│   │   ├── architect.md
+│   │   └── ...
+│   └── skills/                   # Optional: custom agent skills
+├── .kiln/                        # Runtime state (ephemeral, gitignored)
+│   ├── messages.db              # SQLite message queue
+│   ├── logs/                    # Agent logs
+│   └── ...
+├── .worktrees/                   # Git worktrees (gitignored)
+│   ├── coder/
+│   ├── refactorer/
+│   ├── architect/
+│   └── ...
+├── .claude/                      # Claude Code configuration
+│   ├── settings.json             # MCP and permission settings
+│   └── .gitignore
+├── claude.json                   # MCP server configuration
+├── .gitignore                    # Git exclusions
+└── README.md                     # Project brief (optional, from example)
+```
+
+**Key points:**
+- `kiln/` is version-controlled (constitution, roles, skills)
+- `.kiln/` and `.worktrees/` are runtime/ephemeral (gitignored)
+- Profiles are inherited from the framework; create `kiln.profiles.yaml` at the root to override
+
+---
+
+## Platform Support
+
+### Windows (Native PowerShell)
+
+Kiln has full native Windows support using PowerShell 7+ and Windows Terminal (or WezTerm).
+
+```powershell
+.\kiln.ps1 -WorkingDir "C:\path\to\project"
+```
+
+**Requirements:**
+- PowerShell 7+ (included with Windows 11)
+- Windows Terminal (Microsoft Store) or WezTerm
+- One or more agent CLIs (Claude Code, GitHub Copilot, Codex, or Grok) depending on configured agents
+
+**Optional parameters:**
+- `-Layout tabs` (default) — one tab per agent
+- `-Layout panes` — 2×2 pane grid (4 agents)
+- `-Terminal wezterm` — use WezTerm instead of Windows Terminal
+
+### Unix/Linux/macOS (zsh + tmux)
+
+Kiln on Unix uses zsh scripts and tmux for session management.
+
+```sh
+./kiln.sh <working-directory>
+```
+
+**Requirements:**
+
+- zsh shell
+- tmux for session management
+- Python 3 with PyYAML module (used for YAML profile parsing)
+
+  ```bash
+  pip install pyyaml
+  ```
+
+- One or more agent CLIs (Claude Code, GitHub Copilot, Codex, or Grok) depending on configured agents
+- Optional: WezTerm or Terminal.app (auto-detected)
+
+---
+
+## Framework Structure
+
+The Kiln repository is organized for clarity and maintainability:
+
+```text
+kiln/
+├── bin/                          # User-facing scripts
+│   ├── kiln.sh             # Main launcher (Unix/macOS)
+│   ├── kiln.ps1            # Main launcher (Windows)
+│   ├── kiln-init.sh            # Project scaffolding (Unix/macOS)
+│   ├── kiln-init.ps1           # Project scaffolding (Windows)
+│   ├── kiln-cleanup.sh          # Manual cleanup (Unix/macOS)
+│   ├── kiln-cleanup.ps1         # Manual cleanup (Windows)
+│   ├── clear-messages.sh         # Clear message queue (testing utility)
+│   └── clear-messages.ps1        # Clear message queue (testing utility)
+│
+├── lib/                          # Framework internals
+│   ├── profile-loader.sh         # YAML profile parsing (Unix)
+│   ├── profile-loader.ps1        # YAML profile parsing (PowerShell)
+│   ├── terminal-adapter.sh       # Terminal backend loader (Unix)
+│   ├── terminal-adapters/        # Terminal backend implementations
+│   │   ├── wezterm.ps1           # WezTerm adapter (Windows)
+│   │   ├── wezterm.sh            # WezTerm adapter (Unix)
+│   │   ├── windows-terminal.sh   # Windows Terminal (WSL)
+│   │   ├── terminal-app.sh       # macOS Terminal.app
+│   │   ├── ghostty.sh            # Ghostty terminal
+│   │   └── none.sh               # Fallback (current shell)
+│   └── kiln-window-watchdog.sh   # Window tracking (Unix tmux)
+│
+├── kiln/                   # Master framework templates & default profiles
+│   ├── profiles.yaml             # Default configuration profiles (framework defaults only)
+│   ├── constitution/             # Shared constitution rules (copied to projects)
+│   │   ├── workflow.md           # Handoff protocol
+│   │   └── engineering.md        # Tech stack & quality gates
+│   ├── roles/                    # Role prompts (copied to projects)
+│   └── skills/                   # Agent skills (optional, copied to projects)
+│
+├── examples/                     # Example project briefs
+│   └── library-hub/README.md     # LibraryHub reference example
+│
+├── tests/                        # Framework tests
+└── docs/                         # Documentation & assets
+```
+
+**User Scripts** (`bin/`) are the entry points for Kiln operations. **Framework Internals** (`lib/`) are implementation details — developers shouldn't need to modify them. **Templates** (`kiln/`) are copied to new projects during scaffolding.
+
+---
+
+## Core Features
+
+- **Config-Driven Topology** — The swarm shape comes from `kiln/profiles.yaml`, not hardcoded variables.
+- **Role Injection** — Constitution (`workflow.md`, `engineering.md`, `project.md`) and role instructions (`roles/<role>.md`) are merged into each agent's instruction file (`CLAUDE.md` or `.github/copilot-instructions.md`), giving full context immediately.
+- **Project-Local Constitution** — Customize architecture, tech stack, and quality gates via `kiln/constitution/project.md`.
+- **Layered Rules** — `kiln/constitution/` contains `workflow.md` (handoffs), `engineering.md` (tools/practices), and `project.md` (arch/quality) — all applied to every agent.
+- **Backend Selection Per Role** — Each role can launch `claude`, `copilot`, `codex`, or `grok` via the `agent` field in profiles.
+- **Observable Swarm** — Watch all agents in one window (tabs or panes on Windows, tmux panes on Unix).
+- **Cross-Platform** — Works on Windows, macOS, and Linux with zero duplication.
+
+---
+
+## Constitution and Roles
+
+The recommended project layout is:
+
+```text
+kiln/
+  roles/
+    architect.md             # Architect role (design review, approval)
+    coder.md                 # Coder role (TDD implementation)
+    refactorer.md            # Refactorer role (quality gates, refactoring)
+    specifier.md             # Specifier role (Gherkin acceptance tests)
+    reviewer.md              # Reviewer role (batch review alternative to refactorer)
+    selftest.md              # Selftest role (communication chain validation)
+  constitution/
+    workflow.md              # Handoff protocol, branch discipline, queue format
+    engineering.md           # Language, tools, dependencies, practices
+    project.md               # Project-specific architecture, tech stack, quality gates
+
+# Optional: Override default profiles (framework uses kiln/profiles.yaml)
+kiln.profiles.yaml           # Project-specific profiles (optional, at root)
+```
+
+**Note:** Configuration profiles are inherited from the framework default (`kiln/profiles.yaml`). Projects can optionally override by creating `kiln.profiles.yaml` at the project root if they need custom profile definitions.
+
+### Profile Loading & Inheritance
+
+Configuration profiles define which agents run, which roles they take, and where they work. Kiln uses a cascading search to find profiles:
+
+1. **Project root** (`kiln.profiles.yaml`) — Project-level overrides
+2. **Project config** (`kiln/profiles.yaml`) — Not used (projects don't copy profiles)
+3. **Project state** (`.kiln/profiles.yaml`) — Not used
+4. **Framework** (`kiln/profiles.yaml`) — Default profiles for all projects
+5. **User home** (`~/.kiln/profiles.yaml`) — User-level defaults (optional)
+6. **System** (`/etc/kiln/profiles.yaml`) — System-wide defaults (optional)
+
+By default, **all projects use the framework's `kiln/profiles.yaml`**, which defines the standard 4-agent workflow (specifier, coder, refactorer, architect). This means new projects work immediately without configuration.
+
+**To customize profiles for a specific project**, create `kiln.profiles.yaml` at the project root. Kiln will use your custom profiles instead of the framework defaults.
+
+### Layered Constitution
+
+- **`constitution/workflow.md`** — Defines handoff protocol, git worktree discipline, and cross-agent communication rules.
+- **`constitution/engineering.md`** — Specifies language, build tools, test frameworks, quality tools, and coding practices.
+- **`constitution/project.md`** — Project-specific customizations: tech stack, architecture patterns, quality thresholds, module structure.
+
+**Agent Instruction Assembly:** Constitution and role instructions are **always combined** at startup:
+
+- Constitution files (`workflow.md`, `engineering.md`, `project.md`) provide shared rules and context for all agents
+- Role file (`roles/<role>.md`) provides role-specific instructions and behavior
+- Both are merged into each agent's generated instruction file:
+  - **Claude agents**: `CLAUDE.md` in the worktree root
+  - **Copilot agents**: `.github/copilot-instructions.md` in the worktree root
+  - **Other backends**: Similar instruction file per backend
+
+This ensures every agent operates with full constitutional context plus its specific role directives.
+
+### Default Workflow
+
+The default four-agent workflow is:
+
+- **`specifier`** — Defines behavior first via Gherkin acceptance tests; notifies the coder when ready.
+- **`coder`** — Implements behavior slices using strict TDD; parameterizes Gherkin scenarios; notifies the refactorer when complete.
+- **`refactorer`** — Runs quality gates (coverage, CRAP analysis, mutation testing); refactors for testability; notifies both coder and architect with verification results.
+- **`architect`** — Reviews completed work, checks design adherence, and approves or requests changes.
+
+> **Optional role:** `reviewer` is an alternative to `refactorer` with a focus on batch processing and review pipelines. Add it to your profile in `kiln/profiles.yaml` to use it instead. See `kiln/roles/reviewer.md`.
+
+---
+
+## Running Kiln
+
+### Quick Reference
+
+| Platform | Command | Options |
+|---|---|---|
+| **Windows** | `.\kiln.ps1 -WorkingDir .` | `-Layout tabs` (default) or `-Layout panes`; `-Terminal wezterm` for WezTerm; `-Debug` for verbose output |
+| **Unix/macOS** | `./kiln.sh .` | Terminal auto-detected: WezTerm > Terminal.app > tmux |
+
+Kiln will create a git repository if one doesn't exist, initialize worktrees, and launch agents.
+
+### Windows (PowerShell)
+
+1. **Create a new project** from the Kiln repository root:
+
+   ```powershell
+   .\bin\kiln-init.ps1 -Target C:\path\to\my-project
+   cd C:\path\to\my-project
+   ```
+
+   This scaffolds the project with all necessary files: constitution, roles, tools, and git initialization.
+
+2. **Optional: Include an example brief** (library-hub):
+
+   ```powershell
+   .\bin\kiln-init.ps1 -Target C:\path\to\library-hub -Example library-hub
+   ```
+
+   This adds the example README.md as your project brief so agents immediately know what to build.
+
+3. **Run Kiln**:
+
+   ```powershell
+   .\bin\kiln.ps1 -WorkingDir .
+   ```
+
+   Optional layout control:
+
+   ```powershell
+   # Tabs layout (default)
+   .\bin\kiln.ps1 -WorkingDir . -Layout tabs
+
+   # Panes layout: 2×2 grid
+   .\bin\kiln.ps1 -WorkingDir . -Layout panes
+
+   # Use WezTerm instead of Windows Terminal
+   .\bin\kiln.ps1 -WorkingDir . -Terminal wezterm
+
+   # Enable debug mode (verbose output for troubleshooting MCP issues)
+   .\bin\kiln.ps1 -WorkingDir . -Debug
+   ```
+
+4. **Startup creates**:
+   - Git worktrees under `.worktrees/` (one per non-@current role)
+   - Generated `CLAUDE.md` files in each worktree with embedded constitution + project + role content
+   - Windows Terminal tabs (or WezTerm tabs/panes) for each role
+   - `.kiln/messages.db` SQLite database for inter-agent messaging via MCP
+
+5. **Verify**: Each agent's tab shows a prompt. Ask it: `pwd` to confirm it's in the correct worktree.
+
+### Unix/macOS (zsh)
+
+1. **Create a new project** from the Kiln repository root:
+
+   ```sh
+   ./bin/kiln-init.sh /path/to/my-project
+   cd /path/to/my-project
+   ```
+
+   This scaffolds the project with all necessary files: constitution, roles, tools, and git initialization.
+
+2. **Optional: Include an example brief** (library-hub):
+
+   ```sh
+   ./bin/kiln-init.sh /path/to/library-hub --example library-hub
+   ```
+
+   This adds the example README.md as your project brief so agents immediately know what to build.
+
+3. **Run Kiln**:
+
+   ```sh
+   ./bin/kiln.sh .
+   ```
+
+4. **What happens**:
+   - Creates git worktrees under `.worktrees/`
+   - Launches tmux sessions (one per role)
+   - Creates Terminal.app windows or WezTerm tabs (auto-detected)
+   - Each agent gets a tmux pane to run in
+   - Generates `CLAUDE.md` files with full constitution and role content
+
+---
+
+## Configuration Profiles
+
+Kiln uses YAML profiles to define swarm topology. The default profile is `dev`, which creates the standard 4-agent swarm. All projects inherit the framework's default profiles from `kiln/profiles.yaml` automatically.
+
+**To customize profiles for a specific project**, create `kiln.profiles.yaml` at your project root. Kiln will use your custom profiles instead of the framework defaults.
+
+### Framework Default Profile
+
+The framework provides the standard `dev` profile:
+
+```yaml
+profiles:
+  dev:
+    description: Standard 4-agent swarm with isolated worktrees
+    terminals:
+      - role: specifier
+        agent: claude
+        worktree: "@current"
+      - role: coder
+        agent: claude
+        worktree: coder
+      - role: refactorer
+        agent: claude
+        worktree: refactorer
+      - role: architect
+        agent: claude
+        worktree: architect
+```
+
+**Profile fields:**
+
+- **role** — maps to `kiln/roles/<role>.md` (must exist)
+- **agent** — which AI tool to use: `claude`, `copilot`, `codex`, or `grok` (defaults to `claude` if omitted)
+- **worktree** — `@current` to work in the main directory, or any name (creates `.worktrees/<name>/`)
+  - Use `@current` for coordinator/review roles that work on the current branch
+  - Use separate worktree names for roles that need isolation (e.g., each agent on its own branch)
+
+### Per-Role Agent Selection
+
+You can mix different agents in a single swarm:
+
+```yaml
+profiles:
+  mixed:
+    description: Swarm with different agent backends per role
+    terminals:
+      - role: specifier
+        agent: copilot        # Use GitHub Copilot for spec writing
+        worktree: "@current"
+      - role: coder
+        agent: claude         # Use Claude for implementation
+        worktree: coder
+      - role: refactorer
+        agent: claude         # Use Claude for refactoring
+        worktree: refactorer
+      - role: architect
+        agent: grok           # Use Grok for architectural decisions
+        worktree: architect
+```
+
+Each agent backend requires the corresponding CLI tool to be installed and available in `PATH`.
+
+### Running a Different Profile
+
+Launch a specific profile with the `-ProfileName` (Windows) or `--profile` (Unix) flag:
+
+```powershell
+# Windows
+.\kiln.ps1 -WorkingDir . -ProfileName staging
+```
+
+```bash
+# Unix/macOS
+./kiln.sh . --profile staging
+```
+
+If no profile is specified, `dev` is used by default. The working directory argument is required.
+
+### Gitflow-Aware Branch Naming
+
+Sub-branches are named `<current-branch>-<worktreeName>` — Kiln automatically mirrors the active branch namespace. On `feature/ABC123` they become `feature/ABC123-coder`, `feature/ABC123-refactorer`, etc. On `main` they become `main-coder`, `main-refactorer`, etc.
+
+**Roles with `@current` worktree** work directly on the current branch in the main project directory and do not create sub-branches.
+
+Sub-branches are **local-only and cannot be pushed** — Kiln enforces this via a git pre-push hook. Attempting to push a sub-branch will fail. This is by design: sub-branches are orchestration-internal and ephemeral.
+
+---
+
+## Terminal Behavior
+
+Kiln opens terminal windows or tabs through a small terminal backend adapter.
+
+### Auto-Detection (Unix)
+
+1. If `$WEZTERM_PANE` is set and `wezterm` is in PATH → WezTerm
+2. If AppleScript is available → macOS Terminal.app
+3. If `wt.exe` is available → Windows Terminal (from WSL)
+4. Otherwise → attach the cleanup tmux session in the current shell
+
+### Auto-Detection (Windows)
+
+1. If `$env:WEZTERM_PANE` is set and `wezterm` is in PATH → WezTerm
+2. If `wt.exe` is available → Windows Terminal
+3. Otherwise → error
+
+### Override the Default
+
+Set `KILN_TERMINAL` to force a specific backend:
+
+**Unix:**
+```sh
+KILN_TERMINAL=wezterm ./kiln.sh .
+KILN_TERMINAL=none ./kiln.sh .
+```
+
+**Windows:**
+```powershell
+$env:KILN_TERMINAL = "wezterm"
+.\kiln.ps1 -WorkingDir .
+```
+
+### Layout Examples
+
+Kiln supports two layout modes: **tabs** (one tab per agent, clear separation) and **panes** (2×2 grid, all agents in one window).
+
+#### Windows Terminal & WezTerm
+
+**Tabs layout** (default):
+
+- One terminal tab per agent (e.g., 4 agents = 4 tabs)
+- Each tab runs independently with its own color scheme
+- Clear visual separation of roles
+- Easy to click between agents
+
+**Panes layout** (2×2 grid):
+
+- All 4 agents visible simultaneously in one window
+- Vertical and horizontal splits for a 2×2 arrangement
+- More compact view; observe all roles at once
+- Useful for rapid-fire coordination
+
+**Future support:** Custom layout mixing (e.g., 2 tabs with split panes, top-1-bottom-3) is planned in TODO section 5.
+
+### WezTerm Config Behavior
+
+Kiln dynamically generates a WezTerm configuration file at runtime to set up the multi-agent layout. **Important:**
+
+- When you run `kiln.ps1 -Terminal wezterm`, Kiln writes a generated `~/.wezterm.lua` file to your home directory
+- This config is tailored to your specific agents and layout (tabs or panes)
+- **Your existing `~/.wezterm.lua` is backed up** to `~/.wezterm.lua.kiln-backup` before writing
+- **The backup is automatically restored** ~500ms after WezTerm starts (when Kiln detects the window has opened)
+- Your personal config is preserved; Kiln's generated config is temporary and session-specific
+
+**If something goes wrong:** If the restore fails or you need to manually restore your config, run:
+
+```powershell
+Move-Item ~/.wezterm.lua.kiln-backup ~/.wezterm.lua -Force
+```
+
+### tmux Behavior (Unix Only)
+
+Kiln uses a project-specific tmux socket (recorded in `.kiln/tmux-socket`), so each project's swarm is isolated from other tmux sessions. It honors tmux `base-index` and `pane-base-index` settings when launching agents, so configurations that number windows from `1` work without requiring users to change their tmux preferences.
+
+When Kiln opens trackable terminal windows or tabs, it starts a small watchdog:
+
+- Closing a non-cleanup terminal surface reopens that surface attached to the same tmux session.
+- Closing the cleanup terminal surface shuts down all configured tmux sessions and closes the remaining tracked surfaces.
+
+### Adding A Terminal Backend
+
+Terminal backends live in `lib/terminal-adapters/`. To add a new backend, create one file named after the backend:
+
+```text
+lib/terminal-adapters/wezterm.sh
+```
+
+or
+
+```text
+lib/terminal-adapters/wezterm.ps1
+```
+
+The file must define this contract (Unix shell example):
+
+```sh
+terminal_backend_label() {
+  echo "WezTerm"
+}
+
+terminal_backend_can_open_sessions() {
+  return 0
+}
+
+terminal_backend_tracks_windows() {
+  return 0
+}
+
+terminal_open_session() {
+  local session="$1"
+  local title="$2"
+  local sibling_id="${3:-}"
+  # Open a terminal surface and print its stable id
+}
+
+terminal_window_exists() {
+  local window_id="$1"
+  # Return 0 if still exists, nonzero otherwise
+}
+
+terminal_close_window() {
+  local window_id="$1"
+  # Close the window
+}
+```
+
+---
+
+## Cleanup
+
+After a Kiln session completes, you can optionally clean up swarm artifacts from your project:
+
+**Windows:**
+```powershell
+.\bin\kiln-cleanup.ps1 -ProjectDir <path-to-project>
+```
+
+**Unix/macOS:**
+```bash
+./bin/kiln-cleanup.sh <path-to-project>
+```
+
+The cleanup script removes:
+- Git worktrees (`.worktrees/`) and associated branches
+- Swarm state (`.kiln/`)
+- Generated instruction files (`CLAUDE.md`, `.github/copilot-instructions.md`)
+- Git hooks installed for swarm discipline
+- Terminal window/tab records
+
+**Note:** Cleanup is **optional and manual** — it only runs when you explicitly call it. This gives you full control and the ability to inspect or debug your project state before cleaning up.
+
+---
+
+## Examples
+
+The repository includes example project briefs under `examples/`. These are intended to be used with the install scripts.
+
+- `examples/library-hub/README.md` — LibraryHub, a FastAPI microservices project with hexagonal architecture, RabbitMQ event-driven communication, and full TDD/mutation-testing quality gates. This serves as the reference implementation for Kiln.
+
+To scaffold a new LibraryHub project:
+
+**Windows:**
+```powershell
+.\bin\kiln-init.ps1 -Target C:\my-library-hub -Example library-hub
+```
+
+**Unix/macOS:**
+```bash
+./bin/kiln-init.sh /path/to/my-library-hub --example library-hub
+```
+
+This creates a complete, ready-to-run project with the LibraryHub brief included.
+
+---
+
+## Communication System Health Check (Self-Test)
+
+After launching Kiln, you can verify that inter-agent communication is working by running the built-in self-test.
+
+### Setup
+
+Create a `selftest` profile in `kiln/profiles.yaml` with the `selftest` role as the **first entry**:
+
+```yaml
+profiles:
+  selftest:
+    description: Communication chain test with selftest agent
+    terminals:
+      - role: selftest
+        worktree: "@current"
+      - role: coder
+        worktree: coder
+      - role: refactorer
+        worktree: refactorer
+      - role: architect
+        worktree: architect
+```
+
+Then launch with:
+
+```sh
+./kiln.sh --profile selftest
+```
+
+The selftest must be first because it acts as the test initiator and receiver for the communication chain.
+
+### Running the Test
+
+Once all agents are launched, the communication system operates in **MCP-mediated mode**:
+
+1. **Agents monitor via MCP**: Each agent automatically uses the MCP `Kiln-db` server to check its message inbox when idle, without manual `/loop` commands.
+
+2. **In the selftest window**, paste this prompt to initiate the chain:
+   ```
+   I am running the selftest prompt. Begin the communication chain test now.
+   ```
+
+3. **The chain executes automatically**:
+   - Selftest sends a test message to the next agent via MCP SQL INSERT
+   - Each agent queries its inbox via MCP `read_query` tool
+   - Agents detect the "system-communication-test" marker and forward (no-op mode, passing messages through)
+   - Each agent marks messages as delivered via MCP SQL UPDATE
+   - The final agent (architect) sends completion back to selftest
+   - Selftest receives completion and reports success
+
+### Expected Output
+
+```
+══════════════════════════════════════════════════════════════
+✓ Kiln COMMUNICATION TEST: PASSED
+══════════════════════════════════════════════════════════════
+
+Role:              selftest
+Configuration:     4 agents configured
+Chain:             selftest → coder → refactorer → architect → selftest
+Test-ID:           selftest-20260608-143022
+Duration:          45 seconds
+
+✓ All messages queued correctly in SQLite database
+✓ All agents processed messages and updated logbook.md
+✓ MCP SQLite messaging operational
+✓ All worktrees accessible
+✓ MCP tools available on each agent
+
+Review logbook.md for complete chain trace.
+
+══════════════════════════════════════════════════════════════
+```
+
+### What It Tests
+
+- **Agent discovery**: Each agent can locate its role and configuration
+- **Message delivery**: Messages are correctly queued in SQLite database (`.kiln/messages.db`)
+- **Message status lifecycle**: Messages progress through queued → delivered → processed states
+- **Priority ordering**: High-priority messages are delivered before normal messages
+- **Logbook tracking**: Each agent writes handoff entries to `logbook.md`
+- **Cross-platform**: Works on Windows (PowerShell) and Unix/macOS (bash/zsh)
+
+### Inspection
+
+After the test completes:
+
+```bash
+# View message database stats (shows queued/delivered/processed counts)
+sqlite3 .kiln/messages.db "SELECT status, COUNT(*) as count FROM messages GROUP BY status;"
+
+# View logbook trace of the entire chain
+git log -p logbook.md | grep -A5 SELFTEST
+
+# Verify all messages had unique test IDs
+grep "selftest-" logbook.md
+
+# Inspect a specific message in the database
+sqlite3 .kiln/messages.db "SELECT id, sender, target, priority, status, content FROM messages WHERE sender = 'selftest' LIMIT 1;"
+```
+
+### Troubleshooting
+
+If the test hangs or fails:
+
+1. **Check agent status**: Make sure all configured agents are running
+2. **Verify database exists**: `ls .kiln/messages.db` — should be created at startup
+3. **Check MCP configuration**: Verify `.mcp.json` is present in the project Kiln directory
+4. **Review agent console**: Each agent window shows what it received and did
+5. **Check logbook.md**: Look for error messages or incomplete entries
+6. **Query database directly**: `sqlite3 .kiln/messages.db "SELECT COUNT(*) FROM messages;"` to verify messages were inserted
+7. **Check agent permissions**: Ensure agents have MCP tool permissions in `.claude/settings.json`
+
+---
+
+## Project Maturity & Status
+
+**Kiln v0.1 — PHASE 3: AUTO-AGENT COMMUNICATION ✓ COMPLETE**
+
+### ✓ Completed Features
+
+- **Phase 1: Framework Architecture** — Config-driven swarm orchestration, role injection, git worktree isolation
+- **Phase 2: Cross-Platform Infrastructure** — Windows (PowerShell/Windows Terminal/WezTerm), Unix/macOS (zsh/tmux)
+- **Phase 3: Auto-Agent Communication** — SQLite message queues with MCP server, automated role-based message forwarding, full agent chain test passing
+  - ✓ Agents monitor `.kiln/messages.db` via MCP `Kiln-db` server for queued messages
+  - ✓ Agents automatically detect and forward messages with role-based routing
+  - ✓ System-communication-test marker enables test vs. real-work mode discrimination
+  - ✓ Full chain validation: selftest → coder → refactorer → architect → selftest (verified 2026-06-18)
+  - ✓ Permission system set to `bypassPermissions` (Claude) / `--allow-all` (Copilot) by default for seamless agent operation
+
+### Current Capabilities
+
+- ✓ Multi-agent swarms (2-5 agents typical)
+- ✓ Per-role configuration and role injection
+- ✓ Isolated git worktrees with branch naming (e.g., `feature/ABC-coder`, `main-refactorer`)
+- ✓ Inter-agent MCP SQLite messaging (no polling needed)
+- ✓ Direct database access via MCP `Kiln-db` server
+- ✓ Layered constitution system (workflow, engineering, project)
+- ✓ Cross-platform terminal support (Windows Terminal, WezTerm, tmux)
+- ✓ Built-in communication health check (selftest agent)
+- ✓ Logbook tracking of all handoffs and agent actions
+
+### ⚠️ Security Considerations
+
+**Agent Permissions:** Kiln agents run with **full permission rights by default** to enable seamless autonomous operation:
+
+- **Claude agents**: `--permission-mode bypassPermissions` (auto-approve all MCP tools and file operations)
+- **Copilot agents**: `--allow-all` (auto-approve GitHub Copilot tools and file access)
+- **Codex agents**: Similar permission bypass mechanism (TBD in implementation)
+- **Grok agents**: Similar permission bypass mechanism (TBD in implementation)
+
+This means agents can read/write/execute any file in their worktree without prompting. This is intentional for autonomous development workflows but should be understood as a security trade-off.
+
+**Risk mitigation:**
+
+- Keep Kiln projects in isolated, non-production directories
+- Do not run agents with sensitive data (credentials, secrets, PII) in the project
+- Use git worktrees for isolation — agents can only access their assigned worktree and shared `.kiln/` directory
+- Review agent outputs and commits before merging to main branch
+- Consider running Kiln in a sandbox/VM for untrusted code or high-security scenarios
+
+### Known Limitations & Future Work
+
+- **Real feature workflows not yet tested** — Phase 3 validates infrastructure; actual multi-agent feature development (specifying → coding → refactoring → verification) requires additional testing
+- **Error handling** — Minimal error recovery in agent workflows; graceful degradation not yet implemented
+- **Scaling** — Tested with 4-5 agents; behavior with 10+ agents unknown
+- **Multi-agent backend validation** — Framework supports `claude` and `copilot` (validated); `codex` and `grok` support planned but not yet implemented
+- **Flexible terminal layouts** — Currently supports one tab per role or 2×2 pane grid; custom layout mixing (e.g., 2 tabs with split panes) is in TODO
+
+### Recommended Next Steps
+
+1. **Run real feature workflows** — Test specifier → coder → refactorer → architect chain with actual code implementation
+2. **Add error handling** — Implement graceful failure modes when agents can't process messages
+3. **Multi-language projects** — Test with Python, Kotlin, JavaScript projects beyond the LibraryHub FastAPI example
+4. **CI/CD integration** — Determine how to integrate Kiln agents into GitHub Actions / GitLab CI workflows
+
+---
+
+## Acknowledgments
+
+Kiln was inspired by [Uncle Bob's swarm-forge](https://github.com/unclebob/swarm-forge), a framework for multi-agent development. While taking cues from that design philosophy, Kiln evolves the concept with a focus on TDD-driven workflows, MCP messaging standards, and production-ready orchestration for AI agents across multiple languages and platforms.
+
+

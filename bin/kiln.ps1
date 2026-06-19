@@ -1,0 +1,805 @@
+#!/usr/bin/env pwsh
+# Kiln Windows Entry Point
+# Orchestrates multi-agent development on Windows Terminal or WezTerm with Claude Code skills
+
+param(
+    [string]$WorkingDir = (Get-Location).Path,
+    [ValidateSet("tabs", "panes")]
+    [string]$Layout = "tabs",
+    [string]$Terminal = $null,
+    [string]$ProfileName = $null,
+    [switch]$Debug = $false
+)
+
+$ErrorActionPreference = "Stop"
+
+# Constants
+$SESSION_PREFIX = "kiln"
+$SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
+# Note: KILN_DIR, STATE_DIR, WORKTREES_DIR are initialized after WorkingDir is resolved to absolute path (see line 584)
+
+# Note: Color variables removed; using Write-Host -ForegroundColor instead for cross-platform compatibility
+
+# State arrays (global scope so functions can modify them)
+$global:ROLES = @()
+$global:AGENTS = @()
+$global:DISPLAY_NAMES = @()
+$global:WORKTREE_NAMES = @()
+$global:WORKTREE_PATHS = @()
+$global:ROLE_INDEX = @{}
+
+function Test-Dependency {
+    param([string]$Command)
+    $result = Get-Command $Command -ErrorAction SilentlyContinue
+    if ($result) {
+        return $true
+    }
+    Write-Host "Error: '$Command' is required but not installed." -ForegroundColor Red
+    exit 1
+}
+
+function Get-TerminalBackend {
+    # Priority: parameter > env var > auto-detect
+    if ($Terminal) {
+        return $Terminal.ToLower()
+    }
+
+    if ($env:KILN_TERMINAL) {
+        return $env:KILN_TERMINAL.ToLower()
+    }
+
+    # Auto-detect: WezTerm if running inside it
+    if ($env:WEZTERM_PANE -and (Get-Command wezterm -ErrorAction SilentlyContinue)) {
+        return "wezterm"
+    }
+
+    # Default to Windows Terminal
+    return "wt"
+}
+
+function Import-TerminalAdapter {
+    param([string]$Backend)
+
+    $adapterPath = Join-Path $SCRIPT_DIR ".." "lib" "terminal-adapters" "$Backend.ps1"
+
+    if (!(Test-Path $adapterPath)) {
+        Write-Host "Error: Unknown terminal backend '$Backend'. Expected adapter file: $adapterPath" -ForegroundColor Red
+        exit 1
+    }
+
+    # Dot-source in the caller's scope so functions are available globally
+    . $adapterPath @args
+}
+
+function Get-ClaudeConfigJson {
+    $frameworkRoot = Split-Path -Parent $SCRIPT_DIR
+    $templatePath = Join-Path $frameworkRoot "kiln" ".claude" "settings.json"
+    if (-not (Test-Path $templatePath)) {
+        Write-Host "Error: Claude settings template not found at: $templatePath" -ForegroundColor Red
+        exit 1
+    }
+    return (Get-Content -Path $templatePath -Raw)
+}
+
+function Write-DirectoryGitignore {
+    param([string]$Dir)
+    if (-not (Test-Path $Dir)) {
+        New-Item -ItemType Directory -Path $Dir -Force | Out-Null
+    }
+    $path = Join-Path $Dir ".gitignore"
+    if (-not (Test-Path $path)) {
+        Set-Content -Path $path -Value "*" -Encoding UTF8
+    }
+}
+
+function Initialize-GitRepo {
+    if (Test-Path (Join-Path $WorkingDir ".git")) {
+        return
+    }
+
+    git -C $WorkingDir init | Out-Null
+    git -C $WorkingDir branch -M main | Out-Null
+    Ensure-InitialGitignore
+    git -C $WorkingDir add . | Out-Null
+    git -C $WorkingDir commit -m "Initial kiln repository" 2>&1 | Out-Null
+
+    # Verify initial commit was created
+    $headExists = git -C $WorkingDir rev-parse HEAD 2>$null
+    if (-not $headExists) {
+        Write-Host "Error: Initial git commit failed. Make sure git is configured correctly." -ForegroundColor Red
+        Write-Host "Try running: git config --global user.email 'test@example.com' && git config --global user.name 'Test User'" -ForegroundColor Yellow
+        exit 1
+    }
+}
+
+function Install-GitHooks {
+    $hookPath = Join-Path $WorkingDir ".git\hooks\pre-push"
+    if (Test-Path $hookPath) { return }
+
+    New-Item -ItemType Directory -Force -Path (Split-Path $hookPath) | Out-Null
+
+    $hookContent = @'
+#!/bin/sh
+BRANCH_LIST="$(git rev-parse --git-dir)/kiln-sub-branches"
+while read local_ref local_sha remote_ref remote_sha; do
+  branch="${local_ref#refs/heads/}"
+  if [ -f "$BRANCH_LIST" ] && grep -qxF "$branch" "$BRANCH_LIST"; then
+    echo "error: '$branch' is a Kiln sub-branch and cannot be pushed."
+    exit 1
+  fi
+done
+exit 0
+'@
+    Set-Content -Path $hookPath -Value $hookContent -Encoding UTF8
+}
+
+function Display-NameForRole {
+    param([string]$Role)
+    $parts = $Role -split "[-_]"
+    $label = ($parts | ForEach-Object { $_.Substring(0, 1).ToUpper() + $_.Substring(1).ToLower() }) -join " "
+    return $label
+}
+
+function Session-NameForRole {
+    param([string]$Role)
+    return "${SESSION_PREFIX}-$Role"
+}
+
+function Worktree-PathForName {
+    param([string]$Name)
+    $basePath = (Resolve-Path $WORKTREES_DIR -ErrorAction SilentlyContinue).Path
+    if (-not $basePath) {
+        $basePath = $WORKTREES_DIR
+    }
+    return Join-Path $basePath $Name
+}
+
+function Load-ConfigFromProfile {
+    # Extract window entries from profile variables set by load_kiln_profile
+    $i = 0
+    while ($i -lt $TERMINAL_COUNT) {
+        $varRole = "TERMINAL_${i}_ROLE"
+        $varWorktree = "TERMINAL_${i}_WORKTREE"
+        $varAgent = "TERMINAL_${i}_AGENT"
+
+        $role = Get-Variable -Name $varRole -ValueOnly -ErrorAction SilentlyContinue
+        $worktree = Get-Variable -Name $varWorktree -ValueOnly -ErrorAction SilentlyContinue
+        $agent = Get-Variable -Name $varAgent -ValueOnly -ErrorAction SilentlyContinue
+
+        if (-not [string]::IsNullOrEmpty($role)) {
+            # Default to claude if agent not specified in profile
+            if ([string]::IsNullOrEmpty($agent)) {
+                $agent = "claude"
+            }
+
+            if ($global:ROLE_INDEX.ContainsKey($role)) {
+                Write-Host "Error: Duplicate role '$role'" -ForegroundColor Red
+                exit 1
+            }
+
+            if ($agent -notin @("claude", "copilot", "codex", "grok")) {
+                Write-Host "Error: Unsupported agent '$agent' for role '$role'" -ForegroundColor Red
+                exit 1
+            }
+
+            $global:ROLE_INDEX[$role] = $global:ROLES.Count
+            $global:ROLES += $role
+            $global:AGENTS += $agent
+            $global:DISPLAY_NAMES += (Display-NameForRole $role)
+            $global:WORKTREE_NAMES += $worktree
+
+            if ($worktree -eq "none" -or $worktree -eq "master" -or $worktree -eq "@current") {
+                $global:WORKTREE_PATHS += $WorkingDir
+            } else {
+                $global:WORKTREE_PATHS += (Worktree-PathForName $worktree)
+            }
+        }
+        $i++
+    }
+
+    if ($global:ROLES.Count -eq 0) {
+        Write-Host "Error: No windows defined in profile" -ForegroundColor Red
+        exit 1
+    }
+}
+
+function Write-SessionsFile {
+    $content = @()
+    for ($i = 0; $i -lt $global:ROLES.Count; $i++) {
+        $index = $i + 1
+        $line = "{0}`t{1}`t{2}`t{3}" -f $index, $global:ROLES[$i], $global:AGENTS[$i], $global:DISPLAY_NAMES[$i]
+        $content += $line
+    }
+    Set-Content $SESSIONS_FILE $content
+}
+
+function Write-ClaudeConfig {
+    $claudeDir = Join-Path $WorkingDir ".claude"
+    New-Item -ItemType Directory -Force -Path $claudeDir | Out-Null
+    Write-DirectoryGitignore $claudeDir
+
+    # Copy template settings.json from framework
+    $frameworkRoot = Split-Path -Parent $PSScriptRoot
+    $templateSettings = Join-Path $frameworkRoot "kiln\.claude\settings.json"
+    $targetSettings = Join-Path $claudeDir "settings.json"
+
+    if (Test-Path $templateSettings) {
+        Copy-Item -Path $templateSettings -Destination $targetSettings -Force
+    } else {
+        Write-Host "Warning: Could not find Claude settings template at $templateSettings" -ForegroundColor Yellow
+    }
+
+    # Create .mcp.json in project root (Copilot agents look here for MCP config)
+    $templateMcp = Join-Path $frameworkRoot "kiln\.claude\.mcp.json"
+    $projectMcp = Join-Path $WorkingDir ".mcp.json"
+    if (Test-Path $templateMcp) {
+        $mcpContent = Get-Content -Path $templateMcp -Raw
+        # Substitute the database path placeholder with absolute path
+        $dbPath = Join-Path $STATE_DIR "messages.db"
+        # Escape backslashes for JSON
+        $dbPathEscaped = $dbPath -replace '\\', '\\'
+        $mcpContent = $mcpContent -replace '__KILN_DB_PATH__', $dbPathEscaped
+        Set-Content -Path $projectMcp -Value $mcpContent -Encoding UTF8
+    }
+}
+
+function Prepare-Workspace {
+    New-Item -ItemType Directory -Force -Path $STATE_DIR, $WORKTREES_DIR | Out-Null
+    Write-DirectoryGitignore $STATE_DIR
+    Write-DirectoryGitignore $WORKTREES_DIR
+    Write-DirectoryGitignore $KILN_DIR
+
+    Write-ClaudeConfig
+}
+
+
+function Prepare-Worktrees {
+    # Clean up any broken worktree references from previous runs
+    git -C $WorkingDir worktree prune 2>$null
+
+    $subBranchList = Join-Path $WorkingDir ".git\kiln-sub-branches"
+    Set-Content -Path $subBranchList -Value "" -Encoding UTF8
+
+    for ($i = 0; $i -lt $global:ROLES.Count; $i++) {
+        $worktreeName = $global:WORKTREE_NAMES[$i]
+        $worktreePath = $global:WORKTREE_PATHS[$i]
+        $role = $global:ROLES[$i]
+
+        if ($worktreeName -eq "none" -or $worktreeName -eq "master" -or $worktreeName -eq "@current") {
+            continue
+        }
+
+        $branchName = "$CurrentBranch-$worktreeName"
+
+        # Ensure path is absolute
+        if (-not [System.IO.Path]::IsPathRooted($worktreePath)) {
+            $worktreePath = Join-Path $WorkingDir $worktreePath
+        }
+
+        if (!(Test-Path $worktreePath)) {
+            $output = git -C $WorkingDir worktree add --force -B $branchName $worktreePath HEAD 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "Error creating worktree for role '$role': $output" -ForegroundColor Red
+                exit 1
+            }
+        }
+
+        # Set up symlink to shared .kiln directory for direct database access
+        $worktreeKilnDir = Join-Path $worktreePath ".kiln"
+
+        # Remove old directory structure if it exists (migration from previous versions)
+        if (Test-Path $worktreeKilnDir) {
+            Remove-Item -Path $worktreeKilnDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+
+        # Create symlink to shared .kiln directory (use relative path for portability)
+        $relativeStatePath = [System.IO.Path]::GetRelativePath($worktreePath, $STATE_DIR)
+        try {
+            New-Item -ItemType SymbolicLink -Path $worktreeKilnDir -Target $relativeStatePath -Force -ErrorAction Stop | Out-Null
+            Write-Host "    [$role] ✓ Symlinked .kiln → $relativeStatePath" -ForegroundColor Green
+        } catch {
+            Write-Host "    [$role] Warning: Could not create symlink: $_" -ForegroundColor Yellow
+            Write-Host "    [$role] Falling back to directory copy" -ForegroundColor Yellow
+            # Fallback: copy the directory structure instead
+            New-Item -ItemType Directory -Force -Path $worktreeKilnDir | Out-Null
+            $mainToolsDir = Join-Path $STATE_DIR "tools"
+            $worktreeToolsDir = Join-Path $worktreeKilnDir "tools"
+            if ((Test-Path $mainToolsDir) -and -not (Test-Path $worktreeToolsDir)) {
+                Copy-Item -Path $mainToolsDir -Destination $worktreeToolsDir -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            $worktreeLogsDir = Join-Path $worktreeKilnDir "logs"
+            New-Item -ItemType Directory -Force -Path $worktreeLogsDir | Out-Null
+        }
+
+        # Copy Claude config to worktree
+        $worktreeClaudeDir = Join-Path $worktreePath ".claude"
+        New-Item -ItemType Directory -Force -Path $worktreeClaudeDir | Out-Null
+        $worktreeSettingsFile = Join-Path $worktreeClaudeDir "settings.json"
+        $json = Get-ClaudeConfigJson
+        Set-Content -Path $worktreeSettingsFile -Value $json -Encoding UTF8
+
+        # Create claude.json in worktree root with MCP server configuration
+        $claudeJsonPath = Join-Path $worktreePath "claude.json"
+        $dbPath = Join-Path $STATE_DIR "messages.db"
+        $dbPathEscaped = $dbPath -replace '\\', '\\'
+        $claudeJson = @"
+{
+  "name": "kiln-$role",
+  "mcpServers": {
+    "kiln-db": {
+      "command": "npx",
+      "args": ["mcp-sqlite", "$dbPathEscaped"]
+    }
+  }
+}
+"@
+        Set-Content -Path $claudeJsonPath -Value $claudeJson -Encoding UTF8
+        Write-Verbose "Created claude.json in worktree $role"
+
+        # Create tmp directory for handoff files
+        $tmpDir = Join-Path $worktreePath "tmp"
+        New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+
+        Add-Content -Path $subBranchList -Value $branchName
+    }
+}
+
+function Prepare-Skills {
+    $skillsSource = Join-Path $KILN_DIR "skills"
+    if (-not (Test-Path $skillsSource)) {
+        Write-Host "  [skills] No skills directory found at: $skillsSource" -ForegroundColor Gray
+        return
+    }
+
+    $skillDirs = @(Get-ChildItem $skillsSource -Directory -ErrorAction SilentlyContinue)
+    if ($skillDirs.Count -eq 0) {
+        Write-Host "  [skills] Skills directory exists but is empty" -ForegroundColor Gray
+        return
+    }
+
+    Write-Host "  [skills] Found $($skillDirs.Count) skill(s) in $skillsSource" -ForegroundColor Cyan
+
+    # Prepare skills for all agents (Claude and Copilot)
+    $pathsToProcess = @()
+    for ($i = 0; $i -lt $global:ROLES.Count; $i++) {
+        $agent = $global:AGENTS[$i]
+        if ($agent -eq "claude" -or $agent -eq "copilot") {
+            $pathsToProcess += @{ Role = $global:ROLES[$i]; Agent = $agent; Path = $global:WORKTREE_PATHS[$i] }
+        }
+    }
+
+    # Also add root working directory
+    if ($pathsToProcess.Count -gt 0) {
+        $pathsToProcess += @{ Role = "root"; Agent = "claude"; Path = $WorkingDir }
+    }
+
+    foreach ($item in $pathsToProcess) {
+        $role = $item.Role
+        $agent = $item.Agent
+        $worktreePath = $item.Path
+
+        # Determine skills directory based on agent type
+        $skillsDir = if ($agent -eq "copilot") {
+            Join-Path $worktreePath ".github" "skills"
+        } else {
+            Join-Path $worktreePath ".claude" "skills"
+        }
+
+        # Always recreate so removed skills don't linger
+        if (Test-Path $skillsDir) {
+            Remove-Item $skillsDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        New-Item -ItemType Directory -Force -Path $skillsDir | Out-Null
+
+        foreach ($skillDir in $skillDirs) {
+            $target = Join-Path $skillsDir $skillDir.Name
+            try {
+                New-Item -ItemType Junction -Path $target -Target $skillDir.FullName -ErrorAction Stop | Out-Null
+                Write-Host "    [$role] → $($skillDir.Name)" -ForegroundColor Green
+            } catch {
+                Write-Host "    [$role] ✗ Failed to link $($skillDir.Name): $_" -ForegroundColor Red
+            }
+        }
+    }
+}
+
+function Prepare-AgentConfigs {
+    # Create ~/.copilot/mcp-config.json for Copilot agents (if any exist in the swarm)
+    $dbPath = Join-Path $STATE_DIR "messages.db"
+    $dbPathEscaped = $dbPath -replace '\\', '\\'
+
+    $hasCopilotAgent = $false
+    for ($i = 0; $i -lt $global:AGENTS.Count; $i++) {
+        if ($global:AGENTS[$i] -eq "copilot") {
+            $hasCopilotAgent = $true
+            break
+        }
+    }
+
+    if ($hasCopilotAgent) {
+        $copilotDir = Join-Path $env:USERPROFILE ".copilot"
+        New-Item -ItemType Directory -Path $copilotDir -Force | Out-Null
+
+        $mcpConfigPath = Join-Path $copilotDir "mcp-config.json"
+        $mcpConfig = @"
+{
+  "mcpServers": {
+    "kiln-db": {
+      "command": "npx",
+      "args": ["mcp-sqlite", "$dbPathEscaped"]
+    }
+  }
+}
+"@
+        Set-Content -Path $mcpConfigPath -Value $mcpConfig -Encoding UTF8
+        Write-Host "Created ~/.copilot/mcp-config.json" -ForegroundColor Green
+    }
+}
+
+function Write-GeneratedCLAUDEmd {
+    param(
+        [int]$Index,
+        [string]$Role,
+        [string]$WorktreePath,
+        [string]$Agent = "claude"
+    )
+
+    if ($Agent -eq "copilot") {
+        $instructionsDir = Join-Path $WorktreePath ".github"
+        New-Item -ItemType Directory -Force -Path $instructionsDir | Out-Null
+        $claudeMdPath = Join-Path $instructionsDir "copilot-instructions.md"
+    } else {
+        $claudeMdPath = Join-Path $WorktreePath "CLAUDE.md"
+    }
+    New-Item -ItemType Directory -Force -Path $WorktreePath | Out-Null
+
+    # Read constitution files
+    $workflow = ""
+    $engineering = ""
+    $project = ""
+
+    $workflowPath = Join-Path $KILN_DIR "constitution" "workflow.md"
+    if (Test-Path $workflowPath) {
+        $workflow = Get-Content $workflowPath -Raw
+    }
+
+    $engineeringPath = Join-Path $KILN_DIR "constitution" "engineering.md"
+    if (Test-Path $engineeringPath) {
+        $engineering = Get-Content $engineeringPath -Raw
+    }
+
+    $projectPath = Join-Path $KILN_DIR "constitution" "project.md"
+    if (Test-Path $projectPath) {
+        $project = Get-Content $projectPath -Raw
+    }
+
+    $rolePrompt = ""
+    $rolePath = Join-Path $KILN_DIR "roles" "$Role.md"
+    if (Test-Path $rolePath) {
+        $rolePrompt = Get-Content $rolePath -Raw
+    }
+
+    $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    $worktreeLeaf = Split-Path -Leaf $WorktreePath
+
+    $content = "<!-- Auto-generated by kiln.ps1 on $timestamp -->`n"
+    $content += "<!-- DO NOT EDIT MANUALLY -->`n`n"
+    $content += "# Kiln Constitution & Workflow`n`n"
+
+    if ($workflow) {
+        $content += "## Workflow Rules`n`n$workflow`n`n"
+    }
+    if ($engineering) {
+        $content += "## Engineering Rules`n`n$engineering`n`n"
+    }
+    if ($project) {
+        $content += "## Project Rules`n`n$project`n`n"
+    }
+
+    $content += "---`n`n"
+    $content += "# Your Role: $Role`n`n"
+    if ($rolePrompt) {
+        $content += "$rolePrompt`n`n"
+    } else {
+        $content += "You are the **$Role** agent in this Kiln swarm.`n`n"
+    }
+    $content += "You work in this worktree: $worktreeLeaf`n`n"
+
+    $content += "## Kiln Runtime Paths`n`n"
+    $content += "- **Your role**: $Role`n"
+    $content += "- **Your branch**: $CurrentBranch`n"
+    $content += "- **Message database**: `.kiln/messages.db` (accessed via MCP `kiln-db` server)`n"
+    $content += "- **MCP server**: kiln-db (configured in `.claude/settings.json` and `.mcp.json`)`n`n"
+    $content += "### Inbox SQL (paste into read_query MCP tool)`n`n"
+    $content += "Check for new messages at session start and after each task. SQL: `SELECT id, sender, priority, content FROM messages WHERE target='$Role' AND branch='$CurrentBranch' AND status='queued' ORDER BY priority ASC, created_at ASC LIMIT 1`n`n"
+    $content += "### Mark delivered SQL (paste into write_query MCP tool)`n`n"
+    $content += "After reading a message, mark it delivered: `UPDATE messages SET status='delivered', delivered_at=datetime('now') WHERE id='<message-id>'`n`n"
+    $content += "### Send message SQL (paste into write_query MCP tool)`n`n"
+    $content += "When sending a handoff to another role: `INSERT INTO messages (id, sender, target, priority, status, content, created_at, branch) VALUES (strftime('%Y%m%d%H%M%S','now')||'-'||substr(hex(randomblob(4)),1,8), '$Role', '<TARGET_ROLE>', 50, 'queued', 'Re-read your role and constitution...<your-message>', datetime('now'), '$CurrentBranch')`n"
+
+    Set-Content $claudeMdPath $content
+}
+
+function Build-AgentCommand {
+    param(
+        [int]$Index,
+        [bool]$DebugMode = $false
+    )
+
+    $role = $global:ROLES[$Index]
+    $agent = $global:AGENTS[$Index]
+    $displayName = $global:DISPLAY_NAMES[$Index]
+    $worktreePath = $global:WORKTREE_PATHS[$Index]
+
+    Write-GeneratedCLAUDEmd -Index $Index -Role $role -WorktreePath $worktreePath -Agent $agent
+
+    $wtProfile = $displayName
+    $command = ""
+    $debugFlags = if ($DebugMode) { "--verbose" } else { "" }
+
+    switch ($agent) {
+        "claude" {
+            $claudeCmd = "claude --model claude-haiku-4-5-20251001 --permission-mode bypassPermissions --mcp-config ./claude.json -n 'Kiln $displayName'"
+            if ($DebugMode) {
+                $claudeCmd += " $debugFlags"
+            }
+            $command = "new-tab -p '$wtProfile' -d '$worktreePath' pwsh -NoExit -Command `"Set-Location '$worktreePath'; $claudeCmd`""
+        }
+        "copilot" {
+            $copilotCmd = "copilot --allow-all --name 'Kiln $displayName'"
+            if ($DebugMode) {
+                $copilotCmd += " $debugFlags"
+            }
+            $command = "new-tab -p '$wtProfile' -d '$worktreePath' pwsh -NoExit -Command `"Set-Location '$worktreePath'; $copilotCmd`""
+        }
+        default {
+            Write-Host "  [$displayName] agent type $agent not yet supported on Windows" -ForegroundColor Yellow
+        }
+    }
+
+    return $command
+}
+
+# Main flow
+Test-Dependency git
+
+# Detect and load terminal adapter
+$TerminalBackend = Get-TerminalBackend
+Write-Host "Using terminal backend: $TerminalBackend" -ForegroundColor Cyan
+
+switch ($TerminalBackend) {
+    "wt" { Test-Dependency wt }
+    "wezterm" {
+        Test-Dependency wezterm
+        $adapterPath = Join-Path $SCRIPT_DIR ".." "lib" "terminal-adapters" "wezterm.ps1"
+        if (!(Test-Path $adapterPath)) {
+            Write-Host "Error: Terminal adapter not found: $adapterPath" -ForegroundColor Red
+            exit 1
+        }
+        . $adapterPath
+    }
+}
+
+$WorkingDir = (Resolve-Path $WorkingDir).Path
+
+# Initialize directory paths now that WorkingDir is resolved to absolute path
+$KILN_DIR = Join-Path $WorkingDir "kiln"
+$STATE_DIR = Join-Path $WorkingDir ".kiln"
+$WORKTREES_DIR = Join-Path $WorkingDir ".worktrees"
+
+Initialize-GitRepo
+Install-GitHooks
+$CurrentBranch = git -C $WorkingDir rev-parse --abbrev-ref HEAD 2>$null
+if (-not $CurrentBranch -or $CurrentBranch -eq "HEAD") { $CurrentBranch = "kiln" }
+
+# Load configuration profile
+if (-not $ProfileName) {
+    $ProfileName = "dev"
+}
+
+Write-Host "Loading configuration profile: $ProfileName" -ForegroundColor Cyan
+. "$SCRIPT_DIR\..\lib\profile-loader.ps1"
+$frameworkRoot = Split-Path -Parent $SCRIPT_DIR
+try {
+    $profileVars = Load-KilnProfile -ProjectRoot $WorkingDir -FrameworkRoot $frameworkRoot -Profile $ProfileName
+    if ($profileVars) {
+        Invoke-Expression $profileVars
+    } else {
+        throw "Profile loader returned empty result"
+    }
+} catch {
+    Write-Host "Error: Failed to load profile '$ProfileName': $_" -ForegroundColor Red
+    exit 1
+}
+
+Load-ConfigFromProfile
+Prepare-Workspace
+Prepare-Worktrees
+Prepare-AgentConfigs
+
+# Create tmp directory for handoff files (used by all agents)
+$tmpDir = Join-Path $WorkingDir "tmp"
+New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+
+Prepare-Skills
+
+# Initialize message database (ACID-compliant message queuing)
+Write-Host "Initializing message database..." -ForegroundColor Cyan
+$dbPath = Join-Path $WorkingDir ".kiln" "messages.db"
+$dbDir = Split-Path $dbPath
+New-Item -ItemType Directory -Force -Path $dbDir | Out-Null
+
+$pythonScript = @"
+import sqlite3, os
+db = r'$dbPath'
+conn = sqlite3.connect(db)
+conn.execute('''CREATE TABLE IF NOT EXISTS messages (
+  id TEXT PRIMARY KEY, sender TEXT NOT NULL, target TEXT NOT NULL,
+  priority INTEGER DEFAULT 50, status TEXT DEFAULT 'queued',
+  content TEXT NOT NULL, created_at TEXT NOT NULL,
+  delivered_at TEXT, acked_at TEXT, processed_at TEXT, error TEXT,
+  branch TEXT NOT NULL DEFAULT 'main')''')
+conn.execute('CREATE INDEX IF NOT EXISTS idx_target_branch_status ON messages(target,branch,status)')
+conn.execute('PRAGMA journal_mode=WAL')
+conn.commit()
+conn.close()
+"@
+
+python -c $pythonScript 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Warning: Failed to initialize database via Python, trying direct sqlite3..." -ForegroundColor Yellow
+    $sqliteScript = @"
+CREATE TABLE IF NOT EXISTS messages (
+  id TEXT PRIMARY KEY, sender TEXT NOT NULL, target TEXT NOT NULL,
+  priority INTEGER DEFAULT 50, status TEXT DEFAULT 'queued',
+  content TEXT NOT NULL, created_at TEXT NOT NULL,
+  delivered_at TEXT, acked_at TEXT, processed_at TEXT, error TEXT,
+  branch TEXT NOT NULL DEFAULT 'main');
+CREATE INDEX IF NOT EXISTS idx_target_branch_status ON messages(target,branch,status);
+PRAGMA journal_mode=WAL;
+"@
+    $sqliteScript | sqlite3 $dbPath
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "✓ Initialized message database via sqlite3" -ForegroundColor Green
+    } else {
+        Write-Host "Error: Could not initialize database (sqlite3 not found)" -ForegroundColor Red
+        Write-Host "Please install sqlite3 or Python to use Kiln messaging." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "✓ Initialized message database" -ForegroundColor Green
+}
+
+# Persist terminal backend + layout so the watchdog knows how to wake agents
+Set-Content (Join-Path $STATE_DIR "runtime.env") "terminal=$TerminalBackend`nlayout=$Layout" -Encoding UTF8
+
+Write-Host "  ╔═══════════════════════════════════════════════╗" -ForegroundColor Cyan
+Write-Host "  ║         Kiln v0.1 Starting                    ║" -ForegroundColor Cyan
+Write-Host "  ║    Disciplined agents build better software   ║" -ForegroundColor Cyan
+Write-Host "  ╚═══════════════════════════════════════════════╝" -ForegroundColor Cyan
+Write-Host ""
+
+Write-Host "Launching agents in Windows Terminal..." -ForegroundColor Green
+
+if ($TerminalBackend -eq "wezterm") {
+    # WezTerm: generate dynamic Lua config and launch
+    $roleData = @()
+    for ($i = 0; $i -lt $global:ROLES.Count; $i++) {
+        $role = $global:ROLES[$i]
+        $agent = $global:AGENTS[$i]
+        $displayName = $global:DISPLAY_NAMES[$i]
+        $worktreePath = $global:WORKTREE_PATHS[$i]
+
+        Write-GeneratedCLAUDEmd -Index $i -Role $role -WorktreePath $worktreePath -Agent $agent
+
+        $cmd = Build-AgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath
+
+        $roleData += [PSCustomObject]@{
+            role  = $role
+            name  = $displayName
+            agent = $agent
+            path  = $worktreePath
+            cmd   = $cmd
+        }
+
+        Write-Host "  [$displayName] configured" -ForegroundColor Cyan
+    }
+
+    $env:KILN_PROJECT_DIR = $WorkingDir
+    Start-WezTermSession -RoleData $roleData -Layout $Layout
+
+} else {
+    # Windows Terminal (wt): use existing inline logic (unchanged for stability)
+    $AgentColors = @("One Half Dark", "Solarized Dark", "Tango Dark", "Campbell Powershell")
+
+    $wtArgs = @()
+    for ($i = 0; $i -lt $global:ROLES.Count; $i++) {
+        $role = $global:ROLES[$i]
+        $agent = $global:AGENTS[$i]
+        $displayName = $global:DISPLAY_NAMES[$i]
+        $worktreePath = $global:WORKTREE_PATHS[$i]
+
+        Write-GeneratedCLAUDEmd -Index $i -Role $role -WorktreePath $worktreePath -Agent $agent
+
+        if ($i -eq 0) {
+            $wtArgs += "new-tab"
+        } elseif ($Layout -eq "panes") {
+            switch ($i) {
+                1 { $wtArgs += ";", "split-pane", "-V" }
+                2 { $wtArgs += ";", "split-pane", "-H" }
+                3 { $wtArgs += ";", "move-focus", "up"; $wtArgs += ";", "move-focus", "left"; $wtArgs += ";", "split-pane", "-H" }
+                default { $wtArgs += ";", "split-pane", "-V" }
+            }
+        } else {
+            $wtArgs += ";", "new-tab"
+        }
+
+        # For tabs mode, add colored emoji symbol to tab title (matching WezTerm: blue, red, green, yellow)
+        # For panes mode, only set title on the first pane (the window title)
+        if ($Layout -eq "tabs") {
+            $colorEmojis = @("🟦", "🟥", "🟩", "🟨")
+            $tabTitle = "$($colorEmojis[$i]) $displayName"
+            $wtArgs += "--title", $tabTitle
+        } elseif ($i -eq 0) {
+            # Panes layout: only set window title on initial tab
+            $wtArgs += "--title", "Kiln v0.1"
+        }
+        $wtArgs += "-d", $worktreePath
+        $wtArgs += "--colorScheme", $AgentColors[$i % $AgentColors.Count]
+        $wtArgs += "pwsh"
+        $wtArgs += "-NoExit"
+        $wtArgs += "-Command"
+
+        switch ($agent) {
+            "claude" {
+                $claudeBase = "claude --model claude-haiku-4-5-20251001 --permission-mode bypassPermissions"
+                if ($Debug) { $claudeBase += " --verbose" }
+
+                if ($Layout -eq "tabs") {
+                    $wtArgs += "$claudeBase -n ""$displayName"""
+                } else {
+                    # Panes layout: don't use -n flag to avoid overriding window title
+                    $wtArgs += $claudeBase
+                }
+            }
+            "copilot" {
+                $copilotBase = "copilot -C '$worktreePath'"
+                if ($Debug) { $copilotBase += " --verbose" }
+
+                if ($Layout -eq "tabs") {
+                    $wtArgs += "$copilotBase --name ""$displayName"""
+                } else {
+                    # Panes layout: don't use --name flag to avoid overriding window title
+                    $wtArgs += $copilotBase
+                }
+            }
+            "codex" {
+                Write-Host "  [$displayName] WARNING: agent type 'codex' not yet supported on Windows" -ForegroundColor Yellow
+                $wtArgs += "echo 'Agent codex is not yet supported on Windows Terminal. Use claude or copilot.'"
+            }
+            "grok" {
+                Write-Host "  [$displayName] WARNING: agent type 'grok' not yet supported on Windows" -ForegroundColor Yellow
+                $wtArgs += "echo 'Agent grok is not yet supported on Windows Terminal. Use claude or copilot.'"
+            }
+            default {
+                Write-Host "  [$displayName] ERROR: unknown agent type '$agent'" -ForegroundColor Red
+                exit 1
+            }
+        }
+
+        Write-Host "  [$displayName] configured" -ForegroundColor Cyan
+    }
+
+    if ($wtArgs.Count -gt 0) {
+        $argString = ($wtArgs | ForEach-Object { if ($_ -match '\s') { """$_""" } else { $_ } }) -join ' '
+        Start-Process wt.exe -ArgumentList $argString -NoNewWindow | Out-Null
+        # Wait for panes to stabilize to avoid race conditions on rapid restarts
+        Start-Sleep -Milliseconds 1500
+    }
+}
+
+Write-Host ""
+Write-Host "Kiln is ready." -ForegroundColor Green
+Write-Host "Working directory: $WorkingDir"
+$rolesJoined = $ROLES -join ", "
+Write-Host "Roles configured: $rolesJoined"
+Write-Host ""
