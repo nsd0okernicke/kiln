@@ -539,14 +539,14 @@ function Build-AgentCommand {
 
     switch ($agent) {
         "claude" {
-            $claudeCmd = "claude --model claude-haiku-4-5-20251001 --permission-mode bypassPermissions --mcp-config ./.mcp.json -n 'Kiln $displayName'"
+            $claudeCmd = "claude --model claude-haiku-4-5-20251001 --permission-mode bypassPermissions --mcp-config ./.mcp.json -n '$displayName'"
             if ($DebugMode) {
                 $claudeCmd += " $debugFlags"
             }
             $command = "new-tab -p '$wtProfile' -d '$worktreePath' pwsh -NoExit -Command `"Set-Location '$worktreePath'; $claudeCmd`""
         }
         "copilot" {
-            $copilotCmd = "copilot --allow-all --name 'Kiln $displayName'"
+            $copilotCmd = "copilot --allow-all --name '$displayName'"
             if ($DebugMode) {
                 $copilotCmd += " $debugFlags"
             }
@@ -554,6 +554,31 @@ function Build-AgentCommand {
         }
         default {
             Write-Host "  [$displayName] agent type $agent not yet supported on Windows" -ForegroundColor Yellow
+        }
+    }
+
+    return $command
+}
+
+function Build-WezTermAgentCommand {
+    param(
+        [string]$Agent,
+        [string]$DisplayName,
+        [string]$WorktreePath,
+        [string]$Model = "claude-haiku-4-5-20251001"
+    )
+
+    $command = ""
+
+    switch ($Agent) {
+        "claude" {
+            $command = "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json -n '$DisplayName'"
+        }
+        "copilot" {
+            $command = "copilot --allow-all"
+        }
+        default {
+            $command = "echo 'Agent $Agent not supported'"
         }
     }
 
@@ -689,9 +714,18 @@ if ($TerminalBackend -eq "wezterm") {
         $displayName = $global:DISPLAY_NAMES[$i]
         $worktreePath = $global:WORKTREE_PATHS[$i]
 
+        # Get model for this terminal, default to haiku
+        $varModel = "TERMINAL_${i}_MODEL"
+        $model = Get-Variable -Name $varModel -ValueOnly -ErrorAction SilentlyContinue
+        if (-not $model) {
+            $model = "claude-haiku-4-5-20251001"
+        }
+
+        Write-Verbose "Role: '$role', DisplayName: '$displayName', Agent: '$agent', Model: '$model'"
+
         Write-GeneratedCLAUDEmd -Index $i -Role $role -WorktreePath $worktreePath -Agent $agent
 
-        $cmd = Build-AgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath
+        $cmd = Build-WezTermAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model
 
         $roleData += [PSCustomObject]@{
             role  = $role
@@ -705,7 +739,7 @@ if ($TerminalBackend -eq "wezterm") {
     }
 
     $env:KILN_PROJECT_DIR = $WorkingDir
-    Start-WezTermSession -RoleData $roleData -Layout $Layout
+    Start-WezTermSession -RoleData $roleData -LayoutJson $PROFILE_LAYOUT_JSON
 
 } else {
     # Windows Terminal (wt): use existing inline logic (unchanged for stability)

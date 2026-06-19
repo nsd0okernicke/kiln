@@ -1,0 +1,102 @@
+version: "2.0"
+description: "SwarmForge configuration profiles with terminal layout topology"
+
+profiles:
+  dev:
+    description: "Local development with organized 2-tab layout"
+    layout:
+      tabs:
+        - title: "Implementation"
+          panes:
+            - role: specifier
+              worktree: "@current"
+            - role: coder
+              worktree: "coder"
+        - title: "Quality"
+          panes:
+            - role: refactorer
+              worktree: "refactorer"
+            - role: architect
+              worktree: "architect"
+    messageBackend: "sqlite"
+    logLevel: "info"
+    env:
+      DEBUG: "false"
+
+  ci:
+    description: "CI/CD environment with minimal overhead"
+    layout:
+      tabs:
+        - title: "Build"
+          panes:
+            - role: coder
+              worktree: "@current"
+    messageBackend: "sqlite"
+    logLevel: "error"
+    env:
+      DEBUG: "false"
+
+  selftest:
+    description: "Self-testing configuration with 3-tab layout"
+    layout:
+      tabs:
+        - title: "Test Controller"
+          panes:
+            - role: selftest
+              worktree: "@current"
+        - title: "Implementation"
+          panes:
+            - role: specifier
+              worktree: "@current"
+            - role: coder
+              worktree: "coder"
+        - title: "Quality"
+          panes:
+            - role: refactorer
+              worktree: "refactorer"
+            - role: architect
+              worktree: "architect"
+    messageBackend: "sqlite"
+    logLevel: "debug"
+    env:
+      DEBUG: "true"
+      SWARMFORGE_SELFTEST_MODE: "true"
+
+  debug:
+    description: "Development with verbose logging and 3-tab layout"
+    layout:
+      tabs:
+        - title: "Debug Controller"
+          panes:
+            - role: selftest
+              worktree: "@current"
+        - title: "Implementation"
+          panes:
+            - role: specifier
+              worktree: "@current"
+            - role: coder
+              worktree: "coder"
+        - title: "Quality"
+          panes:
+            - role: refactorer
+              worktree: "refactorer"
+            - role: architect
+              worktree: "architect"
+    messageBackend: "sqlite"
+    logLevel: "debug"
+    env:
+      DEBUG: "true"
+      SWARMFORGE_VERBOSE_EVENTS: "true"
+
+  minimal:
+    description: "Minimal setup for lightweight testing"
+    layout:
+      tabs:
+        - title: "Coder"
+          panes:
+            - role: coder
+              worktree: "@current"
+    messageBackend: "sqlite"
+    logLevel: "warn"
+    env:
+      DEBUG: "false"

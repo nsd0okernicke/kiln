@@ -62,16 +62,21 @@ function Build-AgentCommand {
 function Start-WezTermSession {
     param(
         [PSCustomObject[]]$RoleData,
-        [string]$Layout = "panes"
+        [string]$LayoutJson = ""
     )
 
     # Build JSON for all roles (passed to Lua via env var)
     $rolesJson = $RoleData | ConvertTo-Json -Depth 5 -Compress
+    Write-Verbose "Roles JSON: $rolesJson"
     $env:Kiln_ROLES_JSON = $rolesJson
-    $env:Kiln_LAYOUT = $Layout
 
-    # WezTerm loads config from ~/.wezterm.lua by default
-    # We write our generated config there, with backup/restore
+    # Pass layout structure as JSON (may be empty, Lua will handle it)
+    if (-not [string]::IsNullOrEmpty($LayoutJson)) {
+        $env:Kiln_LAYOUT_JSON = $LayoutJson
+    }
+
+    # Backup user's config, use ours temporarily, then restore
+    # This avoids long-term interference with the user's .wezterm.lua
     $wezConfigPath = Join-Path $env:USERPROFILE ".wezterm.lua"
     $backupPath = "$wezConfigPath.Kiln-backup"
 
@@ -91,8 +96,10 @@ function Start-WezTermSession {
     } catch {
         Write-Host "Error: Failed to start WezTerm: $_" -ForegroundColor Red
     } finally {
-        # Restore original config after WezTerm starts
-        Start-Sleep -Milliseconds 500
+        # Wait for WezTerm to fully load config before restoring
+        Start-Sleep -Seconds 2
+
+        # Restore original config
         if (Test-Path $backupPath) {
             Move-Item -Path $backupPath -Destination $wezConfigPath -Force
         } elseif (Test-Path $wezConfigPath) {
@@ -127,9 +134,9 @@ config.mouse_bindings = {
 
 wezterm.on('gui-startup', function(cmd)
   local mux = wezterm.mux
-  local roles_json   = os.getenv('Kiln_ROLES_JSON')   or '[]'
-  local layout       = os.getenv('Kiln_LAYOUT')       or 'panes'
-  local project_dir  = os.getenv('Kiln_PROJECT_DIR')  or ''
+  local roles_json      = os.getenv('Kiln_ROLES_JSON')      or '[]'
+  local layout_json     = os.getenv('Kiln_LAYOUT_JSON')     or ''
+  local project_dir     = os.getenv('Kiln_PROJECT_DIR')     or ''
   local roles = wezterm.json_parse(roles_json)
 
   if not roles or #roles == 0 then
@@ -151,101 +158,204 @@ wezterm.on('gui-startup', function(cmd)
   config.color_scheme = color_schemes[scheme_idx]
 
   local all_panes = {}
+  local role_map = {}
 
-  if layout == 'tabs' then
-    local markers = { '🟦', '🟥', '🟩', '🟨', '🟪', '🟫', '⬜', '⬛' }
-    local tab, first_pane, window = mux.spawn_window({ cwd = roles[1].path })
-    local marker_idx = ((0) % #markers) + 1
-    tab:set_title(markers[marker_idx] .. ' ' .. roles[1].name)
-    first_pane:send_text('cd "' .. roles[1].path .. '" && ' .. roles[1].cmd .. '\r\n')
-    all_panes[1] = first_pane
+  -- Parse layout structure
+  local layout = nil
+  if layout_json and layout_json ~= '' then
+    layout = wezterm.json_parse(layout_json)
+  end
 
-    for i = 2, #roles do
-      local tab_n, pane = window:spawn_tab({ cwd = roles[i].path })
-      marker_idx = ((i-1) % #markers) + 1
-      tab_n:set_title(markers[marker_idx] .. ' ' .. roles[i].name)
-      pane:send_text('cd "' .. roles[i].path .. '" && ' .. roles[i].cmd .. '\r\n')
-      all_panes[i] = pane
-    end
-    tab:activate()
+  -- Build layout from profile structure
+  if layout and layout.tabs then
+    -- New flat format: layout.tabs is array of { title, panes: [] }
+    local window = nil
+    local first_tab = true
 
-  else
-    -- Panes layout: 2 columns, dynamic rows, left column fills first
-    local n = #roles
-    local left_count  = math.ceil(n / 2)
-    local right_count = math.floor(n / 2)
+    for tab_idx, tab_def in ipairs(layout.tabs) do
+      if not tab_def.panes or #tab_def.panes == 0 then
+        goto next_tab
+      end
 
-    -- Distribute roles: left col gets odd positions (1,3,5...), right gets even (2,4,6...)
-    local left_roles  = {}
-    local right_roles = {}
-    for i = 1, n do
-      if i % 2 == 1 then
-        left_roles[#left_roles + 1] = roles[i]
+      local first_role_name = tab_def.panes[1].role
+      local first_role = nil
+      for _, r in ipairs(roles) do
+        if r.role == first_role_name then
+          first_role = r
+          break
+        end
+      end
+
+      if not first_role then
+        goto next_tab
+      end
+
+      -- Create first pane
+      local tab, first_pane
+      if first_tab then
+        tab, first_pane, window = mux.spawn_window({ cwd = first_role.path })
+        first_tab = false
       else
-        right_roles[#right_roles + 1] = roles[i]
+        tab, first_pane = window:spawn_tab({ cwd = first_role.path })
+      end
+
+      -- Set tab title: explicit title or derive from role names
+      if tab_def.title then
+        tab:set_title(tab_def.title)
+      else
+        -- Generate title from all role names in this tab: "Role1 & Role2 & Role3"
+        local role_names = {}
+        for _, pane_def in ipairs(tab_def.panes) do
+          for _, r in ipairs(roles) do
+            if r.role == pane_def.role then
+              table.insert(role_names, r.name)
+              break
+            end
+          end
+        end
+        if #role_names > 0 then
+          tab:set_title(table.concat(role_names, ' & '))
+        end
+      end
+
+      -- Send command to first pane
+      first_pane:send_text(first_role.cmd .. '\r\n')
+      table.insert(all_panes, first_pane)
+      role_map[first_role_name] = first_pane:pane_id()
+
+      -- Add remaining panes via splits
+      local grid_rows = tab_def.gridRows or 1
+      local grid_cols = tab_def.gridCols or #tab_def.panes
+
+      if grid_rows > 1 or grid_cols > 1 then
+        -- Grid layout: create a 2D grid of panes
+        local panes_grid = {}
+        panes_grid[1] = {}
+        panes_grid[1][1] = first_pane
+
+        -- Create first column (all rows in column 1)
+        local prev_row_pane = first_pane
+        for row = 2, grid_rows do
+          local col1_pane_idx = (row - 1) * grid_cols + 1
+          if col1_pane_idx <= #tab_def.panes then
+            local pane_def = tab_def.panes[col1_pane_idx]
+            local role_data = nil
+            for _, r in ipairs(roles) do
+              if r.role == pane_def.role then
+                role_data = r
+                break
+              end
+            end
+            if role_data then
+              local split_size = 1.0 / (grid_rows - row + 2)
+              local new_pane = prev_row_pane:split({
+                direction = 'Bottom',
+                size = split_size,
+                cwd = role_data.path
+              })
+              if not panes_grid[row] then panes_grid[row] = {} end
+              panes_grid[row][1] = new_pane
+              new_pane:send_text(role_data.cmd .. '\r\n')
+              table.insert(all_panes, new_pane)
+              role_map[pane_def.role] = new_pane:pane_id()
+              prev_row_pane = new_pane
+            end
+          end
+        end
+
+        -- Create remaining columns
+        for col = 2, grid_cols do
+          for row = 1, grid_rows do
+            local pane_idx = (row - 1) * grid_cols + col
+            if pane_idx <= #tab_def.panes then
+              local pane_def = tab_def.panes[pane_idx]
+              local role_data = nil
+              for _, r in ipairs(roles) do
+                if r.role == pane_def.role then
+                  role_data = r
+                  break
+                end
+              end
+              if role_data and panes_grid[row] and panes_grid[row][col - 1] then
+                local split_size = 1.0 / (grid_cols - col + 2)
+                local new_pane = panes_grid[row][col - 1]:split({
+                  direction = 'Right',
+                  size = split_size,
+                  cwd = role_data.path
+                })
+                if not panes_grid[row] then panes_grid[row] = {} end
+                panes_grid[row][col] = new_pane
+                new_pane:send_text(role_data.cmd .. '\r\n')
+                table.insert(all_panes, new_pane)
+                role_map[pane_def.role] = new_pane:pane_id()
+              end
+            end
+          end
+        end
+      else
+        -- Simple linear layout: split horizontally for each pane
+        local prev_pane = first_pane
+        for pane_idx = 2, #tab_def.panes do
+          local pane_def = tab_def.panes[pane_idx]
+          local role_name = pane_def.role
+          local role_data = nil
+          for _, r in ipairs(roles) do
+            if r.role == role_name then
+              role_data = r
+              break
+            end
+          end
+
+          if role_data then
+            local split_size = 1.0 / (#tab_def.panes - pane_idx + 2)
+            local new_pane = prev_pane:split({
+              direction = 'Right',
+              size = split_size,
+              cwd = role_data.path
+            })
+
+            new_pane:send_text(role_data.cmd .. '\r\n')
+            table.insert(all_panes, new_pane)
+            role_map[role_name] = new_pane:pane_id()
+            prev_pane = new_pane
+          end
+        end
+      end
+
+      ::next_tab::
+    end
+
+    if window then
+      window:tabs()[1]:activate()
+    end
+
+  elseif layout and layout.roles then
+    -- Fallback: old shorthand format with roles array
+    local markers = { '🟦', '🟥', '🟩', '🟨', '🟪', '🟫', '⬜', '⬛' }
+    local window = nil
+    for i, role_name in ipairs(layout.roles) do
+      local role_obj = nil
+      for _, r in ipairs(roles) do
+        if r.role == role_name then
+          role_obj = r
+          break
+        end
+      end
+      if role_obj then
+        local tab, pane
+        if i == 1 then
+          tab, pane, window = mux.spawn_window({ cwd = role_obj.path })
+          tab:activate()
+        else
+          tab, pane = window:spawn_tab({ cwd = role_obj.path })
+        end
+        local marker_idx = ((i - 1) % #markers) + 1
+        tab:set_title(markers[marker_idx] .. ' ' .. role_obj.name)
+        pane:send_text('cd "' .. role_obj.path .. '" && ' .. role_obj.cmd .. '\r\n')
+        table.insert(all_panes, pane)
+        role_map[role_obj.role] = pane:pane_id()
       end
     end
-
-    -- Spawn window with top-left pane
-    local tab, left_top, window = mux.spawn_window({ cwd = left_roles[1].path })
-    tab:set_title('Kiln v0.1')
-
-    -- Split right column from left_top (top-right pane)
-    local right_top = nil
-    if right_count > 0 then
-      right_top = left_top:split({
-        direction = 'Right',
-        size = 0.5,
-        cwd = right_roles[1].path
-      })
-    end
-
-    -- Build left column: split Bottom from each previous left pane
-    local left_panes = { left_top }
-    for i = 2, left_count do
-      local size = 1.0 / (left_count - i + 2)
-      left_panes[i] = left_panes[i-1]:split({
-        direction = 'Bottom',
-        size = size,
-        cwd = left_roles[i].path
-      })
-    end
-
-    -- Build right column: split Bottom from each previous right pane
-    local right_panes = {}
-    if right_count > 0 then
-      right_panes[1] = right_top
-      for i = 2, right_count do
-        local size = 1.0 / (right_count - i + 2)
-        right_panes[i] = right_panes[i-1]:split({
-          direction = 'Bottom',
-          size = size,
-          cwd = right_roles[i].path
-        })
-      end
-    end
-
-    -- Send commands and collect all_panes in role order
-    for i = 1, left_count do
-      local cmd = left_roles[i].cmd
-      cmd = cmd:gsub(" -n '[^']*'", "")
-      cmd = cmd:gsub(' -n "[^"]*"', "")
-      cmd = cmd:gsub(" --name '[^']*'", "")
-      cmd = cmd:gsub(' --name "[^"]*"', "")
-      left_panes[i]:send_text('cd "' .. left_roles[i].path .. '" && ' .. cmd .. '\r\n')
-      all_panes[#all_panes + 1] = left_panes[i]
-      if right_panes[i] then
-        local rcmd = right_roles[i].cmd
-        rcmd = rcmd:gsub(" -n '[^']*'", "")
-        rcmd = rcmd:gsub(' -n "[^"]*"', "")
-        rcmd = rcmd:gsub(" --name '[^']*'", "")
-        rcmd = rcmd:gsub(' --name "[^"]*"', "")
-        right_panes[i]:send_text('cd "' .. right_roles[i].path .. '" && ' .. rcmd .. '\r\n')
-        all_panes[#all_panes + 1] = right_panes[i]
-      end
-    end
-
-    tab:activate()
   end
 
   -- Write pane IDs so the watchdog can address agents directly via wezterm cli
@@ -253,10 +363,8 @@ wezterm.on('gui-startup', function(cmd)
     local pane_ids_path = project_dir .. '/.Kiln/pane-ids.tsv'
     local f = io.open(pane_ids_path, 'w')
     if f then
-      for i, pane in ipairs(all_panes) do
-        if roles[i] and roles[i].role then
-          f:write(roles[i].role .. '\t' .. pane:pane_id() .. '\n')
-        end
+      for role_name, pane_id in pairs(role_map) do
+        f:write(role_name .. '\t' .. pane_id .. '\n')
       end
       f:close()
     end

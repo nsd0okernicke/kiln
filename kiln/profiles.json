@@ -1,0 +1,405 @@
+{
+  "version": "1.0",
+  "description": "Kiln configuration profiles for different development scenarios",
+  "profiles": {
+    "dev": {
+      "description": "Local development setup with standard 4-agent swarm in tabs",
+      "terminals": [
+        {
+          "role": "specifier",
+          "agent": "copilot",
+          "worktree": "@current",
+          "title": "Kiln Specifier"
+        },
+        {
+          "role": "coder",
+          "agent": "claude",
+          "worktree": "coder",
+          "title": "Kiln Coder",
+          "model": "claude-haiku-4-5-20251001"
+        },
+        {
+          "role": "refactorer",
+          "agent": "claude",
+          "worktree": "refactorer",
+          "title": "Kiln Refactorer",
+          "model": "claude-haiku-4-5-20251001"
+        },
+        {
+          "role": "architect",
+          "agent": "claude",
+          "worktree": "architect",
+          "title": "Kiln Architect",
+          "model": "claude-haiku-4-5-20251001"
+        }
+      ],
+      "layout": {
+        "type": "tabs",
+        "roles": [
+          "specifier",
+          "coder",
+          "refactorer",
+          "architect"
+        ]
+      },
+      "messageBackend": "sqlite",
+      "logLevel": "info",
+      "env": {
+        "DEBUG": "false"
+      }
+    },
+    "ci": {
+      "description": "CI/CD environment with minimal overhead",
+      "terminals": [
+        {
+          "role": "coder",
+          "agent": "claude",
+          "worktree": "@current",
+          "title": "Kiln CI",
+          "model": "claude-haiku-4-5-20251001"
+        }
+      ],
+      "layout": {
+        "type": "tabs",
+        "roles": [
+          "coder"
+        ]
+      },
+      "messageBackend": "sqlite",
+      "logLevel": "error",
+      "env": {
+        "DEBUG": "false"
+      }
+    },
+    "selftest": {
+      "description": "Automated self-testing configuration",
+      "terminals": [
+        {
+          "role": "selftest",
+          "agent": "copilot",
+          "worktree": "@current",
+          "title": "Kiln Self-Test"
+        },
+        {
+          "role": "specifier",
+          "agent": "claude",
+          "worktree": "specifier",
+          "title": "Kiln Specifier",
+          "model": "claude-haiku-4-5-20251001"
+        },
+        {
+          "role": "coder",
+          "agent": "claude",
+          "worktree": "coder",
+          "title": "Kiln Coder",
+          "model": "claude-haiku-4-5-20251001"
+        },
+        {
+          "role": "refactorer",
+          "agent": "claude",
+          "worktree": "refactorer",
+          "title": "Kiln Refactorer",
+          "model": "claude-haiku-4-5-20251001"
+        },
+        {
+          "role": "architect",
+          "agent": "claude",
+          "worktree": "architect",
+          "title": "Kiln Architect",
+          "model": "claude-haiku-4-5-20251001"
+        }
+      ],
+      "layout": {
+        "type": "tabs",
+        "roles": [
+          "selftest",
+          "specifier",
+          "coder",
+          "refactorer",
+          "architect"
+        ]
+      },
+      "messageBackend": "sqlite",
+      "logLevel": "debug",
+      "env": {
+        "DEBUG": "true",
+        "Kiln_SELFTEST_MODE": "true"
+      }
+    },
+    "debug": {
+      "description": "Development with verbose logging and debugging enabled",
+      "terminals": [
+        {
+          "role": "specifier",
+          "agent": "claude",
+          "worktree": "specifier",
+          "title": "Kiln Specifier [DEBUG]",
+          "model": "claude-haiku-4-5-20251001"
+        },
+        {
+          "role": "coder",
+          "agent": "claude",
+          "worktree": "coder",
+          "title": "Kiln Coder [DEBUG]",
+          "model": "claude-haiku-4-5-20251001"
+        },
+        {
+          "role": "refactorer",
+          "agent": "claude",
+          "worktree": "refactorer",
+          "title": "Kiln Refactorer [DEBUG]",
+          "model": "claude-haiku-4-5-20251001"
+        },
+        {
+          "role": "architect",
+          "agent": "claude",
+          "worktree": "architect",
+          "title": "Kiln Architect [DEBUG]",
+          "model": "claude-haiku-4-5-20251001"
+        }
+      ],
+      "layout": {
+        "type": "tabs",
+        "roles": [
+          "specifier",
+          "coder",
+          "refactorer",
+          "architect"
+        ]
+      },
+      "messageBackend": "sqlite",
+      "logLevel": "debug",
+      "env": {
+        "DEBUG": "true",
+        "Kiln_VERBOSE_EVENTS": "true"
+      }
+    },
+    "minimal": {
+      "description": "Minimal setup for lightweight testing",
+      "terminals": [
+        {
+          "role": "coder",
+          "agent": "claude",
+          "worktree": "@current",
+          "title": "Kiln Coder",
+          "model": "claude-haiku-4-5-20251001"
+        }
+      ],
+      "layout": {
+        "type": "tabs",
+        "roles": [
+          "coder"
+        ]
+      },
+      "messageBackend": "sqlite",
+      "logLevel": "warn",
+      "env": {
+        "DEBUG": "false"
+      }
+    },
+    "copilot-test": {
+      "description": "Single Copilot agent for MCP testing",
+      "terminals": [
+        {
+          "role": "coder",
+          "agent": "copilot",
+          "worktree": "@current",
+          "title": "Kiln Copilot Test"
+        }
+      ],
+      "layout": {
+        "type": "tabs",
+        "roles": [
+          "coder"
+        ]
+      },
+      "messageBackend": "sqlite",
+      "logLevel": "info",
+      "env": {
+        "DEBUG": "false"
+      }
+    },
+    "compact": {
+      "description": "Compact pane layout with all roles in one tab",
+      "terminals": [
+        {
+          "role": "specifier",
+          "agent": "copilot",
+          "worktree": "@current",
+          "title": "Kiln Specifier"
+        },
+        {
+          "role": "coder",
+          "agent": "claude",
+          "worktree": "coder",
+          "title": "Kiln Coder",
+          "model": "claude-haiku-4-5-20251001"
+        },
+        {
+          "role": "refactorer",
+          "agent": "claude",
+          "worktree": "refactorer",
+          "title": "Kiln Refactorer",
+          "model": "claude-haiku-4-5-20251001"
+        },
+        {
+          "role": "architect",
+          "agent": "claude",
+          "worktree": "architect",
+          "title": "Kiln Architect",
+          "model": "claude-haiku-4-5-20251001"
+        }
+      ],
+      "layout": {
+        "tabs": [
+          {
+            "title": "All Roles",
+            "gridRows": 2,
+            "gridCols": 2,
+            "panes": [
+              {
+                "role": "specifier"
+              },
+              {
+                "role": "coder"
+              },
+              {
+                "role": "refactorer"
+              },
+              {
+                "role": "architect"
+              }
+            ]
+          }
+        ]
+      },
+      "messageBackend": "sqlite",
+      "logLevel": "info",
+      "env": {
+        "DEBUG": "false"
+      }
+    },
+    "dual-pane": {
+      "description": "Two tabs with two panes each",
+      "terminals": [
+        {
+          "role": "specifier",
+          "agent": "copilot",
+          "worktree": "@current",
+          "title": "Kiln Specifier"
+        },
+        {
+          "role": "coder",
+          "agent": "claude",
+          "worktree": "coder",
+          "title": "Kiln Coder",
+          "model": "claude-haiku-4-5-20251001"
+        },
+        {
+          "role": "refactorer",
+          "agent": "claude",
+          "worktree": "refactorer",
+          "title": "Kiln Refactorer",
+          "model": "claude-haiku-4-5-20251001"
+        },
+        {
+          "role": "architect",
+          "agent": "claude",
+          "worktree": "architect",
+          "title": "Kiln Architect",
+          "model": "claude-haiku-4-5-20251001"
+        }
+      ],
+      "layout": {
+        "tabs": [
+          {
+            "panes": [
+              {
+                "role": "specifier"
+              },
+              {
+                "role": "coder"
+              }
+            ]
+          },
+          {
+            "panes": [
+              {
+                "role": "refactorer"
+              },
+              {
+                "role": "architect"
+              }
+            ]
+          }
+        ]
+      },
+      "messageBackend": "sqlite",
+      "logLevel": "info",
+      "env": {
+        "DEBUG": "false"
+      }
+    },
+    "focus-top": {
+      "description": "Focus layout: role 1 full, roles 2-4 in 3-way split below",
+      "terminals": [
+        {
+          "role": "specifier",
+          "agent": "copilot",
+          "worktree": "@current",
+          "title": "Kiln Specifier"
+        },
+        {
+          "role": "coder",
+          "agent": "claude",
+          "worktree": "coder",
+          "title": "Kiln Coder",
+          "model": "claude-haiku-4-5-20251001"
+        },
+        {
+          "role": "refactorer",
+          "agent": "claude",
+          "worktree": "refactorer",
+          "title": "Kiln Refactorer",
+          "model": "claude-haiku-4-5-20251001"
+        },
+        {
+          "role": "architect",
+          "agent": "claude",
+          "worktree": "architect",
+          "title": "Kiln Architect",
+          "model": "claude-haiku-4-5-20251001"
+        }
+      ],
+      "layout": {
+        "tabs": [
+          {
+            "panes": [
+              {
+                "role": "specifier"
+              }
+            ]
+          },
+          {
+            "panes": [
+              {
+                "role": "coder"
+              },
+              {
+                "role": "refactorer"
+              },
+              {
+                "role": "architect"
+              }
+            ]
+          }
+        ]
+      },
+      "messageBackend": "sqlite",
+      "logLevel": "info",
+      "env": {
+        "DEBUG": "false"
+      }
+    }
+  }
+}

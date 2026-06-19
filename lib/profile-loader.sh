@@ -13,11 +13,11 @@ load_kiln_profile() {
     # Find profiles.yaml if not provided
     if [[ -z "$config_path" ]]; then
         local search_paths=(
-            "$project_root/kiln.profiles.yaml"
-            "$project_root/kiln/profiles.yaml"
-            "$project_root/.kiln/profiles.yaml"
-            "$HOME/.kiln/profiles.yaml"
-            "/etc/kiln/profiles.yaml"
+            "$project_root/kiln.profiles.json"
+            "$project_root/kiln/profiles.json"
+            "$project_root/.kiln/profiles.json"
+            "$HOME/.kiln/profiles.json"
+            "/etc/kiln/profiles.json"
         )
 
         for path in "${search_paths[@]}"; do
@@ -43,15 +43,14 @@ _parse_yaml_profile() {
     local config_path="$1"
     local profile_name="$2"
 
-    # Use Python for robust YAML parsing
+    # Use Python to parse JSON (simpler than manual parsing)
     python3 << PYTHON_PROFILE_LOADER
-import yaml
 import json
 import sys
 
 try:
     with open('$config_path', 'r') as f:
-        config = yaml.safe_load(f)
+        config = json.load(f)
 
     if 'profiles' not in config or '$profile_name' not in config['profiles']:
         available = list(config.get('profiles', {}).keys())
@@ -62,6 +61,7 @@ try:
     profile_data = {
         'name': '$profile_name',
         'description': profile.get('description', ''),
+        'layout': profile.get('layout', {}),
         'terminals': profile.get('terminals', []),
         'messageBackend': profile.get('messageBackend', 'sqlite'),
         'logLevel': profile.get('logLevel', 'info'),
@@ -71,8 +71,15 @@ try:
     # Output as bash-compatible variables
     print(f"PROFILE_NAME='{profile_data['name']}'")
     print(f"PROFILE_DESCRIPTION='{profile_data['description']}'")
+    print(f"PROFILE_MODEL='{profile.get('model', 'claude-haiku-4-5-20251001')}'")
     print(f"PROFILE_BACKEND='{profile_data['messageBackend']}'")
     print(f"PROFILE_LOG_LEVEL='{profile_data['logLevel']}'")
+
+    # Serialize layout as JSON
+    layout_json = json.dumps(profile_data['layout']) if profile_data['layout'] else ''
+    # Escape single quotes for bash
+    layout_json = layout_json.replace("'", "'\\''")
+    print(f"PROFILE_LAYOUT_JSON='{layout_json}'")
 
     # Output terminals as array
     for i, terminal in enumerate(profile_data['terminals']):
@@ -80,10 +87,13 @@ try:
         agent = terminal.get('agent', 'claude')
         worktree = terminal.get('worktree', '@current')
         title = terminal.get('title', f'kiln {role}')
+        model = terminal.get('model', '')
         print(f"TERMINAL_{i}_ROLE='{role}'")
         print(f"TERMINAL_{i}_AGENT='{agent}'")
         print(f"TERMINAL_{i}_WORKTREE='{worktree}'")
         print(f"TERMINAL_{i}_TITLE='{title}'")
+        if model:
+            print(f"TERMINAL_{i}_MODEL='{model}'")
 
     print(f"TERMINAL_COUNT={len(profile_data['terminals'])}")
 
@@ -100,19 +110,19 @@ PYTHON_PROFILE_LOADER
 # List all available profiles
 get_available_profiles() {
     local project_root="$1"
-    local config_path="$project_root/kiln/kiln.profiles.yaml"
+    local config_path="$project_root/kiln/profiles.json"
 
     if [[ ! -f "$config_path" ]]; then
         return
     fi
 
     python3 << PYTHON_LIST_PROFILES
-import yaml
+import json
 import sys
 
 try:
     with open('$config_path', 'r') as f:
-        config = yaml.safe_load(f)
+        config = json.load(f)
 
     profiles = config.get('profiles', {})
     for name, profile in profiles.items():

@@ -535,6 +535,7 @@ load_config_from_profile
 check_backend_dependencies
 TERMINAL_BACKEND="$(detect_terminal_backend)"
 load_terminal_backend "$TERMINAL_BACKEND"
+export KILN_LAYOUT_JSON="${PROFILE_LAYOUT_JSON:-}"
 
 if (( DRY_RUN )); then
   echo -e "${YELLOW}[DRY RUN] Would create workspace dirs: $STATE_DIR, $PROMPTS_DIR${RESET}"

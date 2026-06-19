@@ -3,7 +3,7 @@ description: "Kiln configuration profiles for different development scenarios"
 
 profiles:
   dev:
-    description: "Local development setup with standard 4-agent swarm"
+    description: "Local development setup with standard 4-agent swarm in tabs"
     terminals:
       - role: specifier
         agent: copilot
@@ -21,6 +21,9 @@ profiles:
         agent: claude
         worktree: "architect"
         title: "Kiln Architect"
+    layout:
+      type: tabs
+      roles: [specifier, coder, refactorer, architect]
     messageBackend: "sqlite"
     logLevel: "info"
     env:
@@ -33,6 +36,9 @@ profiles:
         agent: claude
         worktree: "@current"
         title: "Kiln CI"
+    layout:
+      type: tabs
+      roles: [coder]
     messageBackend: "sqlite"
     logLevel: "error"
     env:
@@ -61,6 +67,9 @@ profiles:
         agent: claude
         worktree: "architect"
         title: "Kiln Architect"
+    layout:
+      type: tabs
+      roles: [selftest, specifier, coder, refactorer, architect]
     messageBackend: "sqlite"
     logLevel: "debug"
     env:
@@ -86,6 +95,9 @@ profiles:
         agent: claude
         worktree: "architect"
         title: "Kiln Architect [DEBUG]"
+    layout:
+      type: tabs
+      roles: [specifier, coder, refactorer, architect]
     messageBackend: "sqlite"
     logLevel: "debug"
     env:
@@ -99,6 +111,9 @@ profiles:
         agent: claude
         worktree: "@current"
         title: "Kiln Coder"
+    layout:
+      type: tabs
+      roles: [coder]
     messageBackend: "sqlite"
     logLevel: "warn"
     env:
@@ -111,8 +126,156 @@ profiles:
         agent: copilot
         worktree: "@current"
         title: "Kiln Copilot Test"
+    layout:
+      type: tabs
+      roles: [coder]
     messageBackend: "sqlite"
     logLevel: "info"
     env:
       DEBUG: "false"
 
+  compact:
+    description: "Compact pane layout with all roles in one tab"
+    terminals:
+      - role: specifier
+        agent: copilot
+        worktree: "@current"
+        title: "Kiln Specifier"
+      - role: coder
+        agent: claude
+        worktree: "coder"
+        title: "Kiln Coder"
+      - role: refactorer
+        agent: claude
+        worktree: "refactorer"
+        title: "Kiln Refactorer"
+      - role: architect
+        agent: claude
+        worktree: "architect"
+        title: "Kiln Architect"
+    layout:
+      type: tab
+      title: "Kiln"
+      children:
+        - type: split
+          direction: right
+          size: 0.5
+          children:
+            - type: pane
+              role: specifier
+            - type: split
+              direction: bottom
+              size: 0.5
+              children:
+                - type: pane
+                  role: coder
+                - type: split
+                  direction: bottom
+                  size: 0.5
+                  children:
+                    - type: pane
+                      role: refactorer
+                    - type: pane
+                      role: architect
+    messageBackend: "sqlite"
+    logLevel: "info"
+    env:
+      DEBUG: "false"
+
+  dual-pane:
+    description: "Two tabs with two panes each"
+    terminals:
+      - role: specifier
+        agent: copilot
+        worktree: "@current"
+        title: "Kiln Specifier"
+      - role: coder
+        agent: claude
+        worktree: "coder"
+        title: "Kiln Coder"
+      - role: refactorer
+        agent: claude
+        worktree: "refactorer"
+        title: "Kiln Refactorer"
+      - role: architect
+        agent: claude
+        worktree: "architect"
+        title: "Kiln Architect"
+    layout:
+      type: tabs
+      children:
+        - type: tab
+          title: "Pair 1"
+          children:
+            - type: split
+              direction: right
+              size: 0.5
+              children:
+                - type: pane
+                  role: specifier
+                - type: pane
+                  role: coder
+        - type: tab
+          title: "Pair 2"
+          children:
+            - type: split
+              direction: right
+              size: 0.5
+              children:
+                - type: pane
+                  role: refactorer
+                - type: pane
+                  role: architect
+    messageBackend: "sqlite"
+    logLevel: "info"
+    env:
+      DEBUG: "false"
+
+  focus-top:
+    description: "Focus layout: role 1 full, roles 2-4 in 3-way split below"
+    terminals:
+      - role: specifier
+        agent: copilot
+        worktree: "@current"
+        title: "Kiln Specifier"
+      - role: coder
+        agent: claude
+        worktree: "coder"
+        title: "Kiln Coder"
+      - role: refactorer
+        agent: claude
+        worktree: "refactorer"
+        title: "Kiln Refactorer"
+      - role: architect
+        agent: claude
+        worktree: "architect"
+        title: "Kiln Architect"
+    layout:
+      type: tabs
+      children:
+        - type: tab
+          title: "Focus"
+          children:
+            - type: pane
+              role: specifier
+        - type: tab
+          title: "Work"
+          children:
+            - type: split
+              direction: right
+              size: 0.33
+              children:
+                - type: pane
+                  role: coder
+                - type: split
+                  direction: right
+                  size: 0.5
+                  children:
+                    - type: pane
+                      role: refactorer
+                    - type: pane
+                      role: architect
+    messageBackend: "sqlite"
+    logLevel: "info"
+    env:
+      DEBUG: "false"

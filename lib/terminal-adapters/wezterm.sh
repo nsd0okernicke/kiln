@@ -31,18 +31,10 @@ terminal_open_session() {
   local cmd="cd $(printf '%q' "$WORKING_DIR") && exec tmux -S $(printf '%q' "$TMUX_SOCKET") attach-session -t $(printf '%q' "$session")"
 
   local pane_id
-  if [[ -n "$sibling_id" ]]; then
-    # Open tab in the same WezTerm window as the sibling pane
-    pane_id="$(wezterm cli spawn --pane-id "$sibling_id" -- zsh -lc "$cmd" 2>/dev/null)"
-  else
-    # Open a new tab in the current/front window, or a new window if none
-    pane_id="$(wezterm cli spawn -- zsh -lc "$cmd" 2>/dev/null)"
-  fi
-
-  if [[ -n "$pane_id" ]]; then
-    wezterm cli set-tab-title --pane-id "$pane_id" "$title" 2>/dev/null || true
-    echo "$pane_id"
-  fi
+  # Note: For hierarchical layouts, the Lua config handles all pane creation
+  # This function is called but panes are already created by the layout builder
+  # Return empty to indicate layout is handled elsewhere
+  echo ""
 }
 
 terminal_close_window() {
