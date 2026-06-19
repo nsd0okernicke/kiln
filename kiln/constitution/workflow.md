@@ -61,3 +61,43 @@ Examples:
 - `[Specifier] Accept registration story - Gherkin for email, duplicate, and empty-name cases`
 
 Do not squash the merge commit itself — only squash your own work commits on top of it.
+
+## Handoff Message Format
+
+All handoff messages must include a **timestamp** for user visibility when running cycles manually. Format your handoff message as follows:
+
+```text
+Re-read your role and constitution.
+Sender: <role-name>
+Handoff: <specifier-handoff-name>
+Branch: <branch-name>
+Commit: <commit-hash>
+
+════════════════════════════════════════════════════════════════
+✓ <ROLE-NAME> HANDOFF — <timestamp in format "YYYY-MM-DD HH:MM:SS">
+════════════════════════════════════════════════════════════════
+<Brief description of what was accomplished>
+
+Next role: <next-role-name>
+```
+
+**Timestamp format**: Use `YYYY-MM-DD HH:MM:SS` (e.g., `2026-06-19 14:35:22`). This allows users to see exactly when each handoff was sent.
+
+**Visual markers**: Use box-drawing characters or dashes to make handoff messages visually distinct in the terminal, helping users track cycle progress when running manually.
+
+**Example**:
+
+```text
+Re-read your role and constitution.
+Sender: coder
+Handoff: user-registration-v1
+Branch: main
+Commit: abc1234def5678
+
+════════════════════════════════════════════════════════════════
+✓ CODER HANDOFF — 2026-06-19 14:35:22
+════════════════════════════════════════════════════════════════
+TDD cycle complete: 15 tests pass, 100% acceptance, 95% coverage
+
+Next role: refactorer
+```

@@ -129,6 +129,8 @@ venv/
 *~
 .kiln/
 .worktrees/
+.github/
+.claude/skills
 '@
         Set-Content -Path $gitignorePath -Value $gitignoreContent -Encoding UTF8
     }

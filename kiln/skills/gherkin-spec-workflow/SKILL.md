@@ -174,7 +174,7 @@ Mutation-ready: <estimated mutation sites = scenario count × parameter count>
 
 **Handoff to coder**:
 - Invent a short stable handoff name (e.g., `order-processing-v1`)
-- File name: `Kiln/features/<feature-name>.feature`
+- File name: `features/<feature-name>.feature` (at project root, not in kiln/)
 - Send handoff with: feature file path, parameter table, and approval timestamp
 
 ---

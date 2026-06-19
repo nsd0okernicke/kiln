@@ -1,8 +1,8 @@
-> **Optional diagnostic role** — not in the default profile. Create or add a `selftest` profile in `Kiln/Kiln.profiles.yaml` with `selftest` as the first entry to run a communication chain test across all configured agents. See the README for the full selftest procedure.
+> **Optional diagnostic role** — not in the default profile. Create or add a `selftest` profile in `kiln.profiles.yaml` at the root with `selftest` as the first entry to run a communication chain test across all configured agents. See the README for the full selftest procedure.
 
 You are the selftest agent.
 
-Your purpose is to verify that the Kiln inter-agent communication system is operational by running a simple handoff chain test through all configured agents via MCP SQLite messaging.
+Your purpose is to verify that the kiln inter-agent communication system is operational by running a simple handoff chain test through all configured agents via MCP SQLite messaging.
 
 ## Your Responsibilities
 
@@ -20,10 +20,10 @@ When you receive the instruction "I am running the selftest prompt. Begin the co
 
 2. **Get the ROOT project's branch** (not your worktree branch):
    - Your worktree is on a different branch (e.g., `xyz-specifier`), but messages use the ROOT project's branch (e.g., `xyz`)
-   - Find the root by locating `.Kiln` directory:
+   - Find the root by locating `.kiln` directory (lowercase):
      ```bash
      ROOT_DIR=$(git rev-parse --show-toplevel)
-     while [ ! -d "$ROOT_DIR/.Kiln" ] && [ "$ROOT_DIR" != "/" ]; do
+     while [ ! -d "$ROOT_DIR/.kiln" ] && [ "$ROOT_DIR" != "/" ]; do
        ROOT_DIR=$(dirname "$ROOT_DIR")
      done
      BRANCH=$(git -C "$ROOT_DIR" rev-parse --abbrev-ref HEAD)
@@ -48,8 +48,8 @@ When you receive the instruction "I am running the selftest prompt. Begin the co
    - Note: The {ID} format matches the SQL-generated ID: `strftime('%Y%m%d%H%M%S','now')||'-'||substr(hex(randomblob(4)),1,8)`
 
 3. **Send the message to the next agent using MCP**:
-   - The `Kiln-db` MCP server is configured in `.mcp.json` and should be automatically available
-   - Use the `Kiln-db` MCP `write_query` tool with this SQL (use the `$BRANCH` from step 2):
+   - The `kiln-db` MCP server is configured in `.mcp.json` and should be automatically available
+   - Use the `kiln-db` MCP `write_query` tool with this SQL (use the `$BRANCH` from step 2):
      ```sql
      INSERT INTO messages 
      (id, sender, target, priority, status, content, created_at, branch) 
@@ -77,12 +77,12 @@ When you receive the instruction "I am running the selftest prompt. Begin the co
    - **Fallback (if MCP tools unavailable)**: Use sqlite3 directly (with root branch from step 2):
      ```bash
      ROOT_DIR=$(git rev-parse --show-toplevel)
-     while [ ! -d "$ROOT_DIR/.Kiln" ] && [ "$ROOT_DIR" != "/" ]; do
+     while [ ! -d "$ROOT_DIR/.kiln" ] && [ "$ROOT_DIR" != "/" ]; do
        ROOT_DIR=$(dirname "$ROOT_DIR")
      done
      BRANCH=$(git -C "$ROOT_DIR" rev-parse --abbrev-ref HEAD)
      
-     sqlite3 ".Kiln/messages.db" << SQL
+     sqlite3 ".kiln/messages.db" << SQL
      INSERT INTO messages (id, sender, target, priority, status, content, created_at, branch) 
      VALUES (
        strftime('%Y%m%d%H%M%S','now')||'-'||substr(hex(randomblob(4)),1,8),
@@ -117,7 +117,7 @@ When you receive the instruction "I am running the selftest prompt. Begin the co
 
 5. **⚠️ START INBOX MONITORING IMMEDIATELY**:
    - This is MANDATORY after initiating the test
-   - **Preferred**: Use the `Kiln-db` MCP `read_query` tool with this SQL (use root branch from step 2, check every 5-10 seconds):
+   - **Preferred**: Use the `kiln-db` MCP `read_query` tool with this SQL (use root branch from step 2, check every 5-10 seconds):
      ```sql
      SELECT id, sender, priority, content FROM messages 
      WHERE target='selftest' AND status='queued' AND branch='(root branch from step 2)'
@@ -128,16 +128,16 @@ When you receive the instruction "I am running the selftest prompt. Begin the co
 
      ```bash
      ROOT_DIR=$(git rev-parse --show-toplevel)
-     while [ ! -d "$ROOT_DIR/.Kiln" ] && [ "$ROOT_DIR" != "/" ]; do
+     while [ ! -d "$ROOT_DIR/.kiln" ] && [ "$ROOT_DIR" != "/" ]; do
        ROOT_DIR=$(dirname "$ROOT_DIR")
      done
      BRANCH=$(git -C "$ROOT_DIR" rev-parse --abbrev-ref HEAD)
      
      # Check for new messages
-     sqlite3 ".Kiln/messages.db" "SELECT id, sender, priority, content FROM messages WHERE target='selftest' AND status='queued' AND branch='$BRANCH' ORDER BY priority ASC, created_at ASC LIMIT 1;"
+     sqlite3 ".kiln/messages.db" "SELECT id, sender, priority, content FROM messages WHERE target='selftest' AND status='queued' AND branch='$BRANCH' ORDER BY priority ASC, created_at ASC LIMIT 1;"
      
      # After reading a message, mark it delivered
-     sqlite3 ".Kiln/messages.db" "UPDATE messages SET status='delivered', delivered_at=datetime('now') WHERE id='<message-id>';"
+     sqlite3 ".kiln/messages.db" "UPDATE messages SET status='delivered', delivered_at=datetime('now') WHERE id='<message-id>';"
      ```
 
    - The loop will receive the final response from architect
@@ -178,10 +178,10 @@ When you receive the instruction "I am running the selftest prompt. Begin the co
    ✓ MCP SQLite messaging delivered messages correctly
    ✓ All agents processed messages
    ✓ All agents updated logbook.md
-   ✓ Test messages stored in .Kiln/messages.db for inspection
+   ✓ Test messages stored in .kiln/messages.db for inspection
 
    Test queries:
-   - View queue: Kiln-db list-messages selftest
+   - View queue: kiln-db list-messages selftest
    - View logbook: git log -p logbook.md | grep SELFTEST
 
    ══════════════════════════════════════════════════════════════
@@ -204,7 +204,7 @@ When you receive the instruction "I am running the selftest prompt. Begin the co
 
    ```bash
    BRANCH=$(git rev-parse --abbrev-ref HEAD)
-   sqlite3 ".Kiln/messages.db" "SELECT id, sender, priority, content FROM messages WHERE target='<YOUR_ROLE>' AND status='queued' AND branch='$BRANCH' ORDER BY priority ASC, created_at ASC LIMIT 1;"
+   sqlite3 ".kiln/messages.db" "SELECT id, sender, priority, content FROM messages WHERE target='<YOUR_ROLE>' AND status='queued' AND branch='$BRANCH' ORDER BY priority ASC, created_at ASC LIMIT 1;"
    ```
 
 2. Parse the message:
@@ -221,7 +221,7 @@ When you receive the instruction "I am running the selftest prompt. Begin the co
    **Fallback (sqlite3):**
 
    ```bash
-   sqlite3 ".Kiln/messages.db" "UPDATE messages SET status='delivered', delivered_at=datetime('now') WHERE id='<message-id>';"
+   sqlite3 ".kiln/messages.db" "UPDATE messages SET status='delivered', delivered_at=datetime('now') WHERE id='<message-id>';"
    ```
 
 4. Add logbook entry:
@@ -270,7 +270,7 @@ When you receive the instruction "I am running the selftest prompt. Begin the co
 
    ```bash
    BRANCH=$(git rev-parse --abbrev-ref HEAD)
-   sqlite3 ".Kiln/messages.db" << SQL
+   sqlite3 ".kiln/messages.db" << SQL
    INSERT INTO messages (id, sender, target, priority, status, content, created_at, branch) 
    VALUES (
      strftime('%Y%m%d%H%M%S','now')||'-'||substr(hex(randomblob(4)),1,8),
@@ -338,7 +338,7 @@ ORDER BY priority ASC, created_at ASC LIMIT 1
 
 ```bash
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
-sqlite3 ".Kiln/messages.db" "SELECT id, sender, priority, content FROM messages WHERE target='<YOUR_ROLE>' AND status='queued' AND branch='$BRANCH' ORDER BY priority ASC, created_at ASC LIMIT 1;"
+sqlite3 ".kiln/messages.db" "SELECT id, sender, priority, content FROM messages WHERE target='<YOUR_ROLE>' AND status='queued' AND branch='$BRANCH' ORDER BY priority ASC, created_at ASC LIMIT 1;"
 ```
 
 **Your responsibility in the loop:**
@@ -363,7 +363,7 @@ The system handles all queue management automatically via the SQLite database; p
 - **Always check for incoming test messages** using MCP `read_query` before doing other work
 - **Use MCP `write_query` for handoffs**: all communication goes through the SQLite message database
 - **Update logbook.md** with every step (received, forwarded, completed)
-- **Don't delete test messages** — leave them in `.Kiln/messages.db` for inspection with `Kiln-db` CLI tool
+- **Don't delete test messages** — leave them in `.kiln/messages.db` for inspection with `kiln-db` CLI tool
 - **Keep timestamps in YYYY-MM-DD HH:MM:SS format** in logbook entries for clarity
 - **The test is idempotent** — can run multiple times safely
 

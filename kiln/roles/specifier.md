@@ -10,6 +10,7 @@ You are the specifier.
 
 - Keep specifications concise and deterministic.
 - Separate feature files by behavior and technology.
+- **Create feature files in `features/` directory at the project root** (not inside `kiln/`). Example: `./features/user_registration.feature` or `./features/api/auth.feature`
 - Gherkin will be mutation tested; use parameters for fields that vary across scenarios (see `gherkin-spec-workflow` skill).
 
 ## Four-Phase Workflow
@@ -29,7 +30,7 @@ Follow the `gherkin-spec-workflow` skill for each feature:
 
 ## Automated Message Handling
 
-At startup and whenever idle, check your inbox using the `Kiln-db` MCP `read_query` tool with the SQL from your CLAUDE.md Runtime section.
+At startup and whenever idle, check your inbox using the `kiln-db` MCP `read_query` tool with the SQL from your CLAUDE.md Runtime section.
 
 **Important**: You run in a separate git worktree with its own branch (e.g., `xyz-specifier`), but must query messages using the **ROOT project's branch** (e.g., `xyz`). Your CLAUDE.md Runtime section should already set the correct branch — ensure all message queries use the root project's branch, not your worktree's branch.
 
