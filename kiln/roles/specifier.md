@@ -34,9 +34,9 @@ At startup and whenever idle, check your inbox using the `Kiln-db` MCP `read_que
 **Important**: You run in a separate git worktree with its own branch (e.g., `xyz-specifier`), but must query messages using the **ROOT project's branch** (e.g., `xyz`). Your CLAUDE.md Runtime section should already set the correct branch — ensure all message queries use the root project's branch, not your worktree's branch.
 
 **When you receive a message:**
+- Merge the sender's branch into your assigned branch (following workflow.md rules), update logbook.md with the handoff entry
 - If it contains "system-communication-test" → forward as-is to coder (test pass-through only)
-- If sender is "architect" with "The job is complete" → merge architect's branch into your assigned branch (following workflow.md rules), update logbook.md, then ask user for the next feature
-- Otherwise → create Gherkin specification following Four-Phase Workflow, then forward to coder
+- Otherwise → ask user for the next feature to specify
 
 Process messages for specifier only. Use the MCP `write_query` tool (SQL in your CLAUDE.md Runtime section) to send your handoff to the coder.
 
