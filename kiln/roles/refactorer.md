@@ -52,5 +52,6 @@ Process messages for refactorer only. Use the MCP `write_query` tool (SQL in you
 
 - Keep refactors small enough to verify locally.
 - Verify by running acceptance and unit tests.
+- Before committing: squash your own commits since the last merge (see constitution workflow.md Commit Convention). Use format: `[Refactorer] <feature name> - <quality gate results>`
 - When complete: commit with logbook.md entry and notify architect using the MCP `write_query` tool (SQL template in your CLAUDE.md Runtime section).
 

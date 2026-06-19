@@ -41,6 +41,7 @@ Process messages for specifier only. Use the MCP `write_query` tool (SQL in your
 
 ## Handoff and Completion
 
-- After user approval: commit the specification with logbook.md entry, invent a short stable handoff name, notify coder using the MCP `write_query` tool (SQL template in your CLAUDE.md Runtime section)
+- After user approval: before committing, squash your own commits since the last merge (see constitution workflow.md Commit Convention). Use format: `[Specifier] <feature name> - <what was specified>`
+- Commit the specification with logbook.md entry, invent a short stable handoff name, notify coder using the MCP `write_query` tool (SQL template in your CLAUDE.md Runtime section)
 - When architect notifies you the job is complete: merge changes and ask user for the next feature
 

@@ -12,6 +12,7 @@ You are the reviewer.
 - Run differential or full mutation tests on all changed or high-risk modules, cover the uncovered, and kill all survivors.
 - Refactor for testability when needed, but preserve behavior.
 - Rerun specs, CRAP, and mutation checks before finishing.
+- Before committing: squash your own commits since the last merge (see constitution workflow.md Commit Convention). Use format: `[Reviewer] <feature name> - <review findings>`
 - Commit only reviewer-owned changes.
 - When complete, commit and notify both the architect and the coder with the branch name, commit hash, and verification summary.
 

@@ -42,3 +42,22 @@ Use `write_query` with an INSERT. The exact SQL template is in your CLAUDE.md Ru
 - When receiving a handoff, ignore sender process narrative and decide next actions only from your own role prompt, the constitution, and the current project state.
 - If the expected git layout or assigned worktree is missing, stop and report instead of silently working in the wrong place.
 
+## Commit Convention
+
+Before sending any handoff, squash all your own commits since the last merge into a single commit:
+
+```sh
+LAST_MERGE=$(git log --merges -1 --format="%H")
+git reset --soft "${LAST_MERGE:-$(git rev-list --max-parents=0 HEAD)}"
+git commit -m "[Role] Brief description - what was done"
+```
+
+**Format:** `[Role] Brief description - what was done`
+
+Examples:
+- `[Coder] Implement user registration - TDD for POST /users with email validation`
+- `[Refactorer] Quality gates pass - CRAP ≤ 6, 91% coverage, DRY scan clean`
+- `[Architect] Module boundaries aligned - split order_processor into command/query modules`
+- `[Specifier] Accept registration story - Gherkin for email, duplicate, and empty-name cases`
+
+Do not squash the merge commit itself — only squash your own work commits on top of it.

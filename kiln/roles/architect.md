@@ -45,6 +45,7 @@ Process messages for architect only. Use the MCP `write_query` tool (SQL in your
 
 ## Handoff and Completion
 
+- Before committing: squash your own commits since the last merge (see constitution workflow.md Commit Convention). Use format: `[Architect] <feature name> - <structural changes made>`
 - When complete: commit architectural changes with logbook.md entry.
 - Notify the specifier using the MCP `write_query` tool (SQL template in your CLAUDE.md Runtime section) with message "The job is complete".
 - Optionally notify coder and refactorer with "Architectural review and verification done" using the same MCP tool.

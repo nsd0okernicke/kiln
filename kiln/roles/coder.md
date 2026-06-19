@@ -47,5 +47,6 @@ Process messages for coder only. Use the MCP `write_query` tool (SQL in your CLA
 
 ## Handoff
 
+- Before committing: squash your own commits since the last merge (see constitution workflow.md Commit Convention). Use format: `[Coder] <feature name> - TDD implementation of <what>`
 - When all acceptance and unit tests pass: commit with logbook.md entry and notify refactorer using the MCP `write_query` tool (SQL template in your CLAUDE.md Runtime section).
 
