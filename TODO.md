@@ -187,54 +187,7 @@
 
 ---
 
-## 5. Flexible Terminal Layout Configuration
-
-**Current Limitation:** Each role gets one tab. All 4 agents = 4 tabs.
-
-**Goal:** Allow flexible layout mixing tabs and panes. Users should be able to configure:
-
-- 4 tabs (current default)
-- 1 tab with 4 panes (vertical or horizontal split)
-- 2 tabs, each with 2 panes
-- Top-bottom layout: 1 tab top, 3 panes bottom
-- Custom split patterns defined in Kiln.profiles.yaml
-
-**Implementation:**
-
-- [ ] **Design layout configuration schema** for Kiln.profiles.yaml (or update profiles.yaml)
-  - Define layout syntax: `tabs`, `panes`, `split:direction:count`, combinations
-  - Example: `layout: "2-tabs-with-2-panes-each"` or structured tree
-  - Support per-terminal layout assignment or global layout directive
-
-- [ ] **Update terminal adapter interfaces**
-  - Modify `Start-WezTermSession` (wezterm.ps1) to accept layout spec
-  - Update `.sh` terminal adapters to handle pane distribution
-  - Pass role+layout pairs to terminal creation functions
-
-- [ ] **Implement layout strategy in terminal adapters**
-  - WezTerm: enhance lua config generator to support arbitrary split patterns
-  - macOS Terminal: distribute panes/tabs based on layout spec
-  - Windows Terminal: replicate layout via wt.exe split commands
-  - Fallback: single tab per role if unsupported
-
-- [ ] **Update role distribution logic**
-  - Assign roles to tabs/panes based on layout rules
-  - Track role → pane ID mapping for proper routing
-  - Document layout rules in constitution/workflow.md
-
-- [ ] **Add layout examples to profiles.yaml**
-  - Example profile: 4 panes in single tab
-  - Example profile: 2 tabs with split panes
-  - Example profile: top-1-bottom-3 configuration
-
-- [ ] **Test on all terminals**
-  - WezTerm (primary: Lua-based)
-  - Windows Terminal (secondary)
-  - macOS Terminal + Ghostty (tertiary)
-
----
-
-## 6. Documentation MCP Server
+## 5. Documentation MCP Server
 
 **Goal:** Create an MCP server that indexes and serves documentation from multiple sources, enabling agents to reference external docs in real-time.
 

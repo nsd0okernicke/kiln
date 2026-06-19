@@ -63,8 +63,9 @@ See **"Running Kiln"** below for more options and customization.
 Kiln is a lightweight orchestration layer that:
 
 - Launches a **config-driven swarm** — specify each agent's role, AI tool/backend (claude/copilot/codex/grok), and workspace (main directory or isolated worktree)
-  - Uses framework defaults from `kiln/profiles.yaml`
-  - Projects can override by creating `kiln.profiles.yaml` at the root
+  - Uses framework defaults from `kiln/profiles.json`
+  - Projects can override by creating `kiln.profiles.json` at the root
+  - Flexible terminal layouts: tabs, split panes, grids, or custom hierarchical arrangements
 - Creates one **terminal window/tab per role** — observe all agents in real time
   - Windows: Windows Terminal or WezTerm tabs/panes
   - Unix/macOS: tmux sessions + Terminal.app or WezTerm
@@ -112,7 +113,7 @@ my-project/
 **Key points:**
 - `kiln/` is version-controlled (constitution, roles, skills)
 - `.kiln/` and `.worktrees/` are runtime/ephemeral (gitignored)
-- Profiles are inherited from the framework; create `kiln.profiles.yaml` at the root to override
+- Profiles are inherited from the framework; create `kiln.profiles.json` at the root to override
 
 ---
 
@@ -176,8 +177,8 @@ kiln/
 │   └── clear-messages.ps1        # Clear message queue (testing utility)
 │
 ├── lib/                          # Framework internals
-│   ├── profile-loader.sh         # YAML profile parsing (Unix)
-│   ├── profile-loader.ps1        # YAML profile parsing (PowerShell)
+│   ├── profile-loader.sh         # JSON profile parsing (Unix)
+│   ├── profile-loader.ps1        # JSON profile parsing (PowerShell)
 │   ├── terminal-adapter.sh       # Terminal backend loader (Unix)
 │   ├── terminal-adapters/        # Terminal backend implementations
 │   │   ├── wezterm.ps1           # WezTerm adapter (Windows)
@@ -189,7 +190,7 @@ kiln/
 │   └── kiln-window-watchdog.sh   # Window tracking (Unix tmux)
 │
 ├── kiln/                   # Master framework templates & default profiles
-│   ├── profiles.yaml             # Default configuration profiles (framework defaults only)
+│   ├── profiles.json             # Default configuration profiles (framework defaults only)
 │   ├── constitution/             # Shared constitution rules (copied to projects)
 │   │   ├── workflow.md           # Handoff protocol
 │   │   └── engineering.md        # Tech stack & quality gates
@@ -209,7 +210,8 @@ kiln/
 
 ## Core Features
 
-- **Config-Driven Topology** — The swarm shape comes from `kiln/profiles.yaml`, not hardcoded variables.
+- **Config-Driven Topology** — The swarm shape comes from `kiln/profiles.json`, not hardcoded variables.
+- **Flexible Terminal Layouts** — Define custom tab and pane arrangements in your profile: simple tabs, split panes, 2×2 grids, hierarchical trees, or focus layouts (e.g., 1 full tab + 3-way split below).
 - **Role Injection** — Constitution (`workflow.md`, `engineering.md`, `project.md`) and role instructions (`roles/<role>.md`) are merged into each agent's instruction file (`CLAUDE.md` or `.github/copilot-instructions.md`), giving full context immediately.
 - **Project-Local Constitution** — Customize architecture, tech stack, and quality gates via `kiln/constitution/project.md`.
 - **Layered Rules** — `kiln/constitution/` contains `workflow.md` (handoffs), `engineering.md` (tools/practices), and `project.md` (arch/quality) — all applied to every agent.
@@ -237,8 +239,8 @@ kiln/
     engineering.md           # Language, tools, dependencies, practices
     project.md               # Project-specific architecture, tech stack, quality gates
 
-# Optional: Override default profiles (framework uses kiln/profiles.yaml)
-kiln.profiles.yaml           # Project-specific profiles (optional, at root)
+# Optional: Override default profiles (framework uses kiln/profiles.json)
+kiln.profiles.json           # Project-specific profiles (optional, at root)
 ```
 
 **Note:** Configuration profiles are inherited from the framework default (`kiln/profiles.yaml`). Projects can optionally override by creating `kiln.profiles.yaml` at the project root if they need custom profile definitions.
@@ -247,16 +249,16 @@ kiln.profiles.yaml           # Project-specific profiles (optional, at root)
 
 Configuration profiles define which agents run, which roles they take, and where they work. Kiln uses a cascading search to find profiles:
 
-1. **Project root** (`kiln.profiles.yaml`) — Project-level overrides
-2. **Project config** (`kiln/profiles.yaml`) — Not used (projects don't copy profiles)
-3. **Project state** (`.kiln/profiles.yaml`) — Not used
-4. **Framework** (`kiln/profiles.yaml`) — Default profiles for all projects
-5. **User home** (`~/.kiln/profiles.yaml`) — User-level defaults (optional)
-6. **System** (`/etc/kiln/profiles.yaml`) — System-wide defaults (optional)
+1. **Project root** (`kiln.profiles.json`) — Project-level overrides
+2. **Project config** (`kiln/profiles.json`) — Not used (projects don't copy profiles)
+3. **Project state** (`.kiln/profiles.json`) — Not used
+4. **Framework** (`kiln/profiles.json`) — Default profiles for all projects
+5. **User home** (`~/.kiln/profiles.json`) — User-level defaults (optional)
+6. **System** (`/etc/kiln/profiles.json`) — System-wide defaults (optional)
 
-By default, **all projects use the framework's `kiln/profiles.yaml`**, which defines the standard 4-agent workflow (specifier, coder, refactorer, architect). This means new projects work immediately without configuration.
+By default, **all projects use the framework's `kiln/profiles.json`**, which defines the standard 4-agent workflow (specifier, coder, refactorer, architect). This means new projects work immediately without configuration.
 
-**To customize profiles for a specific project**, create `kiln.profiles.yaml` at the project root. Kiln will use your custom profiles instead of the framework defaults.
+**To customize profiles for a specific project**, create `kiln.profiles.json` at the project root. Kiln will use your custom profiles instead of the framework defaults.
 
 ### Layered Constitution
 
@@ -294,8 +296,8 @@ The default four-agent workflow is:
 
 | Platform | Command | Options |
 |---|---|---|
-| **Windows** | `.\kiln.ps1 -WorkingDir .` | `-Layout tabs` (default) or `-Layout panes`; `-Terminal wezterm` for WezTerm; `-Debug` for verbose output |
-| **Unix/macOS** | `./kiln.sh .` | Terminal auto-detected: WezTerm > Terminal.app > tmux |
+| **Windows** | `.\kiln.ps1 -WorkingDir .` | `-ProfileName <profile>` for different profiles; `-Terminal wezterm` for WezTerm; `-Debug` for verbose output |
+| **Unix/macOS** | `./kiln.sh .` | `--profile <profile>` for different profiles; Terminal auto-detected: WezTerm > Terminal.app > tmux |
 
 Kiln will create a git repository if one doesn't exist, initialize worktrees, and launch agents.
 
@@ -324,14 +326,14 @@ Kiln will create a git repository if one doesn't exist, initialize worktrees, an
    .\bin\kiln.ps1 -WorkingDir .
    ```
 
-   Optional layout control:
+   Optional profile and terminal control:
 
    ```powershell
-   # Tabs layout (default)
-   .\bin\kiln.ps1 -WorkingDir . -Layout tabs
+   # Run the default 'dev' profile (standard 4-agent swarm with tabs)
+   .\bin\kiln.ps1 -WorkingDir .
 
-   # Panes layout: 2×2 grid
-   .\bin\kiln.ps1 -WorkingDir . -Layout panes
+   # Run a different profile (e.g., 'compact' with 2×2 grid layout)
+   .\bin\kiln.ps1 -WorkingDir . -ProfileName compact
 
    # Use WezTerm instead of Windows Terminal
    .\bin\kiln.ps1 -WorkingDir . -Terminal wezterm
@@ -384,62 +386,182 @@ Kiln will create a git repository if one doesn't exist, initialize worktrees, an
 
 ## Configuration Profiles
 
-Kiln uses YAML profiles to define swarm topology. The default profile is `dev`, which creates the standard 4-agent swarm. All projects inherit the framework's default profiles from `kiln/profiles.yaml` automatically.
+Kiln uses JSON profiles to define swarm topology. The default profile is `dev`, which creates the standard 4-agent swarm. All projects inherit the framework's default profiles from `kiln/profiles.json` automatically.
 
-**To customize profiles for a specific project**, create `kiln.profiles.yaml` at your project root. Kiln will use your custom profiles instead of the framework defaults.
+**To customize profiles for a specific project**, create `kiln.profiles.json` at your project root. Kiln will use your custom profiles instead of the framework defaults.
 
 ### Framework Default Profile
 
-The framework provides the standard `dev` profile:
+The framework provides the standard `dev` profile with tab-based layout:
 
-```yaml
-profiles:
-  dev:
-    description: Standard 4-agent swarm with isolated worktrees
-    terminals:
-      - role: specifier
-        agent: claude
-        worktree: "@current"
-      - role: coder
-        agent: claude
-        worktree: coder
-      - role: refactorer
-        agent: claude
-        worktree: refactorer
-      - role: architect
-        agent: claude
-        worktree: architect
+```json
+{
+  "profiles": {
+    "dev": {
+      "description": "Standard 4-agent swarm with isolated worktrees",
+      "terminals": [
+        {
+          "role": "specifier",
+          "agent": "copilot",
+          "worktree": "@current",
+          "model": "claude-haiku-4-5-20251001"
+        },
+        {
+          "role": "coder",
+          "agent": "claude",
+          "worktree": "coder",
+          "model": "claude-haiku-4-5-20251001"
+        },
+        {
+          "role": "refactorer",
+          "agent": "claude",
+          "worktree": "refactorer",
+          "model": "claude-haiku-4-5-20251001"
+        },
+        {
+          "role": "architect",
+          "agent": "claude",
+          "worktree": "architect",
+          "model": "claude-haiku-4-5-20251001"
+        }
+      ],
+      "layout": {
+        "type": "tabs",
+        "roles": ["specifier", "coder", "refactorer", "architect"]
+      }
+    }
+  }
+}
 ```
 
-**Profile fields:**
+**Terminal fields:**
 
 - **role** — maps to `kiln/roles/<role>.md` (must exist)
-- **agent** — which AI tool to use: `claude`, `copilot`, `codex`, or `grok` (defaults to `claude` if omitted)
+- **agent** — which AI tool to use: `claude`, `copilot`, `codex`, or `grok`
 - **worktree** — `@current` to work in the main directory, or any name (creates `.worktrees/<name>/`)
   - Use `@current` for coordinator/review roles that work on the current branch
   - Use separate worktree names for roles that need isolation (e.g., each agent on its own branch)
+- **model** — (Claude agents only) which Claude model to use, e.g., `claude-haiku-4-5-20251001`, `claude-sonnet-4-6`, `claude-opus-4-8`
+
+### Layout Configurations
+
+The `layout` field defines how agents are displayed in the terminal. Kiln supports multiple layout types:
+
+**Tabs Layout** (default):
+
+```json
+"layout": {
+  "type": "tabs",
+  "roles": ["specifier", "coder", "refactorer", "architect"]
+}
+```
+
+Each role gets its own tab.
+
+**Grid Layout** (2×2, 3×3, etc.):
+
+```json
+"layout": {
+  "tabs": [
+    {
+      "title": "All Roles",
+      "gridRows": 2,
+      "gridCols": 2,
+      "panes": [
+        {"role": "specifier"},
+        {"role": "coder"},
+        {"role": "refactorer"},
+        {"role": "architect"}
+      ]
+    }
+  ]
+}
+```
+
+All agents visible simultaneously in a grid within a single tab.
+
+**Split Panes Layout**:
+
+```json
+"layout": {
+  "tabs": [
+    {
+      "panes": [
+        {"role": "specifier"},
+        {"role": "coder"}
+      ]
+    },
+    {
+      "panes": [
+        {"role": "refactorer"},
+        {"role": "architect"}
+      ]
+    }
+  ]
+}
+```
+
+Multiple tabs, each with side-by-side panes.
+
+**Focus Layout** (1 top, multiple bottom):
+
+```json
+"layout": {
+  "tabs": [
+    {
+      "panes": [{"role": "specifier"}]
+    },
+    {
+      "panes": [
+        {"role": "coder"},
+        {"role": "refactorer"},
+        {"role": "architect"}
+      ]
+    }
+  ]
+}
+```
 
 ### Per-Role Agent Selection
 
 You can mix different agents in a single swarm:
 
-```yaml
-profiles:
-  mixed:
-    description: Swarm with different agent backends per role
-    terminals:
-      - role: specifier
-        agent: copilot        # Use GitHub Copilot for spec writing
-        worktree: "@current"
-      - role: coder
-        agent: claude         # Use Claude for implementation
-        worktree: coder
-      - role: refactorer
-        agent: claude         # Use Claude for refactoring
-        worktree: refactorer
-      - role: architect
-        agent: grok           # Use Grok for architectural decisions
-        worktree: architect
+```json
+{
+  "profiles": {
+    "mixed": {
+      "description": "Swarm with different agent backends per role",
+      "terminals": [
+        {
+          "role": "specifier",
+          "agent": "copilot",
+          "worktree": "@current"
+        },
+        {
+          "role": "coder",
+          "agent": "claude",
+          "worktree": "coder",
+          "model": "claude-sonnet-4-6"
+        },
+        {
+          "role": "refactorer",
+          "agent": "claude",
+          "worktree": "refactorer",
+          "model": "claude-haiku-4-5-20251001"
+        },
+        {
+          "role": "architect",
+          "agent": "grok",
+          "worktree": "architect"
+        }
+      ],
+      "layout": {
+        "type": "tabs",
+        "roles": ["specifier", "coder", "refactorer", "architect"]
+      }
+    }
+  }
+}
 ```
 
 Each agent backend requires the corresponding CLI tool to be installed and available in `PATH`.
@@ -505,9 +627,9 @@ $env:KILN_TERMINAL = "wezterm"
 
 ### Layout Examples
 
-Kiln supports two layout modes: **tabs** (one tab per agent, clear separation) and **panes** (2×2 grid, all agents in one window).
+Kiln supports flexible layout configurations that can be defined in your profile. Layouts can range from simple (tabs) to complex (hierarchical splits, grids, focus layouts).
 
-#### Windows Terminal & WezTerm
+#### Supported Layout Types
 
 **Tabs layout** (default):
 
@@ -515,15 +637,31 @@ Kiln supports two layout modes: **tabs** (one tab per agent, clear separation) a
 - Each tab runs independently with its own color scheme
 - Clear visual separation of roles
 - Easy to click between agents
+- Use when: you want simple visual separation
 
-**Panes layout** (2×2 grid):
+**Grid layout** (2×2, 3×3, etc.):
 
-- All 4 agents visible simultaneously in one window
-- Vertical and horizontal splits for a 2×2 arrangement
-- More compact view; observe all roles at once
+- All agents visible simultaneously in one window
+- Configurable rows and columns (e.g., `gridRows: 2, gridCols: 2`)
+- Compact view; observe all roles at once
 - Useful for rapid-fire coordination
+- Use when: you want all agents visible and have few enough roles to fit in a grid
 
-**Future support:** Custom layout mixing (e.g., 2 tabs with split panes, top-1-bottom-3) is planned in TODO section 5.
+**Split panes layout**:
+
+- Multiple tabs, each with their own pane arrangement
+- E.g., Tab 1: specifier + coder side-by-side; Tab 2: refactorer + architect side-by-side
+- Balances visibility and organization
+- Use when: you want to group related agents together
+
+**Focus layout** (top-focused):
+
+- Top tab shows the current focus role at full height
+- Bottom tab shows supporting roles in a multi-pane split
+- E.g., specifier at top, coder/refactorer/architect split at bottom
+- Use when: you want to focus on one agent while monitoring others
+
+All layouts work on **Windows Terminal**, **WezTerm**, and **Unix/macOS tmux**.
 
 ### WezTerm Config Behavior
 
@@ -652,21 +790,26 @@ After launching Kiln, you can verify that inter-agent communication is working b
 
 ### Setup
 
-Create a `selftest` profile in `kiln/profiles.yaml` with the `selftest` role as the **first entry**:
+Create a `selftest` profile in `kiln/profiles.json` with the `selftest` role as the **first entry**:
 
-```yaml
-profiles:
-  selftest:
-    description: Communication chain test with selftest agent
-    terminals:
-      - role: selftest
-        worktree: "@current"
-      - role: coder
-        worktree: coder
-      - role: refactorer
-        worktree: refactorer
-      - role: architect
-        worktree: architect
+```json
+{
+  "profiles": {
+    "selftest": {
+      "description": "Communication chain test with selftest agent",
+      "terminals": [
+        {"role": "selftest", "agent": "claude", "worktree": "@current"},
+        {"role": "coder", "agent": "claude", "worktree": "coder"},
+        {"role": "refactorer", "agent": "claude", "worktree": "refactorer"},
+        {"role": "architect", "agent": "claude", "worktree": "architect"}
+      ],
+      "layout": {
+        "type": "tabs",
+        "roles": ["selftest", "coder", "refactorer", "architect"]
+      }
+    }
+  }
+}
 ```
 
 Then launch with:
@@ -785,6 +928,8 @@ If the test hangs or fails:
 - ✓ Direct database access via MCP `Kiln-db` server
 - ✓ Layered constitution system (workflow, engineering, project)
 - ✓ Cross-platform terminal support (Windows Terminal, WezTerm, tmux)
+- ✓ Flexible terminal layouts (tabs, split panes, grids, focus layouts)
+- ✓ Per-agent model configuration for Claude agents
 - ✓ Built-in communication health check (selftest agent)
 - ✓ Logbook tracking of all handoffs and agent actions
 
@@ -813,7 +958,6 @@ This means agents can read/write/execute any file in their worktree without prom
 - **Error handling** — Minimal error recovery in agent workflows; graceful degradation not yet implemented
 - **Scaling** — Tested with 4-5 agents; behavior with 10+ agents unknown
 - **Multi-agent backend validation** — Framework supports `claude` and `copilot` (validated); `codex` and `grok` support planned but not yet implemented
-- **Flexible terminal layouts** — Currently supports one tab per role or 2×2 pane grid; custom layout mixing (e.g., 2 tabs with split panes) is in TODO
 
 ### Recommended Next Steps
 
