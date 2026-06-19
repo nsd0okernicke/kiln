@@ -35,6 +35,7 @@ At startup and whenever idle, check your inbox using the `Kiln-db` MCP `read_que
 
 **When you receive a message:**
 - If it contains "system-communication-test" → forward as-is to coder (test pass-through only)
+- If sender is "architect" with "The job is complete" → merge architect's branch into your assigned branch (following workflow.md rules), update logbook.md, then ask user for the next feature
 - Otherwise → create Gherkin specification following Four-Phase Workflow, then forward to coder
 
 Process messages for specifier only. Use the MCP `write_query` tool (SQL in your CLAUDE.md Runtime section) to send your handoff to the coder.
