@@ -133,8 +133,6 @@ Kiln has full native Windows support using PowerShell 7+ and Windows Terminal (o
 - One or more agent CLIs (Claude Code, GitHub Copilot, Codex, or Grok) depending on configured agents
 
 **Optional parameters:**
-- `-Layout tabs` (default) — one tab per agent
-- `-Layout panes` — 2×2 pane grid (4 agents)
 - `-Terminal wezterm` — use WezTerm instead of Windows Terminal
 
 ### Unix/Linux/macOS (zsh + tmux)
@@ -296,7 +294,7 @@ The default four-agent workflow is:
 
 | Platform | Command | Options |
 |---|---|---|
-| **Windows** | `.\kiln.ps1 -WorkingDir .` | `-ProfileName <profile>` for different profiles; `-Terminal wezterm` for WezTerm; `-Debug` for verbose output |
+| **Windows** | `.\kiln.ps1 -WorkingDir .` | `-ProfileName <profile>` for different profiles; `-Terminal wezterm` to override terminal backend; `-Debug` for verbose output |
 | **Unix/macOS** | `./kiln.sh .` | `--profile <profile>` for different profiles; Terminal auto-detected: WezTerm > Terminal.app > tmux |
 
 Kiln will create a git repository if one doesn't exist, initialize worktrees, and launch agents.
@@ -329,10 +327,10 @@ Kiln will create a git repository if one doesn't exist, initialize worktrees, an
    Optional profile and terminal control:
 
    ```powershell
-   # Run the default 'dev' profile (standard 4-agent swarm with tabs)
+   # Run the default 'dev' profile (standard 4-agent swarm with tab layout)
    .\bin\kiln.ps1 -WorkingDir .
 
-   # Run a different profile (e.g., 'compact' with 2×2 grid layout)
+   # Run a different profile (e.g., 'compact' with different layout or agent configuration)
    .\bin\kiln.ps1 -WorkingDir . -ProfileName compact
 
    # Use WezTerm instead of Windows Terminal

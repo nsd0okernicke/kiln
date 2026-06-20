@@ -4,8 +4,6 @@
 
 param(
     [string]$WorkingDir = (Get-Location).Path,
-    [ValidateSet("tabs", "panes")]
-    [string]$Layout = "tabs",
     [string]$Terminal = $null,
     [string]$ProfileName = $null,
     [switch]$Debug = $false
@@ -629,6 +627,167 @@ function Build-WezTermAgentCommand {
     return $command
 }
 
+function Build-WindowsTerminalLayout {
+    param(
+        [string]$LayoutJson,
+        [hashtable]$RoleIndex,
+        [array]$Roles,
+        [array]$Agents,
+        [array]$DisplayNames,
+        [array]$WorktreePaths
+    )
+
+    if (-not $LayoutJson) {
+        # Default to tabs if no layout specified
+        return Build-WindowsTerminalTabsLayout -RoleIndex $RoleIndex -Roles $Roles -Agents $Agents -DisplayNames $DisplayNames -WorktreePaths $WorktreePaths
+    }
+
+    try {
+        $layout = $LayoutJson | ConvertFrom-Json
+    } catch {
+        Write-Host "Warning: Could not parse layout JSON, defaulting to tabs" -ForegroundColor Yellow
+        return Build-WindowsTerminalTabsLayout -RoleIndex $RoleIndex -Roles $Roles -Agents $Agents -DisplayNames $DisplayNames -WorktreePaths $WorktreePaths
+    }
+
+    # Handle simple "type" format
+    if ($layout.type -eq "tabs") {
+        return Build-WindowsTerminalTabsLayout -RoleIndex $RoleIndex -Roles $Roles -Agents $Agents -DisplayNames $DisplayNames -WorktreePaths $WorktreePaths
+    }
+
+    # Handle tabs array format
+    if ($layout.tabs) {
+        return Build-WindowsTerminalTabsArrayLayout -Layout $layout -RoleIndex $RoleIndex -Roles $Roles -Agents $Agents -DisplayNames $DisplayNames -WorktreePaths $WorktreePaths
+    }
+
+    # Default fallback
+    return Build-WindowsTerminalTabsLayout -RoleIndex $RoleIndex -Roles $Roles -Agents $Agents -DisplayNames $DisplayNames -WorktreePaths $WorktreePaths
+}
+
+function Build-WindowsTerminalTabsLayout {
+    param(
+        [hashtable]$RoleIndex,
+        [array]$Roles,
+        [array]$Agents,
+        [array]$DisplayNames,
+        [array]$WorktreePaths
+    )
+
+    $AgentColors = @("One Half Dark", "Solarized Dark", "Tango Dark", "Campbell Powershell")
+    $colorEmojis = @("🟦", "🟥", "🟩", "🟨")
+    $wtArgs = @()
+
+    for ($i = 0; $i -lt $Roles.Count; $i++) {
+        $agent = $Agents[$i]
+        $displayName = $DisplayNames[$i]
+        $worktreePath = $WorktreePaths[$i]
+
+        if ($i -eq 0) {
+            $wtArgs += "new-tab"
+        } else {
+            $wtArgs += ";", "new-tab"
+        }
+
+        $tabTitle = "$($colorEmojis[$i % $colorEmojis.Count]) $displayName"
+        $wtArgs += "--title", $tabTitle
+        $wtArgs += "-d", $worktreePath
+        $wtArgs += "--colorScheme", $AgentColors[$i % $AgentColors.Count]
+        $wtArgs += "pwsh", "-NoExit", "-Command"
+
+        $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath
+        $wtArgs += $agentCmd
+    }
+
+    return $wtArgs
+}
+
+function Build-WindowsTerminalTabsArrayLayout {
+    param(
+        [object]$Layout,
+        [hashtable]$RoleIndex,
+        [array]$Roles,
+        [array]$Agents,
+        [array]$DisplayNames,
+        [array]$WorktreePaths
+    )
+
+    $AgentColors = @("One Half Dark", "Solarized Dark", "Tango Dark", "Campbell Powershell")
+    $wtArgs = @()
+
+    foreach ($tabIndex in 0..($Layout.tabs.Count - 1)) {
+        $tab = $Layout.tabs[$tabIndex]
+
+        if ($tabIndex -eq 0) {
+            $wtArgs += "new-tab"
+        } else {
+            $wtArgs += ";", "new-tab"
+        }
+
+        if ($tab.title) {
+            $wtArgs += "--title", $tab.title
+        }
+
+        # Determine if this tab has a grid layout
+        $isGrid = ($tab.gridRows -and $tab.gridCols)
+
+        # Process panes in this tab
+        foreach ($paneIndex in 0..($tab.panes.Count - 1)) {
+            $pane = $tab.panes[$paneIndex]
+            $roleInPane = $pane.role
+
+            if ($RoleIndex.ContainsKey($roleInPane)) {
+                $roleIdx = $RoleIndex[$roleInPane]
+                $agent = $Agents[$roleIdx]
+                $displayName = $DisplayNames[$roleIdx]
+                $worktreePath = $WorktreePaths[$roleIdx]
+
+                # Add pane split if not first pane in tab
+                if ($paneIndex -gt 0) {
+                    if ($isGrid -and $tab.gridCols -gt 1) {
+                        # Grid layout: alternate H/V splits
+                        if ($paneIndex % $tab.gridCols -eq 0) {
+                            $wtArgs += ";", "split-pane", "-V"
+                        } else {
+                            $wtArgs += ";", "split-pane", "-H"
+                        }
+                    } else {
+                        # Default: vertical splits (top/bottom)
+                        $wtArgs += ";", "split-pane", "-V"
+                    }
+                }
+
+                $colorIdx = $roleIdx % $AgentColors.Count
+                $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath
+                $wtArgs += "-d", $worktreePath
+                $wtArgs += "--colorScheme", $AgentColors[$colorIdx]
+                $wtArgs += "pwsh", "-NoExit", "-Command"
+                $wtArgs += $agentCmd
+            }
+        }
+    }
+
+    return $wtArgs
+}
+
+function Get-WindowsTerminalAgentCommand {
+    param(
+        [string]$Agent,
+        [string]$DisplayName,
+        [string]$WorktreePath
+    )
+
+    switch ($Agent) {
+        "claude" {
+            return "claude --model claude-haiku-4-5-20251001 --permission-mode bypassPermissions --mcp-config ./.mcp.json -n ""$DisplayName"""
+        }
+        "copilot" {
+            return "copilot --allow-all --name ""$DisplayName"""
+        }
+        default {
+            return "echo 'Agent $Agent not supported'"
+        }
+    }
+}
+
 # Main flow
 Test-Dependency git
 
@@ -738,8 +897,8 @@ PRAGMA journal_mode=WAL;
     Write-Host "✓ Initialized message database" -ForegroundColor Green
 }
 
-# Persist terminal backend + layout so the watchdog knows how to wake agents
-Set-Content (Join-Path $STATE_DIR "runtime.env") "terminal=$TerminalBackend`nlayout=$Layout" -Encoding UTF8
+# Persist terminal backend so the watchdog knows how to wake agents
+Set-Content (Join-Path $STATE_DIR "runtime.env") "terminal=$TerminalBackend" -Encoding UTF8
 
 Write-Host "  ╔═══════════════════════════════════════════════╗" -ForegroundColor Cyan
 Write-Host "  ║         Kiln v0.1 Starting                    ║" -ForegroundColor Cyan
@@ -786,86 +945,23 @@ if ($TerminalBackend -eq "wezterm") {
     Start-WezTermSession -RoleData $roleData -LayoutJson $PROFILE_LAYOUT_JSON
 
 } else {
-    # Windows Terminal (wt): use existing inline logic (unchanged for stability)
-    $AgentColors = @("One Half Dark", "Solarized Dark", "Tango Dark", "Campbell Powershell")
-
-    $wtArgs = @()
+    # Windows Terminal (wt): use profile-based layout
     for ($i = 0; $i -lt $global:ROLES.Count; $i++) {
         $role = $global:ROLES[$i]
-        $agent = $global:AGENTS[$i]
-        $displayName = $global:DISPLAY_NAMES[$i]
         $worktreePath = $global:WORKTREE_PATHS[$i]
-
+        $agent = $global:AGENTS[$i]
         Write-GeneratedCLAUDEmd -Index $i -Role $role -WorktreePath $worktreePath -Agent $agent
-
-        if ($i -eq 0) {
-            $wtArgs += "new-tab"
-        } elseif ($Layout -eq "panes") {
-            switch ($i) {
-                1 { $wtArgs += ";", "split-pane", "-V" }
-                2 { $wtArgs += ";", "split-pane", "-H" }
-                3 { $wtArgs += ";", "move-focus", "up"; $wtArgs += ";", "move-focus", "left"; $wtArgs += ";", "split-pane", "-H" }
-                default { $wtArgs += ";", "split-pane", "-V" }
-            }
-        } else {
-            $wtArgs += ";", "new-tab"
-        }
-
-        # For tabs mode, add colored emoji symbol to tab title (matching WezTerm: blue, red, green, yellow)
-        # For panes mode, only set title on the first pane (the window title)
-        if ($Layout -eq "tabs") {
-            $colorEmojis = @("🟦", "🟥", "🟩", "🟨")
-            $tabTitle = "$($colorEmojis[$i]) $displayName"
-            $wtArgs += "--title", $tabTitle
-        } elseif ($i -eq 0) {
-            # Panes layout: only set window title on initial tab
-            $wtArgs += "--title", "Kiln v0.1"
-        }
-        $wtArgs += "-d", $worktreePath
-        $wtArgs += "--colorScheme", $AgentColors[$i % $AgentColors.Count]
-        $wtArgs += "pwsh"
-        $wtArgs += "-NoExit"
-        $wtArgs += "-Command"
-
-        switch ($agent) {
-            "claude" {
-                $claudeBase = "claude --model claude-haiku-4-5-20251001 --permission-mode bypassPermissions"
-                if ($Debug) { $claudeBase += " --verbose" }
-
-                if ($Layout -eq "tabs") {
-                    $wtArgs += "$claudeBase -n ""$displayName"""
-                } else {
-                    # Panes layout: don't use -n flag to avoid overriding window title
-                    $wtArgs += $claudeBase
-                }
-            }
-            "copilot" {
-                $copilotBase = "copilot -C '$worktreePath'"
-                if ($Debug) { $copilotBase += " --verbose" }
-
-                if ($Layout -eq "tabs") {
-                    $wtArgs += "$copilotBase --name ""$displayName"""
-                } else {
-                    # Panes layout: don't use --name flag to avoid overriding window title
-                    $wtArgs += $copilotBase
-                }
-            }
-            "codex" {
-                Write-Host "  [$displayName] WARNING: agent type 'codex' not yet supported on Windows" -ForegroundColor Yellow
-                $wtArgs += "echo 'Agent codex is not yet supported on Windows Terminal. Use claude or copilot.'"
-            }
-            "grok" {
-                Write-Host "  [$displayName] WARNING: agent type 'grok' not yet supported on Windows" -ForegroundColor Yellow
-                $wtArgs += "echo 'Agent grok is not yet supported on Windows Terminal. Use claude or copilot.'"
-            }
-            default {
-                Write-Host "  [$displayName] ERROR: unknown agent type '$agent'" -ForegroundColor Red
-                exit 1
-            }
-        }
-
-        Write-Host "  [$displayName] configured" -ForegroundColor Cyan
+        Write-Host "  [$($global:DISPLAY_NAMES[$i])] configured" -ForegroundColor Cyan
     }
+
+    # Build layout from profile
+    $wtArgs = Build-WindowsTerminalLayout `
+        -LayoutJson $PROFILE_LAYOUT_JSON `
+        -RoleIndex $global:ROLE_INDEX `
+        -Roles $global:ROLES `
+        -Agents $global:AGENTS `
+        -DisplayNames $global:DISPLAY_NAMES `
+        -WorktreePaths $global:WORKTREE_PATHS
 
     if ($wtArgs.Count -gt 0) {
         $argString = ($wtArgs | ForEach-Object { if ($_ -match '\s') { """$_""" } else { $_ } }) -join ' '
