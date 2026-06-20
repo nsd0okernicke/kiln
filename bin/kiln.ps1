@@ -736,22 +736,23 @@ function Build-WindowsTerminalTabsArrayLayout {
                         }
 
                         # Navigate from current to parent position
+                        # Move horizontally first, then vertically (important for tree structure)
                         $rowDiff = $parentRow - $currentRow
                         $colDiff = $parentCol - $currentCol
-
-                        for ($i = 0; $i -lt [math]::Abs($rowDiff); $i++) {
-                            if ($rowDiff -gt 0) {
-                                $wtArgs += ";", "move-focus", "down"
-                            } else {
-                                $wtArgs += ";", "move-focus", "up"
-                            }
-                        }
 
                         for ($i = 0; $i -lt [math]::Abs($colDiff); $i++) {
                             if ($colDiff -gt 0) {
                                 $wtArgs += ";", "move-focus", "right"
                             } else {
                                 $wtArgs += ";", "move-focus", "left"
+                            }
+                        }
+
+                        for ($i = 0; $i -lt [math]::Abs($rowDiff); $i++) {
+                            if ($rowDiff -gt 0) {
+                                $wtArgs += ";", "move-focus", "down"
+                            } else {
+                                $wtArgs += ";", "move-focus", "up"
                             }
                         }
 
