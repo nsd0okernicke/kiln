@@ -38,15 +38,19 @@ You are the refactorer.
 
 ## Automated Message Handling
 
-At startup and whenever idle, check your inbox by calling the `kiln-db` MCP `read_inbox(role="refactorer", branch="<root-branch>")` tool.
+At session startup, subscribe to your inbox resource for push notifications. When you receive a `notifications/resources/updated` event:
 
-**Important**: You run in a separate git worktree with its own branch (e.g., `xyz-refactorer`), but must query messages using the **ROOT project's branch** (e.g., `xyz`). Your CLAUDE.md Runtime section should already set the correct branch — ensure all message reads use the root project's branch, not your worktree's branch.
+1. Call `read_inbox(role="refactorer", branch="<root-branch>")` to fetch the message
+2. Process according to your role (run quality gates, refactor, test, etc.)
+3. Call `mark_delivered(message_id="<id>")` to acknowledge receipt
+
+**Important**: You run in a separate git worktree with its own branch (e.g., `xyz-refactorer`), but must read messages using the **ROOT project's branch** (e.g., `xyz`). Your CLAUDE.md Runtime section should already set the correct branch — ensure all message reads use the root project's branch, not your worktree's branch.
 
 **When you receive a message:**
 - If it contains "system-communication-test" → forward as-is to architect (test pass-through only)
 - Otherwise → run quality gates (coverage → CRAP → DRY → mutation), refactor, test, then forward to architect
 
-After reading, call `mark_delivered(message_id="<id>")` to acknowledge. Send your handoff to the architect using the `send_message` MCP tool.
+Send your handoff to the architect using the `send_message` MCP tool.
 
 ## Verification and Handoff
 

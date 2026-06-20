@@ -30,16 +30,20 @@ Follow the `gherkin-spec-workflow` skill for each feature:
 
 ## Automated Message Handling
 
-At startup and whenever idle, check your inbox by calling the `kiln-db` MCP `read_inbox(role="specifier", branch="<root-branch>")` tool.
+At session startup, subscribe to your inbox resource for push notifications. When you receive a `notifications/resources/updated` event:
 
-**Important**: You run in a separate git worktree with its own branch (e.g., `xyz-specifier`), but must query messages using the **ROOT project's branch** (e.g., `xyz`). Your CLAUDE.md Runtime section should already set the correct branch — ensure all message reads use the root project's branch, not your worktree's branch.
+1. Call `read_inbox(role="specifier", branch="<root-branch>")` to fetch the message
+2. Process according to your role (merge branches, update logbook, ask for next feature, etc.)
+3. Call `mark_delivered(message_id="<id>")` to acknowledge receipt
+
+**Important**: You run in a separate git worktree with its own branch (e.g., `xyz-specifier`), but must read messages using the **ROOT project's branch** (e.g., `xyz`). Your CLAUDE.md Runtime section should already set the correct branch — ensure all message reads use the root project's branch, not your worktree's branch.
 
 **When you receive a message:**
 - Merge the sender's branch into your assigned branch (following workflow.md rules), update logbook.md with the handoff entry
 - If it contains "system-communication-test" → forward as-is to coder (test pass-through only)
 - Otherwise → ask user for the next feature to specify
 
-After reading, call `mark_delivered(message_id="<id>")` to acknowledge. Send your handoff to the coder using the `send_message` MCP tool.
+Send your handoff to the coder using the `send_message` MCP tool.
 
 ## Handoff and Completion
 

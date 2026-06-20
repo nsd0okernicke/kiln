@@ -62,18 +62,13 @@ When you receive the instruction "I am running the selftest prompt. Begin the co
      ```
    - Commit: `git add logbook.md && git commit -m "SELFTEST: initiated chain test"`
 
-5. **⚠️ START INBOX MONITORING IMMEDIATELY**:
+5. **⚠️ SUBSCRIBE AND MONITOR**:
    - This is MANDATORY after initiating the test
-   - Use the `read_inbox` MCP tool (check every 5-10 seconds):
-     ```
-     read_inbox(role="selftest", branch="(root branch from step 2)")
-     ```
-   - The tool returns a list of queued messages. When the architect responds, you'll see a message from them.
-   - Mark each message as delivered immediately:
-     ```
-     mark_delivered(message_id="<id-from-read_inbox>")
-     ```
-   - Continue checking until you receive the final completion message from architect.
+   - Subscribe to your inbox resource: `kiln://inbox/selftest`
+   - When you receive `notifications/resources/updated` for this URI:
+     - Call `read_inbox(role="selftest", branch="(root branch from step 2)")` to get the message
+     - Mark it as delivered immediately: `mark_delivered(message_id="<id-from-read_inbox>")`
+   - Continue monitoring until you receive the final completion message from architect.
 
 6. **Wait for completion** (max 2 minutes):
    - Your `read_inbox` polling loop will display the message when architect responds
@@ -192,29 +187,24 @@ If you receive a message containing `system-communication-test` AND you are the 
 
 ## Automated Message Handling
 
-At startup and whenever idle, monitor your inbox using the `read_inbox` MCP tool:
+At session startup, subscribe to your inbox resource: `kiln://inbox/selftest`
 
-**Periodic Check (every 5-10 seconds):**
-```
-read_inbox(role="selftest", branch="<root-branch>")
-```
+When you receive `notifications/resources/updated` for this URI:
 
-**Your responsibility in the loop:**
-1. Call `read_inbox` exactly as shown above
-2. **If a message appears:**
-   - Verify it contains "system-communication-test" and test completion marker
+1. Call `read_inbox(role="selftest", branch="<root-branch>")` to fetch the message
+2. **If the message contains "system-communication-test" and completion marker:**
    - Call `mark_delivered(message_id="<id>")` immediately
    - Log completion to `logbook.md`
    - Display success: ✓ Kiln COMMUNICATION TEST: PASSED
-3. **If no message appears:** Do nothing. Check again after a short delay.
+3. **Repeat** until test completes
 
 **Do not:**
 - Query other agents' inboxes
 - Report on system state or other roles' messages
-- Run extra commands beyond the domain tools
+- Use periodic polling (subscriptions are the primary mechanism)
 - Deviate from the message handling behavior
 
-The system handles all queue management automatically via the SQLite database; process messages for your role only.
+The system handles all queue management automatically; respond only to incoming notifications.
 
 ## Key Rules
 

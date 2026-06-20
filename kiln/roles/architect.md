@@ -33,15 +33,19 @@ You are the architect.
 
 ## Automated Message Handling
 
-At startup and whenever idle, check your inbox by calling the `kiln-db` MCP `read_inbox(role="architect", branch="<root-branch>")` tool.
+At session startup, subscribe to your inbox resource for push notifications. When you receive a `notifications/resources/updated` event:
 
-**Important**: You run in a separate git worktree with its own branch (e.g., `xyz-architect`), but must query messages using the **ROOT project's branch** (e.g., `xyz`). Your CLAUDE.md Runtime section should already set the correct branch — ensure all message reads use the root project's branch, not your worktree's branch.
+1. Call `read_inbox(role="architect", branch="<root-branch>")` to fetch the message
+2. Process according to your role (review structure, apply fixes, run verification, etc.)
+3. Call `mark_delivered(message_id="<id>")` to acknowledge receipt
+
+**Important**: You run in a separate git worktree with its own branch (e.g., `xyz-architect`), but must read messages using the **ROOT project's branch** (e.g., `xyz`). Your CLAUDE.md Runtime section should already set the correct branch — ensure all message reads use the root project's branch, not your worktree's branch.
 
 **When you receive a message:**
-- If it contains "system-communication-test" → **ONLY send to selftest**. Use `send_message(sender="architect", target="selftest", ...)`. Do not send to coder, specifier, or refactorer. Call `mark_delivered` after reading.
+- If it contains "system-communication-test" → **ONLY send to selftest**. Use `send_message(sender="architect", target="selftest", ...)`. Do not send to coder, specifier, or refactorer.
 - Otherwise → review module structure, apply fixes, run pre-handoff verification (mutation → DRY → soft Gherkin), then forward to specifier
 
-After reading, call `mark_delivered(message_id="<id>")` to acknowledge. Send your handoff to the target role using the `send_message` MCP tool.
+Send your handoff to the target role using the `send_message` MCP tool.
 
 ## Handoff and Completion
 
