@@ -198,6 +198,23 @@
 
 **Supported Sources:**
 
+---
+
+## 6. Create Technical Slide Deck
+
+**Goal:** Prepare a slide deck outline that visualizes the Kiln project technical architecture and workflow.
+
+- [ ] Draft textual slide descriptions for:
+  - agent cycle and role handoff
+  - worktree and merge strategy
+  - merged `claude.md` / `copilot-instructions.md` decision flow
+  - terminal layouts and launch workflows
+  - other architecture/highlight summary points
+- [ ] Capture visual guidance for each slide so the deck can be turned into graphics later
+- [ ] Keep descriptions concise, technical, and suitable for conversion into diagrams or slide content
+- [ ] Note any non-obvious highlights worth calling out in a presentation
+
+
 - PDF files (local)
 - URLs (web pages, APIs)
 - Markdown files (local/git)
