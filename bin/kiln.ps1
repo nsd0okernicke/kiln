@@ -372,14 +372,14 @@ function Prepare-Worktrees {
         $dbPath = Join-Path $STATE_DIR "messages.db"
         $dbPathEscaped = $dbPath -replace '\\', '\\'
         $frameworkRoot = Split-Path -Parent $SCRIPT_DIR
-        $frameworkRootEscaped = $frameworkRoot -replace '\\', '\\'
+        $serverPathEscaped = "$frameworkRoot\kiln\mcp-server\kiln_db_server.py" -replace '\\', '\\'
         $claudeJson = @"
 {
   "name": "kiln-$role",
   "mcpServers": {
     "kiln-db": {
       "command": "python",
-      "args": ["$frameworkRootEscaped/kiln/mcp-server/kiln_db_server.py", "$dbPathEscaped"]
+      "args": ["$serverPathEscaped", "$dbPathEscaped"]
     }
   }
 }
@@ -459,7 +459,7 @@ function Prepare-AgentConfigs {
     $dbPath = Join-Path $STATE_DIR "messages.db"
     $dbPathEscaped = $dbPath -replace '\\', '\\'
     $frameworkRoot = Split-Path -Parent $SCRIPT_DIR
-    $frameworkRootEscaped = $frameworkRoot -replace '\\', '\\'
+    $serverPathEscaped = "$frameworkRoot\kiln\mcp-server\kiln_db_server.py" -replace '\\', '\\'
 
     $hasCopilotAgent = $false
     for ($i = 0; $i -lt $global:AGENTS.Count; $i++) {
@@ -479,7 +479,7 @@ function Prepare-AgentConfigs {
   "mcpServers": {
     "kiln-db": {
       "command": "python",
-      "args": ["$frameworkRootEscaped/kiln/mcp-server/kiln_db_server.py", "$dbPathEscaped"]
+      "args": ["$serverPathEscaped", "$dbPathEscaped"]
     }
   }
 }
