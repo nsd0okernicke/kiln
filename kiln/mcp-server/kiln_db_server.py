@@ -24,6 +24,7 @@ from mcp.types import (
     Resource,
     ResourceTemplate,
     TextContent,
+    ServerCapabilities,
 )
 
 # Global state
@@ -418,6 +419,7 @@ async def main():
             InitializationOptions(
                 server_name="kiln-db",
                 server_version="1.0.0",
+                capabilities=ServerCapabilities()
             )
         )
 
