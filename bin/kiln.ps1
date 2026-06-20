@@ -594,7 +594,7 @@ function Build-WezTermAgentCommand {
 
     switch ($Agent) {
         "claude" {
-            $debugFlag = if ($Debug) { "--log-level debug" } else { "" }
+            $debugFlag = if ($Debug) { "--debug" } else { "" }
             $command = "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json -n '$DisplayName' $debugFlag".Trim()
         }
         "copilot" {
@@ -839,7 +839,7 @@ function Get-WindowsTerminalAgentCommand {
         Write-Warning "No model specified for $DisplayName; agent command may fail"
     }
 
-    $debugFlag = if ($Debug) { "--log-level debug" } else { "" }
+    $debugFlag = if ($Debug) { "--debug" } else { "" }
     $copilotDebugFlag = if ($Debug) { "--debug" } else { "" }
 
     switch ($Agent) {
