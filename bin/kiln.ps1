@@ -699,7 +699,21 @@ function Build-WindowsTerminalTabsArrayLayout {
         if ($tab.title) {
             $wtArgs += "--title", $tab.title
         } else {
-            $wtArgs += "--title", "Kiln"
+            # Generate title from all role names in this tab: "Role1 & Role2 & Role3"
+            $roleNames = @()
+            foreach ($pane in $tab.panes) {
+                $roleInPane = $pane.role
+                if ($RoleIndex.ContainsKey($roleInPane)) {
+                    $roleIdx = $RoleIndex[$roleInPane]
+                    $roleNames += $DisplayNames[$roleIdx]
+                }
+            }
+            if ($roleNames.Count -gt 0) {
+                $tabTitle = $roleNames -join " & "
+            } else {
+                $tabTitle = "Kiln"
+            }
+            $wtArgs += "--title", $tabTitle
         }
 
         # Determine if this tab has a grid layout
