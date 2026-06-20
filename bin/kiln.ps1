@@ -562,17 +562,22 @@ function Write-GeneratedCLAUDEmd {
     }
     $content += "You work in this worktree: $worktreeLeaf`n`n"
 
+    $content += "## CRITICAL: Inbox Subscription & Message Monitoring`n`n"
+    $content += "**At session startup, you MUST do these steps in order:**`n`n"
+    $content += "1. **Subscribe to your inbox resource immediately:**`n"
+    $content += "   Call the MCP tool: `agent subscribe_resource uri=kiln://inbox/$Role`n`n"
+    $content += "2. **Monitor for notifications:** After subscribing, stay alert for `notifications/resources/updated` events from the MCP server. When you receive one for your inbox URI, immediately call `read_inbox` (see step 3).`n`n"
+    $content += "3. **When a notification arrives or at any time:**`n"
+    $content += "   - Call `read_inbox(role=""$Role"", branch=""$CurrentBranch"")` to fetch queued messages`n"
+    $content += "   - Process the message according to your role instructions`n"
+    $content += "   - Call `mark_delivered(message_id=""<id>"")` immediately after reading`n`n"
+    $content += "**Do NOT wait for manual prompts to check your inbox — agents that receive subscribed messages wake up instantly.**`n`n"
+
     $content += "## Kiln Runtime Paths`n`n"
     $content += "- **Your role**: $Role`n"
     $content += "- **Your branch**: $CurrentBranch`n"
     $content += "- **Message database**: `.kiln/messages.db` (accessed via MCP `kiln-db` server)`n"
-    $content += "- **MCP server**: kiln-db (configured in `.claude/settings.json` and `.mcp.json`)`n`n"
-    $content += "### Inbox SQL (paste into read_query MCP tool)`n`n"
-    $content += "Check for new messages at session start and after each task. SQL: `SELECT id, sender, priority, content FROM messages WHERE target='$Role' AND branch='$CurrentBranch' AND status='queued' ORDER BY priority ASC, created_at ASC LIMIT 1`n`n"
-    $content += "### Mark delivered SQL (paste into write_query MCP tool)`n`n"
-    $content += "After reading a message, mark it delivered: `UPDATE messages SET status='delivered', delivered_at=datetime('now') WHERE id='<message-id>'`n`n"
-    $content += "### Send message SQL (paste into write_query MCP tool)`n`n"
-    $content += "When sending a handoff to another role: `INSERT INTO messages (id, sender, target, priority, status, content, created_at, branch) VALUES (strftime('%Y%m%d%H%M%S','now')||'-'||substr(hex(randomblob(4)),1,8), '$Role', '<TARGET_ROLE>', 50, 'queued', 'Re-read your role and constitution...<your-message>', datetime('now'), '$CurrentBranch')`n"
+    $content += "- **MCP server**: kiln-db (configured in `.mcp.json`)`n"
 
     Set-Content $claudeMdPath $content
 }

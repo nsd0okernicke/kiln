@@ -78,7 +78,8 @@
           "role": "selftest",
           "agent": "claude",
           "worktree": "@current",
-          "title": "Kiln Self-Test"
+          "title": "Kiln Self-Test",
+          "model": "claude-haiku-4-5-20251001"
         },
         {
           "role": "specifier",
