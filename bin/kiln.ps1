@@ -705,9 +705,7 @@ function Build-WindowsTerminalTabsArrayLayout {
                 $roleInPane = $pane.role
                 if ($RoleIndex.ContainsKey($roleInPane)) {
                     $roleIdx = $RoleIndex[$roleInPane]
-                    $name = $DisplayNames[$roleIdx]
-                    Write-Host "DEBUG: Tab $tabIndex, pane role=$roleInPane, roleIdx=$roleIdx, displayName=$name" -ForegroundColor Yellow
-                    $roleNames += $name
+                    $roleNames += $DisplayNames[$roleIdx]
                 }
             }
             if ($roleNames.Count -gt 0) {
@@ -715,7 +713,6 @@ function Build-WindowsTerminalTabsArrayLayout {
             } else {
                 $tabTitle = "Kiln"
             }
-            Write-Host "DEBUG: Tab $tabIndex final title: $tabTitle (roleNames count: $($roleNames.Count))" -ForegroundColor Yellow
             $wtArgs += "--title", $tabTitle
         }
 
@@ -735,6 +732,7 @@ function Build-WindowsTerminalTabsArrayLayout {
             if ($RoleIndex.ContainsKey($roleInPane)) {
                 $roleIdx = $RoleIndex[$roleInPane]
                 $agent = $Agents[$roleIdx]
+                $displayName = $DisplayNames[$roleIdx]
                 $worktreePath = $WorktreePaths[$roleIdx]
 
                 # Get model from profile variable
@@ -797,8 +795,7 @@ function Build-WindowsTerminalTabsArrayLayout {
                 }
 
                 $colorIdx = $roleIdx % $AgentColors.Count
-                # For multi-pane layouts, don't pass display name to agent (tab title controls it)
-                $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $null -WorktreePath $worktreePath -Model $model
+                $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model
                 $wtArgs += "-d", $worktreePath
                 $wtArgs += "--colorScheme", $AgentColors[$colorIdx]
                 $wtArgs += "pwsh", "-NoExit", "-Command"
@@ -1017,8 +1014,6 @@ if ($TerminalBackend -eq "wezterm") {
 
     if ($wtArgs.Count -gt 0) {
         $argString = ($wtArgs | ForEach-Object { if ($_ -match '\s') { """$_""" } else { $_ } }) -join ' '
-        Write-Host "DEBUG: wt command line:" -ForegroundColor Yellow
-        Write-Host "wt.exe $argString" -ForegroundColor Yellow
         Start-Process wt.exe -ArgumentList $argString -NoNewWindow | Out-Null
         # Wait for panes to stabilize to avoid race conditions on rapid restarts
         Start-Sleep -Milliseconds 1500
