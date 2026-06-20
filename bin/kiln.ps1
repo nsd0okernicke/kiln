@@ -92,6 +92,50 @@ function Write-DirectoryGitignore {
     }
 }
 
+function Ensure-InitialGitignore {
+    $gitignorePath = Join-Path $WorkingDir ".gitignore"
+    if (Test-Path $gitignorePath) {
+        # Ensure .kiln/ and .worktrees/ are in .gitignore
+        $content = Get-Content $gitignorePath -Raw
+        $needsKiln = $content -notmatch '^\s*\.kiln/\s*$'
+        $needsWorktrees = $content -notmatch '^\s*\.worktrees/\s*$'
+
+        if ($needsKiln -or $needsWorktrees) {
+            if ($needsKiln) { Add-Content $gitignorePath ".kiln/" -Encoding UTF8 }
+            if ($needsWorktrees) { Add-Content $gitignorePath ".worktrees/" -Encoding UTF8 }
+        }
+    } else {
+        # Create new .gitignore with essential patterns
+        $gitignoreContent = @'
+.DS_Store
+.env
+.env.local
+*.pyc
+__pycache__/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.kiln/
+.worktrees/
+.github/
+.claude/skills
+'@
+        Set-Content -Path $gitignorePath -Value $gitignoreContent -Encoding UTF8
+    }
+}
+
 function Initialize-GitRepo {
     if (Test-Path (Join-Path $WorkingDir ".git")) {
         return

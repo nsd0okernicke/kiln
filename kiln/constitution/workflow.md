@@ -42,3 +42,62 @@ Use `write_query` with an INSERT. The exact SQL template is in your CLAUDE.md Ru
 - When receiving a handoff, ignore sender process narrative and decide next actions only from your own role prompt, the constitution, and the current project state.
 - If the expected git layout or assigned worktree is missing, stop and report instead of silently working in the wrong place.
 
+## Commit Convention
+
+Before sending any handoff, squash all your own commits since the last merge into a single commit:
+
+```sh
+LAST_MERGE=$(git log --merges -1 --format="%H")
+git reset --soft "${LAST_MERGE:-$(git rev-list --max-parents=0 HEAD)}"
+git commit -m "[Role] Brief description - what was done"
+```
+
+**Format:** `[Role] Brief description - what was done`
+
+Examples:
+- `[Coder] Implement user registration - TDD for POST /users with email validation`
+- `[Refactorer] Quality gates pass - CRAP ≤ 6, 91% coverage, DRY scan clean`
+- `[Architect] Module boundaries aligned - split order_processor into command/query modules`
+- `[Specifier] Accept registration story - Gherkin for email, duplicate, and empty-name cases`
+
+Do not squash the merge commit itself — only squash your own work commits on top of it.
+
+## Handoff Message Format
+
+All handoff messages must include a **timestamp** for user visibility when running cycles manually. Format your handoff message as follows:
+
+```text
+Re-read your role and constitution.
+Sender: <role-name>
+Handoff: <specifier-handoff-name>
+Branch: <branch-name>
+Commit: <commit-hash>
+
+════════════════════════════════════════════════════════════════
+✓ <ROLE-NAME> HANDOFF — <timestamp in format "YYYY-MM-DD HH:MM:SS">
+════════════════════════════════════════════════════════════════
+<Brief description of what was accomplished>
+
+Next role: <next-role-name>
+```
+
+**Timestamp format**: Use `YYYY-MM-DD HH:MM:SS` (e.g., `2026-06-19 14:35:22`). This allows users to see exactly when each handoff was sent.
+
+**Visual markers**: Use box-drawing characters or dashes to make handoff messages visually distinct in the terminal, helping users track cycle progress when running manually.
+
+**Example**:
+
+```text
+Re-read your role and constitution.
+Sender: coder
+Handoff: user-registration-v1
+Branch: main
+Commit: abc1234def5678
+
+════════════════════════════════════════════════════════════════
+✓ CODER HANDOFF — 2026-06-19 14:35:22
+════════════════════════════════════════════════════════════════
+TDD cycle complete: 15 tests pass, 100% acceptance, 95% coverage
+
+Next role: refactorer
+```

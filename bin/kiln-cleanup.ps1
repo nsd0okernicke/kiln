@@ -48,27 +48,28 @@ if ($wtProcesses) {
     Write-Host "  ✓ Terminated remaining Windows Terminal processes"
 }
 
-# Step 2: Delete git branches created for worktrees
+# Step 2: Preserve git branches (audit trail across multiple cycles)
 Write-Host ""
-Write-Host "Step 2: Removing git branches..."
+Write-Host "Step 2: Preserving sub-branches as audit trail..."
 if (Test-Path $SWARM_BRANCHES_FILE) {
-    $branchesToDelete = @()
+    $preservedBranches = @()
     try {
-        $branchesToDelete = Get-Content $SWARM_BRANCHES_FILE | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        $preservedBranches = Get-Content $SWARM_BRANCHES_FILE | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
     } catch {
         Write-Host "  ⚠ Warning: Could not read Kiln-sub-branches file"
     }
 
-    foreach ($branch in $branchesToDelete) {
-        $branch = $branch.Trim()
-        if (-not [string]::IsNullOrWhiteSpace($branch)) {
-            git -C $ProjectDir branch -D $branch 2>$null | Out-Null
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "  ✓ Deleted branch: $branch"
-            } else {
-                Write-Host "  ⚠ Could not delete branch: $branch (may not exist)"
+    if ($preservedBranches.Count -gt 0) {
+        Write-Host "  ✓ Sub-branches preserved (not deleted):"
+        foreach ($branch in $preservedBranches) {
+            $branch = $branch.Trim()
+            if (-not [string]::IsNullOrWhiteSpace($branch)) {
+                Write-Host "     - $branch"
             }
         }
+        Write-Host ""
+        Write-Host "  These branches are the audit trail for agent work across multiple cycles."
+        Write-Host "  To delete them, run: git branch -D $($preservedBranches -join ' ')"
     }
     Remove-Item $SWARM_BRANCHES_FILE -Force -ErrorAction SilentlyContinue
 }

@@ -13,7 +13,8 @@ You are the coder.
 
 ## TDD Cycle
 
-- For each behavior slice, follow the TDD cycle in order: `tdd-red` → `tdd-green` → `tdd-refactor`.
+- For each behavior slice, **run the complete TDD cycle without pausing for user confirmation**: `tdd-red` → `tdd-green` → `tdd-refactor` → next behavior.
+- Do not ask the user to approve each phase (RED, GREEN, REFACTOR). Proceed autonomously through all phases until all tests pass.
 - The three rules apply: no production code except to pass a failing test; only enough test code to fail; only enough production code to pass.
 
 ## Code Organization
@@ -35,7 +36,7 @@ You are the coder.
 
 ## Automated Message Handling
 
-At startup and whenever idle, check your inbox using the `Kiln-db` MCP `read_query` tool with the SQL from your CLAUDE.md Runtime section.
+At startup and whenever idle, check your inbox using the `kiln-db` MCP `read_query` tool with the SQL from your CLAUDE.md Runtime section.
 
 **Important**: You run in a separate git worktree with its own branch (e.g., `xyz-coder`), but must query messages using the **ROOT project's branch** (e.g., `xyz`). Your CLAUDE.md Runtime section should already set the correct branch — ensure all message queries use the root project's branch, not your worktree's branch.
 
@@ -47,5 +48,6 @@ Process messages for coder only. Use the MCP `write_query` tool (SQL in your CLA
 
 ## Handoff
 
+- Before committing: squash your own commits since the last merge (see constitution workflow.md Commit Convention). Use format: `[Coder] <feature name> - TDD implementation of <what>`
 - When all acceptance and unit tests pass: commit with logbook.md entry and notify refactorer using the MCP `write_query` tool (SQL template in your CLAUDE.md Runtime section).
 

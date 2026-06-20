@@ -62,30 +62,37 @@ Domain classes are **pure Python dataclasses** with no ORM (SQLAlchemy) or schem
 
 ### Package Structure (Per Service)
 ```
-<service>/src/<service_name>/
-├── domain/
-│   ├── <entity>.py              (pure dataclasses, business logic)
-│   ├── events/                  (domain events as dataclasses)
-│   └── ports/
-│       ├── <x>_repository.py    (ABC interfaces, no implementation)
-│       └── message_publisher.py (ABC interface)
+<service>/
+├── features/                    (Gherkin acceptance specifications, specifier role)
+│   ├── user_registration.feature
+│   ├── api/
+│   │   └── auth.feature
+│   └── ...
 │
-├── application/
-│   ├── <use_case>.py            (orchestrates domain, calls ports)
-│   └── <service>.py             (application service, if needed)
-│
-└── infrastructure/
-    ├── api/
-    │   ├── schemas/             (Pydantic DTOs)
-    │   └── routers/             (FastAPI endpoints)
-    ├── db/
-    │   ├── models.py            (SQLAlchemy ORM models)
-    │   └── <x>_repository.py    (port implementations)
-    ├── messaging/
-    │   ├── publisher.py         (RabbitMQ publisher adapter)
-    │   └── consumer.py          (RabbitMQ consumer adapter)
-    └── config/
-        └── settings.py          (pydantic-settings)
+├── src/<service_name>/
+│   ├── domain/
+│   │   ├── <entity>.py              (pure dataclasses, business logic)
+│   │   ├── events/                  (domain events as dataclasses)
+│   │   └── ports/
+│   │       ├── <x>_repository.py    (ABC interfaces, no implementation)
+│   │       └── message_publisher.py (ABC interface)
+│   │
+│   ├── application/
+│   │   ├── <use_case>.py            (orchestrates domain, calls ports)
+│   │   └── <service>.py             (application service, if needed)
+│   │
+│   └── infrastructure/
+│       ├── api/
+│       │   ├── schemas/             (Pydantic DTOs)
+│       │   └── routers/             (FastAPI endpoints)
+│       ├── db/
+│       │   ├── models.py            (SQLAlchemy ORM models)
+│       │   └── <x>_repository.py    (port implementations)
+│       ├── messaging/
+│       │   ├── publisher.py         (RabbitMQ publisher adapter)
+│       │   └── consumer.py          (RabbitMQ consumer adapter)
+│       └── config/
+│           └── settings.py          (pydantic-settings)
 ```
 
 ---

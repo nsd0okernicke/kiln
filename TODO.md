@@ -87,30 +87,7 @@
 
 ---
 
-## 3. Git Strategy & Commit Management
-
-- [ ] **Agent Commit Consolidation**
-  - Research best approach: squash commits before handoff vs. interactive rebase
-  - Implement automatic commit consolidation before agent handoff
-  - Ensure each agent's work is represented as a single logical commit
-  - Preserve commit history for debugging while maintaining clean main branch
-
-- [ ] **Uniform Commit Messages**
-  - Define commit message convention for agent-generated commits
-  - Format: `[ROLE] Brief description - what was done`
-  - Include context: issue number, changes scope, reason for changes
-  - Implement template or validation to enforce consistency
-  - Consider adding footer with agent metadata (agent type, worktree, branch)
-
-- [ ] **Git History Cleanup**
-  - Decide on merge strategy: squash vs. rebase vs. merge commits
-  - Configure git hooks to validate agent commit messages
-  - Document commit message standards in constitution/workflow.md
-  - Create example commits from selftest runs
-
----
-
-## 4. MCP Push Notifications (Hybrid Model)
+## 3. MCP Push Notifications (Hybrid Model)
 
 **Current Implementation:** Agents poll SQLite inbox (pull model only)
 
@@ -187,7 +164,7 @@
 
 ---
 
-## 5. Documentation MCP Server
+## 4. Documentation MCP Server
 
 **Goal:** Create an MCP server that indexes and serves documentation from multiple sources, enabling agents to reference external docs in real-time.
 
