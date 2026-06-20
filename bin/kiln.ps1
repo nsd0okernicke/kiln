@@ -583,7 +583,9 @@ function Build-WezTermAgentCommand {
         [string]$DisplayName,
         [string]$WorktreePath,
         [string]$Model = "",
-        [bool]$Debug = $false
+        [bool]$Debug = $false,
+        [string]$FrameworkRoot = "",
+        [string]$DatabasePath = ""
     )
 
     if (-not $Model) {
@@ -599,7 +601,13 @@ function Build-WezTermAgentCommand {
         }
         "copilot" {
             $debugFlag = if ($Debug) { "--debug" } else { "" }
-            $command = "copilot --allow-all $debugFlag".Trim()
+            # Register MCP server explicitly for Copilot CLI
+            if ($FrameworkRoot -and $DatabasePath) {
+                $serverPath = "$FrameworkRoot\kiln\mcp-server\kiln_db_server.py"
+                $command = "copilot mcp add kiln-db -- python `"$serverPath`" `"$DatabasePath`"; copilot --allow-all $debugFlag".Trim()
+            } else {
+                $command = "copilot --allow-all $debugFlag".Trim()
+            }
         }
         default {
             $command = "echo 'Agent $Agent not supported'"
@@ -683,7 +691,7 @@ function Build-WindowsTerminalTabsLayout {
         $wtArgs += "--colorScheme", $AgentColors[$i % $AgentColors.Count]
         $wtArgs += "pwsh", "-NoExit", "-Command"
 
-        $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Debug $debug
+        $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Debug $debug -FrameworkRoot $frameworkRoot -DatabasePath $dbPath
         $wtArgs += $agentCmd
     }
 
@@ -814,7 +822,7 @@ function Build-WindowsTerminalTabsArrayLayout {
                 }
 
                 $colorIdx = $roleIdx % $AgentColors.Count
-                $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Debug $debug
+                $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Debug $debug -FrameworkRoot $frameworkRoot -DatabasePath $dbPath
                 $wtArgs += "-d", $worktreePath
                 $wtArgs += "--colorScheme", $AgentColors[$colorIdx]
                 $wtArgs += "pwsh", "-NoExit", "-Command"
@@ -832,7 +840,9 @@ function Get-WindowsTerminalAgentCommand {
         [string]$DisplayName,
         [string]$WorktreePath,
         [string]$Model = "",
-        [bool]$Debug = $false
+        [bool]$Debug = $false,
+        [string]$FrameworkRoot = "",
+        [string]$DatabasePath = ""
     )
 
     if (-not $Model) {
@@ -851,10 +861,19 @@ function Get-WindowsTerminalAgentCommand {
             }
         }
         "copilot" {
-            if ($DisplayName) {
-                return "copilot --allow-all --name ""$DisplayName"" $copilotDebugFlag".Trim()
+            # Register MCP server explicitly for Copilot CLI
+            $baseCmd = ""
+            if ($FrameworkRoot -and $DatabasePath) {
+                $serverPath = "$FrameworkRoot\kiln\mcp-server\kiln_db_server.py"
+                $baseCmd = "copilot mcp add kiln-db -- python `"$serverPath`" `"$DatabasePath`"; copilot --allow-all $copilotDebugFlag"
             } else {
-                return "copilot --allow-all $copilotDebugFlag".Trim()
+                $baseCmd = "copilot --allow-all $copilotDebugFlag"
+            }
+
+            if ($DisplayName) {
+                return "$baseCmd --name ""$DisplayName""".Trim()
+            } else {
+                return $baseCmd.Trim()
             }
         }
         default {
@@ -1001,7 +1020,7 @@ if ($TerminalBackend -eq "wezterm") {
 
         Write-GeneratedCLAUDEmd -Index $i -Role $role -WorktreePath $worktreePath -Agent $agent
 
-        $cmd = Build-WezTermAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Debug $debug
+        $cmd = Build-WezTermAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Debug $debug -FrameworkRoot $frameworkRoot -DatabasePath $dbPath
 
         $roleData += [PSCustomObject]@{
             role  = $role
