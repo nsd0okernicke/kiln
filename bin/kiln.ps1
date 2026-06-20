@@ -655,6 +655,7 @@ function Build-WindowsTerminalTabsLayout {
             $wtArgs += ";", "new-tab"
         }
 
+        # For tabs layout, use colored emoji + role name as title
         $tabTitle = "$($colorEmojis[$i % $colorEmojis.Count]) $displayName"
         $wtArgs += "--title", $tabTitle
         $wtArgs += "-d", $worktreePath
@@ -690,8 +691,11 @@ function Build-WindowsTerminalTabsArrayLayout {
             $wtArgs += ";", "new-tab"
         }
 
+        # Set tab title only once per tab (for multi-pane tabs)
         if ($tab.title) {
             $wtArgs += "--title", $tab.title
+        } else {
+            $wtArgs += "--title", "Kiln"
         }
 
         # Determine if this tab has a grid layout
@@ -736,23 +740,23 @@ function Build-WindowsTerminalTabsArrayLayout {
                         }
 
                         # Navigate from current to parent position
-                        # Move horizontally first, then vertically (important for tree structure)
+                        # Move vertically first (up/down) to avoid navigating to non-existent panes
                         $rowDiff = $parentRow - $currentRow
                         $colDiff = $parentCol - $currentCol
-
-                        for ($i = 0; $i -lt [math]::Abs($colDiff); $i++) {
-                            if ($colDiff -gt 0) {
-                                $wtArgs += ";", "move-focus", "right"
-                            } else {
-                                $wtArgs += ";", "move-focus", "left"
-                            }
-                        }
 
                         for ($i = 0; $i -lt [math]::Abs($rowDiff); $i++) {
                             if ($rowDiff -gt 0) {
                                 $wtArgs += ";", "move-focus", "down"
                             } else {
                                 $wtArgs += ";", "move-focus", "up"
+                            }
+                        }
+
+                        for ($i = 0; $i -lt [math]::Abs($colDiff); $i++) {
+                            if ($colDiff -gt 0) {
+                                $wtArgs += ";", "move-focus", "right"
+                            } else {
+                                $wtArgs += ";", "move-focus", "left"
                             }
                         }
 
