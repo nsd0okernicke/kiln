@@ -379,7 +379,6 @@ function Prepare-Worktrees {
         $serverPathEscaped = "$frameworkRoot\kiln\mcp-server\kiln_db_server.py" -replace '\\', '\\'
         $claudeJson = @"
 {
-  "name": "kiln-$role",
   "mcpServers": {
     "kiln-db": {
       "command": "python",
