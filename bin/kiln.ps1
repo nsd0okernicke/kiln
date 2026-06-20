@@ -705,7 +705,9 @@ function Build-WindowsTerminalTabsArrayLayout {
                 $roleInPane = $pane.role
                 if ($RoleIndex.ContainsKey($roleInPane)) {
                     $roleIdx = $RoleIndex[$roleInPane]
-                    $roleNames += $DisplayNames[$roleIdx]
+                    $name = $DisplayNames[$roleIdx]
+                    Write-Host "DEBUG: Tab $tabIndex, pane role=$roleInPane, roleIdx=$roleIdx, displayName=$name" -ForegroundColor Yellow
+                    $roleNames += $name
                 }
             }
             if ($roleNames.Count -gt 0) {
@@ -713,6 +715,7 @@ function Build-WindowsTerminalTabsArrayLayout {
             } else {
                 $tabTitle = "Kiln"
             }
+            Write-Host "DEBUG: Tab $tabIndex final title: $tabTitle (roleNames count: $($roleNames.Count))" -ForegroundColor Yellow
             $wtArgs += "--title", $tabTitle
         }
 
