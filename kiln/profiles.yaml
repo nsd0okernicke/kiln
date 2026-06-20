@@ -45,27 +45,32 @@ profiles:
       DEBUG: "false"
 
   selftest:
-    description: "Automated self-testing configuration"
+    description: "Automated self-testing configuration with debug logging"
     terminals:
       - role: selftest
         agent: copilot
         worktree: "@current"
+        debug: true
         title: "Kiln Self-Test"
       - role: specifier
         agent: claude
         worktree: "specifier"
+        debug: true
         title: "Kiln Specifier"
       - role: coder
         agent: claude
         worktree: "coder"
+        debug: true
         title: "Kiln Coder"
       - role: refactorer
         agent: claude
         worktree: "refactorer"
+        debug: true
         title: "Kiln Refactorer"
       - role: architect
         agent: claude
         worktree: "architect"
+        debug: true
         title: "Kiln Architect"
     layout:
       type: tabs

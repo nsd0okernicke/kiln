@@ -24,6 +24,7 @@ $global:AGENTS = @()
 $global:DISPLAY_NAMES = @()
 $global:WORKTREE_NAMES = @()
 $global:WORKTREE_PATHS = @()
+$global:DEBUG_FLAGS = @()
 $global:ROLE_INDEX = @{}
 
 function Test-Dependency {
@@ -207,10 +208,12 @@ function Load-ConfigFromProfile {
         $varRole = "TERMINAL_${i}_ROLE"
         $varWorktree = "TERMINAL_${i}_WORKTREE"
         $varAgent = "TERMINAL_${i}_AGENT"
+        $varDebug = "TERMINAL_${i}_DEBUG"
 
         $role = Get-Variable -Name $varRole -ValueOnly -ErrorAction SilentlyContinue
         $worktree = Get-Variable -Name $varWorktree -ValueOnly -ErrorAction SilentlyContinue
         $agent = Get-Variable -Name $varAgent -ValueOnly -ErrorAction SilentlyContinue
+        $debug = Get-Variable -Name $varDebug -ValueOnly -ErrorAction SilentlyContinue
 
         if (-not [string]::IsNullOrEmpty($role)) {
             # Default to claude if agent not specified in profile
@@ -233,6 +236,7 @@ function Load-ConfigFromProfile {
             $global:AGENTS += $agent
             $global:DISPLAY_NAMES += (Display-NameForRole $role)
             $global:WORKTREE_NAMES += $worktree
+            $global:DEBUG_FLAGS += [bool]::Parse($debug -eq "true")
 
             if ($worktree -eq "none" -or $worktree -eq "master" -or $worktree -eq "@current") {
                 $global:WORKTREE_PATHS += $WorkingDir
@@ -578,7 +582,8 @@ function Build-WezTermAgentCommand {
         [string]$Agent,
         [string]$DisplayName,
         [string]$WorktreePath,
-        [string]$Model = ""
+        [string]$Model = "",
+        [bool]$Debug = $false
     )
 
     if (-not $Model) {
@@ -589,10 +594,12 @@ function Build-WezTermAgentCommand {
 
     switch ($Agent) {
         "claude" {
-            $command = "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json -n '$DisplayName'"
+            $debugFlag = if ($Debug) { "--log-level debug" } else { "" }
+            $command = "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json -n '$DisplayName' $debugFlag".Trim()
         }
         "copilot" {
-            $command = "copilot --allow-all"
+            $debugFlag = if ($Debug) { "--debug" } else { "" }
+            $command = "copilot --allow-all $debugFlag".Trim()
         }
         default {
             $command = "echo 'Agent $Agent not supported'"
@@ -609,33 +616,34 @@ function Build-WindowsTerminalLayout {
         [array]$Roles,
         [array]$Agents,
         [array]$DisplayNames,
-        [array]$WorktreePaths
+        [array]$WorktreePaths,
+        [array]$DebugFlags
     )
 
     if (-not $LayoutJson) {
         # Default to tabs if no layout specified
-        return Build-WindowsTerminalTabsLayout -RoleIndex $RoleIndex -Roles $Roles -Agents $Agents -DisplayNames $DisplayNames -WorktreePaths $WorktreePaths
+        return Build-WindowsTerminalTabsLayout -RoleIndex $RoleIndex -Roles $Roles -Agents $Agents -DisplayNames $DisplayNames -WorktreePaths $WorktreePaths -DebugFlags $DebugFlags
     }
 
     try {
         $layout = $LayoutJson | ConvertFrom-Json
     } catch {
         Write-Host "Warning: Could not parse layout JSON, defaulting to tabs" -ForegroundColor Yellow
-        return Build-WindowsTerminalTabsLayout -RoleIndex $RoleIndex -Roles $Roles -Agents $Agents -DisplayNames $DisplayNames -WorktreePaths $WorktreePaths
+        return Build-WindowsTerminalTabsLayout -RoleIndex $RoleIndex -Roles $Roles -Agents $Agents -DisplayNames $DisplayNames -WorktreePaths $WorktreePaths -DebugFlags $DebugFlags
     }
 
     # Handle simple "type" format
     if ($layout.type -eq "tabs") {
-        return Build-WindowsTerminalTabsLayout -RoleIndex $RoleIndex -Roles $Roles -Agents $Agents -DisplayNames $DisplayNames -WorktreePaths $WorktreePaths
+        return Build-WindowsTerminalTabsLayout -RoleIndex $RoleIndex -Roles $Roles -Agents $Agents -DisplayNames $DisplayNames -WorktreePaths $WorktreePaths -DebugFlags $DebugFlags
     }
 
     # Handle tabs array format
     if ($layout.tabs) {
-        return Build-WindowsTerminalTabsArrayLayout -Layout $layout -RoleIndex $RoleIndex -Roles $Roles -Agents $Agents -DisplayNames $DisplayNames -WorktreePaths $WorktreePaths
+        return Build-WindowsTerminalTabsArrayLayout -Layout $layout -RoleIndex $RoleIndex -Roles $Roles -Agents $Agents -DisplayNames $DisplayNames -WorktreePaths $WorktreePaths -DebugFlags $DebugFlags
     }
 
     # Default fallback
-    return Build-WindowsTerminalTabsLayout -RoleIndex $RoleIndex -Roles $Roles -Agents $Agents -DisplayNames $DisplayNames -WorktreePaths $WorktreePaths
+    return Build-WindowsTerminalTabsLayout -RoleIndex $RoleIndex -Roles $Roles -Agents $Agents -DisplayNames $DisplayNames -WorktreePaths $WorktreePaths -DebugFlags $DebugFlags
 }
 
 function Build-WindowsTerminalTabsLayout {
@@ -644,7 +652,8 @@ function Build-WindowsTerminalTabsLayout {
         [array]$Roles,
         [array]$Agents,
         [array]$DisplayNames,
-        [array]$WorktreePaths
+        [array]$WorktreePaths,
+        [array]$DebugFlags
     )
 
     $AgentColors = @("One Half Dark", "Solarized Dark", "Tango Dark", "Campbell Powershell")
@@ -655,6 +664,7 @@ function Build-WindowsTerminalTabsLayout {
         $agent = $Agents[$i]
         $displayName = $DisplayNames[$i]
         $worktreePath = $WorktreePaths[$i]
+        $debug = $DebugFlags[$i]
 
         # Get model from profile variable
         $varModel = "TERMINAL_${i}_MODEL"
@@ -673,7 +683,7 @@ function Build-WindowsTerminalTabsLayout {
         $wtArgs += "--colorScheme", $AgentColors[$i % $AgentColors.Count]
         $wtArgs += "pwsh", "-NoExit", "-Command"
 
-        $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model
+        $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Debug $debug
         $wtArgs += $agentCmd
     }
 
@@ -687,7 +697,8 @@ function Build-WindowsTerminalTabsArrayLayout {
         [array]$Roles,
         [array]$Agents,
         [array]$DisplayNames,
-        [array]$WorktreePaths
+        [array]$WorktreePaths,
+        [array]$DebugFlags
     )
 
     $AgentColors = @("One Half Dark", "Solarized Dark", "Tango Dark", "Campbell Powershell")
@@ -741,6 +752,7 @@ function Build-WindowsTerminalTabsArrayLayout {
                 $agent = $Agents[$roleIdx]
                 $displayName = $DisplayNames[$roleIdx]
                 $worktreePath = $WorktreePaths[$roleIdx]
+                $debug = $DebugFlags[$roleIdx]
 
                 # Get model from profile variable
                 $varModel = "TERMINAL_${roleIdx}_MODEL"
@@ -802,7 +814,7 @@ function Build-WindowsTerminalTabsArrayLayout {
                 }
 
                 $colorIdx = $roleIdx % $AgentColors.Count
-                $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model
+                $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Debug $debug
                 $wtArgs += "-d", $worktreePath
                 $wtArgs += "--colorScheme", $AgentColors[$colorIdx]
                 $wtArgs += "pwsh", "-NoExit", "-Command"
@@ -819,26 +831,30 @@ function Get-WindowsTerminalAgentCommand {
         [string]$Agent,
         [string]$DisplayName,
         [string]$WorktreePath,
-        [string]$Model = ""
+        [string]$Model = "",
+        [bool]$Debug = $false
     )
 
     if (-not $Model) {
         Write-Warning "No model specified for $DisplayName; agent command may fail"
     }
 
+    $debugFlag = if ($Debug) { "--log-level debug" } else { "" }
+    $copilotDebugFlag = if ($Debug) { "--debug" } else { "" }
+
     switch ($Agent) {
         "claude" {
             if ($DisplayName) {
-                return "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json -n ""$DisplayName"""
+                return "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json -n ""$DisplayName"" $debugFlag".Trim()
             } else {
-                return "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json"
+                return "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json $debugFlag".Trim()
             }
         }
         "copilot" {
             if ($DisplayName) {
-                return "copilot --allow-all --name ""$DisplayName"""
+                return "copilot --allow-all --name ""$DisplayName"" $copilotDebugFlag".Trim()
             } else {
-                return "copilot --allow-all"
+                return "copilot --allow-all $copilotDebugFlag".Trim()
             }
         }
         default {
@@ -975,16 +991,17 @@ if ($TerminalBackend -eq "wezterm") {
         $agent = $global:AGENTS[$i]
         $displayName = $global:DISPLAY_NAMES[$i]
         $worktreePath = $global:WORKTREE_PATHS[$i]
+        $debug = $global:DEBUG_FLAGS[$i]
 
         # Get model for this terminal from profile
         $varModel = "TERMINAL_${i}_MODEL"
         $model = Get-Variable -Name $varModel -ValueOnly -ErrorAction SilentlyContinue
 
-        Write-Verbose "Role: '$role', DisplayName: '$displayName', Agent: '$agent', Model: '$model'"
+        Write-Verbose "Role: '$role', DisplayName: '$displayName', Agent: '$agent', Model: '$model', Debug: $debug"
 
         Write-GeneratedCLAUDEmd -Index $i -Role $role -WorktreePath $worktreePath -Agent $agent
 
-        $cmd = Build-WezTermAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model
+        $cmd = Build-WezTermAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Debug $debug
 
         $roleData += [PSCustomObject]@{
             role  = $role
@@ -1017,7 +1034,8 @@ if ($TerminalBackend -eq "wezterm") {
         -Roles $global:ROLES `
         -Agents $global:AGENTS `
         -DisplayNames $global:DISPLAY_NAMES `
-        -WorktreePaths $global:WORKTREE_PATHS
+        -WorktreePaths $global:WORKTREE_PATHS `
+        -DebugFlags $global:DEBUG_FLAGS
 
     if ($wtArgs.Count -gt 0) {
         $argString = ($wtArgs | ForEach-Object { if ($_ -match '\s') { """$_""" } else { $_ } }) -join ' '
