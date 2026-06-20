@@ -269,6 +269,21 @@ GITIGNORE
 
 echo "✓ Initialized git repository on branch 'main'"
 echo ""
+
+# Install MCP server dependencies
+echo "Installing MCP server dependencies..."
+req_file="$FRAMEWORK_ROOT/kiln/mcp-server/requirements.txt"
+if [ -f "$req_file" ]; then
+    if command -v pip &>/dev/null; then
+        pip install -q -r "$req_file" 2>/dev/null && echo "✓ Installed MCP dependencies" || echo "Warning: Could not install MCP dependencies. You may need to run: pip install -r $req_file"
+    else
+        echo "Warning: pip not found; MCP dependencies not installed" >&2
+    fi
+else
+    echo "Warning: requirements.txt not found at $req_file" >&2
+fi
+echo ""
+
 echo "✓ Project created successfully: $TARGET"
 echo ""
 echo "Next steps:"

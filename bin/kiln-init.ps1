@@ -291,6 +291,22 @@ venv/
     Write-Host "Skipping git initialization (use -NoGit for existing repos)" -ForegroundColor Cyan
 }
 
+# Install MCP server dependencies
+Write-Host ""
+Write-Host "Installing MCP server dependencies..." -ForegroundColor Cyan
+$reqFile = Join-Path $FrameworkRoot "kiln" "mcp-server" "requirements.txt"
+if (Test-Path $reqFile) {
+    try {
+        pip install -q -r $reqFile | Out-Null
+        Write-Host "✓ Installed MCP dependencies" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "Warning: Could not install MCP dependencies. You may need to run: pip install -r $reqFile" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "Warning: requirements.txt not found at $reqFile" -ForegroundColor Yellow
+}
+
 Write-Host ""
 Write-Host "✓ Project created successfully: $Target" -ForegroundColor Green
 Write-Host ""

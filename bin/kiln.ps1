@@ -280,10 +280,13 @@ function Write-ClaudeConfig {
     $projectMcp = Join-Path $WorkingDir ".mcp.json"
     if (Test-Path $templateMcp) {
         $mcpContent = Get-Content -Path $templateMcp -Raw
-        # Substitute the database path placeholder with absolute path
-        $dbPath = Join-Path $STATE_DIR "messages.db"
+        # Substitute framework root and database path placeholders
+        $frameworkRoot = Split-Path -Parent $SCRIPT_DIR
         # Escape backslashes for JSON
+        $frameworkRootEscaped = $frameworkRoot -replace '\\', '\\'
+        $dbPath = Join-Path $STATE_DIR "messages.db"
         $dbPathEscaped = $dbPath -replace '\\', '\\'
+        $mcpContent = $mcpContent -replace '__KILN_FRAMEWORK_ROOT__', $frameworkRootEscaped
         $mcpContent = $mcpContent -replace '__KILN_DB_PATH__', $dbPathEscaped
         Set-Content -Path $projectMcp -Value $mcpContent -Encoding UTF8
     }
@@ -368,13 +371,15 @@ function Prepare-Worktrees {
         $claudeJsonPath = Join-Path $worktreePath ".mcp.json"
         $dbPath = Join-Path $STATE_DIR "messages.db"
         $dbPathEscaped = $dbPath -replace '\\', '\\'
+        $frameworkRoot = Split-Path -Parent $SCRIPT_DIR
+        $frameworkRootEscaped = $frameworkRoot -replace '\\', '\\'
         $claudeJson = @"
 {
   "name": "kiln-$role",
   "mcpServers": {
     "kiln-db": {
-      "command": "npx",
-      "args": ["mcp-sqlite", "$dbPathEscaped"]
+      "command": "python",
+      "args": ["$frameworkRootEscaped/kiln/mcp-server/kiln_db_server.py", "$dbPathEscaped"]
     }
   }
 }
@@ -453,6 +458,8 @@ function Prepare-AgentConfigs {
     # Create ~/.copilot/mcp-config.json for Copilot agents (if any exist in the swarm)
     $dbPath = Join-Path $STATE_DIR "messages.db"
     $dbPathEscaped = $dbPath -replace '\\', '\\'
+    $frameworkRoot = Split-Path -Parent $SCRIPT_DIR
+    $frameworkRootEscaped = $frameworkRoot -replace '\\', '\\'
 
     $hasCopilotAgent = $false
     for ($i = 0; $i -lt $global:AGENTS.Count; $i++) {
@@ -471,8 +478,8 @@ function Prepare-AgentConfigs {
 {
   "mcpServers": {
     "kiln-db": {
-      "command": "npx",
-      "args": ["mcp-sqlite", "$dbPathEscaped"]
+      "command": "python",
+      "args": ["$frameworkRootEscaped/kiln/mcp-server/kiln_db_server.py", "$dbPathEscaped"]
     }
   }
 }

@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "kiln-db": {
-      "command": "npx",
-      "args": ["mcp-sqlite", "__KILN_DB_PATH__"]
+      "command": "python",
+      "args": ["__KILN_FRAMEWORK_ROOT__/kiln/mcp-server/kiln_db_server.py", "__KILN_DB_PATH__"]
     }
   }
 }

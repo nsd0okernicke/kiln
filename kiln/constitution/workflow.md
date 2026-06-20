@@ -4,13 +4,25 @@
 
 Kiln uses a SQLite message database at `.kiln/messages.db` in the project root for all inter-agent communication. Each agent has direct access via the **`kiln-db` MCP server** configured in `.claude/settings.json` and `.mcp.json`.
 
-### Check Your Inbox
+### Push Notifications (Primary)
 
-At session start and after completing any task, check for waiting messages using the `read_query` MCP tool. The exact SQL is in your CLAUDE.md Runtime section. When a message is returned, process it according to your role instructions. Then mark it delivered immediately using `write_query`:
+At session start, subscribe to your inbox resource to receive immediate notifications when messages arrive:
+
+```
+Resource URI: kiln://inbox/<your-role>
+```
+
+When you receive a `notifications/resources/updated` notification for this URI, immediately read your inbox using the SQL in "Check Your Inbox" below.
+
+### Check Your Inbox (Fallback / Manual Poll)
+
+At session start and after completing any task, you can manually check for waiting messages using the `read_query` MCP tool. The exact SQL is in your CLAUDE.md Runtime section. When a message is returned, process it according to your role instructions. Then mark it delivered immediately using `write_query`:
 
 ```sql
 UPDATE messages SET status='delivered', delivered_at=datetime('now') WHERE id='<message-id>'
 ```
+
+**Note:** Manual polling is a fallback for agents that don't support resource subscriptions. If you subscribe to your inbox resource, you'll receive push notifications and don't need to manually poll.
 
 ### Send a Message (Handoff)
 
