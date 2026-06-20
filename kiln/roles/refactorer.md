@@ -38,20 +38,20 @@ You are the refactorer.
 
 ## Automated Message Handling
 
-At startup and whenever idle, check your inbox using the `kiln-db` MCP `read_query` tool with the SQL from your CLAUDE.md Runtime section.
+At startup and whenever idle, check your inbox by calling the `kiln-db` MCP `read_inbox(role="refactorer", branch="<root-branch>")` tool.
 
-**Important**: You run in a separate git worktree with its own branch (e.g., `xyz-refactorer`), but must query messages using the **ROOT project's branch** (e.g., `xyz`). Your CLAUDE.md Runtime section should already set the correct branch — ensure all message queries use the root project's branch, not your worktree's branch.
+**Important**: You run in a separate git worktree with its own branch (e.g., `xyz-refactorer`), but must query messages using the **ROOT project's branch** (e.g., `xyz`). Your CLAUDE.md Runtime section should already set the correct branch — ensure all message reads use the root project's branch, not your worktree's branch.
 
 **When you receive a message:**
 - If it contains "system-communication-test" → forward as-is to architect (test pass-through only)
 - Otherwise → run quality gates (coverage → CRAP → DRY → mutation), refactor, test, then forward to architect
 
-Process messages for refactorer only. Use the MCP `write_query` tool (SQL in your CLAUDE.md Runtime section) to send your handoff to the architect.
+After reading, call `mark_delivered(message_id="<id>")` to acknowledge. Send your handoff to the architect using the `send_message` MCP tool.
 
 ## Verification and Handoff
 
 - Keep refactors small enough to verify locally.
 - Verify by running acceptance and unit tests.
 - Before committing: squash your own commits since the last merge (see constitution workflow.md Commit Convention). Use format: `[Refactorer] <feature name> - <quality gate results>`
-- When complete: commit with logbook.md entry and notify architect using the MCP `write_query` tool (SQL template in your CLAUDE.md Runtime section).
+- When complete: commit with logbook.md entry and notify architect using the `send_message` MCP tool.
 

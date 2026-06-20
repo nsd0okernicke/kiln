@@ -130,12 +130,13 @@ fi
 
 # Create .mcp.json in project root with MCP server configuration (for Copilot agents)
 db_path="$TARGET/.kiln/messages.db"
+framework_root=$(cd "$FRAMEWORK_ROOT" && pwd)
 cat > "$TARGET/.mcp.json" << EOF
 {
   "mcpServers": {
     "kiln-db": {
-      "command": "npx",
-      "args": ["mcp-sqlite", "$db_path"]
+      "command": "python",
+      "args": ["$framework_root/kiln/mcp-server/kiln_db_server.py", "$db_path"]
     }
   }
 }

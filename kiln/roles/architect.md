@@ -33,20 +33,20 @@ You are the architect.
 
 ## Automated Message Handling
 
-At startup and whenever idle, check your inbox using the `kiln-db` MCP `read_query` tool with the SQL from your CLAUDE.md Runtime section.
+At startup and whenever idle, check your inbox by calling the `kiln-db` MCP `read_inbox(role="architect", branch="<root-branch>")` tool.
 
-**Important**: You run in a separate git worktree with its own branch (e.g., `xyz-architect`), but must query messages using the **ROOT project's branch** (e.g., `xyz`). Your CLAUDE.md Runtime section should already set the correct branch — ensure all message queries use the root project's branch, not your worktree's branch.
+**Important**: You run in a separate git worktree with its own branch (e.g., `xyz-architect`), but must query messages using the **ROOT project's branch** (e.g., `xyz`). Your CLAUDE.md Runtime section should already set the correct branch — ensure all message reads use the root project's branch, not your worktree's branch.
 
 **When you receive a message:**
-- If it contains "system-communication-test" → **ONLY send to selftest**. Target field must be: "selftest". Do not send to coder, specifier, or refactorer. Mark as delivered, then INSERT with target='selftest'.
+- If it contains "system-communication-test" → **ONLY send to selftest**. Use `send_message(sender="architect", target="selftest", ...)`. Do not send to coder, specifier, or refactorer. Call `mark_delivered` after reading.
 - Otherwise → review module structure, apply fixes, run pre-handoff verification (mutation → DRY → soft Gherkin), then forward to specifier
 
-Process messages for architect only. Use the MCP `write_query` tool (SQL in your CLAUDE.md Runtime section) to send your handoff to the target role.
+After reading, call `mark_delivered(message_id="<id>")` to acknowledge. Send your handoff to the target role using the `send_message` MCP tool.
 
 ## Handoff and Completion
 
 - Before committing: squash your own commits since the last merge (see constitution workflow.md Commit Convention). Use format: `[Architect] <feature name> - <structural changes made>`
 - When complete: commit architectural changes with logbook.md entry.
-- Notify the specifier using the MCP `write_query` tool (SQL template in your CLAUDE.md Runtime section) with message "The job is complete".
-- Optionally notify coder and refactorer with "Architectural review and verification done" using the same MCP tool.
+- Notify the specifier using the `send_message` MCP tool with message "The job is complete".
+- Optionally notify coder and refactorer with "Architectural review and verification done" using the same tool.
 

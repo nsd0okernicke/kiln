@@ -36,18 +36,18 @@ You are the coder.
 
 ## Automated Message Handling
 
-At startup and whenever idle, check your inbox using the `kiln-db` MCP `read_query` tool with the SQL from your CLAUDE.md Runtime section.
+At startup and whenever idle, check your inbox by calling the `kiln-db` MCP `read_inbox(role="coder", branch="<root-branch>")` tool.
 
-**Important**: You run in a separate git worktree with its own branch (e.g., `xyz-coder`), but must query messages using the **ROOT project's branch** (e.g., `xyz`). Your CLAUDE.md Runtime section should already set the correct branch — ensure all message queries use the root project's branch, not your worktree's branch.
+**Important**: You run in a separate git worktree with its own branch (e.g., `xyz-coder`), but must query messages using the **ROOT project's branch** (e.g., `xyz`). Your CLAUDE.md Runtime section should already set the correct branch — ensure all message reads use the root project's branch, not your worktree's branch.
 
 **When you receive a message:**
 - If it contains "system-communication-test" → forward as-is to refactorer (test pass-through only)
 - Otherwise → implement using TDD cycle, then forward to refactorer
 
-Process messages for coder only. Use the MCP `write_query` tool (SQL in your CLAUDE.md Runtime section) to send your handoff to the refactorer.
+After reading, call `mark_delivered(message_id="<id>")` to acknowledge. Send your handoff to the refactorer using the `send_message` MCP tool.
 
 ## Handoff
 
 - Before committing: squash your own commits since the last merge (see constitution workflow.md Commit Convention). Use format: `[Coder] <feature name> - TDD implementation of <what>`
-- When all acceptance and unit tests pass: commit with logbook.md entry and notify refactorer using the MCP `write_query` tool (SQL template in your CLAUDE.md Runtime section).
+- When all acceptance and unit tests pass: commit with logbook.md entry and notify refactorer using the `send_message` MCP tool.
 

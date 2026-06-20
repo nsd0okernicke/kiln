@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Kiln MCP Server - Custom SQLite database server with push notifications.
+Kiln MCP Server - Domain-level API with push notifications.
 
-Replaces mcp-sqlite with support for resource subscriptions on agent inboxes.
-When a new message is written for an agent, all subscribed clients receive a
-notifications/resources/updated notification immediately.
+Provides domain tools (send_message, read_inbox, mark_delivered, mark_processed)
+instead of raw SQL. When a new message arrives for an agent, all subscribed clients
+receive a notifications/resources/updated notification immediately.
 
 Usage:
     python kiln_db_server.py <path/to/messages.db>
@@ -14,10 +14,11 @@ import asyncio
 import json
 import sqlite3
 import sys
+import uuid
+from datetime import datetime
 from pathlib import Path
-from typing import Any
 
-from mcp.server import Server
+from mcp.server import Server, InitializationOptions
 from mcp.server.stdio import stdio_server
 from mcp.types import (
     Resource,
@@ -163,42 +164,119 @@ async def unsubscribe_resource(uri: str, session_id: str) -> None:
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> str:
-    """Execute a tool (read_query or write_query)."""
-    if name == "read_query":
-        sql = arguments.get("query", "")
-        if not sql:
-            return json.dumps({"error": "query parameter required"})
-        try:
-            conn = get_db()
-            cursor = conn.execute(sql)
-            rows = [dict(row) for row in cursor.fetchall()]
-            conn.close()
-            return json.dumps({"results": rows})
-        except Exception as e:
-            return json.dumps({"error": str(e)})
+    """Execute domain-level tools for message handling."""
+    if name == "send_message":
+        sender = arguments.get("sender")
+        target = arguments.get("target")
+        content = arguments.get("content")
+        priority = arguments.get("priority", 50)
+        branch = arguments.get("branch", "main")
 
-    elif name == "write_query":
-        sql = arguments.get("query", "")
-        if not sql:
-            return json.dumps({"error": "query parameter required"})
+        if not all([sender, target, content]):
+            return json.dumps(
+                {"error": "sender, target, and content are required"}
+            )
+
         try:
+            message_id = str(uuid.uuid4())
+            now = datetime.now().isoformat()
             conn = get_db()
-            conn.execute(sql)
+            conn.execute(
+                """
+                INSERT INTO messages
+                (id, sender, target, priority, status, content, created_at, branch)
+                VALUES (?, ?, ?, ?, 'queued', ?, ?, ?)
+                """,
+                (message_id, sender, target, priority, content, now, branch),
+            )
             conn.commit()
             conn.close()
 
-            # Check for new messages and notify subscribers
-            new_messages = check_new_messages()
-            for role, messages in new_messages.items():
-                uri = f"kiln://inbox/{role}"
-                if uri in subscriptions:
-                    for session_id in subscriptions[uri]:
+            # Notify subscribers for this target
+            uri = f"kiln://inbox/{target}"
+            if uri in subscriptions:
+                for session_id in subscriptions[uri]:
+                    try:
                         await server.request_context.notify(
                             "notifications/resources/updated",
                             {"uri": uri},
                         )
+                    except Exception:
+                        pass
 
-            return json.dumps({"success": True})
+            return json.dumps(
+                {"success": True, "message_id": message_id, "timestamp": now}
+            )
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+
+    elif name == "read_inbox":
+        role = arguments.get("role")
+        branch = arguments.get("branch", "main")
+
+        if not role:
+            return json.dumps({"error": "role is required"})
+
+        try:
+            conn = get_db()
+            cursor = conn.execute(
+                """
+                SELECT id, sender, priority, content, created_at
+                FROM messages
+                WHERE target = ? AND branch = ? AND status = 'queued'
+                ORDER BY priority ASC, created_at ASC
+                """,
+                (role, branch),
+            )
+            messages = [dict(row) for row in cursor.fetchall()]
+            conn.close()
+            return json.dumps({"inbox": messages})
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+
+    elif name == "mark_delivered":
+        message_id = arguments.get("message_id")
+
+        if not message_id:
+            return json.dumps({"error": "message_id is required"})
+
+        try:
+            now = datetime.now().isoformat()
+            conn = get_db()
+            conn.execute(
+                """
+                UPDATE messages
+                SET status = 'delivered', delivered_at = ?
+                WHERE id = ?
+                """,
+                (now, message_id),
+            )
+            conn.commit()
+            conn.close()
+            return json.dumps({"success": True, "timestamp": now})
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+
+    elif name == "mark_processed":
+        message_id = arguments.get("message_id")
+
+        if not message_id:
+            return json.dumps({"error": "message_id is required"})
+
+        try:
+            now = datetime.now().isoformat()
+            conn = get_db()
+            conn.execute(
+                """
+                UPDATE messages
+                SET status = 'processed', processed_at = ?
+                WHERE id = ?
+                """,
+                (now, message_id),
+            )
+            conn.commit()
+            conn.close()
+            return json.dumps({"success": True, "timestamp": now})
         except Exception as e:
             return json.dumps({"error": str(e)})
 
@@ -208,34 +286,85 @@ async def call_tool(name: str, arguments: dict) -> str:
 
 @server.list_tools()
 async def list_tools():
-    """List available tools."""
+    """List available domain tools."""
     return [
         {
-            "name": "read_query",
-            "description": "Execute a SELECT query and return results as JSON rows",
+            "name": "send_message",
+            "description": "Send a message to another agent role",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "query": {
+                    "sender": {
                         "type": "string",
-                        "description": "The SQL SELECT query to execute",
-                    }
+                        "description": "Your role name (e.g., 'coder')",
+                    },
+                    "target": {
+                        "type": "string",
+                        "description": "Target role name (e.g., 'refactorer')",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "The complete handoff message content",
+                    },
+                    "priority": {
+                        "type": "integer",
+                        "description": "Message priority: 0-9 (high), 50 (normal), 100+ (low). Default: 50",
+                        "default": 50,
+                    },
+                    "branch": {
+                        "type": "string",
+                        "description": "Git branch name. Default: 'main'",
+                        "default": "main",
+                    },
                 },
-                "required": ["query"],
+                "required": ["sender", "target", "content"],
             },
         },
         {
-            "name": "write_query",
-            "description": "Execute an INSERT, UPDATE, or DELETE query",
+            "name": "read_inbox",
+            "description": "Read queued messages for your role",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "query": {
+                    "role": {
                         "type": "string",
-                        "description": "The SQL INSERT/UPDATE/DELETE query to execute",
+                        "description": "Your role name (e.g., 'coder')",
+                    },
+                    "branch": {
+                        "type": "string",
+                        "description": "Git branch name. Default: 'main'",
+                        "default": "main",
+                    },
+                },
+                "required": ["role"],
+            },
+        },
+        {
+            "name": "mark_delivered",
+            "description": "Mark a message as delivered after reading it",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "message_id": {
+                        "type": "string",
+                        "description": "The message ID returned by read_inbox",
                     }
                 },
-                "required": ["query"],
+                "required": ["message_id"],
+            },
+        },
+        {
+            "name": "mark_processed",
+            "description": "Mark a message as processed after completing the work it describes",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "message_id": {
+                        "type": "string",
+                        "description": "The message ID returned by read_inbox",
+                    }
+                },
+                "required": ["message_id"],
             },
         },
     ]
@@ -284,7 +413,13 @@ async def main():
 
     # Run the MCP server
     async with stdio_server() as streams:
-        await server.run(*streams)
+        await server.run(
+            streams[0], streams[1],
+            InitializationOptions(
+                server_name="kiln-db",
+                server_version="1.0.0",
+            )
+        )
 
 
 if __name__ == "__main__":

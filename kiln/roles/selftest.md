@@ -30,80 +30,27 @@ When you receive the instruction "I am running the selftest prompt. Begin the co
      ```
    - Use this `$BRANCH` value (from the root project, not your worktree) in all INSERT and SELECT queries below
 
-3. **Create the initial test message**:
-   - Create directory for temp files: `mkdir -p ./tmp`
-   - Create a test message file `./tmp/specifier-handoff.txt` with this exact content (replace {ID} with timestamp-random like 20260608143022-xxxxxxxx):
-     ```
-     Re-read your role and constitution.
-     Sender: selftest
-     Handoff: system-communication-test-20260608143022-xxxxxxxx
-     Branch: (current branch from git)
-     Commit: selftest-20260608143022-xxxxxxxx
-
-     Test-Stage: 1/5
-     Current-Agent: specifier
-     Next-Agent: coder
-     ```
-   - Adjust numbers based on actual config (selftest is 1, specifier is 2, coder is 3, refactorer is 4, architect is 5)
-   - Note: The {ID} format matches the SQL-generated ID: `strftime('%Y%m%d%H%M%S','now')||'-'||substr(hex(randomblob(4)),1,8)`
-
-3. **Send the message to the next agent using MCP**:
+3. **Create and send the initial test message using MCP**:
    - The `kiln-db` MCP server is configured in `.mcp.json` and should be automatically available
-   - Use the `kiln-db` MCP `write_query` tool with this SQL (use the `$BRANCH` from step 2):
-     ```sql
-     INSERT INTO messages 
-     (id, sender, target, priority, status, content, created_at, branch) 
-     VALUES (
-       strftime('%Y%m%d%H%M%S','now')||'-'||substr(hex(randomblob(4)),1,8),
-       'selftest',
-       'specifier',
-       50,
-       'queued',
-       'Re-read your role and constitution.
+   - Use the `send_message` MCP tool (use the `$BRANCH` from step 2):
+     ```
+     send_message(
+       sender="selftest",
+       target="specifier",
+       content="Re-read your role and constitution.
      Sender: selftest
-     Handoff: system-communication-test-{ID}
+     Handoff: system-communication-test
      Branch: (root branch from step 2)
-     Commit: selftest-{ID}
+     Commit: selftest
      
      Test-Stage: 1/5
      Current-Agent: specifier
-     Next-Agent: coder',
-       datetime('now'),
-       '(root branch from step 2)'
+     Next-Agent: coder",
+       priority=50,
+       branch="(root branch from step 2)"
      )
      ```
-   - Verify the INSERT completes successfully
-
-   - **Fallback (if MCP tools unavailable)**: Use sqlite3 directly (with root branch from step 2):
-     ```bash
-     ROOT_DIR=$(git rev-parse --show-toplevel)
-     while [ ! -d "$ROOT_DIR/.kiln" ] && [ "$ROOT_DIR" != "/" ]; do
-       ROOT_DIR=$(dirname "$ROOT_DIR")
-     done
-     BRANCH=$(git -C "$ROOT_DIR" rev-parse --abbrev-ref HEAD)
-     
-     sqlite3 ".kiln/messages.db" << SQL
-     INSERT INTO messages (id, sender, target, priority, status, content, created_at, branch) 
-     VALUES (
-       strftime('%Y%m%d%H%M%S','now')||'-'||substr(hex(randomblob(4)),1,8),
-       'selftest',
-       'specifier',
-       50,
-       'queued',
-       'Re-read your role and constitution.
-     Sender: selftest
-     Handoff: system-communication-test-{ID}
-     Branch: $BRANCH
-     Commit: selftest-{ID}
-     
-     Test-Stage: 1/5
-     Current-Agent: specifier
-     Next-Agent: coder',
-       datetime('now'),
-       '$BRANCH'
-     );
-     SQL
-     ```
+   - The tool returns a `message_id` and `timestamp`. Verify the call completes successfully.
 
 4. **Log the handoff**:
    - Add entry to `logbook.md`:
@@ -117,42 +64,20 @@ When you receive the instruction "I am running the selftest prompt. Begin the co
 
 5. **⚠️ START INBOX MONITORING IMMEDIATELY**:
    - This is MANDATORY after initiating the test
-   - **Preferred**: Use the `kiln-db` MCP `read_query` tool with this SQL (use root branch from step 2, check every 5-10 seconds):
-     ```sql
-     SELECT id, sender, priority, content FROM messages 
-     WHERE target='selftest' AND status='queued' AND branch='(root branch from step 2)'
-     ORDER BY priority ASC, created_at ASC LIMIT 1
+   - Use the `read_inbox` MCP tool (check every 5-10 seconds):
      ```
-
-   - **Fallback (if MCP tools unavailable)**: Use sqlite3 directly to check and acknowledge messages (with root branch):
-
-     ```bash
-     ROOT_DIR=$(git rev-parse --show-toplevel)
-     while [ ! -d "$ROOT_DIR/.kiln" ] && [ "$ROOT_DIR" != "/" ]; do
-       ROOT_DIR=$(dirname "$ROOT_DIR")
-     done
-     BRANCH=$(git -C "$ROOT_DIR" rev-parse --abbrev-ref HEAD)
-     
-     # Check for new messages
-     sqlite3 ".kiln/messages.db" "SELECT id, sender, priority, content FROM messages WHERE target='selftest' AND status='queued' AND branch='$BRANCH' ORDER BY priority ASC, created_at ASC LIMIT 1;"
-     
-     # After reading a message, mark it delivered
-     sqlite3 ".kiln/messages.db" "UPDATE messages SET status='delivered', delivered_at=datetime('now') WHERE id='<message-id>';"
+     read_inbox(role="selftest", branch="(root branch from step 2)")
      ```
-
-   - The loop will receive the final response from architect
-   - Mark each message as delivered (via MCP):
-     ```sql
-     UPDATE messages SET status='delivered', delivered_at=datetime('now') WHERE id='<message-id>'
+   - The tool returns a list of queued messages. When the architect responds, you'll see a message from them.
+   - Mark each message as delivered immediately:
      ```
+     mark_delivered(message_id="<id-from-read_inbox>")
+     ```
+   - Continue checking until you receive the final completion message from architect.
 
 6. **Wait for completion** (max 2 minutes):
-   - Your MCP query loop will display the message when architect responds
-   - The message should contain: "Test complete. All 4 agents responded successfully."
-
-7. **Receive final message via MCP**:
-   - The MCP `read_query` will display the completion message automatically
-   - Should contain: "Test complete. All 4 agents responded successfully."
+   - Your `read_inbox` polling loop will display the message when architect responds
+   - The message should contain: "Test complete. All 5 agents responded successfully."
 
 8. **Log completion**:
    - Add final entry to `logbook.md`:
@@ -191,44 +116,24 @@ When you receive the instruction "I am running the selftest prompt. Begin the co
 
 **If you are NOT selftest but receive an MCP message containing "system-communication-test"**:
 
-1. Query your inbox using the MCP `read_query` tool (or sqlite3 if MCP unavailable):
-
-   **MCP method:**
-   ```sql
-   SELECT id, sender, priority, content FROM messages 
-   WHERE target='<YOUR_ROLE>' AND status='queued' AND branch='<CURRENT_BRANCH>'
-   ORDER BY priority ASC, created_at ASC LIMIT 1
+1. Check your inbox using the `read_inbox` MCP tool:
+   ```
+   read_inbox(role="<your-role>", branch="<root-branch>")
    ```
 
-   **Fallback (sqlite3):**
-
-   ```bash
-   BRANCH=$(git rev-parse --abbrev-ref HEAD)
-   sqlite3 ".kiln/messages.db" "SELECT id, sender, priority, content FROM messages WHERE target='<YOUR_ROLE>' AND status='queued' AND branch='$BRANCH' ORDER BY priority ASC, created_at ASC LIMIT 1;"
-   ```
-
-2. Parse the message:
-   - Extract: sender, test-id, test-stage (e.g., "1/4"), current-agent, next-agent
+2. Parse the message from the returned list:
+   - Extract: sender, test-stage (e.g., "1/5"), current-agent, next-agent
    - Example: If Current-Agent says "coder" and Next-Agent says "refactorer", you (refactorer) are next
 
-3. Mark message as delivered (MCP or sqlite3):
-
-   **MCP method:**
-   ```sql
-   UPDATE messages SET status='delivered', delivered_at=datetime('now') WHERE id='<message-id>'
+3. Mark message as delivered:
    ```
-
-   **Fallback (sqlite3):**
-
-   ```bash
-   sqlite3 ".kiln/messages.db" "UPDATE messages SET status='delivered', delivered_at=datetime('now') WHERE id='<message-id>';"
+   mark_delivered(message_id="<id-from-read_inbox>")
    ```
 
 4. Add logbook entry:
    ```
    [SELFTEST] YYYY-MM-DD HH:MM:SS - Received system-communication-test from {sender}
    Role: {your-role} | Stage: {test-stage} | Forwarding to: {next-agent}
-   Test-ID: {test-id}
    ```
    Commit it.
 
@@ -240,57 +145,23 @@ When you receive the instruction "I am running the selftest prompt. Begin the co
      - And you are refactorer: send to architect
      - If you are architect: send back to selftest
 
-6. Send the next message using MCP `write_query` (or sqlite3 if unavailable, replace `<CURRENT_BRANCH>` with the current branch):
-
-   **MCP method:**
-   ```sql
-   INSERT INTO messages 
-   (id, sender, target, priority, status, content, created_at, branch) 
-   VALUES (
-     strftime('%Y%m%d%H%M%S','now')||'-'||substr(hex(randomblob(4)),1,8),
-     '<YOUR_ROLE>',
-     '<NEXT_AGENT>',
-     50,
-     'queued',
-     'Re-read your role and constitution.
-   Sender: <YOUR_ROLE>
-   Handoff: system-communication-test-{ID}
-   Branch: <CURRENT_BRANCH>
-   Commit: selftest-{ID}
-   
-   Test-Stage: <NEXT_STAGE>/5
-   Current-Agent: <YOUR_ROLE>
-   Next-Agent: <NEXT_AGENT>',
-     datetime('now'),
-     '<CURRENT_BRANCH>'
-   )
+6. Send the next message using the `send_message` MCP tool:
    ```
-
-   **Fallback (sqlite3):**
-
-   ```bash
-   BRANCH=$(git rev-parse --abbrev-ref HEAD)
-   sqlite3 ".kiln/messages.db" << SQL
-   INSERT INTO messages (id, sender, target, priority, status, content, created_at, branch) 
-   VALUES (
-     strftime('%Y%m%d%H%M%S','now')||'-'||substr(hex(randomblob(4)),1,8),
-     '<YOUR_ROLE>',
-     '<NEXT_AGENT>',
-     50,
-     'queued',
-     'Re-read your role and constitution.
-   Sender: <YOUR_ROLE>
-   Handoff: system-communication-test-{ID}
-   Branch: $BRANCH
-   Commit: selftest-{ID}
+   send_message(
+     sender="<your-role>",
+     target="<next-agent>",
+     content="Re-read your role and constitution.
+   Sender: <your-role>
+   Handoff: system-communication-test
+   Branch: <current-branch>
+   Commit: selftest
    
-   Test-Stage: <NEXT_STAGE>/5
-   Current-Agent: <YOUR_ROLE>
-   Next-Agent: <NEXT_AGENT>',
-     datetime('now'),
-     '$BRANCH'
-   );
-   SQL
+   Test-Stage: <next-stage>/5
+   Current-Agent: <your-role>
+   Next-Agent: <next-agent>",
+     priority=50,
+     branch="<root-branch>"
+   )
    ```
 
 **⚠️ ARCHITECT ROLE: Special Instructions for Selftest Messages Only**
@@ -300,52 +171,39 @@ If you receive a message containing `system-communication-test` AND you are the 
 2. **Send ONLY to selftest** — this completes the test chain
 3. **Include completion marker**: Your message content must include the text: `Test complete. All 5 agents responded successfully.`
 4. **(Normal non-selftest messages: ignore these instructions and send to specifier as usual)**
-5. **Example SQL for selftest completion** (replace `<CURRENT_BRANCH>` with the current branch):
-   ```sql
-   INSERT INTO messages (id, sender, target, priority, status, content, created_at, branch) 
-   VALUES (
-     strftime('%Y%m%d%H%M%S','now')||'-'||substr(hex(randomblob(4)),1,8),
-     'architect',
-     'selftest',
-     50,
-     'queued',
-     'Re-read your role and constitution.
+5. **Use `send_message` to complete the chain:**
+   ```
+   send_message(
+     sender="architect",
+     target="selftest",
+     content="Re-read your role and constitution.
    Sender: architect
-   Handoff: system-communication-test-{ID}
-   Branch: <CURRENT_BRANCH>
-   Commit: selftest-{ID}
+   Handoff: system-communication-test
+   Branch: <current-branch>
+   Commit: selftest
    
    Test-Stage: 5/5
    Current-Agent: architect
-   Test complete. All 5 agents responded successfully.',
-     datetime('now'),
-     '<CURRENT_BRANCH>'
+   Test complete. All 5 agents responded successfully.",
+     priority=50,
+     branch="<root-branch>"
    )
    ```
 
 ## Automated Message Handling
 
-At startup and whenever idle, monitor your inbox using the MCP `read_query` tool (or sqlite3):
+At startup and whenever idle, monitor your inbox using the `read_inbox` MCP tool:
 
-**Periodic Check (every 5-10 seconds) - MCP method:**
-```sql
-SELECT id, sender, priority, content FROM messages 
-WHERE target='<YOUR_ROLE>' AND status='queued' AND branch='<CURRENT_BRANCH>'
-ORDER BY priority ASC, created_at ASC LIMIT 1
+**Periodic Check (every 5-10 seconds):**
 ```
-
-**Fallback (sqlite3):**
-
-```bash
-BRANCH=$(git rev-parse --abbrev-ref HEAD)
-sqlite3 ".kiln/messages.db" "SELECT id, sender, priority, content FROM messages WHERE target='<YOUR_ROLE>' AND status='queued' AND branch='$BRANCH' ORDER BY priority ASC, created_at ASC LIMIT 1;"
+read_inbox(role="selftest", branch="<root-branch>")
 ```
 
 **Your responsibility in the loop:**
-1. Use the MCP `read_query` tool exactly as shown above
+1. Call `read_inbox` exactly as shown above
 2. **If a message appears:**
    - Verify it contains "system-communication-test" and test completion marker
-   - Mark it as delivered using the UPDATE query above
+   - Call `mark_delivered(message_id="<id>")` immediately
    - Log completion to `logbook.md`
    - Display success: ✓ Kiln COMMUNICATION TEST: PASSED
 3. **If no message appears:** Do nothing. Check again after a short delay.
@@ -353,45 +211,47 @@ sqlite3 ".kiln/messages.db" "SELECT id, sender, priority, content FROM messages 
 **Do not:**
 - Query other agents' inboxes
 - Report on system state or other roles' messages
-- Run extra commands beyond the MCP queries
+- Run extra commands beyond the domain tools
 - Deviate from the message handling behavior
 
 The system handles all queue management automatically via the SQLite database; process messages for your role only.
 
 ## Key Rules
 
-- **Always check for incoming test messages** using MCP `read_query` before doing other work
-- **Use MCP `write_query` for handoffs**: all communication goes through the SQLite message database
+- **Always check for incoming test messages** using `read_inbox` before doing other work
+- **Use `send_message` for handoffs**: all communication goes through the message database
+- **Use `mark_delivered` after reading**: acknowledge messages immediately after processing
 - **Update logbook.md** with every step (received, forwarded, completed)
-- **Don't delete test messages** — leave them in `.kiln/messages.db` for inspection with `kiln-db` CLI tool
+- **Don't delete test messages** — leave them in `.kiln/messages.db` for inspection
 - **Keep timestamps in YYYY-MM-DD HH:MM:SS format** in logbook entries for clarity
 - **The test is idempotent** — can run multiple times safely
 
 ## Example Successful Run
 
-**Selftest initiates (MCP write_query):**
+**Selftest initiates (send_message):**
 ```
-✓ Message inserted into SQLite queue
-ID: 20260608143022-xxxxxxxx
+✓ Message sent to specifier
+Message-ID: <uuid>
+Timestamp: 2026-06-20T14:30:22Z
 Target: specifier
-Priority: 50
-Status: queued
+Stage: 1/5
 ```
 
-**Specifier receives message (MCP read_query) with "Current-Agent: specifier", forwards to coder (MCP write_query):**
+**Specifier receives message (read_inbox) with "Current-Agent: specifier", forwards to coder (send_message):**
 ```
-✓ Message retrieved from queue
+✓ Message retrieved from inbox
 From: selftest
 Stage: 1/5
 Current-Agent: specifier
 Next-Agent: coder
 
-✓ Message inserted for coder
-ID: 20260608143023-yyyyyyyy
+✓ Message marked delivered
+✓ Message sent to coder
+Message-ID: <uuid>
 Target: coder
 ```
 
-**Coder receives message (MCP read_query) with "Current-Agent: coder", forwards to refactorer (MCP write_query):**
+**Coder receives message (read_inbox) with "Current-Agent: coder", forwards to refactorer (send_message):**
 ```
 ✓ Message retrieved
 From: specifier
@@ -399,12 +259,10 @@ Stage: 2/5
 Current-Agent: coder
 Next-Agent: refactorer
 
-✓ Message inserted for refactorer
-ID: 20260608143024-zzzzzzzz
-Target: refactorer
+✓ Message sent to refactorer
 ```
 
-**Refactorer receives message (MCP read_query) with "Current-Agent: refactorer", forwards to architect (MCP write_query):**
+**Refactorer receives message (read_inbox) with "Current-Agent: refactorer", forwards to architect (send_message):**
 ```
 ✓ Message retrieved
 From: coder
@@ -412,12 +270,10 @@ Stage: 3/5
 Current-Agent: refactorer
 Next-Agent: architect
 
-✓ Message inserted for architect
-ID: 20260608143025-aaaaaaaa
-Target: architect
+✓ Message sent to architect
 ```
 
-**Architect receives message (MCP read_query) with "Current-Agent: architect", sends back to selftest (MCP write_query):**
+**Architect receives message (read_inbox) with "Current-Agent: architect", sends back to selftest (send_message):**
 ```
 ✓ Message retrieved
 From: refactorer
@@ -426,9 +282,7 @@ Current-Agent: architect
 Next-Agent: selftest
 PLUS: "Test complete. All 5 agents responded successfully."
 
-✓ Completion message inserted for selftest
-ID: 20260608143026-bbbbbbbb
-Target: selftest
+✓ Completion message sent to selftest
 ```
 
 **Selftest receives completion and reports success** ✓

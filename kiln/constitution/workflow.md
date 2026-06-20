@@ -4,6 +4,8 @@
 
 Kiln uses a SQLite message database at `.kiln/messages.db` in the project root for all inter-agent communication. Each agent has direct access via the **`kiln-db` MCP server** configured in `.claude/settings.json` and `.mcp.json`.
 
+The server exposes 4 domain tools: `send_message`, `read_inbox`, `mark_delivered`, `mark_processed`. Agents never write SQL directly — the server handles all database operations.
+
 ### Push Notifications (Primary)
 
 At session start, subscribe to your inbox resource to receive immediate notifications when messages arrive:
@@ -12,26 +14,43 @@ At session start, subscribe to your inbox resource to receive immediate notifica
 Resource URI: kiln://inbox/<your-role>
 ```
 
-When you receive a `notifications/resources/updated` notification for this URI, immediately read your inbox using the SQL in "Check Your Inbox" below.
+When you receive a `notifications/resources/updated` notification for this URI, immediately call `read_inbox` to check for new messages.
 
-### Check Your Inbox (Fallback / Manual Poll)
+### Read Your Inbox
 
-At session start and after completing any task, you can manually check for waiting messages using the `read_query` MCP tool. The exact SQL is in your CLAUDE.md Runtime section. When a message is returned, process it according to your role instructions. Then mark it delivered immediately using `write_query`:
+Use the `read_inbox` MCP tool with your role name:
 
-```sql
-UPDATE messages SET status='delivered', delivered_at=datetime('now') WHERE id='<message-id>'
+```
+read_inbox(role="<your-role>", branch="<current-branch>")
 ```
 
-**Note:** Manual polling is a fallback for agents that don't support resource subscriptions. If you subscribe to your inbox resource, you'll receive push notifications and don't need to manually poll.
+Returns a list of queued messages. Each message includes:
+- `id` — unique message identifier
+- `sender` — the sending role
+- `priority` — message priority (0-9 high, 50 normal, 100+ low)
+- `content` — the complete handoff message
+- `created_at` — timestamp
+
+When you have processed a message, call `mark_delivered` to acknowledge receipt:
+
+```
+mark_delivered(message_id="<id-from-read_inbox>")
+```
 
 ### Send a Message (Handoff)
 
-Use `write_query` with an INSERT. The exact SQL template is in your CLAUDE.md Runtime section. Include the complete handoff message in the `content` column.
+Use the `send_message` MCP tool:
+
+```
+send_message(sender="<your-role>", target="<recipient-role>", content="<message>", priority=50, branch="<current-branch>")
+```
 
 **Priority values:**
 - `0-9`: High priority (architect handoffs, critical tasks)
 - `50`: Normal priority (standard handoffs and messages)
 - `100+`: Low priority (informational messages)
+
+The message is inserted into the database with `status='queued'`. If the recipient has subscribed to their inbox resource, they receive an immediate `notifications/resources/updated` notification.
 
 - The project root is the directory containing `.kiln/`. From a named worktree (e.g., `.worktrees/coder/`), walk up parent directories until you find it.
 - At startup, discover and remember the branch or worktree assigned to your role.

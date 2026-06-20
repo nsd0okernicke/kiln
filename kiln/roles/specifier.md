@@ -30,20 +30,20 @@ Follow the `gherkin-spec-workflow` skill for each feature:
 
 ## Automated Message Handling
 
-At startup and whenever idle, check your inbox using the `kiln-db` MCP `read_query` tool with the SQL from your CLAUDE.md Runtime section.
+At startup and whenever idle, check your inbox by calling the `kiln-db` MCP `read_inbox(role="specifier", branch="<root-branch>")` tool.
 
-**Important**: You run in a separate git worktree with its own branch (e.g., `xyz-specifier`), but must query messages using the **ROOT project's branch** (e.g., `xyz`). Your CLAUDE.md Runtime section should already set the correct branch — ensure all message queries use the root project's branch, not your worktree's branch.
+**Important**: You run in a separate git worktree with its own branch (e.g., `xyz-specifier`), but must query messages using the **ROOT project's branch** (e.g., `xyz`). Your CLAUDE.md Runtime section should already set the correct branch — ensure all message reads use the root project's branch, not your worktree's branch.
 
 **When you receive a message:**
 - Merge the sender's branch into your assigned branch (following workflow.md rules), update logbook.md with the handoff entry
 - If it contains "system-communication-test" → forward as-is to coder (test pass-through only)
 - Otherwise → ask user for the next feature to specify
 
-Process messages for specifier only. Use the MCP `write_query` tool (SQL in your CLAUDE.md Runtime section) to send your handoff to the coder.
+After reading, call `mark_delivered(message_id="<id>")` to acknowledge. Send your handoff to the coder using the `send_message` MCP tool.
 
 ## Handoff and Completion
 
 - After user approval: before committing, squash your own commits since the last merge (see constitution workflow.md Commit Convention). Use format: `[Specifier] <feature name> - <what was specified>`
-- Commit the specification with logbook.md entry, invent a short stable handoff name, notify coder using the MCP `write_query` tool (SQL template in your CLAUDE.md Runtime section)
+- Commit the specification with logbook.md entry, invent a short stable handoff name, notify coder using the `send_message` MCP tool
 - When architect notifies you the job is complete: merge changes and ask user for the next feature
 
