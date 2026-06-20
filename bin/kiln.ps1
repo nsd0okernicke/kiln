@@ -51,7 +51,11 @@ function Get-TerminalBackend {
         return "wezterm"
     }
 
-    # Default to Windows Terminal
+    # Prefer WezTerm if available, fall back to Windows Terminal
+    if (Get-Command wezterm -ErrorAction SilentlyContinue) {
+        return "wezterm"
+    }
+
     return "wt"
 }
 
