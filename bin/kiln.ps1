@@ -735,7 +735,6 @@ function Build-WindowsTerminalTabsArrayLayout {
             if ($RoleIndex.ContainsKey($roleInPane)) {
                 $roleIdx = $RoleIndex[$roleInPane]
                 $agent = $Agents[$roleIdx]
-                $displayName = $DisplayNames[$roleIdx]
                 $worktreePath = $WorktreePaths[$roleIdx]
 
                 # Get model from profile variable
@@ -798,7 +797,8 @@ function Build-WindowsTerminalTabsArrayLayout {
                 }
 
                 $colorIdx = $roleIdx % $AgentColors.Count
-                $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model
+                # For multi-pane layouts, don't pass display name to agent (tab title controls it)
+                $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $null -WorktreePath $worktreePath -Model $model
                 $wtArgs += "-d", $worktreePath
                 $wtArgs += "--colorScheme", $AgentColors[$colorIdx]
                 $wtArgs += "pwsh", "-NoExit", "-Command"
@@ -824,10 +824,18 @@ function Get-WindowsTerminalAgentCommand {
 
     switch ($Agent) {
         "claude" {
-            return "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json -n ""$DisplayName"""
+            if ($DisplayName) {
+                return "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json -n ""$DisplayName"""
+            } else {
+                return "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json"
+            }
         }
         "copilot" {
-            return "copilot --allow-all --name ""$DisplayName"""
+            if ($DisplayName) {
+                return "copilot --allow-all --name ""$DisplayName"""
+            } else {
+                return "copilot --allow-all"
+            }
         }
         default {
             return "echo 'Agent $Agent not supported'"
