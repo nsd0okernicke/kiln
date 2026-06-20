@@ -604,7 +604,8 @@ function Build-WezTermAgentCommand {
             # Register MCP server explicitly for Copilot CLI
             if ($FrameworkRoot -and $DatabasePath) {
                 $serverPath = "$FrameworkRoot\kiln\mcp-server\kiln_db_server.py"
-                $command = "copilot mcp remove kiln-db; copilot mcp add kiln-db -- python `"$serverPath`" `"$DatabasePath`"; copilot --allow-all $debugFlag".Trim()
+                # Try to add the MCP server; if it exists, copilot will continue anyway
+                $command = "copilot mcp add kiln-db -- python `"$serverPath`" `"$DatabasePath`"; copilot --allow-all $debugFlag".Trim()
             } else {
                 $command = "copilot --allow-all $debugFlag".Trim()
             }
@@ -865,7 +866,8 @@ function Get-WindowsTerminalAgentCommand {
             $baseCmd = ""
             if ($FrameworkRoot -and $DatabasePath) {
                 $serverPath = "$FrameworkRoot\kiln\mcp-server\kiln_db_server.py"
-                $baseCmd = "copilot mcp remove kiln-db; copilot mcp add kiln-db -- python `"$serverPath`" `"$DatabasePath`"; copilot --allow-all $copilotDebugFlag"
+                # Try to add the MCP server; if it exists, copilot will continue anyway
+                $baseCmd = "copilot mcp add kiln-db -- python `"$serverPath`" `"$DatabasePath`"; copilot --allow-all $copilotDebugFlag"
             } else {
                 $baseCmd = "copilot --allow-all $copilotDebugFlag"
             }
