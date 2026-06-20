@@ -696,6 +696,11 @@ function Build-WindowsTerminalTabsArrayLayout {
 
         # Determine if this tab has a grid layout
         $isGrid = ($tab.gridRows -and $tab.gridCols)
+        $gridCols = if ($isGrid) { $tab.gridCols } else { 1 }
+
+        # Track current pane position for grid navigation
+        $currentRow = 0
+        $currentCol = 0
 
         # Process panes in this tab
         foreach ($paneIndex in 0..($tab.panes.Count - 1)) {
@@ -714,15 +719,54 @@ function Build-WindowsTerminalTabsArrayLayout {
 
                 # Add pane split if not first pane in tab
                 if ($paneIndex -gt 0) {
-                    if ($isGrid -and $tab.gridCols -gt 1) {
-                        # Grid layout: alternate H/V splits
-                        if ($paneIndex % $tab.gridCols -eq 0) {
-                            $wtArgs += ";", "split-pane", "-V"
+                    if ($isGrid) {
+                        # Grid layout: calculate position and navigate to parent pane
+                        $targetRow = [math]::Floor($paneIndex / $gridCols)
+                        $targetCol = $paneIndex % $gridCols
+
+                        # Determine parent pane position
+                        if ($targetRow -eq 0) {
+                            # First row: parent is previous pane in same row
+                            $parentRow = 0
+                            $parentCol = $targetCol - 1
                         } else {
-                            $wtArgs += ";", "split-pane", "-H"
+                            # Other rows: parent is pane directly above (same column, previous row)
+                            $parentRow = $targetRow - 1
+                            $parentCol = $targetCol
                         }
+
+                        # Navigate from current to parent position
+                        $rowDiff = $parentRow - $currentRow
+                        $colDiff = $parentCol - $currentCol
+
+                        for ($i = 0; $i -lt [math]::Abs($rowDiff); $i++) {
+                            if ($rowDiff -gt 0) {
+                                $wtArgs += ";", "move-focus", "down"
+                            } else {
+                                $wtArgs += ";", "move-focus", "up"
+                            }
+                        }
+
+                        for ($i = 0; $i -lt [math]::Abs($colDiff); $i++) {
+                            if ($colDiff -gt 0) {
+                                $wtArgs += ";", "move-focus", "right"
+                            } else {
+                                $wtArgs += ";", "move-focus", "left"
+                            }
+                        }
+
+                        # Do the split
+                        if ($targetRow -eq 0) {
+                            $wtArgs += ";", "split-pane", "-H"
+                        } else {
+                            $wtArgs += ";", "split-pane", "-V"
+                        }
+
+                        # Update current position (new pane is now active)
+                        $currentRow = $targetRow
+                        $currentCol = $targetCol
                     } else {
-                        # Default: vertical splits (top/bottom)
+                        # Non-grid: vertical splits (top/bottom)
                         $wtArgs += ";", "split-pane", "-V"
                     }
                 }
