@@ -48,7 +48,7 @@ profiles:
     description: "Automated self-testing configuration with debug logging"
     terminals:
       - role: selftest
-        agent: copilot
+        agent: claude
         worktree: "@current"
         debug: true
         title: "Kiln Self-Test"

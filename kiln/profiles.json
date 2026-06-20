@@ -76,7 +76,7 @@
       "terminals": [
         {
           "role": "selftest",
-          "agent": "copilot",
+          "agent": "claude",
           "worktree": "@current",
           "title": "Kiln Self-Test"
         },
