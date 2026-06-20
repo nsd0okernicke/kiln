@@ -2,7 +2,7 @@
 
 **An orchestration platform that turns swarms of AI agents into reliable, professional software engineers.**
 
-Kiln launches a config-driven multi-agent swarm, each agent working in its own git worktree with role-specific instructions and cross-agent communication. Works on Windows (PowerShell + Windows Terminal / WezTerm), macOS/Linux (zsh + tmux), and is Git-aware: sub-branches are created per worktree, all state lives in `.kiln/`, and handoffs are tracked in `logbook.md`.
+Kiln launches a config-driven multi-agent swarm, each agent working in its own git worktree with role-specific instructions and cross-agent communication. Works on Windows (PowerShell + WezTerm / Windows Terminal), macOS/Linux (zsh + tmux), and is Git-aware: sub-branches are created per worktree, all state lives in `.kiln/`, and handoffs are tracked in `logbook.md`.
 
 ---
 
@@ -67,7 +67,7 @@ Kiln is a lightweight orchestration layer that:
   - Projects can override by creating `kiln.profiles.json` at the root
   - Flexible terminal layouts: tabs, split panes, grids, or custom hierarchical arrangements
 - Creates one **terminal window/tab per role** — observe all agents in real time
-  - Windows: Windows Terminal or WezTerm tabs/panes
+  - Windows: WezTerm or Windows Terminal tabs/panes (WezTerm preferred)
   - Unix/macOS: tmux sessions + Terminal.app or WezTerm
 - Reads role behavior from `kiln/roles/<role>.md` files and a layered `kiln/constitution/` (workflow, engineering, project)
 - Creates one **git worktree per agent** (except those using `@current`) under `.worktrees/` so agents don't collide — agents using `@current` work in the project root on the current branch
@@ -121,7 +121,7 @@ my-project/
 
 ### Windows (Native PowerShell)
 
-Kiln has full native Windows support using PowerShell 7+ and Windows Terminal (or WezTerm).
+Kiln has full native Windows support using PowerShell 7+ and WezTerm (or Windows Terminal).
 
 ```powershell
 .\kiln.ps1 -WorkingDir "C:\path\to\project"
@@ -129,11 +129,12 @@ Kiln has full native Windows support using PowerShell 7+ and Windows Terminal (o
 
 **Requirements:**
 - PowerShell 7+ (included with Windows 11)
-- Windows Terminal (Microsoft Store) or WezTerm
+- WezTerm (recommended) or Windows Terminal (Microsoft Store)
 - One or more agent CLIs (Claude Code, GitHub Copilot, Codex, or Grok) depending on configured agents
 
 **Optional parameters:**
-- `-Terminal wezterm` — use WezTerm instead of Windows Terminal
+- `-Terminal wt` — use Windows Terminal instead of WezTerm
+- `-Terminal wezterm` — explicitly use WezTerm (default when available)
 
 ### Unix/Linux/macOS (zsh + tmux)
 
@@ -294,7 +295,7 @@ The default four-agent workflow is:
 
 | Platform | Command | Options |
 |---|---|---|
-| **Windows** | `.\kiln.ps1 -WorkingDir .` | `-ProfileName <profile>` for different profiles; `-Terminal wezterm` to override terminal backend; `-Debug` for verbose output |
+| **Windows** | `.\kiln.ps1 -WorkingDir .` | `-ProfileName <profile>` for different profiles; `-Terminal wt` to use Windows Terminal; `-Debug` for verbose output |
 | **Unix/macOS** | `./kiln.sh .` | `--profile <profile>` for different profiles; Terminal auto-detected: WezTerm > Terminal.app > tmux |
 
 Kiln will create a git repository if one doesn't exist, initialize worktrees, and launch agents.
@@ -333,8 +334,8 @@ Kiln will create a git repository if one doesn't exist, initialize worktrees, an
    # Run a different profile (e.g., 'compact' with different layout or agent configuration)
    .\bin\kiln.ps1 -WorkingDir . -ProfileName compact
 
-   # Use WezTerm instead of Windows Terminal
-   .\bin\kiln.ps1 -WorkingDir . -Terminal wezterm
+   # Use Windows Terminal instead of WezTerm (default)
+   .\bin\kiln.ps1 -WorkingDir . -Terminal wt
 
    # Enable debug mode (verbose output for troubleshooting MCP issues)
    .\bin\kiln.ps1 -WorkingDir . -Debug
@@ -343,7 +344,7 @@ Kiln will create a git repository if one doesn't exist, initialize worktrees, an
 4. **Startup creates**:
    - Git worktrees under `.worktrees/` (one per non-@current role)
    - Generated `CLAUDE.md` files in each worktree with embedded constitution + project + role content
-   - Windows Terminal tabs (or WezTerm tabs/panes) for each role
+   - WezTerm tabs/panes (or Windows Terminal tabs) for each role
    - `.kiln/messages.db` SQLite database for inter-agent messaging via MCP
 
 5. **Verify**: Each agent's tab shows a prompt. Ask it: `pwd` to confirm it's in the correct worktree.
@@ -604,8 +605,9 @@ Kiln opens terminal windows or tabs through a small terminal backend adapter.
 ### Auto-Detection (Windows)
 
 1. If `$env:WEZTERM_PANE` is set and `wezterm` is in PATH → WezTerm
-2. If `wt.exe` is available → Windows Terminal
-3. Otherwise → error
+2. If `wezterm` is available → WezTerm
+3. If `wt.exe` is available → Windows Terminal
+4. Otherwise → error
 
 ### Override the Default
 
@@ -659,13 +661,13 @@ Kiln supports flexible layout configurations that can be defined in your profile
 - E.g., specifier at top, coder/refactorer/architect split at bottom
 - Use when: you want to focus on one agent while monitoring others
 
-All layouts work on **Windows Terminal**, **WezTerm**, and **Unix/macOS tmux**.
+All layouts work on **WezTerm**, **Windows Terminal**, and **Unix/macOS tmux**.
 
 ### WezTerm Config Behavior
 
-Kiln dynamically generates a WezTerm configuration file at runtime to set up the multi-agent layout. **Important:**
+Kiln dynamically generates a WezTerm configuration file at runtime to set up the multi-agent layout (when WezTerm is used, which is the default on Windows). **Important:**
 
-- When you run `kiln.ps1 -Terminal wezterm`, Kiln writes a generated `~/.wezterm.lua` file to your home directory
+- When you run `kiln.ps1`, Kiln writes a generated `~/.wezterm.lua` file to your home directory
 - This config is tailored to your specific agents and layout (tabs or panes)
 - **Your existing `~/.wezterm.lua` is backed up** to `~/.wezterm.lua.kiln-backup` before writing
 - **The backup is automatically restored** ~500ms after WezTerm starts (when Kiln detects the window has opened)
