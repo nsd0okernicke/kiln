@@ -711,7 +711,7 @@ function Build-WindowsTerminalTabsArrayLayout {
                 }
             }
             if ($roleNames.Count -gt 0) {
-                $tabTitle = $roleNames -join " & "
+                $tabTitle = $roleNames -join " `& "
             } else {
                 $tabTitle = "Kiln"
             }
