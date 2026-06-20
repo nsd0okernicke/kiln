@@ -1009,6 +1009,8 @@ if ($TerminalBackend -eq "wezterm") {
 
     if ($wtArgs.Count -gt 0) {
         $argString = ($wtArgs | ForEach-Object { if ($_ -match '\s') { """$_""" } else { $_ } }) -join ' '
+        Write-Host "DEBUG: wt command line:" -ForegroundColor Yellow
+        Write-Host "wt.exe $argString" -ForegroundColor Yellow
         Start-Process wt.exe -ArgumentList $argString -NoNewWindow | Out-Null
         # Wait for panes to stabilize to avoid race conditions on rapid restarts
         Start-Sleep -Milliseconds 1500
