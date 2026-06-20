@@ -313,6 +313,7 @@
       "layout": {
         "tabs": [
           {
+            "title": "Specifier & Coder",
             "panes": [
               {
                 "role": "specifier"
@@ -323,6 +324,7 @@
             ]
           },
           {
+            "title": "Refactorer & Architect",
             "panes": [
               {
                 "role": "refactorer"
@@ -374,6 +376,7 @@
       "layout": {
         "tabs": [
           {
+            "title": "Specifier",
             "panes": [
               {
                 "role": "specifier"
@@ -381,6 +384,7 @@
             ]
           },
           {
+            "title": "Coder & Refactorer & Architect",
             "panes": [
               {
                 "role": "coder"
