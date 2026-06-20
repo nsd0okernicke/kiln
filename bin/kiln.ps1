@@ -562,53 +562,17 @@ function Write-GeneratedCLAUDEmd {
     Set-Content $claudeMdPath $content
 }
 
-function Build-AgentCommand {
-    param(
-        [int]$Index,
-        [bool]$DebugMode = $false
-    )
-
-    $role = $global:ROLES[$Index]
-    $agent = $global:AGENTS[$Index]
-    $displayName = $global:DISPLAY_NAMES[$Index]
-    $worktreePath = $global:WORKTREE_PATHS[$Index]
-
-    Write-GeneratedCLAUDEmd -Index $Index -Role $role -WorktreePath $worktreePath -Agent $agent
-
-    $wtProfile = $displayName
-    $command = ""
-    $debugFlags = if ($DebugMode) { "--verbose" } else { "" }
-
-    switch ($agent) {
-        "claude" {
-            $claudeCmd = "claude --model claude-haiku-4-5-20251001 --permission-mode bypassPermissions --mcp-config ./.mcp.json -n '$displayName'"
-            if ($DebugMode) {
-                $claudeCmd += " $debugFlags"
-            }
-            $command = "new-tab -p '$wtProfile' -d '$worktreePath' pwsh -NoExit -Command `"Set-Location '$worktreePath'; $claudeCmd`""
-        }
-        "copilot" {
-            $copilotCmd = "copilot --allow-all --name '$displayName'"
-            if ($DebugMode) {
-                $copilotCmd += " $debugFlags"
-            }
-            $command = "new-tab -p '$wtProfile' -d '$worktreePath' pwsh -NoExit -Command `"Set-Location '$worktreePath'; $copilotCmd`""
-        }
-        default {
-            Write-Host "  [$displayName] agent type $agent not yet supported on Windows" -ForegroundColor Yellow
-        }
-    }
-
-    return $command
-}
-
 function Build-WezTermAgentCommand {
     param(
         [string]$Agent,
         [string]$DisplayName,
         [string]$WorktreePath,
-        [string]$Model = "claude-haiku-4-5-20251001"
+        [string]$Model = ""
     )
+
+    if (-not $Model) {
+        Write-Warning "No model specified for $DisplayName; agent command may fail"
+    }
 
     $command = ""
 
@@ -681,6 +645,10 @@ function Build-WindowsTerminalTabsLayout {
         $displayName = $DisplayNames[$i]
         $worktreePath = $WorktreePaths[$i]
 
+        # Get model from profile variable
+        $varModel = "TERMINAL_${i}_MODEL"
+        $model = Get-Variable -Name $varModel -ValueOnly -ErrorAction SilentlyContinue
+
         if ($i -eq 0) {
             $wtArgs += "new-tab"
         } else {
@@ -693,7 +661,7 @@ function Build-WindowsTerminalTabsLayout {
         $wtArgs += "--colorScheme", $AgentColors[$i % $AgentColors.Count]
         $wtArgs += "pwsh", "-NoExit", "-Command"
 
-        $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath
+        $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model
         $wtArgs += $agentCmd
     }
 
@@ -740,6 +708,10 @@ function Build-WindowsTerminalTabsArrayLayout {
                 $displayName = $DisplayNames[$roleIdx]
                 $worktreePath = $WorktreePaths[$roleIdx]
 
+                # Get model from profile variable
+                $varModel = "TERMINAL_${roleIdx}_MODEL"
+                $model = Get-Variable -Name $varModel -ValueOnly -ErrorAction SilentlyContinue
+
                 # Add pane split if not first pane in tab
                 if ($paneIndex -gt 0) {
                     if ($isGrid -and $tab.gridCols -gt 1) {
@@ -756,7 +728,7 @@ function Build-WindowsTerminalTabsArrayLayout {
                 }
 
                 $colorIdx = $roleIdx % $AgentColors.Count
-                $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath
+                $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model
                 $wtArgs += "-d", $worktreePath
                 $wtArgs += "--colorScheme", $AgentColors[$colorIdx]
                 $wtArgs += "pwsh", "-NoExit", "-Command"
@@ -772,12 +744,17 @@ function Get-WindowsTerminalAgentCommand {
     param(
         [string]$Agent,
         [string]$DisplayName,
-        [string]$WorktreePath
+        [string]$WorktreePath,
+        [string]$Model = ""
     )
+
+    if (-not $Model) {
+        Write-Warning "No model specified for $DisplayName; agent command may fail"
+    }
 
     switch ($Agent) {
         "claude" {
-            return "claude --model claude-haiku-4-5-20251001 --permission-mode bypassPermissions --mcp-config ./.mcp.json -n ""$DisplayName"""
+            return "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json -n ""$DisplayName"""
         }
         "copilot" {
             return "copilot --allow-all --name ""$DisplayName"""
@@ -917,12 +894,9 @@ if ($TerminalBackend -eq "wezterm") {
         $displayName = $global:DISPLAY_NAMES[$i]
         $worktreePath = $global:WORKTREE_PATHS[$i]
 
-        # Get model for this terminal, default to haiku
+        # Get model for this terminal from profile
         $varModel = "TERMINAL_${i}_MODEL"
         $model = Get-Variable -Name $varModel -ValueOnly -ErrorAction SilentlyContinue
-        if (-not $model) {
-            $model = "claude-haiku-4-5-20251001"
-        }
 
         Write-Verbose "Role: '$role', DisplayName: '$displayName', Agent: '$agent', Model: '$model'"
 
