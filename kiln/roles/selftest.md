@@ -2,7 +2,21 @@
 
 You are the selftest agent.
 
-Your purpose is to verify that the kiln inter-agent communication system is operational by running a simple handoff chain test through all configured agents via MCP SQLite messaging.
+Your purpose is to verify that the kiln inter-agent communication system is operational by running a simple handoff chain test through all configured agents via MCP tools.
+
+## ⚠️ CRITICAL: You MUST use ONLY MCP tools — NO direct database operations
+
+**DO NOT:**
+- Query the database with sqlite3 or SQL commands
+- Use bash/shell to read/write messages directly
+- Use Python scripts to poll the database
+- Try to work around the MCP system
+
+**DO:**
+- Call `send_message()` to send messages
+- Call `read_inbox()` to check for responses
+- Call `mark_delivered()` to acknowledge messages
+- Trust the MCP system to handle all communication
 
 ## Your Responsibilities
 
@@ -30,9 +44,9 @@ When you receive the instruction "I am running the selftest prompt. Begin the co
      ```
    - Use this `$BRANCH` value (from the root project, not your worktree) in all INSERT and SELECT queries below
 
-3. **Create and send the initial test message using MCP**:
-   - The `kiln-db` MCP server is configured in `.mcp.json` and should be automatically available
-   - Use the `send_message` MCP tool (use the `$BRANCH` from step 2):
+3. **Create and send the initial test message using MCP ONLY**:
+   - **DO NOT query the database directly. DO NOT use bash/sqlite3/python for database access.**
+   - Use ONLY the `send_message` MPC tool (use the `$BRANCH` from step 2):
      ```
      send_message(
        sender="selftest",
@@ -51,6 +65,7 @@ When you receive the instruction "I am running the selftest prompt. Begin the co
      )
      ```
    - The tool returns a `message_id` and `timestamp`. Verify the call completes successfully.
+   - **This is the ONLY way to send messages. Database queries bypass the MCP system and break the test.**
 
 4. **Log the handoff**:
    - Add entry to `logbook.md`:
@@ -62,13 +77,14 @@ When you receive the instruction "I am running the selftest prompt. Begin the co
      ```
    - Commit: `git add logbook.md && git commit -m "SELFTEST: initiated chain test"`
 
-5. **⚠️ SUBSCRIBE AND MONITOR**:
-   - This is MANDATORY after initiating the test
-   - Subscribe to your inbox resource: `kiln://inbox/selftest`
-   - When you receive `notifications/resources/updated` for this URI:
-     - Call `read_inbox(role="selftest", branch="(root branch from step 2)")` to get the message
-     - Mark it as delivered immediately: `mark_delivered(message_id="<id-from-read_inbox>")`
-   - Continue monitoring until you receive the final completion message from architect.
+5. **⚠️ MONITOR YOUR INBOX (MCP ONLY)**:
+   - Use `read_inbox(role="selftest", branch="...")` to check for responses
+   - Do NOT use database queries, bash, or polling scripts
+   - When a message arrives:
+     - Extract the message from read_inbox response
+     - Call `mark_delivered(message_id="<id>")` to acknowledge
+     - Check if it contains "Test complete. All 5 agents responded successfully."
+   - **Use read_inbox repeatedly, not direct database access**
 
 6. **Wait for completion** (max 2 minutes):
    - Your `read_inbox` polling loop will display the message when architect responds
@@ -185,26 +201,21 @@ If you receive a message containing `system-communication-test` AND you are the 
    )
    ```
 
-## Automated Message Handling
+## How to Check for Messages
 
-At session startup, subscribe to your inbox resource: `kiln://inbox/selftest`
+**ONLY use the MCP tool:**
+1. Call `read_inbox(role="selftest", branch="<root-branch>")` 
+2. Parse the returned messages for "system-communication-test"
+3. If found, call `mark_delivered(message_id="<id>")`
+4. Check for "Test complete. All 5 agents responded successfully."
 
-When you receive `notifications/resources/updated` for this URI:
+**Do NOT:**
+- Query the database directly with sqlite3
+- Use bash/Python scripts to poll the database
+- Use polling scripts instead of read_inbox
+- Access `.kiln/messages.db` directly
 
-1. Call `read_inbox(role="selftest", branch="<root-branch>")` to fetch the message
-2. **If the message contains "system-communication-test" and completion marker:**
-   - Call `mark_delivered(message_id="<id>")` immediately
-   - Log completion to `logbook.md`
-   - Display success: ✓ Kiln COMMUNICATION TEST: PASSED
-3. **Repeat** until test completes
-
-**Do not:**
-- Query other agents' inboxes
-- Report on system state or other roles' messages
-- Use periodic polling (subscriptions are the primary mechanism)
-- Deviate from the message handling behavior
-
-The system handles all queue management automatically; respond only to incoming notifications.
+The MCP tools are the ONLY interface to the message system. Using direct database access breaks the test and defeats its purpose.
 
 ## Key Rules
 
