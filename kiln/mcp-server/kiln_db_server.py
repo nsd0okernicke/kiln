@@ -14,11 +14,24 @@ Launch agents with: claude --channels server:kiln-db --mcp-config .mcp.json ...
 
 import asyncio
 import json
+import logging
 import sqlite3
 import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
+
+# Set up logging
+log_file = Path(__file__).parent / "kiln_db_server.log"
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler(log_file),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 from mcp.server import Server, InitializationOptions
 from mcp.server.stdio import stdio_server
@@ -123,6 +136,8 @@ server = Server("kiln-db")
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> str:
     """Execute domain-level tools for message handling."""
+    logger.info(f"Tool called: {name}")
+    logger.debug(f"  Arguments: {arguments}")
 
     if name == "send_message":
         sender = arguments.get("sender")
@@ -139,6 +154,10 @@ async def call_tool(name: str, arguments: dict) -> str:
         try:
             message_id = str(uuid.uuid4())
             now = datetime.now().isoformat()
+            logger.info(f"send_message: {sender} -> {target} (priority={priority}, branch={branch})")
+            logger.debug(f"  Content: {content[:100]}...")
+            logger.debug(f"  Message-ID: {message_id}")
+
             conn = get_db()
             conn.execute(
                 """
@@ -150,6 +169,8 @@ async def call_tool(name: str, arguments: dict) -> str:
             )
             conn.commit()
             conn.close()
+
+            logger.info(f"  ✓ Message inserted into database")
 
             # Notification will be pushed via notification_loop using --channels
             return json.dumps(
@@ -163,9 +184,11 @@ async def call_tool(name: str, arguments: dict) -> str:
         branch = arguments.get("branch", "main")
 
         if not role:
+            logger.error("read_inbox: role is required")
             return json.dumps({"error": "role is required"})
 
         try:
+            logger.info(f"read_inbox: role={role}, branch={branch}")
             conn = get_db()
             cursor = conn.execute(
                 """
@@ -178,6 +201,7 @@ async def call_tool(name: str, arguments: dict) -> str:
             )
             messages = [dict(row) for row in cursor.fetchall()]
             conn.close()
+            logger.info(f"  Found {len(messages)} queued messages for {role}")
             return json.dumps({"inbox": messages})
         except Exception as e:
             return json.dumps({"error": str(e)})
@@ -186,9 +210,11 @@ async def call_tool(name: str, arguments: dict) -> str:
         message_id = arguments.get("message_id")
 
         if not message_id:
+            logger.error("mark_delivered: message_id is required")
             return json.dumps({"error": "message_id is required"})
 
         try:
+            logger.info(f"mark_delivered: message_id={message_id}")
             now = datetime.now().isoformat()
             conn = get_db()
             conn.execute(
@@ -201,6 +227,7 @@ async def call_tool(name: str, arguments: dict) -> str:
             )
             conn.commit()
             conn.close()
+            logger.info(f"  ✓ Marked as delivered")
             return json.dumps({"success": True, "timestamp": now})
         except Exception as e:
             return json.dumps({"error": str(e)})
@@ -209,9 +236,11 @@ async def call_tool(name: str, arguments: dict) -> str:
         message_id = arguments.get("message_id")
 
         if not message_id:
+            logger.error("mark_processed: message_id is required")
             return json.dumps({"error": "message_id is required"})
 
         try:
+            logger.info(f"mark_processed: message_id={message_id}")
             now = datetime.now().isoformat()
             conn = get_db()
             conn.execute(
@@ -224,6 +253,7 @@ async def call_tool(name: str, arguments: dict) -> str:
             )
             conn.commit()
             conn.close()
+            logger.info(f"  ✓ Marked as processed")
             return json.dumps({"success": True, "timestamp": now})
         except Exception as e:
             return json.dumps({"error": str(e)})
@@ -235,6 +265,7 @@ async def call_tool(name: str, arguments: dict) -> str:
 @server.list_tools()
 async def list_tools():
     """List available domain tools."""
+    logger.info("list_tools() called - returning 4 tools")
     return [
         Tool(
             name="send_message",
@@ -320,15 +351,19 @@ async def list_tools():
 
 async def notification_loop():
     """Background loop that checks for new messages and pushes them via --channels."""
+    logger.info("notification_loop started")
     while True:
         try:
             await asyncio.sleep(0.25)  # Check every 250ms
             new_messages = check_new_messages()
+            if new_messages:
+                logger.info(f"Found new messages: {list(new_messages.keys())}")
             for target_role, messages in new_messages.items():
                 for msg in messages:
                     # Emit channel notification for each new message
                     # Agents filter by target role in the <channel> tag
                     try:
+                        logger.info(f"Pushing channel notification for {target_role} (from {msg['sender']})")
                         await server.request_context.notify(
                             "notifications/claude/channel",
                             {
@@ -342,33 +377,38 @@ async def notification_loop():
                                 }
                             }
                         )
-                    except Exception:
-                        # Silently ignore notification errors
-                        pass
-        except Exception:
-            # Continue loop even if notification fails
-            pass
+                        logger.info(f"  ✓ Notification sent")
+                    except Exception as e:
+                        logger.error(f"  ✗ Failed to send notification: {e}")
+        except Exception as e:
+            logger.error(f"notification_loop error: {e}")
 
 
 async def main():
     """Start the MCP server."""
     global db_path
 
+    logger.info("="*60)
+    logger.info("Kiln MCP Server Starting")
+    logger.info("="*60)
+
     if len(sys.argv) < 2:
-        print("Usage: kiln_db_server.py <path/to/messages.db>", file=sys.stderr)
+        logger.error("Usage: kiln_db_server.py <path/to/messages.db>")
         sys.exit(1)
 
     db_path = sys.argv[1]
+    logger.info(f"Database path: {db_path}")
 
     # Verify database exists
     if not Path(db_path).exists():
-        print(f"Error: Database not found: {db_path}", file=sys.stderr)
+        logger.error(f"Database not found: {db_path}")
         sys.exit(1)
 
-    print(f"[kiln-db] Database: {db_path}", file=sys.stderr)
-    print(f"[kiln-db] Ready to push messages via --channels", file=sys.stderr)
+    logger.info("Database exists and is accessible")
+    logger.info("Ready to push messages via --channels")
 
     # Start notification loop in background
+    logger.info("Starting notification loop...")
     asyncio.create_task(notification_loop())
 
     # Run the MCP server
