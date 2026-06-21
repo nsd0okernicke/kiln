@@ -382,7 +382,7 @@ function Prepare-Worktrees {
   "mcpServers": {
     "kiln-db": {
       "command": "python",
-      "args": ["$serverPathEscaped", "$dbPathEscaped"]
+      "args": ["$serverPathEscaped", "$dbPathEscaped", "$role"]
     }
   }
 }
@@ -582,7 +582,8 @@ function Build-WezTermAgentCommand {
         [string]$Model = "",
         [bool]$Debug = $false,
         [string]$FrameworkRoot = "",
-        [string]$DatabasePath = ""
+        [string]$DatabasePath = "",
+        [string]$Role = ""
     )
 
     if (-not $Model) {
@@ -599,10 +600,10 @@ function Build-WezTermAgentCommand {
         "copilot" {
             $debugFlag = if ($Debug) { "--debug" } else { "" }
             # Register MCP server explicitly for Copilot CLI
-            if ($FrameworkRoot -and $DatabasePath) {
+            if ($FrameworkRoot -and $DatabasePath -and $Role) {
                 $serverPath = "$FrameworkRoot\kiln\mcp-server\kiln_db_server.py"
                 # Try to add the MCP server; if it exists, copilot will continue anyway
-                $command = "copilot mcp add kiln-db -- python `"$serverPath`" `"$DatabasePath`"; copilot --allow-all $debugFlag".Trim()
+                $command = "copilot mcp add kiln-db -- python `"$serverPath`" `"$DatabasePath`" `"$Role`"; copilot --allow-all $debugFlag".Trim()
             } else {
                 $command = "copilot --allow-all $debugFlag".Trim()
             }
@@ -820,7 +821,7 @@ function Build-WindowsTerminalTabsArrayLayout {
                 }
 
                 $colorIdx = $roleIdx % $AgentColors.Count
-                $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Debug $debug -FrameworkRoot $frameworkRoot -DatabasePath $dbPath
+                $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Debug $debug -FrameworkRoot $frameworkRoot -DatabasePath $dbPath -Role $role
                 $wtArgs += "-d", $worktreePath
                 $wtArgs += "--colorScheme", $AgentColors[$colorIdx]
                 $wtArgs += "pwsh", "-NoExit", "-Command"
@@ -840,7 +841,8 @@ function Get-WindowsTerminalAgentCommand {
         [string]$Model = "",
         [bool]$Debug = $false,
         [string]$FrameworkRoot = "",
-        [string]$DatabasePath = ""
+        [string]$DatabasePath = "",
+        [string]$Role = ""
     )
 
     if (-not $Model) {
@@ -861,10 +863,10 @@ function Get-WindowsTerminalAgentCommand {
         "copilot" {
             # Register MCP server explicitly for Copilot CLI
             $baseCmd = ""
-            if ($FrameworkRoot -and $DatabasePath) {
+            if ($FrameworkRoot -and $DatabasePath -and $Role) {
                 $serverPath = "$FrameworkRoot\kiln\mcp-server\kiln_db_server.py"
                 # Try to add the MCP server; if it exists, copilot will continue anyway
-                $baseCmd = "copilot mcp add kiln-db -- python `"$serverPath`" `"$DatabasePath`"; copilot --allow-all $copilotDebugFlag"
+                $baseCmd = "copilot mcp add kiln-db -- python `"$serverPath`" `"$DatabasePath`" `"$Role`"; copilot --allow-all $copilotDebugFlag"
             } else {
                 $baseCmd = "copilot --allow-all $copilotDebugFlag"
             }
@@ -1019,7 +1021,7 @@ if ($TerminalBackend -eq "wezterm") {
 
         Write-GeneratedCLAUDEmd -Index $i -Role $role -WorktreePath $worktreePath -Agent $agent
 
-        $cmd = Build-WezTermAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Debug $debug -FrameworkRoot $frameworkRoot -DatabasePath $dbPath
+        $cmd = Build-WezTermAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Debug $debug -FrameworkRoot $frameworkRoot -DatabasePath $dbPath -Role $role
 
         $roleData += [PSCustomObject]@{
             role  = $role

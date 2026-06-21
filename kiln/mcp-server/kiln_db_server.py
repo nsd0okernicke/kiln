@@ -7,7 +7,7 @@ instead of raw SQL. When a new message arrives for an agent, all subscribed clie
 receive a notifications/resources/updated notification immediately.
 
 Usage:
-    python kiln_db_server.py <path/to/messages.db>
+    python kiln_db_server.py <path/to/messages.db> <role>
 """
 
 import asyncio
@@ -46,23 +46,6 @@ def get_role_from_uri(uri: str) -> str | None:
     """Extract role name from resource URI (kiln://inbox/{role})."""
     if uri.startswith("kiln://inbox/"):
         return uri[len("kiln://inbox/") :]
-    return None
-
-
-def extract_role_from_db_path(path: str) -> str | None:
-    """Extract the agent role from the database path.
-
-    Paths have two forms:
-    1. Named worktree: .../library-hub-testrun/.worktrees/{role}/.kiln/messages.db
-    2. Main worktree: .../library-hub-testrun/.kiln/messages.db (role is unknown)
-
-    Returns the role name if found in a .worktrees path, otherwise None.
-    """
-    p = Path(path)
-    parts = p.parts
-    for i, part in enumerate(parts):
-        if part == ".worktrees" and i + 1 < len(parts):
-            return parts[i + 1]
     return None
 
 
@@ -435,23 +418,20 @@ async def main():
     """Start the MCP server."""
     global db_path, agent_role
 
-    if len(sys.argv) < 2:
-        print("Usage: kiln_db_server.py <path/to/messages.db>", file=sys.stderr)
+    if len(sys.argv) < 3:
+        print("Usage: kiln_db_server.py <path/to/messages.db> <role>", file=sys.stderr)
         sys.exit(1)
 
     db_path = sys.argv[1]
+    agent_role = sys.argv[2]
 
     # Verify database exists
     if not Path(db_path).exists():
         print(f"Error: Database not found: {db_path}", file=sys.stderr)
         sys.exit(1)
 
-    # Extract the agent role from the database path
-    agent_role = extract_role_from_db_path(db_path)
-    if agent_role:
-        print(f"[kiln-db] Serving role: {agent_role}", file=sys.stderr)
-    else:
-        print(f"[kiln-db] Could not extract role from path, auto-subscribe disabled", file=sys.stderr)
+    print(f"[kiln-db] Database: {db_path}", file=sys.stderr)
+    print(f"[kiln-db] Serving role: {agent_role}", file=sys.stderr)
 
     # Start notification loop in background
     asyncio.create_task(notification_loop())
