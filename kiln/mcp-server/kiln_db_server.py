@@ -25,6 +25,8 @@ from mcp.server.stdio import stdio_server
 from mcp.types import (
     ServerCapabilities,
     ToolsCapability,
+    Tool,
+    TextContent,
 )
 
 # Global state
@@ -234,10 +236,10 @@ async def call_tool(name: str, arguments: dict) -> str:
 async def list_tools():
     """List available domain tools."""
     return [
-        {
-            "name": "send_message",
-            "description": "Send a message to another agent role",
-            "inputSchema": {
+        Tool(
+            name="send_message",
+            description="Send a message to another agent role",
+            inputSchema={
                 "type": "object",
                 "properties": {
                     "sender": {
@@ -265,11 +267,11 @@ async def list_tools():
                 },
                 "required": ["sender", "target", "content"],
             },
-        },
-        {
-            "name": "read_inbox",
-            "description": "Read queued messages for your role",
-            "inputSchema": {
+        ),
+        Tool(
+            name="read_inbox",
+            description="Read queued messages for your role",
+            inputSchema={
                 "type": "object",
                 "properties": {
                     "role": {
@@ -284,11 +286,11 @@ async def list_tools():
                 },
                 "required": ["role"],
             },
-        },
-        {
-            "name": "mark_delivered",
-            "description": "Mark a message as delivered after reading it",
-            "inputSchema": {
+        ),
+        Tool(
+            name="mark_delivered",
+            description="Mark a message as delivered after reading it",
+            inputSchema={
                 "type": "object",
                 "properties": {
                     "message_id": {
@@ -298,11 +300,11 @@ async def list_tools():
                 },
                 "required": ["message_id"],
             },
-        },
-        {
-            "name": "mark_processed",
-            "description": "Mark a message as processed after completing the work it describes",
-            "inputSchema": {
+        ),
+        Tool(
+            name="mark_processed",
+            description="Mark a message as processed after completing the work it describes",
+            inputSchema={
                 "type": "object",
                 "properties": {
                     "message_id": {
@@ -312,7 +314,7 @@ async def list_tools():
                 },
                 "required": ["message_id"],
             },
-        },
+        ),
     ]
 
 
