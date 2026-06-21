@@ -377,11 +377,7 @@ async def main():
                 server_name="kiln-db",
                 server_version="1.0.0",
                 capabilities=ServerCapabilities(
-                    tools=ToolsCapability(),
-                    # Declare experimental claude/channel capability for push notifications
-                    experimental={
-                        "claude/channel": {}
-                    }
+                    tools=ToolsCapability()
                 )
             )
         )
