@@ -26,7 +26,7 @@ from mcp.types import (
     TextContent,
     ServerCapabilities,
     ToolsCapability,
-    ResourceCapability,
+    ResourcesCapability,
 )
 
 # Global state
@@ -476,7 +476,7 @@ async def main():
                 server_version="1.0.0",
                 capabilities=ServerCapabilities(
                     tools=ToolsCapability(),
-                    resources=ResourceCapability(subscribe=True)
+                    resources=ResourcesCapability(subscribe=True)
                 )
             )
         )
