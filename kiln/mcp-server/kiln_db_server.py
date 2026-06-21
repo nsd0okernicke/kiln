@@ -302,6 +302,26 @@ async def call_tool(name: str, arguments: dict) -> str:
         except Exception as e:
             return json.dumps({"error": str(e)})
 
+    elif name == "subscribe_to_inbox":
+        # Explicit subscription tool for agents to call on startup
+        # This is a workaround since MCP's subscribe_resource is not directly callable by agents
+        if not agent_role:
+            return json.dumps({"error": "Server role not configured"})
+
+        uri = f"kiln://inbox/{agent_role}"
+        # Add a subscription entry (the MCP framework will handle the actual session)
+        if uri not in subscriptions:
+            subscriptions[uri] = set()
+
+        # Add a marker that this role has been explicitly subscribed
+        subscriptions[uri].add("__explicit_subscribe__")
+
+        return json.dumps({
+            "success": True,
+            "message": f"Subscribed to {uri}",
+            "uri": uri
+        })
+
     else:
         return json.dumps({"error": f"Unknown tool: {name}"})
 
@@ -387,6 +407,15 @@ async def list_tools():
                     }
                 },
                 "required": ["message_id"],
+            },
+        },
+        {
+            "name": "subscribe_to_inbox",
+            "description": "Subscribe to your inbox to receive push notifications when messages arrive",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "required": [],
             },
         },
     ]
