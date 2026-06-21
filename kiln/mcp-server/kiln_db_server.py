@@ -31,6 +31,8 @@ from mcp.types import (
 db_path: str = ""
 subscriptions: dict[str, set[str]] = {}  # uri -> set of session_ids
 last_message_ids: set[str] = set()  # Track already-notified messages
+agent_role: str | None = None  # The role this server instance serves (extracted from db_path)
+auto_subscribed: set[str] = set()  # Session IDs we've already auto-subscribed
 
 
 def get_db() -> sqlite3.Connection:
@@ -44,6 +46,23 @@ def get_role_from_uri(uri: str) -> str | None:
     """Extract role name from resource URI (kiln://inbox/{role})."""
     if uri.startswith("kiln://inbox/"):
         return uri[len("kiln://inbox/") :]
+    return None
+
+
+def extract_role_from_db_path(path: str) -> str | None:
+    """Extract the agent role from the database path.
+
+    Paths have two forms:
+    1. Named worktree: .../library-hub-testrun/.worktrees/{role}/.kiln/messages.db
+    2. Main worktree: .../library-hub-testrun/.kiln/messages.db (role is unknown)
+
+    Returns the role name if found in a .worktrees path, otherwise None.
+    """
+    p = Path(path)
+    parts = p.parts
+    for i, part in enumerate(parts):
+        if part == ".worktrees" and i + 1 < len(parts):
+            return parts[i + 1]
     return None
 
 
@@ -163,9 +182,29 @@ async def unsubscribe_resource(uri: str, session_id: str) -> None:
             del subscriptions[uri]
 
 
+def ensure_agent_auto_subscribed() -> None:
+    """Ensure the agent is auto-subscribed to their inbox."""
+    global agent_role, auto_subscribed
+
+    if agent_role is None or auto_subscribed:
+        return
+
+    # Use a sentinel session_id for auto-subscriptions
+    # All clients will match this subscription
+    auto_session = "__auto_subscribe__"
+    uri = f"kiln://inbox/{agent_role}"
+    if uri not in subscriptions:
+        subscriptions[uri] = set()
+    subscriptions[uri].add(auto_session)
+    auto_subscribed.add(uri)
+
+
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> str:
     """Execute domain-level tools for message handling."""
+    # Ensure auto-subscription is set up
+    ensure_agent_auto_subscribed()
+
     if name == "send_message":
         sender = arguments.get("sender")
         target = arguments.get("target")
@@ -196,14 +235,13 @@ async def call_tool(name: str, arguments: dict) -> str:
             # Notify subscribers for this target
             uri = f"kiln://inbox/{target}"
             if uri in subscriptions:
-                for session_id in subscriptions[uri]:
-                    try:
-                        await server.request_context.notify(
-                            "notifications/resources/updated",
-                            {"uri": uri},
-                        )
-                    except Exception:
-                        pass
+                try:
+                    await server.request_context.notify(
+                        "notifications/resources/updated",
+                        {"uri": uri},
+                    )
+                except Exception:
+                    pass
 
             return json.dumps(
                 {"success": True, "message_id": message_id, "timestamp": now}
@@ -380,15 +418,14 @@ async def notification_loop():
             for role, messages in new_messages.items():
                 uri = f"kiln://inbox/{role}"
                 if uri in subscriptions:
-                    for session_id in subscriptions[uri]:
-                        try:
-                            await server.request_context.notify(
-                                "notifications/resources/updated",
-                                {"uri": uri},
-                            )
-                        except Exception:
-                            # Silently ignore notification errors
-                            pass
+                    try:
+                        await server.request_context.notify(
+                            "notifications/resources/updated",
+                            {"uri": uri},
+                        )
+                    except Exception:
+                        # Silently ignore notification errors
+                        pass
         except Exception:
             # Continue loop even if notification fails
             pass
@@ -396,7 +433,7 @@ async def notification_loop():
 
 async def main():
     """Start the MCP server."""
-    global db_path
+    global db_path, agent_role
 
     if len(sys.argv) < 2:
         print("Usage: kiln_db_server.py <path/to/messages.db>", file=sys.stderr)
@@ -408,6 +445,13 @@ async def main():
     if not Path(db_path).exists():
         print(f"Error: Database not found: {db_path}", file=sys.stderr)
         sys.exit(1)
+
+    # Extract the agent role from the database path
+    agent_role = extract_role_from_db_path(db_path)
+    if agent_role:
+        print(f"[kiln-db] Serving role: {agent_role}", file=sys.stderr)
+    else:
+        print(f"[kiln-db] Could not extract role from path, auto-subscribe disabled", file=sys.stderr)
 
     # Start notification loop in background
     asyncio.create_task(notification_loop())
