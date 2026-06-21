@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
-Kiln MCP Server - Domain-level API with push notifications.
+Kiln MCP Server - Domain-level API with channel-based push notifications.
 
 Provides domain tools (send_message, read_inbox, mark_delivered, mark_processed)
-instead of raw SQL. When a new message arrives for an agent, all subscribed clients
-receive a notifications/resources/updated notification immediately.
+instead of raw SQL. Agents use the Claude Code --channels mechanism to receive
+push notifications when new messages arrive via notifications/claude/channel.
 
 Usage:
     python kiln_db_server.py <path/to/messages.db> <role>
+
+Launch agents with: claude --channels server:kiln-db --mcp-config .mcp.json ...
 """
 
 import asyncio
@@ -21,20 +23,13 @@ from pathlib import Path
 from mcp.server import Server, InitializationOptions
 from mcp.server.stdio import stdio_server
 from mcp.types import (
-    Resource,
-    ResourceTemplate,
-    TextContent,
     ServerCapabilities,
     ToolsCapability,
-    ResourcesCapability,
 )
 
 # Global state
 db_path: str = ""
-subscriptions: dict[str, set[str]] = {}  # uri -> set of session_ids
-last_message_ids: set[str] = set()  # Track already-notified messages
-agent_role: str | None = None  # The role this server instance serves (extracted from db_path)
-auto_subscribed: set[str] = set()  # Session IDs we've already auto-subscribed
+last_message_ids: set[str] = set()  # Track already-notified messages for channel notifications
 
 
 def get_db() -> sqlite3.Connection:
@@ -121,74 +116,11 @@ def check_new_messages() -> dict[str, list[dict]]:
 server = Server("kiln-db")
 
 
-@server.list_resources()
-async def list_resources() -> list[ResourceTemplate]:
-    """List available inbox resources."""
-    # Return a template for dynamic inbox resources
-    return [
-        ResourceTemplate(
-            uri_template="kiln://inbox/{role}",
-            name="Agent Inbox",
-            description="Queued messages for a specific agent role",
-            mimeType="application/json",
-        )
-    ]
-
-
-@server.read_resource()
-async def read_resource(uri: str) -> str:
-    """Read a resource (inbox for a role)."""
-    role = get_role_from_uri(uri)
-    if not role:
-        raise ValueError(f"Invalid resource URI: {uri}")
-
-    messages = get_queued_messages(role)
-    return json.dumps({"role": role, "queued": messages})
-
-
-@server.subscribe_resource()
-async def subscribe_resource(uri: str, session_id: str) -> None:
-    """Subscribe to a resource (inbox notifications)."""
-    role = get_role_from_uri(uri)
-    if not role:
-        raise ValueError(f"Invalid resource URI: {uri}")
-
-    if uri not in subscriptions:
-        subscriptions[uri] = set()
-    subscriptions[uri].add(session_id)
-
-
-@server.unsubscribe_resource()
-async def unsubscribe_resource(uri: str, session_id: str) -> None:
-    """Unsubscribe from a resource."""
-    if uri in subscriptions:
-        subscriptions[uri].discard(session_id)
-        if not subscriptions[uri]:
-            del subscriptions[uri]
-
-
-def ensure_agent_auto_subscribed() -> None:
-    """Ensure the agent is auto-subscribed to their inbox."""
-    global agent_role, auto_subscribed
-
-    if agent_role is None or auto_subscribed:
-        return
-
-    # Use a sentinel session_id for auto-subscriptions
-    # All clients will match this subscription
-    auto_session = "__auto_subscribe__"
-    uri = f"kiln://inbox/{agent_role}"
-    if uri not in subscriptions:
-        subscriptions[uri] = set()
-    subscriptions[uri].add(auto_session)
-    auto_subscribed.add(uri)
 
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> str:
     """Execute domain-level tools for message handling."""
-    # Ensure auto-subscription is set up
-    ensure_agent_auto_subscribed()
 
     if name == "send_message":
         sender = arguments.get("sender")
@@ -217,17 +149,7 @@ async def call_tool(name: str, arguments: dict) -> str:
             conn.commit()
             conn.close()
 
-            # Notify subscribers for this target
-            uri = f"kiln://inbox/{target}"
-            if uri in subscriptions:
-                try:
-                    await server.request_context.notify(
-                        "notifications/resources/updated",
-                        {"uri": uri},
-                    )
-                except Exception:
-                    pass
-
+            # Notification will be pushed via notification_loop using --channels
             return json.dumps(
                 {"success": True, "message_id": message_id, "timestamp": now}
             )
@@ -303,26 +225,6 @@ async def call_tool(name: str, arguments: dict) -> str:
             return json.dumps({"success": True, "timestamp": now})
         except Exception as e:
             return json.dumps({"error": str(e)})
-
-    elif name == "subscribe_to_inbox":
-        # Explicit subscription tool for agents to call on startup
-        # This is a workaround since MCP's subscribe_resource is not directly callable by agents
-        if not agent_role:
-            return json.dumps({"error": "Server role not configured"})
-
-        uri = f"kiln://inbox/{agent_role}"
-        # Add a subscription entry (the MCP framework will handle the actual session)
-        if uri not in subscriptions:
-            subscriptions[uri] = set()
-
-        # Add a marker that this role has been explicitly subscribed
-        subscriptions[uri].add("__explicit_subscribe__")
-
-        return json.dumps({
-            "success": True,
-            "message": f"Subscribed to {uri}",
-            "uri": uri
-        })
 
     else:
         return json.dumps({"error": f"Unknown tool: {name}"})
@@ -411,31 +313,32 @@ async def list_tools():
                 "required": ["message_id"],
             },
         },
-        {
-            "name": "subscribe_to_inbox",
-            "description": "Subscribe to your inbox to receive push notifications when messages arrive",
-            "inputSchema": {
-                "type": "object",
-                "properties": {},
-                "required": [],
-            },
-        },
     ]
 
 
 async def notification_loop():
-    """Background loop that checks for new messages and notifies subscribers."""
+    """Background loop that checks for new messages and pushes them via --channels."""
     while True:
         try:
             await asyncio.sleep(0.25)  # Check every 250ms
             new_messages = check_new_messages()
-            for role, messages in new_messages.items():
-                uri = f"kiln://inbox/{role}"
-                if uri in subscriptions:
+            for target_role, messages in new_messages.items():
+                for msg in messages:
+                    # Emit channel notification for each new message
+                    # Agents filter by target role in the <channel> tag
                     try:
                         await server.request_context.notify(
-                            "notifications/resources/updated",
-                            {"uri": uri},
+                            "notifications/claude/channel",
+                            {
+                                "content": f"Message from {msg['sender']}: {msg['content']}",
+                                "meta": {
+                                    "target": target_role,
+                                    "sender": msg["sender"],
+                                    "message_id": msg["id"],
+                                    "priority": msg["priority"],
+                                    "created_at": msg["created_at"],
+                                }
+                            }
                         )
                     except Exception:
                         # Silently ignore notification errors
@@ -447,14 +350,13 @@ async def notification_loop():
 
 async def main():
     """Start the MCP server."""
-    global db_path, agent_role
+    global db_path
 
-    if len(sys.argv) < 3:
-        print("Usage: kiln_db_server.py <path/to/messages.db> <role>", file=sys.stderr)
+    if len(sys.argv) < 2:
+        print("Usage: kiln_db_server.py <path/to/messages.db>", file=sys.stderr)
         sys.exit(1)
 
     db_path = sys.argv[1]
-    agent_role = sys.argv[2]
 
     # Verify database exists
     if not Path(db_path).exists():
@@ -462,7 +364,7 @@ async def main():
         sys.exit(1)
 
     print(f"[kiln-db] Database: {db_path}", file=sys.stderr)
-    print(f"[kiln-db] Serving role: {agent_role}", file=sys.stderr)
+    print(f"[kiln-db] Ready to push messages via --channels", file=sys.stderr)
 
     # Start notification loop in background
     asyncio.create_task(notification_loop())
@@ -476,7 +378,10 @@ async def main():
                 server_version="1.0.0",
                 capabilities=ServerCapabilities(
                     tools=ToolsCapability(),
-                    resources=ResourcesCapability(subscribe=True)
+                    # Declare experimental claude/channel capability for push notifications
+                    experimental={
+                        "claude/channel": {}
+                    }
                 )
             )
         )
