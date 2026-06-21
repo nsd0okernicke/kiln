@@ -25,8 +25,7 @@ from mcp.types import (
     ResourceTemplate,
     TextContent,
     ServerCapabilities,
-    Tool,
-    ToolCapability,
+    ToolsCapability,
     ResourceCapability,
 )
 
@@ -476,7 +475,7 @@ async def main():
                 server_name="kiln-db",
                 server_version="1.0.0",
                 capabilities=ServerCapabilities(
-                    tools=ToolCapability(),
+                    tools=ToolsCapability(),
                     resources=ResourceCapability(subscribe=True)
                 )
             )
