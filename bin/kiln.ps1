@@ -603,7 +603,7 @@ function Build-WezTermAgentCommand {
     switch ($Agent) {
         "claude" {
             $debugFlag = if ($Debug) { "--debug" } else { "" }
-            $command = "claude --model $Model --permission-mode bypassPermissions --channels server:kiln-db --mcp-config ./.mcp.json -n '$DisplayName' $debugFlag".Trim()
+            $command = "claude --model $Model --permission-mode bypassPermissions --dangerously-load-development-channels server:kiln-db --mcp-config ./.mcp.json -n '$DisplayName' $debugFlag".Trim()
         }
         "copilot" {
             $debugFlag = if ($Debug) { "--debug" } else { "" }
