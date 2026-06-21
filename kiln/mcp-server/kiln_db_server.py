@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """
-Kiln MCP Server - Domain-level API with channel-based push notifications.
+Kiln MCP Server - Domain-level API with SQLite + OS file-system push.
 
 Provides domain tools (send_message, read_inbox, mark_delivered, mark_processed)
-instead of raw SQL. Agents use the Claude Code --channels mechanism to receive
-push notifications when new messages arrive via notifications/claude/channel.
+instead of raw SQL. Messages flow through a Channel that uses OS file-system
+watching (watchdog) for instant push notifications across processes.
 
 Usage:
-    python kiln_db_server.py <path/to/messages.db> <role>
+    python kiln_db_server.py <path/to/messages.db>
 
-Launch agents with: claude --channels server:kiln-db --mcp-config .mcp.json ...
+Architecture:
+  - send_message() calls Channel.send() → writes to SQLite
+  - Watching agents subscribe via Channel.subscribe() → OS detects file change
+  - Instant notification: no polling, no MCP push (OS handles the push)
 """
 
 import asyncio
@@ -17,7 +20,6 @@ import json
 import logging
 import sqlite3
 import sys
-import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -39,12 +41,13 @@ from mcp.types import (
     ServerCapabilities,
     ToolsCapability,
     Tool,
-    TextContent,
 )
+
+from channel import Channel, Message
 
 # Global state
 db_path: str = ""
-last_message_ids: set[str] = set()  # Track already-notified messages for channel notifications
+channel: Channel | None = None
 
 
 def get_db() -> sqlite3.Connection:
@@ -52,79 +55,6 @@ def get_db() -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn
-
-
-def get_role_from_uri(uri: str) -> str | None:
-    """Extract role name from resource URI (kiln://inbox/{role})."""
-    if uri.startswith("kiln://inbox/"):
-        return uri[len("kiln://inbox/") :]
-    return None
-
-
-def get_queued_messages(role: str) -> list[dict]:
-    """Get all queued messages for a given role."""
-    conn = get_db()
-    try:
-        cursor = conn.execute(
-            """
-            SELECT id, sender, priority, content, created_at
-            FROM messages
-            WHERE target = ? AND status = 'queued'
-            ORDER BY priority ASC, created_at ASC
-            """,
-            (role,),
-        )
-        messages = [dict(row) for row in cursor.fetchall()]
-        return messages
-    finally:
-        conn.close()
-
-
-def check_new_messages() -> dict[str, list[dict]]:
-    """
-    Check for new queued messages and return grouped by target role.
-    Returns dict of {role: [new_messages]}.
-    """
-    global last_message_ids
-
-    conn = get_db()
-    try:
-        cursor = conn.execute(
-            """
-            SELECT id, target
-            FROM messages
-            WHERE status = 'queued'
-            ORDER BY created_at ASC
-            """
-        )
-        rows = cursor.fetchall()
-        current_ids = {row["id"]: row["target"] for row in rows}
-
-        # Find newly arrived messages (not in last_message_ids)
-        new_ids = set(current_ids.keys()) - last_message_ids
-        new_by_role: dict[str, list[dict]] = {}
-
-        if new_ids:
-            cursor = conn.execute(
-                """
-                SELECT id, target, sender, priority, content, created_at
-                FROM messages
-                WHERE id IN ({})
-                ORDER BY priority ASC, created_at ASC
-                """.format(",".join("?" * len(new_ids))),
-                list(new_ids),
-            )
-            for row in cursor.fetchall():
-                role = row["target"]
-                if role not in new_by_role:
-                    new_by_role[role] = []
-                new_by_role[role].append(dict(row))
-
-        last_message_ids = set(current_ids.keys())
-        return new_by_role
-
-    finally:
-        conn.close()
 
 
 # Create the MCP server
@@ -152,31 +82,25 @@ async def call_tool(name: str, arguments: dict) -> str:
             )
 
         try:
-            message_id = str(uuid.uuid4())
-            now = datetime.now().isoformat()
             logger.info(f"send_message: {sender} -> {target} (priority={priority}, branch={branch})")
             logger.debug(f"  Content: {content[:100]}...")
-            logger.debug(f"  Message-ID: {message_id}")
 
-            conn = get_db()
-            conn.execute(
-                """
-                INSERT INTO messages
-                (id, sender, target, priority, status, content, created_at, branch)
-                VALUES (?, ?, ?, ?, 'queued', ?, ?, ?)
-                """,
-                (message_id, sender, target, priority, content, now, branch),
+            msg = Message(
+                sender=sender,
+                receiver=target,
+                topic="kiln.handoff",
+                payload={"content": content, "priority": priority, "branch": branch}
             )
-            conn.commit()
-            conn.close()
+            channel.send(msg)
 
-            logger.info(f"  ✓ Message inserted into database")
+            logger.info(f"  ✓ Message sent via channel (OS file-system push)")
 
-            # Notification will be pushed via notification_loop using --channels
+            # OS file-system watch will notify listening agents instantly
             return json.dumps(
-                {"success": True, "message_id": message_id, "timestamp": now}
+                {"success": True, "message_id": msg.id, "timestamp": msg.timestamp}
             )
         except Exception as e:
+            logger.error(f"  ✗ Failed to send message: {e}")
             return json.dumps({"error": str(e)})
 
     elif name == "read_inbox":
@@ -189,21 +113,31 @@ async def call_tool(name: str, arguments: dict) -> str:
 
         try:
             logger.info(f"read_inbox: role={role}, branch={branch}")
-            conn = get_db()
+            conn = channel._conn()
             cursor = conn.execute(
                 """
-                SELECT id, sender, priority, content, created_at
+                SELECT id, sender, receiver, topic, payload, timestamp, status
                 FROM messages
-                WHERE target = ? AND branch = ? AND status = 'queued'
-                ORDER BY priority ASC, created_at ASC
+                WHERE receiver = ? AND branch = ? AND status = 'pending'
+                ORDER BY timestamp ASC
                 """,
                 (role, branch),
             )
-            messages = [dict(row) for row in cursor.fetchall()]
+            rows = cursor.fetchall()
+            messages = []
+            for row in rows:
+                msg_data = dict(row)
+                # Flatten the payload for easier agent use
+                if msg_data.get("payload"):
+                    payload = json.loads(msg_data["payload"])
+                    msg_data["content"] = payload.get("content", "")
+                    msg_data["priority"] = payload.get("priority", 50)
+                messages.append(msg_data)
             conn.close()
-            logger.info(f"  Found {len(messages)} queued messages for {role}")
+            logger.info(f"  Found {len(messages)} pending messages for {role}")
             return json.dumps({"inbox": messages})
         except Exception as e:
+            logger.error(f"  ✗ read_inbox error: {e}")
             return json.dumps({"error": str(e)})
 
     elif name == "mark_delivered":
@@ -349,44 +283,11 @@ async def list_tools():
     ]
 
 
-async def notification_loop():
-    """Background loop that checks for new messages and pushes them via --channels."""
-    logger.info("notification_loop started")
-    while True:
-        try:
-            await asyncio.sleep(0.25)  # Check every 250ms
-            new_messages = check_new_messages()
-            if new_messages:
-                logger.info(f"Found new messages: {list(new_messages.keys())}")
-            for target_role, messages in new_messages.items():
-                for msg in messages:
-                    # Emit channel notification for each new message
-                    # Agents filter by target role in the <channel> tag
-                    try:
-                        logger.info(f"Pushing channel notification for {target_role} (from {msg['sender']})")
-                        await server.request_context.notify(
-                            "notifications/claude/channel",
-                            {
-                                "content": f"Message from {msg['sender']}: {msg['content']}",
-                                "meta": {
-                                    "target": target_role,
-                                    "sender": msg["sender"],
-                                    "message_id": msg["id"],
-                                    "priority": msg["priority"],
-                                    "created_at": msg["created_at"],
-                                }
-                            }
-                        )
-                        logger.info(f"  ✓ Notification sent")
-                    except Exception as e:
-                        logger.error(f"  ✗ Failed to send notification: {e}")
-        except Exception as e:
-            logger.error(f"notification_loop error: {e}")
 
 
 async def main():
-    """Start the MCP server."""
-    global db_path
+    """Start the MCP server with Channel-based push notifications."""
+    global db_path, channel
 
     logger.info("="*60)
     logger.info("Kiln MCP Server Starting")
@@ -405,11 +306,15 @@ async def main():
         sys.exit(1)
 
     logger.info("Database exists and is accessible")
-    logger.info("Ready to push messages via --channels")
 
-    # Start notification loop in background
-    logger.info("Starting notification loop...")
-    asyncio.create_task(notification_loop())
+    # Initialize the Channel (SQLite + OS file-system watching)
+    try:
+        channel = Channel(db_path)
+        logger.info("Channel initialized: SQLite + OS file-system watching ready")
+        logger.info("  → Agents can subscribe for instant push notifications (no polling)")
+    except Exception as e:
+        logger.error(f"Failed to initialize Channel: {e}")
+        sys.exit(1)
 
     # Run the MCP server
     async with stdio_server() as streams:
@@ -423,6 +328,8 @@ async def main():
                 )
             )
         )
+
+
 
 
 if __name__ == "__main__":
