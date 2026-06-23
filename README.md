@@ -72,7 +72,9 @@ Kiln is a lightweight orchestration layer that:
 - Reads role behavior from `kiln/roles/<role>.md` files and a layered `kiln/constitution/` (workflow, engineering, project)
 - Creates one **git worktree per agent** (except those using `@current`) under `.worktrees/` so agents don't collide — agents using `@current` work in the project root on the current branch
 - Supports per-role **agent backends**: `claude`, `copilot`, `codex`, or `grok` — configure via `agent` field in profiles
-- Creates **inter-agent messaging** via SQLite at `.kiln/messages.db` with MCP server access
+- Creates **inter-agent messaging** via SQLite at `.kiln/messages.db`, exposed through two MCP servers:
+  - **`kiln-db`** — SQL read/write for sending handoffs (`write_query`)
+  - **`kiln-channel`** — blocking `wait_for_message()` tool that each agent calls to receive its next handoff; the channel polls the database and returns as soon as a message arrives, already marked delivered
 - Keeps all swarm state in `.kiln/` (logs, sessions, message database) — gitignored and ephemeral
 
 ### Project Structure Created by `kiln-init`
@@ -194,6 +196,9 @@ kiln/
 │   │   ├── workflow.md           # Handoff protocol
 │   │   └── engineering.md        # Tech stack & quality gates
 │   ├── roles/                    # Role prompts (copied to projects)
+│   ├── mcp-server/               # Python MCP servers bundled with the framework
+│   │   ├── channel.py            # kiln-channel: blocking wait_for_message() receiver
+│   │   └── requirements.txt      # mcp>=1.0.0
 │   └── skills/                   # Agent skills (optional, copied to projects)
 │
 ├── examples/                     # Example project briefs
@@ -278,14 +283,25 @@ This ensures every agent operates with full constitutional context plus its spec
 
 ### Default Workflow
 
-The default four-agent workflow is:
+The default four-agent workflow runs in a continuous loop. Each agent (except specifier) follows the same **Message Loop**:
 
-- **`specifier`** — Defines behavior first via Gherkin acceptance tests; notifies the coder when ready.
-- **`coder`** — Implements behavior slices using strict TDD; parameterizes Gherkin scenarios; notifies the refactorer when complete.
-- **`refactorer`** — Runs quality gates (coverage, CRAP analysis, mutation testing); refactors for testability; notifies both coder and architect with verification results.
-- **`architect`** — Reviews completed work, checks design adherence, and approves or requests changes.
+1. **Wait** — call `wait_for_message()` via the `kiln-channel` MCP server (blocks until a handoff arrives)
+2. **Merge** — `git merge <commit>` from the sender's branch into their own
+3. **Log received** — write a logbook.md entry
+4. **Work** — role-specific task (see below)
+5. **Log sent** — write a logbook.md entry for the outgoing handoff
+6. **Squash** — squash work commits into one
+7. **Send handoff** — INSERT into `.kiln/messages.db` via `write_query`
+8. Return to step 1
 
-> **Optional role:** `reviewer` is an alternative to `refactorer` with a focus on batch processing and review pipelines. Add it to your profile in `kiln/profiles.yaml` to use it instead. See `kiln/roles/reviewer.md`.
+The cycle flows: **specifier → coder → refactorer → architect → specifier**
+
+- **`specifier`** — At startup, asks the user what feature to specify. Writes Gherkin acceptance tests, gets user approval, sends handoff to coder. After sending, calls `wait_for_message()` to wait for architect's completion signal before starting the next feature.
+- **`coder`** — Implements behavior slices using strict TDD until all tests pass, then sends handoff to refactorer. The loop is not complete until the handoff is sent.
+- **`refactorer`** — Runs quality gates (coverage → CRAP → DRY → mutation site count), refactors for testability, sends handoff to architect.
+- **`architect`** — Reviews module structure, runs pre-handoff verification (mutation → DRY → soft Gherkin), sends "The job is complete" to specifier.
+
+> **Optional role:** `reviewer` is an alternative to `refactorer` with a focus on batch processing and review pipelines. Add it to your profile in `kiln/profiles.json` to use it instead. See `kiln/roles/reviewer.md`.
 
 ---
 
@@ -339,11 +355,16 @@ Kiln will create a git repository if one doesn't exist, initialize worktrees, an
 
    # Enable debug mode (verbose output for troubleshooting MCP issues)
    .\bin\kiln.ps1 -WorkingDir . -Debug
+
+   # Kill orphaned MCP server processes after closing the terminal
+   .\bin\kiln.ps1 -Stop
    ```
 
 4. **Startup creates**:
    - Git worktrees under `.worktrees/` (one per non-@current role)
    - Generated `CLAUDE.md` files in each worktree with embedded constitution + project + role content
+   - Per-worktree `.mcp.json` with both `kiln-db` and `kiln-channel` configured (correct role and branch env vars injected)
+   - Channel log files at `.kiln/logs/channel-<role>.log` for debugging
    - WezTerm tabs/panes (or Windows Terminal tabs) for each role
    - `.kiln/messages.db` SQLite database for inter-agent messaging via MCP
 
@@ -822,9 +843,9 @@ The selftest must be first because it acts as the test initiator and receiver fo
 
 ### Running the Test
 
-Once all agents are launched, the communication system operates in **MCP-mediated mode**:
+Once all agents are launched:
 
-1. **Agents monitor via MCP**: Each agent automatically uses the MCP `Kiln-db` server to check its message inbox when idle, without manual `/loop` commands.
+1. **Agents block on `wait_for_message()`**: Each agent calls the `kiln-channel` MCP server at startup and blocks until a message arrives. No manual prompting needed.
 
 2. **In the selftest window**, paste this prompt to initiate the chain:
    ```
@@ -832,12 +853,13 @@ Once all agents are launched, the communication system operates in **MCP-mediate
    ```
 
 3. **The chain executes automatically**:
-   - Selftest sends a test message to the next agent via MCP SQL INSERT
-   - Each agent queries its inbox via MCP `read_query` tool
-   - Agents detect the "system-communication-test" marker and forward (no-op mode, passing messages through)
-   - Each agent marks messages as delivered via MCP SQL UPDATE
+   - Selftest sends a test message to coder via `write_query` SQL INSERT
+   - Each agent's `wait_for_message()` call returns when the message arrives (already marked delivered)
+   - Agents detect the "system-communication-test" marker and forward as-is (test pass-through, no actual work)
    - The final agent (architect) sends completion back to selftest
    - Selftest receives completion and reports success
+
+4. **Monitor channel logs** at `.kiln/logs/channel-<role>.log` to see polling activity per agent.
 
 ### Expected Output
 
@@ -906,26 +928,27 @@ If the test hangs or fails:
 
 ## Project Maturity & Status
 
-**Kiln v0.1 — PHASE 3: AUTO-AGENT COMMUNICATION ✓ COMPLETE**
+**Kiln v0.1 — PHASE 4: CHANNEL-BASED MESSAGING ✓ COMPLETE**
 
 ### ✓ Completed Features
 
 - **Phase 1: Framework Architecture** — Config-driven swarm orchestration, role injection, git worktree isolation
 - **Phase 2: Cross-Platform Infrastructure** — Windows (PowerShell/Windows Terminal/WezTerm), Unix/macOS (zsh/tmux)
 - **Phase 3: Auto-Agent Communication** — SQLite message queues with MCP server, automated role-based message forwarding, full agent chain test passing
-  - ✓ Agents monitor `.kiln/messages.db` via MCP `Kiln-db` server for queued messages
-  - ✓ Agents automatically detect and forward messages with role-based routing
-  - ✓ System-communication-test marker enables test vs. real-work mode discrimination
-  - ✓ Full chain validation: selftest → coder → refactorer → architect → selftest (verified 2026-06-18)
-  - ✓ Permission system set to `bypassPermissions` (Claude) / `--allow-all` (Copilot) by default for seamless agent operation
+- **Phase 4: Channel-Based Messaging** — Replaced SQL inbox polling with a blocking `wait_for_message()` Channel
+  - ✓ `kiln-channel` Python MCP server (`kiln/mcp-server/channel.py`) — polls SQLite and blocks until a message arrives, returns it already marked delivered
+  - ✓ Per-worktree `.mcp.json` generated with `kiln-db` + `kiln-channel`, correct `KILN_ROLE`/`KILN_BRANCH` env vars injected per agent
+  - ✓ Explicit numbered Message Loop in every role: wait → merge → log → work → log → squash → handoff → repeat
+  - ✓ Channel debug logs at `.kiln/logs/channel-<role>.log`
+  - ✓ `-Stop` flag on `kiln.ps1` to kill orphaned MCP server processes after terminal close
 
 ### Current Capabilities
 
 - ✓ Multi-agent swarms (2-5 agents typical)
 - ✓ Per-role configuration and role injection
 - ✓ Isolated git worktrees with branch naming (e.g., `feature/ABC-coder`, `main-refactorer`)
-- ✓ Inter-agent MCP SQLite messaging (no polling needed)
-- ✓ Direct database access via MCP `Kiln-db` server
+- ✓ Blocking Channel messaging — agents call `wait_for_message()` and are notified the instant a handoff arrives
+- ✓ SQL handoff sending via MCP `kiln-db` `write_query`
 - ✓ Layered constitution system (workflow, engineering, project)
 - ✓ Cross-platform terminal support (Windows Terminal, WezTerm, tmux)
 - ✓ Flexible terminal layouts (tabs, split panes, grids, focus layouts)
