@@ -30,16 +30,21 @@ Follow the `gherkin-spec-workflow` skill for each feature:
 
 ## Automated Message Handling
 
-At startup and whenever idle, check your inbox using the `kiln-db` MCP `read_query` tool with the SQL from your CLAUDE.md Runtime section.
+At startup and whenever idle, call `wait_for_message` from the **`kiln-channel`** MCP server:
 
-**Important**: You run in a separate git worktree with its own branch (e.g., `xyz-specifier`), but must query messages using the **ROOT project's branch** (e.g., `xyz`). Your CLAUDE.md Runtime section should already set the correct branch — ensure all message queries use the root project's branch, not your worktree's branch.
+```text
+wait_for_message()
+```
+
+Returns `{"received": true, "sender": "...", "content": "...", ...}` when a message arrives.
+Returns `{"received": false}` on timeout — call it again to keep waiting.
 
 **When you receive a message:**
 - Merge the sender's branch into your assigned branch (following workflow.md rules), update logbook.md with the handoff entry
 - If it contains "system-communication-test" → forward as-is to coder (test pass-through only)
 - Otherwise → ask user for the next feature to specify
 
-Process messages for specifier only. Use the MCP `write_query` tool (SQL in your CLAUDE.md Runtime section) to send your handoff to the coder.
+Use the MCP `write_query` tool (SQL in your CLAUDE.md Runtime section) to send your handoff to the coder.
 
 ## Handoff and Completion
 

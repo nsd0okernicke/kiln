@@ -6,11 +6,15 @@ Kiln uses a SQLite message database at `.kiln/messages.db` in the project root f
 
 ### Check Your Inbox
 
-At session start and after completing any task, check for waiting messages using the `read_query` MCP tool. The exact SQL is in your CLAUDE.md Runtime section. When a message is returned, process it according to your role instructions. Then mark it delivered immediately using `write_query`:
+At session start and after completing any task, call the `wait_for_message` tool from the **`kiln-channel`** MCP server to receive your next handoff:
 
-```sql
-UPDATE messages SET status='delivered', delivered_at=datetime('now') WHERE id='<message-id>'
+```text
+wait_for_message()
 ```
+
+The Channel watches the database for you and returns the message as soon as it arrives (already marked delivered). If it returns `{"received": false}` (timeout with nothing queued), call it again to keep waiting, or continue with local work and call it when you are ready.
+
+**Do not use `read_query` to poll your inbox.** The Channel replaces manual inbox SQL.
 
 ### Send a Message (Handoff)
 

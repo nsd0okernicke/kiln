@@ -275,18 +275,61 @@ function Write-ClaudeConfig {
         Write-Host "Warning: Could not find Claude settings template at $templateSettings" -ForegroundColor Yellow
     }
 
-    # Create .mcp.json in project root (Copilot agents look here for MCP config)
-    $templateMcp = Join-Path $frameworkRoot "kiln\.claude\.mcp.json"
+    # Generate .mcp.json in project root for @current roles
     $projectMcp = Join-Path $WorkingDir ".mcp.json"
-    if (Test-Path $templateMcp) {
-        $mcpContent = Get-Content -Path $templateMcp -Raw
-        # Substitute the database path placeholder with absolute path
-        $dbPath = Join-Path $STATE_DIR "messages.db"
-        # Escape backslashes for JSON
-        $dbPathEscaped = $dbPath -replace '\\', '\\'
-        $mcpContent = $mcpContent -replace '__KILN_DB_PATH__', $dbPathEscaped
-        Set-Content -Path $projectMcp -Value $mcpContent -Encoding UTF8
+    $dbPath = Join-Path $STATE_DIR "messages.db"
+    $dbPathEscaped = $dbPath -replace '\\', '\\'
+    $channelScript = Join-Path $frameworkRoot "kiln" "mcp-server" "channel.py"
+    $channelScriptEscaped = $channelScript -replace '\\', '\\'
+
+    # Find the first @current role — that role gets kiln-channel in the root .mcp.json
+    $currentRole = ""
+    for ($i = 0; $i -lt $global:ROLES.Count; $i++) {
+        $wt = $global:WORKTREE_NAMES[$i]
+        if ($wt -eq "@current" -or $wt -eq "none" -or $wt -eq "master") {
+            $currentRole = $global:ROLES[$i]
+            break
+        }
     }
+
+    if ($currentRole) {
+        $logsDir = Join-Path $STATE_DIR "logs"
+        New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
+        $channelLog = Join-Path $logsDir "channel-$currentRole.log"
+        $channelLogEscaped = $channelLog -replace '\\', '\\'
+        $mcpContent = @"
+{
+  "mcpServers": {
+    "kiln-db": {
+      "command": "npx",
+      "args": ["mcp-sqlite", "$dbPathEscaped"]
+    },
+    "kiln-channel": {
+      "command": "python",
+      "args": ["$channelScriptEscaped"],
+      "env": {
+        "KILN_ROLE": "$currentRole",
+        "KILN_DB_PATH": "$dbPathEscaped",
+        "KILN_BRANCH": "$CurrentBranch",
+        "KILN_CHANNEL_LOG": "$channelLogEscaped"
+      }
+    }
+  }
+}
+"@
+    } else {
+        $mcpContent = @"
+{
+  "mcpServers": {
+    "kiln-db": {
+      "command": "npx",
+      "args": ["mcp-sqlite", "$dbPathEscaped"]
+    }
+  }
+}
+"@
+    }
+    Set-Content -Path $projectMcp -Value $mcpContent -Encoding UTF8
 }
 
 function Prepare-Workspace {
@@ -368,6 +411,12 @@ function Prepare-Worktrees {
         $claudeJsonPath = Join-Path $worktreePath ".mcp.json"
         $dbPath = Join-Path $STATE_DIR "messages.db"
         $dbPathEscaped = $dbPath -replace '\\', '\\'
+        $channelScript = Join-Path (Split-Path -Parent $SCRIPT_DIR) "kiln" "mcp-server" "channel.py"
+        $channelScriptEscaped = $channelScript -replace '\\', '\\'
+        $logsDir = Join-Path $STATE_DIR "logs"
+        New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
+        $channelLog = Join-Path $logsDir "channel-$role.log"
+        $channelLogEscaped = $channelLog -replace '\\', '\\'
         $claudeJson = @"
 {
   "name": "kiln-$role",
@@ -375,12 +424,22 @@ function Prepare-Worktrees {
     "kiln-db": {
       "command": "npx",
       "args": ["mcp-sqlite", "$dbPathEscaped"]
+    },
+    "kiln-channel": {
+      "command": "python",
+      "args": ["$channelScriptEscaped"],
+      "env": {
+        "KILN_ROLE": "$role",
+        "KILN_DB_PATH": "$dbPathEscaped",
+        "KILN_BRANCH": "$CurrentBranch",
+        "KILN_CHANNEL_LOG": "$channelLogEscaped"
+      }
     }
   }
 }
 "@
         Set-Content -Path $claudeJsonPath -Value $claudeJson -Encoding UTF8
-        Write-Verbose "Created .mcp.json in worktree $role"
+        Write-Verbose "Created .mcp.json in worktree $role (with kiln-channel)"
 
         # Create tmp directory for handoff files
         $tmpDir = Join-Path $worktreePath "tmp"
@@ -555,13 +614,17 @@ function Write-GeneratedCLAUDEmd {
     $content += "- **Your role**: $Role`n"
     $content += "- **Your branch**: $CurrentBranch`n"
     $content += "- **Message database**: `.kiln/messages.db` (accessed via MCP `kiln-db` server)`n"
-    $content += "- **MCP server**: kiln-db (configured in `.claude/settings.json` and `.mcp.json`)`n`n"
-    $content += "### Inbox SQL (paste into read_query MCP tool)`n`n"
-    $content += "Check for new messages at session start and after each task. SQL: `SELECT id, sender, priority, content FROM messages WHERE target='$Role' AND branch='$CurrentBranch' AND status='queued' ORDER BY priority ASC, created_at ASC LIMIT 1`n`n"
-    $content += "### Mark delivered SQL (paste into write_query MCP tool)`n`n"
-    $content += "After reading a message, mark it delivered: `UPDATE messages SET status='delivered', delivered_at=datetime('now') WHERE id='<message-id>'`n`n"
+    $content += "- **MCP servers**: `kiln-db` (SQL queries) and `kiln-channel` (message receiver)`n`n"
+    $content += "### Receiving Messages (via kiln-channel)`n`n"
+    $content += "When you are ready to receive a handoff, call the `wait_for_message` tool from the `kiln-channel` MCP server:`n`n"
+    $content += "``````text`n"
+    $content += "wait_for_message()`n"
+    $content += "``````n`n"
+    $content += "The tool blocks until a message arrives and returns ``{`"received`": true, `"sender`": `"..`", `"content`": `"..`", ...}``.`n"
+    $content += "Call it again immediately if the session is interrupted before a message arrives.`n"
+    $content += "**Do NOT use read_query to poll your inbox.** The Channel handles delivery automatically.`n`n"
     $content += "### Send message SQL (paste into write_query MCP tool)`n`n"
-    $content += "When sending a handoff to another role: `INSERT INTO messages (id, sender, target, priority, status, content, created_at, branch) VALUES (strftime('%Y%m%d%H%M%S','now')||'-'||substr(hex(randomblob(4)),1,8), '$Role', '<TARGET_ROLE>', 50, 'queued', 'Re-read your role and constitution...<your-message>', datetime('now'), '$CurrentBranch')`n"
+    $content += "When sending a handoff to another role: ``INSERT INTO messages (id, sender, target, priority, status, content, created_at, branch) VALUES (strftime('%Y%m%d%H%M%S','now')||'-'||substr(hex(randomblob(4)),1,8), '$Role', '<TARGET_ROLE>', 50, 'queued', 'Re-read your role and constitution...<your-message>', datetime('now'), '$CurrentBranch')```n"
 
     Set-Content $claudeMdPath $content
 }
@@ -582,7 +645,7 @@ function Build-WezTermAgentCommand {
 
     switch ($Agent) {
         "claude" {
-            $command = "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json -n '$DisplayName'"
+            $command = "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json -n '$DisplayName' 'Start your role session.'"
         }
         "copilot" {
             $command = "copilot --allow-all"
@@ -822,9 +885,9 @@ function Get-WindowsTerminalAgentCommand {
     switch ($Agent) {
         "claude" {
             if ($DisplayName) {
-                return "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json -n ""$DisplayName"""
+                return "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json -n ""$DisplayName"" ""Start your role session."""
             } else {
-                return "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json"
+                return "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json ""Start your role session."""
             }
         }
         "copilot" {

@@ -33,15 +33,22 @@ You are the architect.
 
 ## Automated Message Handling
 
-At startup and whenever idle, check your inbox using the `kiln-db` MCP `read_query` tool with the SQL from your CLAUDE.md Runtime section.
+At startup and whenever idle, call `wait_for_message` from the **`kiln-channel`** MCP server:
 
-**Important**: You run in a separate git worktree with its own branch (e.g., `xyz-architect`), but must query messages using the **ROOT project's branch** (e.g., `xyz`). Your CLAUDE.md Runtime section should already set the correct branch — ensure all message queries use the root project's branch, not your worktree's branch.
+```text
+wait_for_message()
+```
+
+Returns `{"received": true, "sender": "...", "content": "...", ...}` when a message arrives.
+Returns `{"received": false}` on timeout — call it again to keep waiting.
+
+**Important**: Messages are indexed by the ROOT project's branch (e.g., `main`), not your worktree branch (e.g., `main-architect`). The Channel is pre-configured with the correct branch — no SQL needed.
 
 **When you receive a message:**
 - If it contains "system-communication-test" → **ONLY send to selftest**. Target field must be: "selftest". Do not send to coder, specifier, or refactorer. Mark as delivered, then INSERT with target='selftest'.
 - Otherwise → review module structure, apply fixes, run pre-handoff verification (mutation → DRY → soft Gherkin), then forward to specifier
 
-Process messages for architect only. Use the MCP `write_query` tool (SQL in your CLAUDE.md Runtime section) to send your handoff to the target role.
+Use the MCP `write_query` tool (SQL in your CLAUDE.md Runtime section) to send your handoff to the target role.
 
 ## Handoff and Completion
 
