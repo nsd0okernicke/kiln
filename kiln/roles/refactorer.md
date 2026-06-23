@@ -45,9 +45,9 @@ Repeat this sequence indefinitely:
 2. **Merge** — run `git merge <commit>` using the branch and commit hash from the handoff message (see workflow.md merge rule). This brings in the coder's latest state before starting work.
 3. **Log received** — add a logbook.md entry with timestamp and the full handoff message content.
 4. **Work**:
-   - If the message contains "system-communication-test" → forward it as-is to architect (test pass-through only), skip to step 5.
+   - If the message contains "system-communication-test" → forward it as-is to architect (test pass-through only).
    - Otherwise → run quality gates (coverage → CRAP → DRY → mutation site count), refactor, verify by running acceptance and unit tests.
-5. **Squash** — squash your commits since the last merge into one. Format: `[Refactorer] <feature name> - <quality gate results>` (see workflow.md Commit Convention).
-6. **Send handoff** — INSERT to architect via `write_query` (SQL template in your CLAUDE.md Runtime section).
-7. **Log sent** — add a logbook.md entry with timestamp and a brief summary of the handoff sent.
+5. **Log sent** — add a logbook.md entry with timestamp and a brief summary of the handoff you are about to send. This must be committed as part of the squashed commit.
+6. **Squash** — squash your commits since the last merge (including the logbook entries from steps 3 and 5) into one commit. Format: `[Refactorer] <feature name> - <quality gate results>` (see workflow.md Commit Convention).
+7. **Send handoff** — INSERT to architect via `write_query` (SQL template in your CLAUDE.md Runtime section).
 8. Return to step 1.

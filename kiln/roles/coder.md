@@ -37,15 +37,15 @@ You are the coder.
 
 ## Message Loop
 
-Repeat this sequence indefinitely:
+Repeat this sequence indefinitely. **Do not stop after tests pass — the loop is not complete until the handoff is sent (step 6).**
 
 1. **Wait** — call `wait_for_message()` from the `kiln-channel` MCP server. If it returns `{"received": false}`, call it again immediately.
 2. **Merge** — run `git merge <commit>` using the branch and commit hash from the handoff message (see workflow.md merge rule). This brings in the specifier's latest state before starting work.
 3. **Log received** — add a logbook.md entry with timestamp and the full handoff message content.
 4. **Work**:
-   - If the message contains "system-communication-test" → forward it as-is to refactorer (test pass-through only), skip to step 5.
-   - Otherwise → implement using the TDD Cycle above until all acceptance and unit tests pass.
-5. **Squash** — squash your commits since the last merge into one. Format: `[Coder] <feature name> - TDD implementation of <what>` (see workflow.md Commit Convention).
-6. **Send handoff** — INSERT to refactorer via `write_query` (SQL template in your CLAUDE.md Runtime section).
-7. **Log sent** — add a logbook.md entry with timestamp and a brief summary of the handoff sent.
+   - If the message contains "system-communication-test" → forward it as-is to refactorer (test pass-through only).
+   - Otherwise → run the TDD Cycle above. Continue until all acceptance and unit tests pass.
+5. **Log sent** — add a logbook.md entry with timestamp and a brief summary of the handoff you are about to send. This must be committed as part of the squashed commit.
+6. **Squash** — squash your commits since the last merge (including the logbook entries from steps 3 and 5) into one commit. Format: `[Coder] <feature name> - TDD implementation of <what>` (see workflow.md Commit Convention).
+7. **Send handoff** — INSERT to refactorer via `write_query` (SQL template in your CLAUDE.md Runtime section). This step is mandatory — tests passing alone does not complete the loop.
 8. Return to step 1.

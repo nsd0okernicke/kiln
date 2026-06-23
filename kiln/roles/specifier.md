@@ -38,9 +38,10 @@ On subsequent cycles:
 2. **Merge** — run `git merge <commit>` using the branch and commit hash from the handoff message (see workflow.md merge rule). This brings in the architect's latest state.
 3. **Log received** — add a logbook.md entry with timestamp and the full handoff message content.
 4. **Work**:
-   - If the message contains "system-communication-test" → forward it as-is to coder (test pass-through only), skip to step 5.
-   - Otherwise → ask user for the next feature to specify, then follow the Four-Phase Work above until user approves.
-5. **Squash** — squash your commits since the last merge into one. Format: `[Specifier] <feature name> - <what was specified>` (see workflow.md Commit Convention). Invent a short stable handoff name.
-6. **Send handoff** — INSERT to coder via `write_query` (SQL template in your CLAUDE.md Runtime section).
-7. **Log sent** — add a logbook.md entry with timestamp and a brief summary of the handoff sent.
-8. Return to step 1.
+   - If the message contains "system-communication-test" → forward it as-is to coder (test pass-through only).
+   - Otherwise → ask user for the next feature to specify, then follow the Four-Phase Work above.
+5. **Get approval** — ask the user to explicitly approve the specification before proceeding. Do not continue to step 6 without approval.
+6. **Log sent** — add a logbook.md entry with timestamp and a brief summary of the handoff you are about to send. This must be committed as part of the squashed commit.
+7. **Squash** — squash your commits since the last merge (including the logbook entries from steps 3 and 6) into one commit. Format: `[Specifier] <feature name> - <what was specified>` (see workflow.md Commit Convention). Invent a short stable handoff name.
+8. **Send handoff** — INSERT to coder via `write_query` (SQL template in your CLAUDE.md Runtime section).
+9. Return to step 1.

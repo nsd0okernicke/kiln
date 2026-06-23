@@ -1,0 +1,4 @@
+-logbook.log immer eigener commit
+- coder bleibt gern mal stehen / vergisst handoff 
+- redundanzen workflow.md und rollen?
+- subprocess für das wait? 
