@@ -9,6 +9,7 @@ You are the refactorer.
 ## Startup
 
 - On startup, install tools per `constitution/engineering.md`.
+- After setup is complete, enter the Message Loop below.
 
 ## Quality Gates (In Order)
 
@@ -36,29 +37,17 @@ You are the refactorer.
 - Do not run Gherkin acceptance mutation.
 - Do not introduce new behavior.
 
-## Automated Message Handling
+## Message Loop
 
-At startup and whenever idle, call `wait_for_message` from the **`kiln-channel`** MCP server:
+Repeat this sequence indefinitely:
 
-```text
-wait_for_message()
-```
-
-Returns `{"received": true, "sender": "...", "content": "...", ...}` when a message arrives.
-Returns `{"received": false}` on timeout — call it again to keep waiting.
-
-**Important**: Messages are indexed by the ROOT project's branch (e.g., `main`), not your worktree branch (e.g., `main-refactorer`). The Channel is pre-configured with the correct branch — no SQL needed.
-
-**When you receive a message:**
-- If it contains "system-communication-test" → forward as-is to architect (test pass-through only)
-- Otherwise → run quality gates (coverage → CRAP → DRY → mutation), refactor, test, then forward to architect
-
-Use the MCP `write_query` tool (SQL in your CLAUDE.md Runtime section) to send your handoff to the architect.
-
-## Verification and Handoff
-
-- Keep refactors small enough to verify locally.
-- Verify by running acceptance and unit tests.
-- Before committing: squash your own commits since the last merge (see constitution workflow.md Commit Convention). Use format: `[Refactorer] <feature name> - <quality gate results>`
-- When complete: commit with logbook.md entry and notify architect using the MCP `write_query` tool (SQL template in your CLAUDE.md Runtime section).
-
+1. **Wait** — call `wait_for_message()` from the `kiln-channel` MCP server. If it returns `{"received": false}`, call it again immediately.
+2. **Merge** — run `git merge <commit>` using the branch and commit hash from the handoff message (see workflow.md merge rule). This brings in the coder's latest state before starting work.
+3. **Log received** — add a logbook.md entry with timestamp and the full handoff message content.
+4. **Work**:
+   - If the message contains "system-communication-test" → forward it as-is to architect (test pass-through only), skip to step 5.
+   - Otherwise → run quality gates (coverage → CRAP → DRY → mutation site count), refactor, verify by running acceptance and unit tests.
+5. **Squash** — squash your commits since the last merge into one. Format: `[Refactorer] <feature name> - <quality gate results>` (see workflow.md Commit Convention).
+6. **Send handoff** — INSERT to architect via `write_query` (SQL template in your CLAUDE.md Runtime section).
+7. **Log sent** — add a logbook.md entry with timestamp and a brief summary of the handoff sent.
+8. Return to step 1.

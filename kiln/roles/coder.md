@@ -10,6 +10,7 @@ You are the coder.
 
 - On startup, install tools per `constitution/engineering.md`.
 - Ensure the APS acceptance pipeline is ready (follow `aps-setup` skill).
+- After setup is complete, enter the Message Loop below.
 
 ## TDD Cycle
 
@@ -34,27 +35,17 @@ You are the coder.
 - Do not run mutation, CRAP, or DRY checks (refactorer/architect own these).
 - Do not run Gherkin acceptance mutation.
 
-## Automated Message Handling
+## Message Loop
 
-At startup and whenever idle, call `wait_for_message` from the **`kiln-channel`** MCP server:
+Repeat this sequence indefinitely:
 
-```text
-wait_for_message()
-```
-
-Returns `{"received": true, "sender": "...", "content": "...", ...}` when a message arrives.
-Returns `{"received": false}` on timeout — call it again to keep waiting.
-
-**Important**: Messages are indexed by the ROOT project's branch (e.g., `main`), not your worktree branch (e.g., `main-coder`). The Channel is pre-configured with the correct branch — no SQL needed.
-
-**When you receive a message:**
-- If it contains "system-communication-test" → forward as-is to refactorer (test pass-through only)
-- Otherwise → implement using TDD cycle, then forward to refactorer
-
-Use the MCP `write_query` tool (SQL in your CLAUDE.md Runtime section) to send your handoff to the refactorer.
-
-## Handoff
-
-- Before committing: squash your own commits since the last merge (see constitution workflow.md Commit Convention). Use format: `[Coder] <feature name> - TDD implementation of <what>`
-- When all acceptance and unit tests pass: commit with logbook.md entry and notify refactorer using the MCP `write_query` tool (SQL template in your CLAUDE.md Runtime section).
-
+1. **Wait** — call `wait_for_message()` from the `kiln-channel` MCP server. If it returns `{"received": false}`, call it again immediately.
+2. **Merge** — run `git merge <commit>` using the branch and commit hash from the handoff message (see workflow.md merge rule). This brings in the specifier's latest state before starting work.
+3. **Log received** — add a logbook.md entry with timestamp and the full handoff message content.
+4. **Work**:
+   - If the message contains "system-communication-test" → forward it as-is to refactorer (test pass-through only), skip to step 5.
+   - Otherwise → implement using the TDD Cycle above until all acceptance and unit tests pass.
+5. **Squash** — squash your commits since the last merge into one. Format: `[Coder] <feature name> - TDD implementation of <what>` (see workflow.md Commit Convention).
+6. **Send handoff** — INSERT to refactorer via `write_query` (SQL template in your CLAUDE.md Runtime section).
+7. **Log sent** — add a logbook.md entry with timestamp and a brief summary of the handoff sent.
+8. Return to step 1.

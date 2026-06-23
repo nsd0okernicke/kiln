@@ -6,7 +6,7 @@ Kiln uses a SQLite message database at `.kiln/messages.db` in the project root f
 
 ### Check Your Inbox
 
-At session start and after completing any task, call the `wait_for_message` tool from the **`kiln-channel`** MCP server to receive your next handoff:
+At session start (except specifier — see role file) and after completing any task, call the `wait_for_message` tool from the **`kiln-channel`** MCP server to receive your next handoff:
 
 ```text
 wait_for_message()

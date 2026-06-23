@@ -6,7 +6,8 @@ param(
     [string]$WorkingDir = (Get-Location).Path,
     [string]$Terminal = $null,
     [string]$ProfileName = $null,
-    [switch]$Debug = $false
+    [switch]$Debug = $false,
+    [switch]$Stop = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -624,6 +625,7 @@ function Write-GeneratedCLAUDEmd {
     $content += "Call it again immediately if the session is interrupted before a message arrives.`n"
     $content += "**Do NOT use read_query to poll your inbox.** The Channel handles delivery automatically.`n`n"
     $content += "### Send message SQL (paste into write_query MCP tool)`n`n"
+    $content += "**IMPORTANT**: The ``branch`` value below (``$CurrentBranch``) is the ROOT branch and is pre-filled. Use it exactly — do NOT substitute your worktree branch (e.g. ``$CurrentBranch-$Role`` would be wrong).`n`n"
     $content += "When sending a handoff to another role: ``INSERT INTO messages (id, sender, target, priority, status, content, created_at, branch) VALUES (strftime('%Y%m%d%H%M%S','now')||'-'||substr(hex(randomblob(4)),1,8), '$Role', '<TARGET_ROLE>', 50, 'queued', 'Re-read your role and constitution...<your-message>', datetime('now'), '$CurrentBranch')```n"
 
     Set-Content $claudeMdPath $content
@@ -921,6 +923,34 @@ switch ($TerminalBackend) {
         }
         . $adapterPath
     }
+}
+
+if ($Stop) {
+    Write-Host "Stopping Kiln MCP server processes..." -ForegroundColor Cyan
+    $killed = 0
+
+    $nodeProcs = Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" |
+        Where-Object { $_.CommandLine -like '*mcp-sqlite*' }
+    foreach ($p in $nodeProcs) {
+        Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
+        Write-Host "  Killed node.exe (mcp-sqlite) PID $($p.ProcessId)" -ForegroundColor Green
+        $killed++
+    }
+
+    $pyProcs = Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" |
+        Where-Object { $_.CommandLine -like '*channel.py*' }
+    foreach ($p in $pyProcs) {
+        Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
+        Write-Host "  Killed python.exe (channel.py) PID $($p.ProcessId)" -ForegroundColor Green
+        $killed++
+    }
+
+    if ($killed -eq 0) {
+        Write-Host "No Kiln MCP processes found." -ForegroundColor Yellow
+    } else {
+        Write-Host "Killed $killed process(es)." -ForegroundColor Green
+    }
+    exit 0
 }
 
 $WorkingDir = (Resolve-Path $WorkingDir).Path

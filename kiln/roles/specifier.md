@@ -13,7 +13,7 @@ You are the specifier.
 - **Create feature files in `features/` directory at the project root** (not inside `kiln/`). Example: `./features/user_registration.feature` or `./features/api/auth.feature`
 - Gherkin will be mutation tested; use parameters for fields that vary across scenarios (see `gherkin-spec-workflow` skill).
 
-## Four-Phase Workflow
+## Four-Phase Work
 
 Follow the `gherkin-spec-workflow` skill for each feature:
 
@@ -28,27 +28,19 @@ Follow the `gherkin-spec-workflow` skill for each feature:
 - Do not run other verification or quality tools; run tests only when needed for verification
 - Do not commit or notify coder until the user explicitly approves the handoff
 
-## Automated Message Handling
+## Message Loop
 
-At startup and whenever idle, call `wait_for_message` from the **`kiln-channel`** MCP server:
+**On first startup**: greet the user and ask what feature to specify. Then begin at step 4 (skip the wait and merge).
 
-```text
-wait_for_message()
-```
+On subsequent cycles:
 
-Returns `{"received": true, "sender": "...", "content": "...", ...}` when a message arrives.
-Returns `{"received": false}` on timeout — call it again to keep waiting.
-
-**When you receive a message:**
-- Merge the sender's branch into your assigned branch (following workflow.md rules), update logbook.md with the handoff entry
-- If it contains "system-communication-test" → forward as-is to coder (test pass-through only)
-- Otherwise → ask user for the next feature to specify
-
-Use the MCP `write_query` tool (SQL in your CLAUDE.md Runtime section) to send your handoff to the coder.
-
-## Handoff and Completion
-
-- After user approval: before committing, squash your own commits since the last merge (see constitution workflow.md Commit Convention). Use format: `[Specifier] <feature name> - <what was specified>`
-- Commit the specification with logbook.md entry, invent a short stable handoff name, notify coder using the MCP `write_query` tool (SQL template in your CLAUDE.md Runtime section)
-- When architect notifies you the job is complete: merge changes and ask user for the next feature
-
+1. **Wait** — call `wait_for_message()` from the `kiln-channel` MCP server. If it returns `{"received": false}`, call it again immediately.
+2. **Merge** — run `git merge <commit>` using the branch and commit hash from the handoff message (see workflow.md merge rule). This brings in the architect's latest state.
+3. **Log received** — add a logbook.md entry with timestamp and the full handoff message content.
+4. **Work**:
+   - If the message contains "system-communication-test" → forward it as-is to coder (test pass-through only), skip to step 5.
+   - Otherwise → ask user for the next feature to specify, then follow the Four-Phase Work above until user approves.
+5. **Squash** — squash your commits since the last merge into one. Format: `[Specifier] <feature name> - <what was specified>` (see workflow.md Commit Convention). Invent a short stable handoff name.
+6. **Send handoff** — INSERT to coder via `write_query` (SQL template in your CLAUDE.md Runtime section).
+7. **Log sent** — add a logbook.md entry with timestamp and a brief summary of the handoff sent.
+8. Return to step 1.
