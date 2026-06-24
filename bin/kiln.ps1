@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 # Kiln Windows Entry Point
 # Orchestrates multi-agent development on Windows Terminal or WezTerm with Claude Code skills
 
@@ -15,6 +15,7 @@ $ErrorActionPreference = "Stop"
 # Constants
 $SESSION_PREFIX = "kiln"
 $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
+$KILN_BUNDLED_DIR = Join-Path (Split-Path -Parent $SCRIPT_DIR) "kiln"
 # Note: KILN_DIR, STATE_DIR, WORKTREES_DIR are initialized after WorkingDir is resolved to absolute path (see line 584)
 
 # Note: Color variables removed; using Write-Host -ForegroundColor instead for cross-platform compatibility
@@ -22,6 +23,7 @@ $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
 # State arrays (global scope so functions can modify them)
 $global:ROLES = @()
 $global:AGENTS = @()
+$global:MODES = @()
 $global:DISPLAY_NAMES = @()
 $global:WORKTREE_NAMES = @()
 $global:WORKTREE_PATHS = @()
@@ -232,6 +234,10 @@ function Load-ConfigFromProfile {
             $global:ROLE_INDEX[$role] = $global:ROLES.Count
             $global:ROLES += $role
             $global:AGENTS += $agent
+            $varMode = "TERMINAL_${i}_MODE"
+            $mode = Get-Variable -Name $varMode -ValueOnly -ErrorAction SilentlyContinue
+            if ([string]::IsNullOrEmpty($mode)) { $mode = "auto" }
+            $global:MODES += $mode
             $global:DISPLAY_NAMES += (Display-NameForRole $role)
             $global:WORKTREE_NAMES += $worktree
 
@@ -542,95 +548,88 @@ function Prepare-AgentConfigs {
     }
 }
 
+function Get-KilnTemplate([string]$Name) {
+    Get-Content (Join-Path $KILN_BUNDLED_DIR "templates" "$Name.md") -Raw -ErrorAction Stop
+}
+
+function Get-KilnConstitution([string]$Name) {
+    Get-Content (Join-Path $KILN_DIR "constitution" "$Name.md") -Raw -ErrorAction Stop
+}
+
+function Get-KilnRole([string]$Role) {
+    $raw = Get-Content (Join-Path $KILN_DIR "roles" "$Role.md") -Raw -ErrorAction Stop
+    $stripped = ($raw -replace '(?ms)^## (Message Loop|Interaction Loop).*?(?=^## |\z)', '').TrimStart("`r", "`n")
+    "# Role`n`n" + $stripped
+}
+
+function Apply-Substitutions([string]$Text, [hashtable]$Map) {
+    foreach ($key in $Map.Keys) {
+        $Text = $Text.Replace($key, $Map[$key])
+    }
+    $Text
+}
+
+function Read-HandoffRoutingTable([string]$Path) {
+    $table = @{}
+    $fileContent = Get-Content $Path -Raw
+    $tableMatches = [regex]::Matches($fileContent, '(?m)^\|\s*(\w+)\s*\|\s*(\w+)\s*\|')
+    foreach ($m in $tableMatches) {
+        $role   = $m.Groups[1].Value
+        $target = $m.Groups[2].Value
+        if ($role -ne 'Role') { $table[$role] = $target }
+    }
+    return $table
+}
+
 function Write-GeneratedCLAUDEmd {
     param(
         [int]$Index,
         [string]$Role,
         [string]$WorktreePath,
-        [string]$Agent = "claude"
+        [string]$Agent = "claude",
+        [string]$Mode  = "auto"
     )
 
+    # Resolve output path
     if ($Agent -eq "copilot") {
         $instructionsDir = Join-Path $WorktreePath ".github"
         New-Item -ItemType Directory -Force -Path $instructionsDir | Out-Null
-        $claudeMdPath = Join-Path $instructionsDir "copilot-instructions.md"
+        $outPath = Join-Path $instructionsDir "copilot-instructions.md"
     } else {
-        $claudeMdPath = Join-Path $WorktreePath "CLAUDE.md"
+        $outPath = Join-Path $WorktreePath "CLAUDE.md"
     }
     New-Item -ItemType Directory -Force -Path $WorktreePath | Out-Null
 
-    # Read constitution files
-    $workflow = ""
-    $engineering = ""
-    $project = ""
+    # Load template blocks in order: loop -> runtime -> workflow -> engineering -> project -> role
+    $loopBlock    = Get-KilnTemplate "loop-$Mode-$Agent"
+    $runtimeBlock = Get-KilnTemplate "runtime-$Agent"
+    $workflow     = Get-KilnConstitution "workflow"
+    $engineering  = Get-KilnConstitution "engineering"
+    $project      = Get-KilnConstitution "project"
+    $roleBlock    = Get-KilnRole $Role
 
-    $workflowPath = Join-Path $KILN_DIR "constitution" "workflow.md"
-    if (Test-Path $workflowPath) {
-        $workflow = Get-Content $workflowPath -Raw
+    # Build substitution map
+    $dbPath = Join-Path $STATE_DIR "messages.db"
+    $subs = @{
+        "{{ROLE}}"           = $Role
+        "{{ROLE_UPPER}}"     = $Role.ToUpper()
+        "{{BRANCH}}"         = $CurrentBranch
+        "{{DB_PATH}}"        = $dbPath
+        "{{WORKTREE}}"       = (Split-Path -Leaf $WorktreePath)
+        "{{HANDOFF_TARGET}}" = if ($HandoffTargets.ContainsKey($Role)) { $HandoffTargets[$Role] } else { "specifier" }
+        "{{COMMIT_FORMAT}}"  = if ($CommitFormats.ContainsKey($Role)) { $CommitFormats[$Role] } else { "[$Role] <description>" }
     }
 
-    $engineeringPath = Join-Path $KILN_DIR "constitution" "engineering.md"
-    if (Test-Path $engineeringPath) {
-        $engineering = Get-Content $engineeringPath -Raw
-    }
+    # Render each block, join with horizontal rules
+    $blocks = @($roleBlock, $loopBlock, $runtimeBlock, $workflow, $engineering, $project)
+    $body   = ($blocks | ForEach-Object { Apply-Substitutions $_ $subs }) -join "`n`n---`n`n"
 
-    $projectPath = Join-Path $KILN_DIR "constitution" "project.md"
-    if (Test-Path $projectPath) {
-        $project = Get-Content $projectPath -Raw
-    }
-
-    $rolePrompt = ""
-    $rolePath = Join-Path $KILN_DIR "roles" "$Role.md"
-    if (Test-Path $rolePath) {
-        $rolePrompt = Get-Content $rolePath -Raw
-    }
-
+    # Write with auto-gen header
     $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-    $worktreeLeaf = Split-Path -Leaf $WorktreePath
-
-    $content = "<!-- Auto-generated by kiln.ps1 on $timestamp -->`n"
-    $content += "<!-- DO NOT EDIT MANUALLY -->`n`n"
-    $content += "# Kiln Constitution & Workflow`n`n"
-
-    if ($workflow) {
-        $content += "## Workflow Rules`n`n$workflow`n`n"
-    }
-    if ($engineering) {
-        $content += "## Engineering Rules`n`n$engineering`n`n"
-    }
-    if ($project) {
-        $content += "## Project Rules`n`n$project`n`n"
-    }
-
-    $content += "---`n`n"
-    $content += "# Your Role: $Role`n`n"
-    if ($rolePrompt) {
-        $content += "$rolePrompt`n`n"
-    } else {
-        $content += "You are the **$Role** agent in this Kiln swarm.`n`n"
-    }
-    $content += "You work in this worktree: $worktreeLeaf`n`n"
-
-    $content += "## Kiln Runtime Paths`n`n"
-    $content += "- **Your role**: $Role`n"
-    $content += "- **Your branch**: $CurrentBranch`n"
-    $content += "- **Message database**: `.kiln/messages.db` (accessed via MCP `kiln-db` server)`n"
-    $content += "- **MCP servers**: `kiln-db` (SQL queries) and `kiln-channel` (message receiver)`n`n"
-    $content += "### Receiving Messages (via kiln-channel)`n`n"
-    $content += "When you are ready to receive a handoff, call the `wait_for_message` tool from the `kiln-channel` MCP server:`n`n"
-    $content += "``````text`n"
-    $content += "wait_for_message()`n"
-    $content += "``````n`n"
-    $content += "The tool blocks until a message arrives and returns ``{`"received`": true, `"sender`": `"..`", `"content`": `"..`", ...}``.`n"
-    $content += "Call it again immediately if the session is interrupted before a message arrives.`n"
-    $content += "**Do NOT use read_query to poll your inbox.** The Channel handles delivery automatically.`n`n"
-    $content += "### Send message SQL (paste into write_query MCP tool)`n`n"
-    $content += "**IMPORTANT**: The ``branch`` value below (``$CurrentBranch``) is the ROOT branch and is pre-filled. Use it exactly — do NOT substitute your worktree branch (e.g. ``$CurrentBranch-$Role`` would be wrong).`n`n"
-    $content += "When sending a handoff to another role: ``INSERT INTO messages (id, sender, target, priority, status, content, created_at, branch) VALUES (strftime('%Y%m%d%H%M%S','now')||'-'||substr(hex(randomblob(4)),1,8), '$Role', '<TARGET_ROLE>', 50, 'queued', 'Re-read your role and constitution...<your-message>', datetime('now'), '$CurrentBranch')```n"
-
-    Set-Content $claudeMdPath $content
+    $header  = "<!-- Auto-generated by kiln.ps1 on $timestamp -->`n"
+    $header += "<!-- DO NOT EDIT MANUALLY -->`n`n"
+    Set-Content $outPath ($header + $body) -Encoding UTF8
 }
-
 function Build-WezTermAgentCommand {
     param(
         [string]$Agent,
@@ -958,6 +957,18 @@ $WorkingDir = (Resolve-Path $WorkingDir).Path
 # Initialize directory paths now that WorkingDir is resolved to absolute path
 $KILN_DIR = Join-Path $WorkingDir "kiln"
 $STATE_DIR = Join-Path $WorkingDir ".kiln"
+
+# Handoff routing table — parsed from workflow.md at startup
+$HandoffTargets = Read-HandoffRoutingTable (Join-Path $KILN_DIR "constitution" "workflow.md")
+
+# Commit format strings per role
+$CommitFormats = @{
+    "specifier"  = "[Specifier] <feature name> - <what was specified>"
+    "coder"      = "[Coder] <feature name> - TDD implementation of <what>"
+    "refactorer" = "[Refactorer] <feature name> - <quality gate results>"
+    "architect"  = "[Architect] <feature name> - <structural changes made>"
+    "selftest"   = "[Selftest] <what was tested>"
+}
 $WORKTREES_DIR = Join-Path $WorkingDir ".worktrees"
 
 Initialize-GitRepo
@@ -1068,7 +1079,7 @@ if ($TerminalBackend -eq "wezterm") {
 
         Write-Verbose "Role: '$role', DisplayName: '$displayName', Agent: '$agent', Model: '$model'"
 
-        Write-GeneratedCLAUDEmd -Index $i -Role $role -WorktreePath $worktreePath -Agent $agent
+        Write-GeneratedCLAUDEmd -Index $i -Role $role -WorktreePath $worktreePath -Agent $agent -Mode $global:MODES[$i]
 
         $cmd = Build-WezTermAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model
 
@@ -1092,7 +1103,7 @@ if ($TerminalBackend -eq "wezterm") {
         $role = $global:ROLES[$i]
         $worktreePath = $global:WORKTREE_PATHS[$i]
         $agent = $global:AGENTS[$i]
-        Write-GeneratedCLAUDEmd -Index $i -Role $role -WorktreePath $worktreePath -Agent $agent
+        Write-GeneratedCLAUDEmd -Index $i -Role $role -WorktreePath $worktreePath -Agent $agent -Mode $global:MODES[$i]
         Write-Host "  [$($global:DISPLAY_NAMES[$i])] configured" -ForegroundColor Cyan
     }
 

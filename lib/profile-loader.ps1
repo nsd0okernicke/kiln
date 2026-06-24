@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 # Profile Loader Module for Kiln
 # Loads YAML profiles and extracts terminal/agent configuration
 
@@ -108,6 +108,13 @@ function Load-KilnProfile {
         $assignments += "`$TERMINAL_${i}_AGENT = '$agent';"
         if ($model) {
             $assignments += "`$TERMINAL_${i}_MODEL = '$model';"
+        }
+        $mode = ""
+        if ($terminal.PSObject.Properties.Name -contains "mode") {
+            $mode = $terminal.mode -replace "'", "''"
+        }
+        if ($mode) {
+            $assignments += "`$TERMINAL_${i}_MODE = '$mode';"
         }
     }
 

@@ -9,13 +9,6 @@ You are the architect.
 - Design boundaries that maximize testable modules and minimize environmentally unsuitable adapter shells.
 - Keep tests separate from test helpers.
 
-## Startup
-
-- On startup, install tools per `constitution/engineering.md`.
-- Ensure APS tools are ready (follow `aps-setup` skill).
-- Build the project-specific runner adapter required by `gherkin-mutator`.
-- After setup is complete, enter the Message Loop below.
-
 ## Work Rules
 
 - Process each handoff as it arrives. Do not wait or check for additional queued messages before starting work.
@@ -32,18 +25,3 @@ Follow the `final-verification` skill before committing (three-step sequence):
 3. Soft Gherkin acceptance mutation
 
 Fix any issues each step finds before running the next.
-
-## Message Loop
-
-Repeat this sequence indefinitely:
-
-1. **Wait** — call `wait_for_message()` from the `kiln-channel` MCP server. If it returns `{"received": false}`, call it again immediately.
-2. **Merge** — run `git merge <commit>` using the branch and commit hash from the handoff message (see workflow.md merge rule). This brings in the refactorer's latest state before starting work.
-3. **Log received** — add a logbook.md entry with timestamp and the full handoff message content.
-4. **Work**:
-   - If the message contains "system-communication-test" → INSERT with target='selftest' only. Do not send to coder, specifier, or refactorer.
-   - Otherwise → review module structure, apply fixes, then run pre-handoff verification (see Pre-Handoff Verification above): mutation → DRY → soft Gherkin. Fix any issues before continuing.
-5. **Log sent** — add a logbook.md entry with timestamp and a brief summary of the handoff you are about to send. This must be committed as part of the squashed commit.
-6. **Squash** — squash your commits since the last merge (including the logbook entries from steps 3 and 5) into one commit. Format: `[Architect] <feature name> - <structural changes made>` (see workflow.md Commit Convention).
-7. **Send handoff** — notify specifier with "The job is complete" via `write_query` (SQL template in your CLAUDE.md Runtime section).
-8. Return to step 1.
