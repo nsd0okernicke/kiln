@@ -567,7 +567,7 @@ else
       sqlite3 "$messages_db" << 'SQL'
 PRAGMA journal_mode=WAL;
 CREATE TABLE IF NOT EXISTS messages (
-  id TEXT PRIMARY KEY,
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
   sender TEXT NOT NULL,
   target TEXT NOT NULL,
   priority INTEGER DEFAULT 50,

@@ -128,3 +128,137 @@ The two services communicate via asynchronous messaging (event-driven), enabling
 - Complex user management or role-based access
 - Frontend / UI
 - Book cover images or advanced metadata
+
+---
+
+## Architecture & Layering Rules
+
+### 3-Layer Structure
+
+The codebase is organized into three layers with unidirectional dependencies (always flowing from outside to inside):
+
+1. **Infrastructure** (outermost, knows everything)
+   - FastAPI REST API, SQLAlchemy ORM, RabbitMQ adapters, Pydantic schemas
+   - Responsibility: HTTP bindings, database adapters, message queue handlers, dependency injection
+   - Location: `infrastructure/` package
+
+2. **Application** (middle, orchestrates domain via ports)
+   - Use cases, application services
+   - Knows `domain/`, uses `domain/ports/`, does NOT import from `infrastructure/`
+   - Location: `application/` package
+
+3. **Domain** (innermost, pure business logic)
+   - Entities, Value Objects, Domain Events, Port Interfaces (ABCs)
+   - Zero dependencies on `application/` or `infrastructure/`
+   - Location: `domain/` package
+
+### Dependency Rules (Enforced)
+
+| From | To | Allowed? |
+| ---- | -- | -------- |
+| `infrastructure/` | `application/` | Yes |
+| `infrastructure/` | `domain/` | Yes |
+| `application/` | `domain/` | Yes |
+| `application/` | `infrastructure/` | No (only via ports) |
+| `domain/` | `application/` | No |
+| `domain/` | `infrastructure/` | No |
+
+Violations detected by static analysis tools (mypy) or code review must be fixed before merge.
+
+### Mapping Pattern
+
+- **HTTP Request** (Pydantic DTO) → mapped by `infrastructure/api/` → **Domain Object** → **Use Case**
+- **Domain Object** → mapped by `infrastructure/db/` → **ORM Model** → **Database**
+- **Database** → **ORM Model** → mapped by `infrastructure/db/` → **Domain Object** → returned via API
+
+Domain classes are **pure Python dataclasses** with no ORM (SQLAlchemy) or schema (Pydantic) imports.
+
+### Package Structure (Per Service)
+
+```text
+<service>/
+├── features/                        (Gherkin acceptance specifications)
+├── src/<service_name>/
+│   ├── domain/
+│   │   ├── <entity>.py              (pure dataclasses, business logic)
+│   │   ├── events/                  (domain events as dataclasses)
+│   │   └── ports/                   (ABC interfaces, no implementation)
+│   ├── application/
+│   │   └── <use_case>.py            (orchestrates domain, calls ports)
+│   └── infrastructure/
+│       ├── api/
+│       │   ├── schemas/             (Pydantic DTOs)
+│       │   └── routers/             (FastAPI endpoints)
+│       ├── db/
+│       │   ├── models.py            (SQLAlchemy ORM models)
+│       │   └── <x>_repository.py    (port implementations)
+│       ├── messaging/
+│       │   ├── publisher.py         (RabbitMQ publisher adapter)
+│       │   └── consumer.py          (RabbitMQ consumer adapter)
+│       └── config/
+│           └── settings.py          (pydantic-settings)
+```
+
+---
+
+## Tech Stack (Locked Decisions)
+
+- **Language**: Python 3.10+ with async/await patterns
+- **REST Framework**: FastAPI (async, modern)
+- **ORM**: SQLAlchemy 2.0+ (async driver: asyncpg for PostgreSQL)
+- **Data Validation**: Pydantic v2 (schemas, DTOs, settings)
+- **Database**: PostgreSQL (two isolated databases: catalog_db, loan_db)
+- **Message Queue**: RabbitMQ (async, event-driven, Topic exchange pattern)
+- **Testing**: pytest with async support
+- **Integration Tests**: Testcontainers (PostgreSQL, RabbitMQ containers)
+- **Quality Tools**: `mutmut` (mutation testing), `mypy` (strict type checking), `ruff` (linting), `black` (formatting), `radon` (complexity/CRAP)
+- **Package Manager**: `uv`
+
+All services use the same tech stack. No divergence.
+
+---
+
+## Quality Gates
+
+All gates are checked before handoff. Do not send a handoff if any gate fails.
+
+- **Mutation Testing**: `domain/` and `application/` must achieve mutation score ≥ 80% — `mutmut run --paths domain,application`
+- **Test Coverage**: All code must achieve > 90% — `coverage run -m pytest && coverage report`
+- **Type Checking**: All code must pass `mypy` in strict mode, no `type: ignore` without explanation — `mypy src/`
+- **Code Style**: Must pass `ruff` and `black` — `ruff check . && black --check .`
+
+---
+
+## Testing Strategy
+
+**Unit Tests** (`domain/` and `application/` layers): pure business logic in isolation, mock all dependencies, run fast (`pytest -m 'not integration'`), coverage > 90%, mutation score ≥ 80%.
+
+**Acceptance Tests** (`infrastructure/` layer): complete user journeys against real services via Testcontainers (PostgreSQL, RabbitMQ), run with `pytest`.
+
+**Test Organization**:
+
+```text
+<service>/src/<service_name>/
+├── domain/tests/           (unit tests)
+├── application/tests/      (unit tests)
+└── infrastructure/
+    ├── api/tests/          (acceptance tests)
+    ├── db/tests/           (acceptance tests)
+    └── messaging/tests/    (acceptance tests)
+```
+
+| Command | Purpose |
+| ------- | ------- |
+| `pytest` | All tests — run before handoff |
+| `pytest -m 'not integration'` | Unit tests only — quick feedback |
+| `pytest --cov=src/` | Coverage report |
+| `mutmut run --paths domain,application` | Mutation testing |
+
+---
+
+## Non-Functional Requirements
+
+- **Code language**: English only — comments, docstrings, variable names, error messages. Test data may contain Unicode.
+- **Error handling**: Return appropriate HTTP status codes (404 not found, 409 conflict, 422 validation, 500 server error).
+- **Logging**: Structured JSON logging in the infrastructure layer using standard library `logging`.
+- **Authentication**: Not required for MVP.

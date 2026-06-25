@@ -60,27 +60,6 @@ Commit: <commit-hash>
 Next role: <next-role-name>
 ```
 
-**Timestamp format**: Use `YYYY-MM-DD HH:MM:SS` (e.g., `2026-06-19 14:35:22`). This allows users to see exactly when each handoff was sent.
-
-**Visual markers**: Use box-drawing characters or dashes to make handoff messages visually distinct in the terminal, helping users track cycle progress when running manually.
-
-**Example**:
-
-```text
-Re-read your role and constitution.
-Sender: coder
-Handoff: user-registration-v1
-Branch: main
-Commit: abc1234def5678
-
-════════════════════════════════════════════════════════════════
-✓ CODER HANDOFF — 2026-06-19 14:35:22
-════════════════════════════════════════════════════════════════
-TDD cycle complete: 15 tests pass, 100% acceptance, 95% coverage
-
-Next role: refactorer
-```
-
 ## Handoff Routing
 
 | Role | Sends to |

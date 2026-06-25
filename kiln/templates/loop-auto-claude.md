@@ -12,19 +12,13 @@ the loop is not complete until the handoff is sent (step 7).**
    ```
    This merge commit becomes the squash anchor you will need in step 6.
 
-3. **Log received** — append a logbook.md entry:
-   - Timestamp (`YYYY-MM-DD HH:MM:SS`)
-   - Complete handoff message content
-   - One-line description of what you will do
+3. **Log received** — append a logbook.md entry: timestamp, full message content, one-line plan.
 
 4. **Work** — apply your role rules. The Role section above defines your specific
    work process, quality gates, and standards. For system-communication-test messages,
    forward as-is to `{{HANDOFF_TARGET}}` and skip steps 5–7.
 
-5. **Log sent** — append a logbook.md entry:
-   - Timestamp
-   - Brief summary of the handoff you are about to send
-   This entry must be committed as part of the squash in step 6.
+5. **Log sent** — append a logbook.md entry: timestamp, brief handoff summary. Commit as part of the squash in step 6.
 
 6. **Squash** — squash all your commits since the merge commit into one:
    ```sh

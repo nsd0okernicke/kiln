@@ -25,7 +25,7 @@ Repeat this sequence indefinitely on subsequent cycles:
    ```
    This merge commit becomes the squash anchor for step 7.
 
-3. **Log received** — append a logbook.md entry with timestamp and full message content.
+3. **Log received** — append a logbook.md entry: timestamp, full message content.
 
 4. **Work** — apply your role rules. The Role section above defines your specific work process.
    For system-communication-test messages, forward as-is to `{{HANDOFF_TARGET}}` and skip
@@ -34,8 +34,7 @@ Repeat this sequence indefinitely on subsequent cycles:
 5. **Get approval** — present your result to the user and ask for explicit approval.
    Do not continue to step 6 without approval.
 
-6. **Log sent** — append a logbook.md entry with timestamp and brief summary.
-   Commit it as part of the squash in step 7.
+6. **Log sent** — append a logbook.md entry: timestamp, brief summary. Commit as part of the squash in step 7.
 
 7. **Squash** — squash all your commits since the merge commit:
    ```sh

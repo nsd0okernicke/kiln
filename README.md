@@ -86,8 +86,8 @@ my-project/
 ├── kiln/                         # Kiln configuration (version-controlled)
 │   ├── constitution/
 │   │   ├── workflow.md           # Handoff protocol
-│   │   ├── engineering.md        # Tech stack & quality gates
-│   │   └── project.md            # Project-specific rules
+│   │   ├── engineering.md        # Engineering practices & quality standards
+│   │   └── project.md            # Project-specific rules (language, architecture, constraints)
 │   ├── roles/                    # Role definitions for your agents
 │   │   ├── specifier.md
 │   │   ├── coder.md
@@ -194,7 +194,8 @@ kiln/
 │   ├── profiles.json             # Default configuration profiles (framework defaults only)
 │   ├── constitution/             # Shared constitution rules (copied to projects)
 │   │   ├── workflow.md           # Handoff protocol
-│   │   └── engineering.md        # Tech stack & quality gates
+│   │   ├── engineering.md        # Engineering practices & quality standards
+│   │   └── project.md            # Project rules starter template (fill in language, constraints)
 │   ├── roles/                    # Role prompts (copied to projects)
 │   ├── mcp-server/               # Python MCP servers bundled with the framework
 │   │   ├── channel.py            # kiln-channel: blocking wait_for_message() receiver
@@ -268,7 +269,7 @@ By default, **all projects use the framework's `kiln/profiles.json`**, which def
 
 - **`constitution/workflow.md`** — Defines handoff protocol, git worktree discipline, and cross-agent communication rules.
 - **`constitution/engineering.md`** — Specifies language, build tools, test frameworks, quality tools, and coding practices.
-- **`constitution/project.md`** — Project-specific customizations: tech stack, architecture patterns, quality thresholds, module structure.
+- **`constitution/project.md`** — Project-specific rules: language, architecture constraints, quality thresholds. Initialized from the framework starter template; fill in or extend for your project. Example projects (like library-hub) keep detailed technical rules in their `README.md` so agents get them as part of the project brief.
 
 **Agent Instruction Assembly:** Constitution and role instructions are **always combined** at startup:
 
@@ -787,7 +788,7 @@ The cleanup script removes:
 
 The repository includes example project briefs under `examples/`. These are intended to be used with the install scripts.
 
-- `examples/library-hub/README.md` — LibraryHub, a FastAPI microservices project with hexagonal architecture, RabbitMQ event-driven communication, and full TDD/mutation-testing quality gates. This serves as the reference implementation for Kiln.
+- `examples/library-hub/README.md` — LibraryHub, a FastAPI microservices project with hexagonal architecture, RabbitMQ event-driven communication, and full TDD/mutation-testing quality gates. Includes architecture & layering rules, tech stack, quality gates, and testing strategy — all as part of the project brief so agents have complete technical context. This serves as the reference implementation for Kiln.
 
 To scaffold a new LibraryHub project:
 

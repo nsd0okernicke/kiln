@@ -1018,7 +1018,7 @@ import sqlite3, os
 db = r'$dbPath'
 conn = sqlite3.connect(db)
 conn.execute('''CREATE TABLE IF NOT EXISTS messages (
-  id TEXT PRIMARY KEY, sender TEXT NOT NULL, target TEXT NOT NULL,
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))), sender TEXT NOT NULL, target TEXT NOT NULL,
   priority INTEGER DEFAULT 50, status TEXT DEFAULT 'queued',
   content TEXT NOT NULL, created_at TEXT NOT NULL,
   delivered_at TEXT, acked_at TEXT, processed_at TEXT, error TEXT,
@@ -1034,7 +1034,7 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host "Warning: Failed to initialize database via Python, trying direct sqlite3..." -ForegroundColor Yellow
     $sqliteScript = @"
 CREATE TABLE IF NOT EXISTS messages (
-  id TEXT PRIMARY KEY, sender TEXT NOT NULL, target TEXT NOT NULL,
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))), sender TEXT NOT NULL, target TEXT NOT NULL,
   priority INTEGER DEFAULT 50, status TEXT DEFAULT 'queued',
   content TEXT NOT NULL, created_at TEXT NOT NULL,
   delivered_at TEXT, acked_at TEXT, processed_at TEXT, error TEXT,

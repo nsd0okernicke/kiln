@@ -25,10 +25,24 @@ if not MY_ROLE or not DB_PATH:
     print("ERROR: KILN_ROLE and KILN_DB_PATH env vars required", file=sys.stderr)
     sys.exit(1)
 
-# Logging: always stderr; also file if KILN_CHANNEL_LOG is set
+# Logging: always stderr; also file if KILN_CHANNEL_LOG is set.
+# Use open/close per write so Windows never holds an exclusive lock on the log file.
+class _NonLockingFileHandler(logging.Handler):
+    def __init__(self, path: str, encoding: str = "utf-8") -> None:
+        super().__init__()
+        self.path = path
+        self.encoding = encoding
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            with open(self.path, "a", encoding=self.encoding) as fh:
+                fh.write(self.format(record) + "\n")
+        except Exception:
+            self.handleError(record)
+
 _handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
 if LOG_PATH:
-    _handlers.append(logging.FileHandler(LOG_PATH, encoding="utf-8"))
+    _handlers.append(_NonLockingFileHandler(LOG_PATH))
 
 logging.basicConfig(
     level=logging.DEBUG,

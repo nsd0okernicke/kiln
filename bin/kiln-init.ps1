@@ -100,7 +100,7 @@ catch {
 
 
 $frameworkConstitution = Join-Path $FrameworkRoot "kiln\constitution"
-@("engineering.md", "workflow.md") | ForEach-Object {
+@("engineering.md", "workflow.md", "project.md") | ForEach-Object {
     $source = Join-Path $frameworkConstitution $_
     $dest = Join-Path $constitutionDir $_
     if (Test-Path $source) {
@@ -129,19 +129,6 @@ if (Test-Path $frameworkSkills) {
 }
 
 
-$projectMdPath = Join-Path $constitutionDir "project.md"
-$projectMdContent = @'
-# Project Rules
-
-- This project is configured for Kiln with four agents: specifier, coder, refactorer, and architect.
-- Project language: Python.
-- Preserve project-local Kiln configuration under kiln/.
-- Keep swarm state local under .kiln/ (SQLite message queue) and worktrees under .worktrees/.
-- Prefer terse, explicit handoffs that report state and request role-appropriate review.
-- Do not change another role's prompt or workflow ownership without explicit user direction.
-'@
-Set-Content -Path $projectMdPath -Value $projectMdContent -Encoding UTF8
-Write-Host "✓ Created project.md" -ForegroundColor Green
 
 $constitutionMdPath = Join-Path $KilnDir "constitution.md"
 $constitutionMdContent = @'
@@ -196,7 +183,7 @@ import sqlite3, os
 db = r'$dbPath'
 conn = sqlite3.connect(db)
 conn.execute('''CREATE TABLE IF NOT EXISTS messages (
-  id TEXT PRIMARY KEY, sender TEXT NOT NULL, target TEXT NOT NULL,
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))), sender TEXT NOT NULL, target TEXT NOT NULL,
   priority INTEGER DEFAULT 50, status TEXT DEFAULT 'queued',
   content TEXT NOT NULL, created_at TEXT NOT NULL,
   delivered_at TEXT, acked_at TEXT, processed_at TEXT, error TEXT,
@@ -213,7 +200,7 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "Warning: Failed to initialize database via Python, trying direct sqlite3..." -ForegroundColor Yellow
     $sqliteScript = @"
 CREATE TABLE IF NOT EXISTS messages (
-  id TEXT PRIMARY KEY, sender TEXT NOT NULL, target TEXT NOT NULL,
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))), sender TEXT NOT NULL, target TEXT NOT NULL,
   priority INTEGER DEFAULT 50, status TEXT DEFAULT 'queued',
   content TEXT NOT NULL, created_at TEXT NOT NULL,
   delivered_at TEXT, acked_at TEXT, processed_at TEXT, error TEXT,

@@ -7,31 +7,35 @@
       "terminals": [
         {
           "role": "specifier",
-          "agent": "copilot",
+          "agent": "claude",
           "worktree": "@current",
           "title": "Kiln Specifier",
-          "mode": "manual"
+          "mode": "manual",
+          "model": "claude-haiku-4-5-20251001"
         },
         {
           "role": "coder",
-          "agent": "copilot",
+          "agent": "claude",
           "worktree": "coder",
           "title": "Kiln Coder",
-          "mode": "auto"
+          "mode": "auto",
+          "model": "claude-haiku-4-5-20251001"
         },
         {
           "role": "refactorer",
-          "agent": "copilot",
+          "agent": "claude",
           "worktree": "refactorer",
           "title": "Kiln Refactorer",
-          "mode": "auto"
+          "mode": "auto",
+          "model": "claude-haiku-4-5-20251001"
         },
         {
           "role": "architect",
-          "agent": "copilot",
+          "agent": "claude",
           "worktree": "architect",
           "title": "Kiln Architect",
-          "mode": "auto"
+          "mode": "auto",
+          "model": "claude-haiku-4-5-20251001"
         }
       ],
       "layout": {
@@ -238,10 +242,11 @@
       "terminals": [
         {
           "role": "specifier",
-          "agent": "copilot",
+          "agent": "claude",
           "worktree": "@current",
           "title": "Kiln Specifier",
-          "mode": "manual"
+          "mode": "manual",
+          "model": "claude-haiku-4-5-20251001"
         },
         {
           "role": "coder",
