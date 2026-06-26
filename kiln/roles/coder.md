@@ -14,9 +14,14 @@ You are the coder.
 
 ## Code Organization
 
-- Keep generated acceptance tests separate from unit tests.
-- Keep new behavior in testable modules whenever possible. Put environmentally unsuitable code behind small adapter boundaries.
-- Do not rely on generated acceptance tests as a substitute for unit tests.
+- For each behavior slice, follow this order:
+  1. Write domain unit tests first (in the project's unit test location per `project.md`) — pure language, no I/O, mock all ports.
+  2. Write application unit tests — mock repository/publisher ports.
+  3. Implement production code to make them pass.
+  4. Wire infrastructure last (HTTP routers, DB models, message adapters).
+- Do not rely on acceptance tests as a substitute for unit tests.
+- For pytest-bdd projects: implement step definitions in the acceptance test directory to execute `.feature` files; do not write a parallel per-story pytest file alongside them.
+- Keep new behavior in testable modules. Put environmentally unsuitable code (DB, queues, HTTP) behind small adapter boundaries.
 
 ## Properties and Handoff
 

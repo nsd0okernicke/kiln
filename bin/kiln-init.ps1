@@ -173,6 +173,11 @@ if ($Example -eq "library-hub") {
         Copy-Item -Path $exampleReadme -Destination (Join-Path $Target "README.md") -Force
         Write-Host "✓ Copied example README.md" -ForegroundColor Green
     }
+    $exampleProjectMd = Join-Path $FrameworkRoot "examples\$Example\kiln\constitution\project.md"
+    if (Test-Path $exampleProjectMd) {
+        Copy-Item -Path $exampleProjectMd -Destination (Join-Path $constitutionDir "project.md") -Force
+        Write-Host "✓ Copied example-specific project.md" -ForegroundColor Green
+    }
 }
 
 Write-Host ""

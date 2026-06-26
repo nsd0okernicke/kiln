@@ -192,6 +192,11 @@ if [ "$EXAMPLE" = "library-hub" ]; then
         cp "$FRAMEWORK_ROOT/examples/library-hub/README.md" "$TARGET/README.md"
         echo "✓ Copied example README.md"
     fi
+    example_project_md="$FRAMEWORK_ROOT/examples/$EXAMPLE/kiln/constitution/project.md"
+    if [ -f "$example_project_md" ]; then
+        cp "$example_project_md" "$TARGET/kiln/constitution/project.md"
+        echo "✓ Copied example-specific project.md"
+    fi
 fi
 
 # Initialize database

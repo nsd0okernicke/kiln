@@ -175,29 +175,33 @@ Domain classes are **pure Python dataclasses** with no ORM (SQLAlchemy) or schem
 
 ### Package Structure (Per Service)
 
+Flat layout — no `src/` wrapper. Each service is a Python package at the project root:
+
 ```text
-<service>/
-├── features/                        (Gherkin acceptance specifications)
-├── src/<service_name>/
-│   ├── domain/
-│   │   ├── <entity>.py              (pure dataclasses, business logic)
-│   │   ├── events/                  (domain events as dataclasses)
-│   │   └── ports/                   (ABC interfaces, no implementation)
-│   ├── application/
-│   │   └── <use_case>.py            (orchestrates domain, calls ports)
-│   └── infrastructure/
-│       ├── api/
-│       │   ├── schemas/             (Pydantic DTOs)
-│       │   └── routers/             (FastAPI endpoints)
-│       ├── db/
-│       │   ├── models.py            (SQLAlchemy ORM models)
-│       │   └── <x>_repository.py    (port implementations)
-│       ├── messaging/
-│       │   ├── publisher.py         (RabbitMQ publisher adapter)
-│       │   └── consumer.py          (RabbitMQ consumer adapter)
-│       └── config/
-│           └── settings.py          (pydantic-settings)
+<service>/                           (Python package, e.g. catalog/ or loan/)
+├── __init__.py
+├── domain/
+│   ├── <entity>.py                  (pure dataclasses, business logic)
+│   ├── events.py                    (domain events as dataclasses)
+│   └── ports.py                     (ABC interfaces, no implementation)
+├── application/
+│   └── <use_case>.py                (orchestrates domain, calls ports)
+└── infrastructure/
+    ├── api/
+    │   ├── main.py                  (FastAPI app)
+    │   ├── schemas.py               (Pydantic DTOs)
+    │   └── routers/                 (FastAPI endpoints)
+    ├── db/
+    │   ├── models.py                (SQLAlchemy ORM models)
+    │   └── <x>_repository.py        (port implementations)
+    ├── messaging/
+    │   ├── publisher.py             (RabbitMQ publisher adapter)
+    │   └── consumer.py              (RabbitMQ consumer adapter)
+    └── config/
+        └── settings.py              (pydantic-settings)
 ```
+
+Gherkin feature files live at the project root in `features/` (not inside a service directory).
 
 ---
 
@@ -209,9 +213,10 @@ Domain classes are **pure Python dataclasses** with no ORM (SQLAlchemy) or schem
 - **Data Validation**: Pydantic v2 (schemas, DTOs, settings)
 - **Database**: PostgreSQL (two isolated databases: catalog_db, loan_db)
 - **Message Queue**: RabbitMQ (async, event-driven, Topic exchange pattern)
-- **Testing**: pytest with async support
-- **Integration Tests**: Testcontainers (PostgreSQL, RabbitMQ containers)
-- **Quality Tools**: `mutmut` (mutation testing), `mypy` (strict type checking), `ruff` (linting), `black` (formatting), `radon` (complexity/CRAP)
+- **Testing**: pytest with async support (`pytest-asyncio`)
+- **BDD / Acceptance Tests**: `pytest-bdd` — feature files in `features/`, step implementations in `tests/acceptance/steps/`
+- **Acceptance Fixtures**: Testcontainers (`testcontainers[postgres,rabbitmq]`) — use real PostgreSQL and RabbitMQ; do NOT use in-memory SQLite for acceptance tests
+- **Quality Tools**: `mutmut` (mutation testing), `mypy` (strict type checking), `ruff` (linting + formatting), `radon` (complexity/CRAP)
 - **Package Manager**: `uv`
 
 All services use the same tech stack. No divergence.
@@ -224,35 +229,44 @@ All gates are checked before handoff. Do not send a handoff if any gate fails.
 
 - **Mutation Testing**: `domain/` and `application/` must achieve mutation score ≥ 80% — `mutmut run --paths domain,application`
 - **Test Coverage**: All code must achieve > 90% — `coverage run -m pytest && coverage report`
-- **Type Checking**: All code must pass `mypy` in strict mode, no `type: ignore` without explanation — `mypy src/`
+- **Type Checking**: All code must pass `mypy` in strict mode, no `type: ignore` without explanation — `mypy catalog/ loan/ --strict`
 - **Code Style**: Must pass `ruff` and `black` — `ruff check . && black --check .`
 
 ---
 
 ## Testing Strategy
 
-**Unit Tests** (`domain/` and `application/` layers): pure business logic in isolation, mock all dependencies, run fast (`pytest -m 'not integration'`), coverage > 90%, mutation score ≥ 80%.
+**Unit Tests** (`tests/unit/`): pure business logic in isolation, mock all dependencies, no I/O, run fast. Coverage > 90%, mutation score ≥ 80%.
 
-**Acceptance Tests** (`infrastructure/` layer): complete user journeys against real services via Testcontainers (PostgreSQL, RabbitMQ), run with `pytest`.
+**Acceptance Tests** (`tests/acceptance/`): pytest-bdd step implementations that execute the `.feature` files in `features/`. Each step file must call `scenarios("features/<file>.feature")` so pytest treats the Gherkin scenarios as live test cases — without this the `.feature` files are dead documentation. Use Testcontainers for real PostgreSQL and RabbitMQ — do not use in-memory SQLite here.
 
 **Test Organization**:
 
 ```text
-<service>/src/<service_name>/
-├── domain/tests/           (unit tests)
-├── application/tests/      (unit tests)
-└── infrastructure/
-    ├── api/tests/          (acceptance tests)
-    ├── db/tests/           (acceptance tests)
-    └── messaging/tests/    (acceptance tests)
+tests/
+├── conftest.py
+├── unit/
+│   ├── catalog/
+│   │   ├── domain/         (unit tests for catalog domain)
+│   │   └── application/    (unit tests for catalog application services)
+│   └── loan/
+│       ├── domain/
+│       └── application/
+└── acceptance/
+    ├── conftest.py          (Testcontainers session fixtures)
+    └── steps/
+        ├── catalog_steps.py (step defs for features/cat-*.feature)
+        └── loan_steps.py    (step defs for features/loan-*.feature)
+features/                    (Gherkin specs — owned by specifier, do not modify)
 ```
 
 | Command | Purpose |
 | ------- | ------- |
 | `pytest` | All tests — run before handoff |
-| `pytest -m 'not integration'` | Unit tests only — quick feedback |
-| `pytest --cov=src/` | Coverage report |
-| `mutmut run --paths domain,application` | Mutation testing |
+| `pytest tests/unit/` | Unit tests only — quick feedback |
+| `pytest tests/acceptance/` | Acceptance tests (requires running containers) |
+| `pytest --cov=catalog --cov=loan` | Coverage report |
+| `mutmut run --paths-to-mutate catalog/domain,catalog/application,loan/domain,loan/application` | Mutation testing |
 
 ---
 
