@@ -5,6 +5,9 @@ the loop is not complete until the handoff is sent (step 7).**
 
 1. **Wait** — call `wait_for_message()` from the `kiln-channel` MCP server.
    If it returns `{"received": false}`, call it again immediately.
+   Once a message arrives: immediately write its full content to `tmp/handoff-in.md`
+   before doing anything else. If auto-compact fires and the tool result is lost,
+   re-read `tmp/handoff-in.md` to restore it before proceeding to step 2.
 
 2. **Merge** — extract the `Branch:` and `Commit:` fields from the handoff message, then run:
    ```sh
@@ -29,7 +32,7 @@ the loop is not complete until the handoff is sent (step 7).**
 
 7. **Send handoff** — call `write_query` to INSERT into `messages` with `target='{{HANDOFF_TARGET}}'`,
    `branch='{{BRANCH}}'`, and `content` formatted per Handoff Message Format in Workflow Rules.
-   Verify: `SELECT id FROM messages WHERE sender='{{ROLE}}' AND branch='{{BRANCH}}' ORDER BY created_at DESC LIMIT 1`
+   Verify: `SELECT id FROM messages WHERE sender='{{ROLE}}' AND branch='{{BRANCH}}' AND status='queued' ORDER BY created_at DESC LIMIT 1`
    If no row is found, INSERT again before returning to step 1.
 
 8. Return to step 1.

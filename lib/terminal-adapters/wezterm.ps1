@@ -132,6 +132,14 @@ config.mouse_bindings = {
   },
 }
 
+wezterm.on('format-window-title', function(tab, pane, tabs, panes, config)
+  local title = tab.tab_title
+  if title and #title > 0 then
+    return 'Kiln — ' .. title
+  end
+  return 'Kiln'
+end)
+
 wezterm.on('gui-startup', function(cmd)
   local mux = wezterm.mux
   local roles_json      = os.getenv('Kiln_ROLES_JSON')      or '[]'

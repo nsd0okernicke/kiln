@@ -83,7 +83,7 @@ def _fetch_and_deliver() -> dict | None:
         )
         log.debug("content preview: %s", row["content"][:120].replace("\n", " "))
         cur.execute(
-            "UPDATE messages SET status='delivered', delivered_at=datetime('now') WHERE id=?",
+            "UPDATE messages SET status='delivered', delivered_at=strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime') WHERE id=?",
             (row["id"],),
         )
         conn.commit()
