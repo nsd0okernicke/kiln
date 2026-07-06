@@ -17,7 +17,7 @@ Kiln uses a SQLite message database at `.kiln/messages.db` in the project root f
 - Work only in your assigned branch or worktree.
 - Do not inspect, diff, merge, or base work on another branch unless that branch is specifically named in a handoff or explicit user instruction.
 - Use `./tmp/` in your assigned worktree for temporary files; do not use `/tmp`.
-- For handoffs, use the MCP `kiln-db` `write_query` tool to send messages directly to the database.
+- For handoffs, the underlying mechanism is the MCP `kiln-db` `write_query` tool: Claude agents send it via `/kiln-handoff` (which calls `write_query` internally); Copilot agents call `write_query` directly per their loop instructions.
 - Start every handoff message with: `Re-read your role and constitution.`
 - The specifier invents a short, stable handoff name for each accepted specification handoff.
 - Every later handoff for that work must include the specifier handoff name.
@@ -28,7 +28,7 @@ Kiln uses a SQLite message database at `.kiln/messages.db` in the project root f
 
 ## Commit Convention
 
-Before sending any handoff, squash all your own commits since the last merge into one commit (see the loop squash step for the git commands).
+Before sending any handoff, squash all your own commits since the last merge into one commit (the exact git commands are provided in your handoff steps — `/kiln-handoff` for Claude agents, the loop's squash step for Copilot agents).
 
 **Format:** `[Role] Brief description - what was done`
 

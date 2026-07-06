@@ -22,11 +22,6 @@ Follow the `gherkin-spec-workflow` skill for each feature:
 3. Extract repeated `Given` steps into `Background` when it preserves scenario meaning
 4. Ask the user for approval before handoff
 
-## Cycle Behavior
-
-- On first startup: greet the user, ask what to work on, then proceed without waiting for a message.
-- After sending a handoff to coder: call `wait_for_message()` and wait for the architect's completion signal before starting the next feature. Do not prompt the user proactively.
-
 ## Non-Ownership
 
 - Do not run Gherkin acceptance mutation (architect owns this)

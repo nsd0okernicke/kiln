@@ -100,15 +100,17 @@ function Write-DirectoryGitignore {
 function Ensure-InitialGitignore {
     $gitignorePath = Join-Path $WorkingDir ".gitignore"
     if (Test-Path $gitignorePath) {
-        # Ensure .kiln/ and .worktrees/ are in .gitignore
+        # Ensure required patterns are in .gitignore (older kiln-init runs may predate some of these)
         $content = Get-Content $gitignorePath -Raw
         $needsKiln = $content -notmatch '^\s*\.kiln/\s*$'
         $needsWorktrees = $content -notmatch '^\s*\.worktrees/\s*$'
+        $needsGithub = $content -notmatch '^\s*\.github/\s*$'
+        $needsClaudeSkills = $content -notmatch '^\s*\.claude/skills\s*$'
 
-        if ($needsKiln -or $needsWorktrees) {
-            if ($needsKiln) { Add-Content $gitignorePath ".kiln/" -Encoding UTF8 }
-            if ($needsWorktrees) { Add-Content $gitignorePath ".worktrees/" -Encoding UTF8 }
-        }
+        if ($needsKiln) { Add-Content $gitignorePath ".kiln/" -Encoding UTF8 }
+        if ($needsWorktrees) { Add-Content $gitignorePath ".worktrees/" -Encoding UTF8 }
+        if ($needsGithub) { Add-Content $gitignorePath ".github/" -Encoding UTF8 }
+        if ($needsClaudeSkills) { Add-Content $gitignorePath ".claude/skills" -Encoding UTF8 }
     } else {
         # Create new .gitignore with essential patterns
         $gitignoreContent = @'
@@ -556,6 +558,11 @@ function Get-KilnConstitution([string]$Name) {
     Get-Content (Join-Path $KILN_DIR "constitution" "$Name.md") -Raw -ErrorAction Stop
 }
 
+function Get-KilnConstitutionHeader {
+    $path = Join-Path $KILN_DIR "constitution.md"
+    if (Test-Path $path) { Get-Content $path -Raw } else { $null }
+}
+
 function Get-KilnRole([string]$Role) {
     $raw = Get-Content (Join-Path $KILN_DIR "roles" "$Role.md") -Raw -ErrorAction Stop
     $stripped = ($raw -replace '(?ms)^## (Message Loop|Interaction Loop).*?(?=^## |\z)', '').TrimStart("`r", "`n")
@@ -600,13 +607,14 @@ function Write-GeneratedCLAUDEmd {
     }
     New-Item -ItemType Directory -Force -Path $WorktreePath | Out-Null
 
-    # Load template blocks in order: loop -> runtime -> workflow -> engineering -> project -> role
-    $loopBlock    = Get-KilnTemplate "loop-$Mode-$Agent"
-    $runtimeBlock = Get-KilnTemplate "runtime-$Agent"
-    $workflow     = Get-KilnConstitution "workflow"
-    $engineering  = Get-KilnConstitution "engineering"
-    $project      = Get-KilnConstitution "project"
-    $roleBlock    = Get-KilnRole $Role
+    # Load template blocks in order: loop -> runtime -> constitution (project -> engineering -> workflow) -> role
+    $loopBlock         = Get-KilnTemplate "loop-$Mode-$Agent"
+    $runtimeBlock      = Get-KilnTemplate "runtime-$Agent"
+    $constitutionBlock = Get-KilnConstitutionHeader
+    $workflow          = Get-KilnConstitution "workflow"
+    $engineering       = Get-KilnConstitution "engineering"
+    $project           = Get-KilnConstitution "project"
+    $roleBlock         = Get-KilnRole $Role
 
     # Build substitution map
     $dbPath = Join-Path $STATE_DIR "messages.db"
@@ -620,8 +628,10 @@ function Write-GeneratedCLAUDEmd {
         "{{COMMIT_FORMAT}}"  = if ($CommitFormats.ContainsKey($Role)) { $CommitFormats[$Role] } else { "[$Role] <description>" }
     }
 
-    # Render each block, join with horizontal rules
-    $blocks = @($roleBlock, $loopBlock, $runtimeBlock, $workflow, $engineering, $project)
+    # Render each block, join with horizontal rules.
+    # Constitution/project/engineering/workflow are ordered per constitution.md's stated
+    # precedence (project wins conflicts, then engineering, then workflow).
+    $blocks = @($roleBlock, $loopBlock, $runtimeBlock, $constitutionBlock, $project, $engineering, $workflow) | Where-Object { $_ }
     $body   = ($blocks | ForEach-Object { Apply-Substitutions $_ $subs }) -join "`n`n---`n`n"
 
     # Write with auto-gen header

@@ -45,20 +45,9 @@ Note the resulting commit hash — you need it in Step 3.
 
 ### Step 3 — Format the handoff message
 
-```text
-Re-read your role and constitution.
-Sender: <your role>
-Handoff: <specifier handoff name from the inbound message>
-Branch: <your branch>
-Commit: <squash commit hash from Step 2>
-
-════════════════════════════════════════════════════════════════
-✓ <YOUR ROLE IN CAPS> HANDOFF — <YYYY-MM-DD HH:MM:SS>
-════════════════════════════════════════════════════════════════
-<Brief description of what was accomplished>
-
-Next role: <handoff target role>
-```
+Use the **Handoff Message Format** template from your Workflow Rules section (already in
+context). Fill in: sender role, specifier handoff name from the inbound message, your branch,
+and the squash commit hash from Step 2.
 
 ### Step 4 — INSERT
 

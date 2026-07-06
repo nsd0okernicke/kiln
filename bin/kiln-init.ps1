@@ -49,13 +49,11 @@ if (-not (Test-Path "$FrameworkRoot\kiln")) {
 if ($ListProfiles) {
     Write-Host "Available Kiln configuration profiles:" -ForegroundColor Green
     Write-Host ""
-    . "$FrameworkRoot\lib\profile-loader.ps1"
-    $profilesPath = Join-Path $FrameworkRoot "kiln" "profiles.yaml"
-    $yaml = Get-Content -Path $profilesPath -Raw
-    $config = ConvertFrom-Yaml $yaml
-    foreach ($profileName in $config.profiles.Keys) {
-        $desc = $config.profiles[$profileName].description
-        Write-Host "  $profileName`t$desc" -ForegroundColor Cyan
+    $profilesPath = Join-Path $FrameworkRoot "kiln" "profiles.json"
+    $config = Get-Content -Path $profilesPath -Raw | ConvertFrom-Json
+    foreach ($profileProp in $config.profiles.PSObject.Properties) {
+        $desc = $profileProp.Value.description
+        Write-Host "  $($profileProp.Name)`t$desc" -ForegroundColor Cyan
     }
     exit 0
 }
@@ -118,7 +116,7 @@ if (Test-Path $frameworkRoles) {
 }
 
 # Note: Profiles are not copied to the target project.
-# Projects inherit framework profiles; override by creating kiln.profiles.yaml at project root if needed.
+# Projects inherit framework profiles; override by creating kiln.profiles.json at project root if needed.
 
 $frameworkSkills = Join-Path $FrameworkRoot "kiln\skills"
 if (Test-Path $frameworkSkills) {
@@ -270,6 +268,8 @@ venv/
 *~
 .kiln/
 .worktrees/
+.github/
+.claude/skills
 '@
         Set-Content -Path $gitignorePath -Value $gitignoreContent -Encoding UTF8
         Write-Host "✓ Created .gitignore" -ForegroundColor Green
