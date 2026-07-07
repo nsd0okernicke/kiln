@@ -102,15 +102,30 @@ function Ensure-InitialGitignore {
     if (Test-Path $gitignorePath) {
         # Ensure required patterns are in .gitignore (older kiln-init runs may predate some of these)
         $content = Get-Content $gitignorePath -Raw
-        $needsKiln = $content -notmatch '^\s*\.kiln/\s*$'
+        # No trailing slash on .kiln: Prepare-Worktrees creates .kiln as a symlink in each
+        # worktree, and a trailing-slash gitignore pattern only matches real directories,
+        # not symlinks — with the slash, the symlink stays untracked-but-not-ignored and
+        # can get swept into a commit, later breaking merges that try to check it out.
+        $needsKiln = $content -notmatch '^\s*\.kiln\s*$'
         $needsWorktrees = $content -notmatch '^\s*\.worktrees/\s*$'
         $needsGithub = $content -notmatch '^\s*\.github/\s*$'
         $needsClaudeSkills = $content -notmatch '^\s*\.claude/skills\s*$'
+        # CLAUDE.md, .mcp.json, and tmp/ are regenerated per-worktree/per-role with different
+        # content each time (Write-GeneratedCLAUDEmd, Prepare-Worktrees). If tracked, every
+        # role's copy differs, so every /kiln-receive merge hits an add/add conflict on all
+        # three — confirmed live: an agent got stuck exactly here and had to escalate instead
+        # of resolving it, since these files were never supposed to be shared across roles.
+        $needsClaudeMd = $content -notmatch '^\s*CLAUDE\.md\s*$'
+        $needsMcpJson = $content -notmatch '^\s*\.mcp\.json\s*$'
+        $needsTmp = $content -notmatch '^\s*tmp/\s*$'
 
-        if ($needsKiln) { Add-Content $gitignorePath ".kiln/" -Encoding UTF8 }
+        if ($needsKiln) { Add-Content $gitignorePath ".kiln" -Encoding UTF8 }
         if ($needsWorktrees) { Add-Content $gitignorePath ".worktrees/" -Encoding UTF8 }
         if ($needsGithub) { Add-Content $gitignorePath ".github/" -Encoding UTF8 }
         if ($needsClaudeSkills) { Add-Content $gitignorePath ".claude/skills" -Encoding UTF8 }
+        if ($needsClaudeMd) { Add-Content $gitignorePath "CLAUDE.md" -Encoding UTF8 }
+        if ($needsMcpJson) { Add-Content $gitignorePath ".mcp.json" -Encoding UTF8 }
+        if ($needsTmp) { Add-Content $gitignorePath "tmp/" -Encoding UTF8 }
     } else {
         # Create new .gitignore with essential patterns
         $gitignoreContent = @'
@@ -134,32 +149,53 @@ venv/
 *.swp
 *.swo
 *~
-.kiln/
+.kiln
 .worktrees/
 .github/
 .claude/skills
+CLAUDE.md
+.mcp.json
+tmp/
 '@
         Set-Content -Path $gitignorePath -Value $gitignoreContent -Encoding UTF8
     }
 }
 
 function Initialize-GitRepo {
-    if (Test-Path (Join-Path $WorkingDir ".git")) {
-        return
+    $isNewRepo = -not (Test-Path (Join-Path $WorkingDir ".git"))
+
+    if ($isNewRepo) {
+        git -C $WorkingDir init | Out-Null
+        git -C $WorkingDir branch -M main | Out-Null
     }
 
-    git -C $WorkingDir init | Out-Null
-    git -C $WorkingDir branch -M main | Out-Null
     Ensure-InitialGitignore
-    git -C $WorkingDir add . | Out-Null
-    git -C $WorkingDir commit -m "Initial kiln repository" 2>&1 | Out-Null
 
-    # Verify initial commit was created
-    $headExists = git -C $WorkingDir rev-parse HEAD 2>$null
-    if (-not $headExists) {
-        Write-Host "Error: Initial git commit failed. Make sure git is configured correctly." -ForegroundColor Red
-        Write-Host "Try running: git config --global user.email 'test@example.com' && git config --global user.name 'Test User'" -ForegroundColor Yellow
-        exit 1
+    if ($isNewRepo) {
+        git -C $WorkingDir add . | Out-Null
+        git -C $WorkingDir commit -m "Initial kiln repository" 2>&1 | Out-Null
+
+        # Verify initial commit was created
+        $headExists = git -C $WorkingDir rev-parse HEAD 2>$null
+        if (-not $headExists) {
+            Write-Host "Error: Initial git commit failed. Make sure git is configured correctly." -ForegroundColor Red
+            Write-Host "Try running: git config --global user.email 'test@example.com' && git config --global user.name 'Test User'" -ForegroundColor Yellow
+            exit 1
+        }
+    } else {
+        # kiln-init.ps1 always creates .git itself, so this branch is what actually runs for
+        # every real kiln project — the "$isNewRepo" branch above almost never fires in
+        # practice. If .gitignore was never committed (kiln-init.ps1 writes it but deliberately
+        # leaves the first commit to the user), commit it now, before Prepare-Worktrees creates
+        # any worktree branches from HEAD. Otherwise `git worktree add` won't check it out, the
+        # .kiln symlink (and anything else meant to be ignored) stays unprotected in each
+        # worktree, and the next broad `git add` there can accidentally track it — which later
+        # breaks merges that try to check that tracked symlink out over a locked messages.db.
+        $gitignoreTracked = git -C $WorkingDir ls-files --error-unmatch .gitignore 2>$null
+        if (-not $gitignoreTracked) {
+            git -C $WorkingDir add .gitignore | Out-Null
+            git -C $WorkingDir commit -m "kiln: ensure .gitignore is tracked before creating worktrees" 2>&1 | Out-Null
+        }
     }
 }
 
@@ -645,7 +681,8 @@ function Build-WezTermAgentCommand {
         [string]$Agent,
         [string]$DisplayName,
         [string]$WorktreePath,
-        [string]$Model = ""
+        [string]$Model = "",
+        [string]$Role = ""
     )
 
     if (-not $Model) {
@@ -656,7 +693,8 @@ function Build-WezTermAgentCommand {
 
     switch ($Agent) {
         "claude" {
-            $command = "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json -n '$DisplayName' 'Start your role session.'"
+            $debugLog = Join-Path $STATE_DIR "logs" "claude-debug-$Role.log"
+            $command = "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json --debug-file '$debugLog' -n '$DisplayName' 'Start your role session.'"
         }
         "copilot" {
             $command = "copilot --allow-all"
@@ -740,7 +778,7 @@ function Build-WindowsTerminalTabsLayout {
         $wtArgs += "--colorScheme", $AgentColors[$i % $AgentColors.Count]
         $wtArgs += "pwsh", "-NoExit", "-Command"
 
-        $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model
+        $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Role $Roles[$i]
         $wtArgs += $agentCmd
     }
 
@@ -869,7 +907,7 @@ function Build-WindowsTerminalTabsArrayLayout {
                 }
 
                 $colorIdx = $roleIdx % $AgentColors.Count
-                $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model
+                $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Role $roleInPane
                 $wtArgs += "-d", $worktreePath
                 $wtArgs += "--colorScheme", $AgentColors[$colorIdx]
                 $wtArgs += "pwsh", "-NoExit", "-Command"
@@ -886,7 +924,8 @@ function Get-WindowsTerminalAgentCommand {
         [string]$Agent,
         [string]$DisplayName,
         [string]$WorktreePath,
-        [string]$Model = ""
+        [string]$Model = "",
+        [string]$Role = ""
     )
 
     if (-not $Model) {
@@ -895,10 +934,11 @@ function Get-WindowsTerminalAgentCommand {
 
     switch ($Agent) {
         "claude" {
+            $debugLog = Join-Path $STATE_DIR "logs" "claude-debug-$Role.log"
             if ($DisplayName) {
-                return "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json -n ""$DisplayName"" ""Start your role session."""
+                return "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json --debug-file ""$debugLog"" -n ""$DisplayName"" ""Start your role session."""
             } else {
-                return "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json ""Start your role session."""
+                return "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json --debug-file ""$debugLog"" ""Start your role session."""
             }
         }
         "copilot" {
@@ -1091,7 +1131,7 @@ if ($TerminalBackend -eq "wezterm") {
 
         Write-GeneratedCLAUDEmd -Index $i -Role $role -WorktreePath $worktreePath -Agent $agent -Mode $global:MODES[$i]
 
-        $cmd = Build-WezTermAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model
+        $cmd = Build-WezTermAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Role $role
 
         $roleData += [PSCustomObject]@{
             role  = $role

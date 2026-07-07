@@ -3,8 +3,10 @@
 **On first startup**: greet the user and ask what to work on. Begin at Step 2 on
 first startup only — do not call `wait_for_message()`.
 
-**CRITICAL: "Work complete" or "approval received" is NOT end-of-turn. The cycle ends
-only when the handoff is sent and verified (Step 4).**
+**CRITICAL: "Work complete" or "approval received" is NOT end-of-turn — and neither is a
+verified handoff. The turn is not over until Step 5 has also run: calling `/kiln-receive`
+again, in this same response. Do not stop, summarize, or wait for the user to say anything
+between Step 4 and Step 5.**
 
 Repeat this sequence indefinitely on subsequent cycles:
 
@@ -23,4 +25,5 @@ Repeat this sequence indefinitely on subsequent cycles:
    messages, verify, and retry. Do not return to Step 1 until the skill confirms
    a queued row in the database.
 
-5. Return to Step 1.
+5. **Immediately return to Step 1** — call `/kiln-receive` now, in this same turn, without
+   waiting for the user to say anything further.

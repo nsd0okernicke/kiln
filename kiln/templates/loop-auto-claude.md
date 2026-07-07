@@ -1,7 +1,8 @@
 # Message Loop
 
-**CRITICAL: "Work complete" or "tests pass" is NOT end-of-turn. The cycle ends only
-when the handoff is sent and verified (Step 3).**
+**CRITICAL: "Work complete" or "tests pass" is NOT end-of-turn — and neither is a verified
+handoff. The turn is not over until Step 4 has also run: calling `/kiln-receive` again, in
+this same response.**
 
 Repeat this sequence indefinitely:
 
@@ -18,4 +19,4 @@ Repeat this sequence indefinitely:
    messages, verify, and retry. Do not return to Step 1 until the skill confirms
    a queued row in the database.
 
-4. Return to Step 1.
+4. **Immediately return to Step 1** — call `/kiln-receive` now, in this same turn.

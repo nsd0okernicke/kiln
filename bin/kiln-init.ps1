@@ -121,6 +121,12 @@ if (Test-Path $frameworkRoles) {
 $frameworkSkills = Join-Path $FrameworkRoot "kiln\skills"
 if (Test-Path $frameworkSkills) {
     Get-ChildItem -Path $frameworkSkills -Directory | ForEach-Object {
+        # Remove any pre-existing copy first (e.g. from a prior kiln-init run) so a stale or
+        # partially-copied skill directory can never linger or shadow the fresh one.
+        $destSkillDir = Join-Path $skillsDir $_.Name
+        if (Test-Path $destSkillDir) {
+            Remove-Item -Path $destSkillDir -Recurse -Force
+        }
         Copy-Item -Path $_.FullName -Destination $skillsDir -Recurse -Force
     }
     Write-Host "✓ Copied skills" -ForegroundColor Green
@@ -148,7 +154,8 @@ Write-Host "✓ Created constitution.md" -ForegroundColor Green
 Write-ClaudeCodeConfig -ProjectPath $Target
 Write-Host "✓ Created .claude/settings.json" -ForegroundColor Green
 
-# Create .mcp.json in project root with MCP server configuration (for Copilot agents)
+# Create .mcp.json in project root with MCP server configuration (for Claude agents;
+# Copilot gets its own ~/.copilot/mcp-config.json instead — see Prepare-AgentConfigs in kiln.ps1)
 $dbPath = Join-Path $Target ".kiln" "messages.db"
 $dbPathEscaped = $dbPath -replace '\\', '\\'
 $mcpJsonPath = Join-Path $Target ".mcp.json"
@@ -266,10 +273,13 @@ venv/
 *.swp
 *.swo
 *~
-.kiln/
+.kiln
 .worktrees/
 .github/
 .claude/skills
+CLAUDE.md
+.mcp.json
+tmp/
 '@
         Set-Content -Path $gitignorePath -Value $gitignoreContent -Encoding UTF8
         Write-Host "✓ Created .gitignore" -ForegroundColor Green

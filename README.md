@@ -107,7 +107,7 @@ my-project/
 ├── .claude/                      # Claude Code configuration
 │   ├── settings.json             # MCP and permission settings
 │   └── .gitignore
-├── .mcp.json                     # MCP server configuration (for Copilot agents)
+├── .mcp.json                     # MCP server configuration (kiln-db + kiln-channel, for Claude agents)
 ├── .gitignore                    # Git exclusions
 └── README.md                     # Project brief (optional, from example)
 ```
@@ -175,7 +175,8 @@ kiln/
 │   ├── kiln-cleanup.sh          # Manual cleanup (Unix/macOS)
 │   ├── kiln-cleanup.ps1         # Manual cleanup (Windows)
 │   ├── clear-messages.sh         # Clear message queue (testing utility)
-│   └── clear-messages.ps1        # Clear message queue (testing utility)
+│   ├── clear-messages.ps1        # Clear message queue (testing utility)
+│   └── kiln-db.ps1               # Inspect/manage messages.db (Windows only, no Unix equivalent yet)
 │
 ├── lib/                          # Framework internals
 │   ├── profile-loader.sh         # JSON profile parsing (Unix)
@@ -248,7 +249,7 @@ kiln/
 kiln.profiles.json           # Project-specific profiles (optional, at root)
 ```
 
-**Note:** Configuration profiles are inherited from the framework default (`kiln/profiles.yaml`). Projects can optionally override by creating `kiln.profiles.yaml` at the project root if they need custom profile definitions.
+**Note:** Configuration profiles are inherited from the framework default (`kiln/profiles.json`). Projects can optionally override by creating `kiln.profiles.json` at the project root if they need custom profile definitions.
 
 ### Profile Loading & Inheritance
 
@@ -284,23 +285,19 @@ This ensures every agent operates with full constitutional context plus its spec
 
 ### Default Workflow
 
-The default four-agent workflow runs in a continuous loop. Each agent (except specifier) follows the same **Message Loop**:
+The default four-agent workflow runs in a continuous loop. Each agent's generated `CLAUDE.md` combines a role file with a **loop template** that drives the cycle through two skills — `/kiln-receive` and `/kiln-handoff` (`kiln/skills/kiln-receive`, `kiln/skills/kiln-handoff`):
 
-1. **Wait** — call `wait_for_message()` via the `kiln-channel` MCP server (blocks until a handoff arrives)
-2. **Merge** — `git merge <commit>` from the sender's branch into their own
-3. **Log received** — write a logbook.md entry
-4. **Work** — role-specific task (see below)
-5. **Log sent** — write a logbook.md entry for the outgoing handoff
-6. **Squash** — squash work commits into one
-7. **Send handoff** — INSERT into `.kiln/messages.db` via `write_query`
-8. Return to step 1
+1. **`/kiln-receive`** — calls `wait_for_message()` via the `kiln-channel` MCP server (blocks until a handoff arrives), persists the message to `tmp/handoff-in.md` (survives auto-compact), merges the sender's commit (`git merge <commit>`), and logs a `[RECEIVED]` entry to `logbook.md`
+2. **Work** — role-specific task (see below); `specifier` additionally requires explicit user approval before continuing
+3. **`/kiln-handoff`** — logs a `[SENT]` entry, squashes work commits into one, `INSERT`s the handoff into `.kiln/messages.db` via `write_query`, then reads it back to verify the row landed — retrying the INSERT if it didn't
+4. **Immediately return to step 1, in the same turn** — a sent and verified handoff is not the end of the cycle; the loop template is explicit that the turn isn't over until `/kiln-receive` has run again (this closes a stall we found in live testing, where an agent would finish a verified handoff and simply stop instead of waiting for the next message)
 
 The cycle flows: **specifier → coder → refactorer → architect → specifier**
 
-- **`specifier`** — At startup, asks the user what feature to specify. Writes Gherkin acceptance tests, gets user approval, sends handoff to coder. After sending, calls `wait_for_message()` to wait for architect's completion signal before starting the next feature.
-- **`coder`** — Implements behavior slices using strict TDD until all tests pass, then sends handoff to refactorer. The loop is not complete until the handoff is sent.
+- **`specifier`** — runs in **manual** mode: at startup, asks the user what feature to specify, writes Gherkin acceptance tests, and requires explicit user approval before sending the handoff to coder. All other roles run in **auto** mode (no human approval step in the loop).
+- **`coder`** — Implements behavior slices using strict TDD until all tests pass, then sends handoff to refactorer.
 - **`refactorer`** — Runs quality gates (coverage → CRAP → DRY → mutation site count), refactors for testability, sends handoff to architect.
-- **`architect`** — Reviews module structure, runs pre-handoff verification (mutation → DRY → soft Gherkin), sends "The job is complete" to specifier.
+- **`architect`** — Reviews module structure, runs pre-handoff verification (mutation → DRY → soft Gherkin), sends completion back to specifier.
 
 > **Optional role:** `reviewer` is an alternative to `refactorer` with a focus on batch processing and review pipelines. Add it to your profile in `kiln/profiles.json` to use it instead. See `kiln/roles/reviewer.md`.
 
@@ -366,6 +363,7 @@ Kiln will create a git repository if one doesn't exist, initialize worktrees, an
    - Generated `CLAUDE.md` files in each worktree with embedded constitution + project + role content
    - Per-worktree `.mcp.json` with both `kiln-db` and `kiln-channel` configured (correct role and branch env vars injected)
    - Channel log files at `.kiln/logs/channel-<role>.log` for debugging
+   - Claude Code debug log files at `.kiln/logs/claude-debug-<role>.log` (`--debug-file`) for diagnosing stalls after the fact
    - WezTerm tabs/panes (or Windows Terminal tabs) for each role
    - `.kiln/messages.db` SQLite database for inter-agent messaging via MCP
 
@@ -897,7 +895,17 @@ Review logbook.md for complete chain trace.
 
 ### Inspection
 
-After the test completes:
+After the test completes, `bin/kiln-db.ps1` (Windows) wraps the common queries so you don't have to hand-write SQL:
+
+```powershell
+.\bin\kiln-db.ps1 stats                     # message counts by status (queued/delivered/processed)
+.\bin\kiln-db.ps1 list-messages selftest    # all messages for a role, optionally -Status <status>
+.\bin\kiln-db.ps1 show-message <id>         # full content of one message
+.\bin\kiln-db.ps1 retry-message <id>        # move a message back to 'queued' from delivered/processed
+.\bin\kiln-db.ps1 clear-old -Before "-7 days"  # dry-run + delete old processed messages
+```
+
+Or query directly (any platform):
 
 ```bash
 # View message database stats (shows queued/delivered/processed counts)
@@ -922,14 +930,15 @@ If the test hangs or fails:
 3. **Check MCP configuration**: Verify `.mcp.json` is present in the project Kiln directory
 4. **Review agent console**: Each agent window shows what it received and did
 5. **Check logbook.md**: Look for error messages or incomplete entries
-6. **Query database directly**: `sqlite3 .kiln/messages.db "SELECT COUNT(*) FROM messages;"` to verify messages were inserted
+6. **Query database directly**: `.\bin\kiln-db.ps1 stats` (or `sqlite3 .kiln/messages.db "SELECT COUNT(*) FROM messages;"`) to verify messages were inserted
 7. **Check agent permissions**: Ensure agents have MCP tool permissions in `.claude/settings.json`
+8. **Check the agent's own reasoning**: `.kiln/logs/claude-debug-<role>.log` captures what the agent was actually doing/deciding, if it stalled without an obvious cause in the message queue or channel log
 
 ---
 
 ## Project Maturity & Status
 
-**Kiln v0.1 — PHASE 4: CHANNEL-BASED MESSAGING ✓ COMPLETE**
+**Kiln v0.1 — PHASE 5: SKILL-BASED HANDOFF HARDENING ✓ COMPLETE**
 
 ### ✓ Completed Features
 
@@ -939,9 +948,15 @@ If the test hangs or fails:
 - **Phase 4: Channel-Based Messaging** — Replaced SQL inbox polling with a blocking `wait_for_message()` Channel
   - ✓ `kiln-channel` Python MCP server (`kiln/mcp-server/channel.py`) — polls SQLite and blocks until a message arrives, returns it already marked delivered
   - ✓ Per-worktree `.mcp.json` generated with `kiln-db` + `kiln-channel`, correct `KILN_ROLE`/`KILN_BRANCH` env vars injected per agent
-  - ✓ Explicit numbered Message Loop in every role: wait → merge → log → work → log → squash → handoff → repeat
   - ✓ Channel debug logs at `.kiln/logs/channel-<role>.log`
   - ✓ `-Stop` flag on `kiln.ps1` to kill orphaned MCP server processes after terminal close
+- **Phase 5: Skill-Based Handoff Hardening** — Moved the raw receive/handoff mechanics out of the loop templates into two dedicated skills, and closed stall/merge failure modes found through live multi-cycle testing against the LibraryHub example
+  - ✓ `/kiln-receive` and `/kiln-handoff` skills (`kiln/skills/kiln-receive`, `kiln/skills/kiln-handoff`) own the full receive/send sequence, including verify-and-retry on the handoff INSERT
+  - ✓ Loop templates' "not end-of-turn" guardrail now explicitly covers looping back to `/kiln-receive`, not just the handoff-sent step — closes a confirmed stall where an agent finished a verified handoff and simply stopped instead of waiting for the next message
+  - ✓ `.gitignore` fixes for symlinked/regenerated paths (`.kiln`, `CLAUDE.md`, `.mcp.json`, `tmp/`) that were getting accidentally committed and causing every `/kiln-receive` merge to hit conflicts
+  - ✓ `.gitignore` is now committed before any worktree is created, even in a pre-existing repo, so new worktrees actually inherit it
+  - ✓ Per-agent Claude Code debug logs (`--debug-file`) at `.kiln/logs/claude-debug-<role>.log`
+  - ✓ `kiln-db.ps1` CLI (`list-messages`, `show-message`, `stats`, `retry-message`, `clear-old`) for inspecting the message queue without hand-writing SQL
 
 ### Current Capabilities
 
@@ -949,7 +964,7 @@ If the test hangs or fails:
 - ✓ Per-role configuration and role injection
 - ✓ Isolated git worktrees with branch naming (e.g., `feature/ABC-coder`, `main-refactorer`)
 - ✓ Blocking Channel messaging — agents call `wait_for_message()` and are notified the instant a handoff arrives
-- ✓ SQL handoff sending via MCP `kiln-db` `write_query`
+- ✓ Skill-based receive/handoff sequence (`/kiln-receive`, `/kiln-handoff`) with verify-and-retry on the handoff INSERT
 - ✓ Layered constitution system (workflow, engineering, project)
 - ✓ Cross-platform terminal support (Windows Terminal, WezTerm, tmux)
 - ✓ Flexible terminal layouts (tabs, split panes, grids, focus layouts)
@@ -978,7 +993,7 @@ This means agents can read/write/execute any file in their worktree without prom
 
 ### Known Limitations & Future Work
 
-- **Real feature workflows not yet tested** — Phase 3 validates infrastructure; actual multi-agent feature development (specifying → coding → refactoring → verification) requires additional testing
+- **Real feature workflows are being tested iteratively** — multi-cycle specifier → coder → refactorer → architect chains have run against the LibraryHub example; several stall and merge-conflict failure modes have been found and fixed this way (see Phase 5), and this manual test/diagnose/fix loop is ongoing
 - **Error handling** — Minimal error recovery in agent workflows; graceful degradation not yet implemented
 - **Scaling** — Tested with 4-5 agents; behavior with 10+ agents unknown
 - **Multi-agent backend validation** — Framework supports `claude` and `copilot` (validated); `codex` and `grok` support planned but not yet implemented

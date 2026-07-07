@@ -38,27 +38,6 @@ function Invoke-TerminalCloseWindow {
     # Window tracking not supported
 }
 
-function Build-AgentCommand {
-    param(
-        [string]$Agent,
-        [string]$DisplayName,
-        [string]$WorktreePath
-    )
-
-    switch ($Agent) {
-        "claude" {
-            return "claude --model claude-haiku-4-5-20251001 --permission-mode bypassPermissions --mcp-config ./.mcp.json -n '$DisplayName'"
-        }
-        "copilot" {
-            # Copilot auto-detects mcp-config.json from ~/.copilot/
-            return "copilot --allow-all --name '$DisplayName'"
-        }
-        default {
-            return "echo 'Agent $Agent not supported'"
-        }
-    }
-}
-
 function Start-WezTermSession {
     param(
         [PSCustomObject[]]$RoleData,
