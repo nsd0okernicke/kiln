@@ -2,10 +2,10 @@
 
 ## Notes
 
-- MCP server implementation: `.Kiln/mcp-server/` (SQLite-based)
-- Current working: Claude and Copilot agents with MCP
-- Socket location: `.Kiln/mcp.sock` (shared across worktrees)
-- Testing: Use `selftest` profile with `Kiln_SELFTEST_MODE=true` and `/doctor`
+- Message queue: SQLite at `.kiln/messages.db`, accessed via two MCP servers — `kiln-db` (generic `mcp-sqlite`, read/write) and `kiln-channel` (`kiln/mcp-server/channel.py`, blocking `wait_for_message()` for Claude agents; Copilot has no channel, only `kiln-db` polling)
+- Receive/handoff mechanics live in the `/kiln-receive` and `/kiln-handoff` skills (`kiln/skills/kiln-receive`, `kiln/skills/kiln-handoff`), not inline in role files or the loop templates
+- Testing: use the `selftest` profile (`kiln/profiles.json`) — see README "Communication System Health Check"
+- Diagnostics: `bin/kiln-db.ps1` (`list-messages`/`show-message`/`stats`/`retry-message`/`clear-old`), `.kiln/logs/channel-<role>.log`, `.kiln/logs/claude-debug-<role>.log` (`--debug-file`)
 
 ---
 
@@ -13,7 +13,7 @@
 
 **Goal:** Enable MCP and full swarm integration for Codex and Grok backends
 
-**Subtasks:**
+**Current state:** `codex`/`grok` are accepted as config values (e.g. `kiln.ps1`'s agent-name validation) but have no case in the actual command builders (`Build-WezTermAgentCommand`, `Get-WindowsTerminalAgentCommand` in `bin/kiln.ps1`) — selecting either just echoes "Agent not supported" instead of launching anything.
 
 ### 1.1 Codex Agent Implementation
 
@@ -24,16 +24,16 @@
   - Document any authentication requirements or setup steps
 
 - [ ] **Implement Codex MCP Configuration**
-  - Add Codex detection to Prepare-AgentConfigs (PowerShell)
-  - Create ~/.codex/mcp-config.json in prepare_agent_configs (Bash)
-  - Add Codex case to Build-AgentCommand (wezterm.ps1, Kiln.ps1, Kiln.sh)
-  - Include permission flags in launch command (--allow-all or equivalent)
-  - Test with codex-test profile
+  - Add Codex detection to `Prepare-AgentConfigs` (PowerShell)
+  - Create `~/.codex/mcp-config.json` in `prepare_agent_configs` (Bash)
+  - Add a Codex case to `Build-WezTermAgentCommand` / `Get-WindowsTerminalAgentCommand` (`kiln.ps1`) and the Unix equivalent (`kiln.sh`)
+  - Include permission flags in the launch command
+  - Test with a `codex-test` profile
 
 - [ ] **Validate Codex Integration**
-  - Launch single Codex agent with `/doctor` to verify MCP
+  - Launch a single Codex agent and verify MCP tool access
   - Test message send/receive from other agents
-  - Verify Codex can read/write files in worktree
+  - Verify Codex can read/write files in its worktree
   - Check for any session/timeout issues
 
 ### 1.2 Grok Agent Implementation
@@ -45,14 +45,14 @@
   - Check for environment variables or config overrides
 
 - [ ] **Implement Grok MCP Configuration**
-  - Add Grok detection to Prepare-AgentConfigs (PowerShell)
-  - Create ~/.grok/mcp-config.json in prepare_agent_configs (Bash)
-  - Add Grok case to Build-AgentCommand in all three launchers
-  - Include permission flags in launch command
-  - Add grok-test profile to profiles.yaml
+  - Add Grok detection to `Prepare-AgentConfigs` (PowerShell)
+  - Create `~/.grok/mcp-config.json` in `prepare_agent_configs` (Bash)
+  - Add a Grok case to the same command builders as above
+  - Include permission flags in the launch command
+  - Add a `grok-test` profile to `kiln/profiles.json`
 
 - [ ] **Validate Grok Integration**
-  - Launch single Grok agent with `/doctor` to verify MCP
+  - Launch a single Grok agent and verify MCP tool access
   - Test basic message passing in single-agent mode
   - Verify file operations (read/write) in worktree
   - Check terminal output and logging
@@ -60,107 +60,65 @@
 ### 1.3 Multi-Agent Mixed Testing
 
 - [ ] **Create Mixed-Agent Test Profiles**
-  - Create profile with claude + copilot + codex
-  - Create profile with claude + copilot + grok
-  - Create profile with all four agents if feasible
+  - Profile with claude + copilot + codex
+  - Profile with claude + copilot + grok
+  - Profile with all four agents if feasible
   - Document any agents that can't coexist
 
 - [ ] **Test Cross-Agent Communication**
   - Verify messages route correctly between different agent types
   - Test handoff chain: claude → copilot → codex → grok
-  - Check message delivery times for each agent type
+  - Check message delivery times per agent type
   - Document any performance differences
 
 - [ ] **Documentation Updates**
-  - Update README.md with Codex and Grok setup instructions
-  - Add Codex and Grok to "Platform Support" section
-  - Create example profiles showing mixed-agent setups
+  - Update README with Codex/Grok setup instructions and "Platform Support" entries
+  - Add example profiles showing mixed-agent setups
   - Document any agent-specific limitations or workarounds
 
 ---
 
 ## 2. Message Routing & Role Communication
 
-- [ ] Verify message routing respects branch context (existing work)
-- [ ] Test agent-to-agent handoff with different agent types
+- [ ] Verify message routing respects branch context under mixed-agent swarms specifically (single-backend swarms are already validated live)
+- [ ] Test agent-to-agent handoff with different agent types once Codex/Grok land
 - [ ] Validate specifier → coder → architect flow across mixed backends
 
 ---
 
-## 3. MCP Push Notifications (Hybrid Model)
+## 3. Handoff Reliability Hardening
 
-**Current Implementation:** Agents poll SQLite inbox (pull model only)
+**Context:** Kiln runs persistent, always-on Claude agents communicating via the SQLite message queue. Historically ~10% of cycles failed — an agent would complete its work but never send (or never resume waiting for) the next handoff. Live multi-cycle testing against the LibraryHub example this session found and fixed one confirmed root cause: the loop templates' "not end-of-turn" guardrail only covered through the handoff-sent step, not the return to `/kiln-receive` — so a verified handoff looked like a valid stopping point. That's fixed (`kiln/templates/loop-*-claude.md`), along with the `/kiln-handoff` skill's own verify-and-retry on the INSERT.
 
-**Goal:** Add push notifications for immediate delivery while keeping pull as fallback/alternative
+The tracks below are further hardening layers — useful if stalls recur with a different root cause, or to make enforcement deterministic (code) rather than relying on prompt wording:
 
-**Alternative Push Mechanisms to Evaluate:**
+### Track A — Prompt Hardening (remaining piece)
 
-### Option 1: Notifications (JSON-RPC Notifications)
+- [ ] **Cycle-tracking summary**: at the top of each cycle (after `/kiln-receive`), have the agent emit a one-line internal status — `Cycle N: received from <sender>, handoff-name=<name>, commit=<hash>` — not a logbook write, just reasoning output that keeps "I must complete this full cycle" salient in context. (Self-verification after the handoff INSERT is already done — see `/kiln-handoff` Step 5.)
 
-- Servers send unsolicited messages to connected client (Claude Code/Copilot)
-- No response expected from client
-- MCP native, simple to implement
-- **Pros:** Standard MCP pattern, low overhead
-- **Cons:** Depends on persistent MCP connection; client must handle incoming messages
+### Track B — Claude Code Hooks (deterministic enforcement, not yet implemented)
 
-### Option 2: Subscriptions (Resource Subscriptions)
+Hooks run shell code at fixed lifecycle points regardless of what the LLM decides — the highest-leverage option if prompt hardening alone isn't enough for a given stall pattern.
 
-- Clients subscribe to resources via `resources/subscribe`
-- Server pushes `resources/updated` notifications on changes
-- Already in MCP spec; used by mcp-observer-server (file watching)
-- **Pros:** Standard pattern, client can choose what to subscribe to
-- **Cons:** Still requires client-side subscription setup; may not wake idle agents
+- [ ] **`Stop` hook** (`kiln/hooks/enforce-handoff.ps1`) — fires at end of every turn; checks whether a handoff was sent since the last `wait_for_message()` (e.g. query `messages` for a row from this role/branch in the last ~2 minutes). If missing *and* the agent did visible work this turn (git activity), return `{"decision": "block", "reason": "..."}` to force the agent to keep going. Needs the "did work happen" check to avoid blocking on legitimate idle waits.
+- [ ] **`PostToolUse` hook** (`kiln/hooks/verify-write.ps1`) — after every `write_query` call, flag zero-row inserts so a failed INSERT surfaces immediately instead of silently.
+- [ ] **Wire both into the generated `.claude/settings.json`** — `kiln/.claude/settings.json` template gets copied to every worktree; hook commands need absolute paths, resolved from `KILN_DIR`/`STATE_DIR` at generation time (same pattern as `.mcp.json`'s absolute DB path).
 
-### Option 3: Server-Sent Events (SSE) Transport
+### Track C — Watcher/Orchestrator Process (near-100% reliability, high effort)
 
-- For remote servers; persistent HTTP connection
-- Server can push updates in real-time without polling
-- **Pros:** True push over HTTP; works across networks
-- **Cons:** Adds complexity (HTTP server); not suitable for local socket-based setup initially
+- [ ] Add a `workflow_state` table (`agent`, `branch`, `state`, `last_updated`; states `WAITING | EXECUTING | COMMITTED | HANDOFF_SENT`)
+- [ ] `kiln/mcp-server/watcher.py` — polls `workflow_state` every ~10s; if an agent is stuck in `EXECUTING` past a timeout (default 15 min), INSERTs a corrective message into that agent's own inbox ("handoff not sent, complete it now")
+- [ ] Infer state transitions from existing DB/git activity (delivered message → `EXECUTING`; new outgoing message → `HANDOFF_SENT`; next `wait_for_message()` → `WAITING`) rather than adding new tools agents must remember to call
+- [ ] New optional `-Watcher` switch on `kiln.ps1`; extend `-Stop` to also kill `watcher.py` processes (same pattern as the existing `channel.py` kill list)
+- [ ] **Escalation path if the watcher's nudge-based approach isn't enough**: a fuller orchestrator that owns *all* state transitions — agent only executes the task and signals completion; the orchestrator (deterministic code) does the squash/handoff/state-update itself. Bigger redesign (agents become "smart task executors" rather than full workflow owners); only worth it if Track C's lighter nudge approach proves insufficient in practice.
 
-### Option 4: Channels (Claude-Specific)
+### Track D — Non-Claude Agent Messaging Compatibility
 
-- Claude Code supports `claude/channel` capability declaration
-- Server pushes messages directly into agent's session context
-- "New task for Agent B arrived" → agent context updated
-- **Pros:** Native Claude Code feature; seamless integration
-- **Cons:** Claude-specific; may not work with Copilot or other backends
+Distinct from Section 1 (launching Codex/Grok at all) — this is about letting *non-blocking* agents (Copilot today, Codex/Grok later) participate in the same message queue without a blocking channel.
 
-### Option 5: Triggers & Events Working Group (Future)
-
-- Standardized webhook/callback mechanism in development
-- Proactive server-to-client notifications with ordering guarantees
-- **Pros:** Future-proof; standardized across MCP implementations
-- **Cons:** Not yet finalized; may change; requires waiting
-
-### Recommended Architecture (Push + Pull Hybrid)
-
-1. **Central Orchestrator MCP Server** (enhance current mcp-server)
-   - Owns SQLite database
-   - Watches for new messages via SQLite triggers, file watcher, or low-frequency polling
-   - Maintains connected clients per agent
-   - Can emit both push notifications AND serve pull requests
-
-2. **Push Notifications (Primary Path)**
-   - When task written for Agent B, server sends JSON-RPC notification
-   - Target agent's MCP client receives notification immediately
-   - Host (Claude Code/Copilot) injects into agent's context
-   - Agent wakes up and processes task without delay
-
-3. **Pull/Polling (Secondary/Fallback Path)**
-   - Keep current poll mechanism as always-available alternative
-   - Agents can actively check inbox periodically (current behavior)
-   - Works when push notifications are missed or agent was offline
-   - Ensures messages aren't lost even if push fails
-
-**Implementation Strategy:**
-
-- [ ] Test JSON-RPC notifications with current SQLite server (keep polling enabled)
-- [ ] Investigate Claude Code channel support (for context injection)
-- [ ] Prototype Orchestrator enhancement to emit notifications alongside poll responses
-- [ ] Validate hybrid behavior with mixed-agent swarm (Claude + Copilot)
-- [ ] Document dual push/pull architecture in MCP architecture docs
-- [ ] Measure performance: notification latency vs. polling interval trade-offs
+- [ ] **`poll_for_message()` in `channel.py`** — non-blocking variant of the existing `_fetch_and_deliver()` used by `wait_for_message()`; single check, returns `{"received": false}` immediately if nothing's queued, so a non-Claude agent can call it in its own retry loop
+- [ ] **Agent-type-aware receive instructions** — `runtime-copilot.md` / `loop-*-copilot.md` should reference `poll_for_message()` (once it exists) instead of raw `read_query`, if `kiln-channel` becomes available to Copilot (next bullet)
+- [ ] **Per-role `kiln-channel` config for Copilot** — `Prepare-AgentConfigs` currently writes one global `~/.copilot/mcp-config.json` with only `kiln-db`; extend to include `kiln-channel` with per-role env vars, which requires Copilot to support per-worktree (not just global) MCP config — confirm this is possible before committing to the approach
 
 ---
 
@@ -173,81 +131,67 @@
 - **Architect role**: Query architecture patterns, design principles, tech decisions from centralized docs
 - **All roles**: Consistent reference material without context switching
 
-**Supported Sources:**
-
----
-
-## 6. Create Technical Slide Deck
-
-**Goal:** Prepare a slide deck outline that visualizes the Kiln project technical architecture and workflow.
-
-- [ ] Draft textual slide descriptions for:
-  - agent cycle and role handoff
-  - worktree and merge strategy
-  - merged `claude.md` / `copilot-instructions.md` decision flow
-  - terminal layouts and launch workflows
-  - other architecture/highlight summary points
-- [ ] Capture visual guidance for each slide so the deck can be turned into graphics later
-- [ ] Keep descriptions concise, technical, and suitable for conversion into diagrams or slide content
-- [ ] Note any non-obvious highlights worth calling out in a presentation
-
-
-- PDF files (local)
-- URLs (web pages, APIs)
-- Markdown files (local/git)
-- OpenAPI/GraphQL schemas
-- Confluence/Notion exports (if available)
+**Supported Sources:** PDF files (local), URLs, Markdown files (local/git), OpenAPI/GraphQL schemas, Confluence/Notion exports (if available)
 
 **Implementation:**
 
 - [ ] **Design MCP server schema**
-  - Define resource types: `documentation/pdf`, `documentation/url`, `documentation/markdown`, `documentation/schema`
-  - Define tool interface: `search_documentation(query, source?, max_results?)`, `get_document(id)`, `list_sources()`
-  - Support metadata: title, author, date, version, tags for filtering
+  - Resource types: `documentation/pdf`, `documentation/url`, `documentation/markdown`, `documentation/schema`
+  - Tool interface: `search_documentation(query, source?, max_results?)`, `get_document(id)`, `list_sources()`
+  - Metadata: title, author, date, version, tags for filtering
 
 - [ ] **Build documentation indexer**
-  - PDF extraction: use PyPDF2 or pdfplumber to extract text + preserve structure
+  - PDF extraction: `PyPDF2`/`pdfplumber`, preserving structure
   - URL fetcher: HTTP client with caching, robots.txt respect
   - Markdown parser: extract headers, code blocks, maintain hierarchy
-  - Schema parser: OpenAPI/GraphQL to readable docs
-  - Semantic search: embed docs using Claude API embeddings (or local embeddings)
+  - Schema parser: OpenAPI/GraphQL → readable docs
+  - Semantic search: embeddings (Claude API or local)
 
 - [ ] **Implement MCP server**
-  - Create `.Kiln/mcp-server/doc-server.py` (or `.ts` if TypeScript preferred)
-  - Register as named MCP server alongside existing `Kiln-db` server
+  - `kiln/mcp-server/doc-server.py`
+  - Register alongside existing `kiln-db` server
   - Expose `search_documentation`, `get_document`, `list_sources` tools
-  - Cache documents in SQLite for performance (`.Kiln/docs.db`)
+  - Cache documents in SQLite (`.kiln/docs.db`)
 
-- [ ] **Configuration in Kiln.profiles.yaml**
-  - Add optional `documentation` field to profiles
-  - Example:
+- [ ] **Configuration in `kiln/profiles.json`**
+  - Add optional `documentation` field per profile:
 
-    ```yaml
-    profiles:
-      dev:
-        documentation:
-          - type: pdf
-            path: ./docs/api-reference.pdf
-          - type: url
-            url: https://example.com/api
-          - type: markdown
-            path: ./docs/architecture/
-        terminals: [...]
+    ```json
+    "documentation": [
+      {"type": "pdf", "path": "./docs/api-reference.pdf"},
+      {"type": "url", "url": "https://example.com/api"},
+      {"type": "markdown", "path": "./docs/architecture/"}
+    ]
     ```
 
 - [ ] **Integration with agent roles**
-  - Inject documentation server config into CLAUDE.md for specifier, architect
-  - Document usage examples in constitution/workflow.md
+  - Inject documentation server config into `CLAUDE.md` for specifier, architect
+  - Document usage in `kiln/constitution/workflow.md`
   - Add to selftest: verify agents can query documentation
 
 - [ ] **CLI utilities**
-  - `Kiln doc-index` — index docs without launching agents
-  - `Kiln doc-search <query>` — test search functionality
-  - `Kiln doc-sources` — list configured documentation sources
+  - `kiln doc-index` — index docs without launching agents
+  - `kiln doc-search <query>` — test search functionality
+  - `kiln doc-sources` — list configured documentation sources
 
 - [ ] **Testing & validation**
-  - Test with various PDF formats (scanned, native, complex layouts)
-  - Test URL fetching with rate limiting
-  - Test semantic search relevance
-  - Verify performance with large doc collections (100+ pages)
+  - Various PDF formats (scanned, native, complex layouts)
+  - URL fetching with rate limiting
+  - Semantic search relevance
+  - Performance with large doc collections (100+ pages)
 
+---
+
+## 5. Technical Slide Deck
+
+**Goal:** Prepare a slide deck outline visualizing Kiln's architecture and workflow.
+
+- [ ] Draft textual slide descriptions for:
+  - Agent cycle and role handoff (now: `/kiln-receive` → work → `/kiln-handoff` → immediate return)
+  - Worktree and merge strategy
+  - Merged `CLAUDE.md` / `copilot-instructions.md` decision flow
+  - Terminal layouts and launch workflows
+  - Other architecture/highlight summary points
+- [ ] Capture visual guidance per slide so it can be turned into graphics later
+- [ ] Keep descriptions concise, technical, suitable for diagrams
+- [ ] Note any non-obvious highlights worth calling out in a presentation
