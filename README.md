@@ -283,14 +283,21 @@ By default, **all projects use the framework's `kiln/profiles.json`**, which def
 
 This ensures every agent operates with full constitutional context plus its specific role directives.
 
+**Worker Subagent Assembly (Claude, `auto`-mode roles):** each of these agents is a thin, persistent **shell** — it only listens, merges, commits, and hands off. The actual role work is delegated each cycle to a disposable **worker subagent**, dispatched via Claude Code's `Agent` tool and defined in a generated `.claude/agents/<role>-worker.md`:
+
+- Built from the role file (`roles/<role>.md`) plus the `engineering.md` and `project.md` constitution — **not** `workflow.md`, since handoff/messaging protocol stays the shell's concern, not the worker's
+- Has no access to the `Agent` tool itself (no recursive subagent spawning) and no MCP messaging tools — it can only read/write/edit/test in its worktree
+- Its full working transcript never enters the shell's own context — only its final report does, which is what keeps the shell's context small and repetitive cycle over cycle, rather than filling up with the noise of the actual implementation work
+
 ### Default Workflow
 
-The default four-agent workflow runs in a continuous loop. Each agent's generated `CLAUDE.md` combines a role file with a **loop template** that drives the cycle through two skills — `/kiln-receive` and `/kiln-handoff` (`kiln/skills/kiln-receive`, `kiln/skills/kiln-handoff`):
+The default four-agent workflow runs in a continuous loop. Each Claude shell agent's generated `CLAUDE.md` combines a role file with a **loop template** that drives the cycle through two skills — `/kiln-receive` and `/kiln-handoff` (`kiln/skills/kiln-receive`, `kiln/skills/kiln-handoff`) — plus a delegated dispatch to that role's worker subagent in between:
 
 1. **`/kiln-receive`** — calls `wait_for_message()` via the `kiln-channel` MCP server (blocks until a handoff arrives), persists the message to `tmp/handoff-in.md` (survives auto-compact), merges the sender's commit (`git merge <commit>`), and logs a `[RECEIVED]` entry to `logbook.md`
-2. **Work** — role-specific task (see below); `specifier` additionally requires explicit user approval before continuing
-3. **`/kiln-handoff`** — logs a `[SENT]` entry, squashes work commits into one, `INSERT`s the handoff into `.kiln/messages.db` via `write_query`, then reads it back to verify the row landed — retrying the INSERT if it didn't
-4. **Immediately return to step 1, in the same turn** — a sent and verified handoff is not the end of the cycle; the loop template is explicit that the turn isn't over until `/kiln-receive` has run again (this closes a stall we found in live testing, where an agent would finish a verified handoff and simply stop instead of waiting for the next message)
+2. **Delegate the work** — the shell does not implement anything itself. It invokes the `Agent` tool (`subagent_type: "<role>-worker"`, blocking) with the handoff content and current branch/worktree; the worker subagent does the actual role-specific task (see below) and reports back what it did. `specifier` still additionally requires explicit user approval before continuing — it runs in `manual` mode and is not yet part of this delegation pattern (see Known Limitations).
+3. **Retry or escalate on failure** — if the worker reports it couldn't finish, the shell re-dispatches it once more with the failure as feedback; a second failure escalates to a handoff that reports the blocker instead of silently stalling.
+4. **`/kiln-handoff`** — logs a `[SENT]` entry, squashes work commits into one, `INSERT`s the handoff into `.kiln/messages.db` via `write_query`, then reads it back to verify the row landed — retrying the INSERT if it didn't
+5. **Immediately return to step 1, in the same turn** — a sent and verified handoff is not the end of the cycle; the loop template is explicit that the turn isn't over until `/kiln-receive` has run again (this closes a stall we found in live testing, where an agent would finish a verified handoff and simply stop instead of waiting for the next message)
 
 The cycle flows: **specifier → coder → refactorer → architect → specifier**
 
@@ -361,6 +368,7 @@ Kiln will create a git repository if one doesn't exist, initialize worktrees, an
 4. **Startup creates**:
    - Git worktrees under `.worktrees/` (one per non-@current role)
    - Generated `CLAUDE.md` files in each worktree with embedded constitution + project + role content
+   - Generated `.claude/agents/<role>-worker.md` in each worktree (Claude, `auto`-mode roles) — the worker subagent definition the shell delegates its actual work to each cycle
    - Per-worktree `.mcp.json` with both `kiln-db` and `kiln-channel` configured (correct role and branch env vars injected)
    - Channel log files at `.kiln/logs/channel-<role>.log` for debugging
    - Claude Code debug log files at `.kiln/logs/claude-debug-<role>.log` (`--debug-file`) for diagnosing stalls after the fact
@@ -400,6 +408,7 @@ Kiln will create a git repository if one doesn't exist, initialize worktrees, an
    - Creates Terminal.app windows or WezTerm tabs (auto-detected)
    - Each agent gets a tmux pane to run in
    - Generates `CLAUDE.md` files with full constitution and role content
+   - Generates `.claude/agents/<role>-worker.md` for Claude agents (see Known Limitations — the receive/delegate/handoff loop that dispatches to this worker is currently Windows-validated only)
 
 ---
 
@@ -938,7 +947,7 @@ If the test hangs or fails:
 
 ## Project Maturity & Status
 
-**Kiln v0.1 — PHASE 5: SKILL-BASED HANDOFF HARDENING ✓ COMPLETE**
+**Kiln v0.1 — PHASE 6: SHELL + WORKER-SUBAGENT DELEGATION 🧪 IMPLEMENTED, NOT YET LIVE-VALIDATED**
 
 ### ✓ Completed Features
 
@@ -957,6 +966,11 @@ If the test hangs or fails:
   - ✓ `.gitignore` is now committed before any worktree is created, even in a pre-existing repo, so new worktrees actually inherit it
   - ✓ Per-agent Claude Code debug logs (`--debug-file`) at `.kiln/logs/claude-debug-<role>.log`
   - ✓ `kiln-db.ps1` CLI (`list-messages`, `show-message`, `stats`, `retry-message`, `clear-old`) for inspecting the message queue without hand-writing SQL
+- **Phase 6: Shell + Worker-Subagent Delegation** — targets the remaining stall pattern (agent forgets to send/resume the loop after several cycles) by making Claude, `auto`-mode role agents thin shells that delegate their actual work to a disposable worker subagent each cycle, so the shell's own context stays small and repetitive instead of accumulating the full working transcript
+  - 🧪 `Write-GeneratedWorkerAgent` (`kiln.ps1`) / `write_worker_agent_file` (`kiln.sh`) generate `.claude/agents/<role>-worker.md` per worktree — role file + `engineering.md` + `project.md`, no `workflow.md`, no `Agent`/MCP tools
+  - 🧪 `loop-auto-claude.md` Step 2 now dispatches the `Agent` tool (`subagent_type: "<role>-worker"`, blocking) instead of doing the work inline; added a retry-once-then-escalate step for a worker that reports it couldn't finish, and extended the "not end-of-turn" guardrail to also cover the subagent's return
+  - ⚠️ **Not yet live-validated**: whether a Task-tool subagent can invoke this project's own Skills (`tdd-red`, `tdd-green`, `coverage-check`, etc.) the way the top-level shell session can, and whether the generated `.claude/agents/<role>-worker.md` is discovered correctly from a worktree's cwd, are both unconfirmed — validate against the `selftest` profile before relying on this for real TDD work
+  - ⚠️ Unix/tmux (`kiln.sh`) generates the worker file, but `write_agent_instruction_file` doesn't inject the loop/runtime templates at all (no `auto`/`manual` mode concept exists in `kiln.sh` today) — the receive→delegate→handoff loop this phase changes is Windows-validated only until that pre-existing platform gap is addressed separately
 
 ### Current Capabilities
 
@@ -971,6 +985,7 @@ If the test hangs or fails:
 - ✓ Per-agent model configuration for Claude agents
 - ✓ Built-in communication health check (selftest agent)
 - ✓ Logbook tracking of all handoffs and agent actions
+- 🧪 Shell + worker-subagent delegation for Claude `auto`-mode roles (Windows-validated pipeline only; see Phase 6)
 
 ### ⚠️ Security Considerations
 
@@ -997,6 +1012,8 @@ This means agents can read/write/execute any file in their worktree without prom
 - **Error handling** — Minimal error recovery in agent workflows; graceful degradation not yet implemented
 - **Scaling** — Tested with 4-5 agents; behavior with 10+ agents unknown
 - **Multi-agent backend validation** — Framework supports `claude` and `copilot` (validated); `codex` and `grok` support planned but not yet implemented
+- **Shell + worker-subagent delegation (Phase 6) is unvalidated in a live swarm** — implemented for Windows; needs a `selftest` run to confirm the worker subagent can invoke project Skills and that `.claude/agents/<role>-worker.md` is discovered correctly, then a multi-cycle LibraryHub run to check whether it actually reduces the stall rate it targets
+- **`kiln.sh` has no loop/runtime template injection** — Unix agents are launched from a much thinner instruction file than Windows' generated `CLAUDE.md`, with no `auto`/`manual` mode concept; the receive→delegate→handoff loop (and Phase 6's delegation change) may not be active there at all until this pre-existing gap is closed
 
 ### Recommended Next Steps
 
@@ -1004,6 +1021,8 @@ This means agents can read/write/execute any file in their worktree without prom
 2. **Add error handling** — Implement graceful failure modes when agents can't process messages
 3. **Multi-language projects** — Test with Python, Kotlin, JavaScript projects beyond the LibraryHub FastAPI example
 4. **CI/CD integration** — Determine how to integrate Kiln agents into GitHub Actions / GitLab CI workflows
+5. **Validate Phase 6 against `selftest`, then LibraryHub** — confirm worker-subagent dispatch and Skill invocation work as designed before rolling the pattern out further
+6. **Bring `kiln.sh` up to parity** — port the loop/runtime template injection Windows already has, so Phase 6 (and future loop changes) apply equally on Unix
 
 ---
 
