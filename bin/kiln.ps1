@@ -679,8 +679,7 @@ function Write-GeneratedCLAUDEmd {
 
 function Write-GeneratedWorkerAgent {
     param(
-        [string]$Role,
-        [string]$WorktreePath
+        [string]$Role
     )
 
     # The worker subagent does the role's actual implementation work for one cycle,
@@ -688,7 +687,11 @@ function Write-GeneratedWorkerAgent {
     # role + engineering/project constitution, but not workflow.md (handoff/messaging
     # protocol stays the shell's concern) and no MCP/Agent tools (no messaging, no
     # recursive subagent spawning).
-    $agentsDir = Join-Path $WorktreePath ".claude" "agents"
+    #
+    # Generated in the main project's .claude/agents/ directory (not the worktree's),
+    # so Claude Code's agent discovery finds it when the shell agent (running in the
+    # worktree) spawns the subagent via the Agent tool.
+    $agentsDir = Join-Path $WorkingDir ".claude" "agents"
     New-Item -ItemType Directory -Force -Path $agentsDir | Out-Null
     $outPath = Join-Path $agentsDir "$Role-worker.md"
 
@@ -1171,7 +1174,7 @@ if ($TerminalBackend -eq "wezterm") {
 
         Write-GeneratedCLAUDEmd -Index $i -Role $role -WorktreePath $worktreePath -Agent $agent -Mode $global:MODES[$i]
         if ($agent -eq "claude" -and $global:MODES[$i] -eq "auto") {
-            Write-GeneratedWorkerAgent -Role $role -WorktreePath $worktreePath
+            Write-GeneratedWorkerAgent -Role $role
         }
 
         $cmd = Build-WezTermAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Role $role
@@ -1198,7 +1201,7 @@ if ($TerminalBackend -eq "wezterm") {
         $agent = $global:AGENTS[$i]
         Write-GeneratedCLAUDEmd -Index $i -Role $role -WorktreePath $worktreePath -Agent $agent -Mode $global:MODES[$i]
         if ($agent -eq "claude" -and $global:MODES[$i] -eq "auto") {
-            Write-GeneratedWorkerAgent -Role $role -WorktreePath $worktreePath
+            Write-GeneratedWorkerAgent -Role $role
         }
         Write-Host "  [$($global:DISPLAY_NAMES[$i])] configured" -ForegroundColor Cyan
     }

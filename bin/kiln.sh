@@ -447,11 +447,14 @@ EOF
 # tool (.claude/agents/<role>-worker.md). Mirrors Write-GeneratedWorkerAgent in kiln.ps1:
 # role.md + project/engineering constitution, no workflow.md (handoff/messaging stays the
 # shell's concern) and no Agent/MCP tools (no recursive spawning, no messaging).
+#
+# Generated in the main project's .claude/agents/ directory (not the worktree's),
+# so Claude Code's agent discovery finds it when the shell agent (running in the
+# worktree) spawns the subagent via the Agent tool.
 write_worker_agent_file() {
   local role="$1"
-  local worktree_path="$2"
 
-  local agents_dir="$worktree_path/.claude/agents"
+  local agents_dir="$WORKING_DIR/.claude/agents"
   mkdir -p "$agents_dir"
   local out_path="$agents_dir/${role}-worker.md"
   local timestamp
@@ -510,7 +513,7 @@ launch_role() {
 
   write_agent_instruction_file "$role" "$prompt_file" "$role_worktree"
   if [[ "$agent" == "claude" ]]; then
-    write_worker_agent_file "$role" "$role_worktree"
+    write_worker_agent_file "$role"
   fi
 
   case "$agent" in
