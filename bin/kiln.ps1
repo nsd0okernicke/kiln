@@ -643,7 +643,8 @@ function Write-GeneratedCLAUDEmd {
     }
     New-Item -ItemType Directory -Force -Path $WorktreePath | Out-Null
 
-    # Load template blocks in order: loop -> runtime -> constitution (project -> engineering -> workflow) -> role
+    # Load template blocks in order: shell-prompt (auto-mode only) -> loop -> runtime -> constitution -> role
+    $shellPromptBlock  = if ($Mode -eq "auto" -and $Agent -eq "claude") { Get-KilnTemplate "shell-prompt-auto-$Agent" } else { $null }
     $loopBlock         = Get-KilnTemplate "loop-$Mode-$Agent"
     $runtimeBlock      = Get-KilnTemplate "runtime-$Agent"
     $constitutionBlock = Get-KilnConstitutionHeader
@@ -665,9 +666,14 @@ function Write-GeneratedCLAUDEmd {
     }
 
     # Render each block, join with horizontal rules.
-    # Constitution/project/engineering/workflow are ordered per constitution.md's stated
-    # precedence (project wins conflicts, then engineering, then workflow).
-    $blocks = @($roleBlock, $loopBlock, $runtimeBlock, $constitutionBlock, $project, $engineering, $workflow) | Where-Object { $_ }
+    # For 'auto' mode roles (Claude agents with subagent delegation), exclude the role block
+    # since that's now in the worker subagent. Instead include a shell-prompt that clarifies
+    # the shell's limited responsibilities. For 'manual' mode (e.g., specifier), include the role block.
+    if ($Mode -eq "auto" -and $Agent -eq "claude") {
+        $blocks = @($shellPromptBlock, $loopBlock, $runtimeBlock, $constitutionBlock, $project, $engineering, $workflow) | Where-Object { $_ }
+    } else {
+        $blocks = @($roleBlock, $loopBlock, $runtimeBlock, $constitutionBlock, $project, $engineering, $workflow) | Where-Object { $_ }
+    }
     $body   = ($blocks | ForEach-Object { Apply-Substitutions $_ $subs }) -join "`n`n---`n`n"
 
     # Write with auto-gen header

@@ -432,8 +432,20 @@ write_agent_instruction_file() {
   local worktree_path="$3"
 
   cat > "$prompt_file" <<EOF
-Read Kiln/constitution.md, then read every file it refers to recursively, and obey all of those instructions.
-Read Kiln/roles/${role}.md, then read every file it refers to recursively, and follow all of those instructions.
+# Shell Agent — Message Loop Only
+
+**Your role: LISTEN → DELEGATE → SEND. Nothing else.**
+
+Do not do any of the ${role^^} work yourself. You are a thin shell that:
+1. Listens for messages via \`/kiln-receive\`
+2. Delegates work to the \`${role}-worker\` subagent via Agent tool
+3. Sends completed work via \`/kiln-handoff\`
+4. Repeats
+
+The worker subagent has all the ${role} role rules, quality gates, and standards. Your job is the message loop only.
+
+Read Kiln/constitution.md for workflow and routing rules.
+Read Kiln/.claude/agents/${role}-worker.md to see what the worker subagent does (do not replicate it yourself).
 
 ## Kiln Runtime Paths
 
