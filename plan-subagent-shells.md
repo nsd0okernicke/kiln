@@ -14,22 +14,22 @@ Investigation confirmed the likely dominant contributor: steps 1 (listen), 2 (me
 skills (`kiln/skills/kiln-receive/SKILL.md`, `kiln/skills/kiln-handoff/SKILL.md`). The *only* step
 that runs as open-ended, many-tool-call agent work inside the same long-lived process is step 3
 ("apply your role rules" — `kiln/templates/loop-auto-claude.md:13`). That work (reading files,
-iterating code, running test suites) is what fills up the shell's context turn over turn and
+iterating code, running test suites) is what fills up the wrapper's context turn over turn and
 dilutes the comparatively small, static receive/handoff instructions that are responsible for the
 steps that go missing.
 
-**The fix:** turn each role's persistent process into a thin shell that only ever does
+**The fix:** turn each role's persistent process into a thin wrapper that only ever does
 listen → merge → dispatch a disposable subagent for the actual work → commit → send → listen
-again. The subagent's full working transcript never enters the shell's context — only its final
-report does — so the shell's per-cycle context stays small and repetitive, keeping the
+again. The subagent's full working transcript never enters the wrapper's context — only its final
+report does — so the wrapper's per-cycle context stays small and repetitive, keeping the
 receive/handoff instructions proportionally dominant every cycle instead of being crowded out.
 
 This was confirmed technically feasible, not just plausible:
-- Agents are launched **interactively**, not headless: `claude --model <M> --permission-mode
+- Wrapper agents are launched **interactively**, not headless: `claude --model <M> --permission-mode
   bypassPermissions --mcp-config ./.mcp.json ...` (Windows, `bin/kiln.ps1` ~line 697) /
   `claude --mcp-config ./.mcp.json --append-system-prompt-file <f> --permission-mode acceptEdits
   ...` (Unix, `bin/kiln.sh` ~line 475). No `-p`/`--print`, no `--allowedTools`/`--disallowedTools`
-  anywhere — the full Agent/Task tool is already available to every role agent.
+  anywhere — the full Agent/Task tool is already available to every wrapper agent.
 - Precedent already exists in this repo: `kiln/skills/review/SKILL.md` dispatches two parallel
   `general-purpose` subagents and aggregates their reports ("Both axes run as parallel sub-agents
   so they don't pollute each other's context").
@@ -77,7 +77,7 @@ Task/Agent-tool subagents in the same sense) is untouched by this change.
 Step 2 changes from doing the role's work directly to:
 
 - Invoke `Agent` tool with `subagent_type: "{{ROLE}}-worker"`, `run_in_background: false` (the
-  shell must block here — steps 3/4 depend on the result). Prompt carries only cycle-specific
+  wrapper must block here — steps 3/4 depend on the result). Prompt carries only cycle-specific
   material: the handoff content already persisted at `tmp/handoff-in.md`, current
   branch/worktree, and an explicit ask for a final report of what was implemented/verified and
   which files were touched. Explicitly state: do not perform the work yourself, delegate it
@@ -90,7 +90,7 @@ Step 2 changes from doing the role's work directly to:
   (`kiln/skills/kiln-receive/SKILL.md:26-30`).
 - Extend the existing "not end-of-turn" guardrail (`loop-auto-claude.md:3-5`) to explicitly cover
   "the subagent call has returned" the same way it already covers the handoff-sent step — this is
-  the new place a shell could plausibly stop early.
+  the new place a wrapper could plausibly stop early.
 
 `loop-manual-claude.md` (specifier) is unchanged for now, per the user's original scope framing;
 the same pattern should be directly reusable there later since the specifier's role file is
@@ -121,10 +121,10 @@ similarly short.
    this repo today — this is new territory for Kiln. Confirm the exact frontmatter Claude Code
    expects and that a file placed at `<worktree>/.claude/agents/<role>-worker.md` is discovered
    correctly from that worktree's cwd before wiring both platform scripts.
-3. **Whether to trim the role block out of the shell's own `CLAUDE.md`.** Today
+3. **Whether to trim the role block out of the wrapper's own `CLAUDE.md`.** Today
    `Write-GeneratedCLAUDEmd` still includes the full role block (`kiln.ps1:670`). Once (1) and (2)
    are confirmed, recommend trimming it to a short "your work is delegated to `<role>-worker`, do
-   not do it yourself" pointer — leaving the full role text in the shell's own instructions
+   not do it yourself" pointer — leaving the full role text in the wrapper's own instructions
    re-introduces the exact ambiguity this change is meant to remove.
 
 ## Verification / rollout plan

@@ -432,13 +432,13 @@ write_agent_instruction_file() {
   local worktree_path="$3"
 
   cat > "$prompt_file" <<EOF
-# Shell Agent — Message Loop Only
+# Wrapper Agent — Message Loop Only
 
 **Your role: LISTEN → DELEGATE → SEND. Nothing else.**
 
-Do not do any of the ${role^^} work yourself. You are a thin shell that:
+Do not do any of the ${role^^} work yourself. You are a thin wrapper that:
 1. Listens for messages via \`/kiln-receive\`
-2. Delegates work to the \`${role}-worker\` subagent via Agent tool
+2. Wraps/delegates work to the \`${role}-worker\` subagent via Agent tool
 3. Sends completed work via \`/kiln-handoff\`
 4. Repeats
 

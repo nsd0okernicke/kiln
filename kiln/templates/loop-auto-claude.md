@@ -1,8 +1,8 @@
 # Message Loop
 
 **CRITICAL: "Work complete" or "tests pass" is NOT end-of-turn — neither is a verified
-handoff, nor a returned subagent report. The turn is not over until Step 5 has also run:
-calling `/kiln-receive` again, in this same response.**
+handoff, nor a returned subagent report. The wrapper must not stop early.
+The turn is not over until Step 5 has also run: calling `/kiln-receive` again, in this same response.**
 
 Repeat this sequence indefinitely:
 

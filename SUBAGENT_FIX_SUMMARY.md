@@ -87,3 +87,5 @@ Before relying on this fix for real TDD work:
 3. **Check context growth** — verify that the shell's per-cycle context stays small (not accumulating working transcripts) as intended
 
 These validation steps are outlined in the plan's "Verification / rollout plan" section.
+
+
