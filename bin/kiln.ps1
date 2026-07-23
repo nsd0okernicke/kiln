@@ -340,6 +340,8 @@ function Write-ClaudeConfig {
     if ($currentRole) {
         $logsDir = Join-Path $STATE_DIR "logs"
         New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
+        $statusDir = Join-Path $STATE_DIR "status"
+        New-Item -ItemType Directory -Force -Path $statusDir | Out-Null
         $channelLog = Join-Path $logsDir "channel-$currentRole.log"
         $channelLogEscaped = $channelLog -replace '\\', '\\'
         $mcpContent = @"
@@ -460,6 +462,8 @@ function Prepare-Worktrees {
         $channelScriptEscaped = $channelScript -replace '\\', '\\'
         $logsDir = Join-Path $STATE_DIR "logs"
         New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
+        $statusDir = Join-Path $STATE_DIR "status"
+        New-Item -ItemType Directory -Force -Path $statusDir | Out-Null
         $channelLog = Join-Path $logsDir "channel-$role.log"
         $channelLogEscaped = $channelLog -replace '\\', '\\'
         $claudeJson = @"

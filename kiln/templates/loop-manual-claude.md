@@ -10,7 +10,9 @@ between Step 4 and Step 5.**
 
 Repeat this sequence indefinitely on subsequent cycles:
 
-1. **Receive** — run `/kiln-receive`. Handles: `wait_for_message()`, persist to
+**Signal state change to terminal:** Before each step, call `python .kiln/tools/set-status.py {{ROLE}} <state>` so your tab title reflects where you are in the cycle. Emit these status signals at each transition (you may see the command fail silently if the status dir doesn't exist yet — that's harmless).
+
+1. **Receive** — call `python .kiln/tools/set-status.py {{ROLE}} waiting` first. Then run `/kiln-receive`. Handles: `wait_for_message()`, persist to
    `tmp/handoff-in.md`, auto-compact recovery, git merge, and log received.
    Do not proceed until the skill completes all its steps.
 
@@ -21,9 +23,9 @@ Repeat this sequence indefinitely on subsequent cycles:
 3. **Get approval** — present your result to the user and ask for explicit approval.
    Do not continue to Step 4 without approval.
 
-4. **Send handoff** — run `/kiln-handoff`. Handles: log sent, squash, INSERT into
+4. **Send handoff** — call `python .kiln/tools/set-status.py {{ROLE}} handoff` first. Then run `/kiln-handoff`. Handles: log sent, squash, INSERT into
    messages, verify, and retry. Do not return to Step 1 until the skill confirms
    a queued row in the database.
 
 5. **Immediately return to Step 1** — call `/kiln-receive` now, in this same turn, without
-   waiting for the user to say anything further.
+   waiting for the user to say anything further. (Step 1 will re-emit the `waiting` status at its start.)

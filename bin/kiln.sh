@@ -383,8 +383,9 @@ prepare_worktrees() {
 }
 EOF
 
-    # Create tmp directory for temporary files
+    # Create tmp and status directories for temporary files and agent state
     mkdir -p "$worktree_path/tmp"
+    mkdir -p "$STATE_DIR/status"
 
     echo "$branch_name" >> "$WORKING_DIR/.git/kiln-sub-branches"
   done

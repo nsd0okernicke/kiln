@@ -1,0 +1,62 @@
+#!/usr/bin/env python3
+"""
+Write agent status to both a JSON file and terminal title (OSC 0 escape sequence).
+Used by wrapper agents in loop templates to signal state transitions visibly.
+
+Usage: python set-status.py <role> <state> [detail]
+  role: agent role name (e.g., "coder", "architect")
+  state: one of "waiting", "receiving", "delegating", "handoff"
+  detail: optional detail string (e.g., role name of delegated worker, or "-" to clear)
+"""
+
+import sys
+import json
+from datetime import datetime
+from pathlib import Path
+
+STATE_EMOJIS = {
+    "waiting": "⏳",
+    "receiving": "🔀",
+    "delegating": "⚙",
+    "handoff": "↩",
+}
+
+def main():
+    if len(sys.argv) < 3:
+        print("Usage: set-status.py <role> <state> [detail]", file=sys.stderr)
+        sys.exit(1)
+
+    role = sys.argv[1]
+    state = sys.argv[2]
+    detail = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] != "-" else None
+
+    if state not in STATE_EMOJIS:
+        print(f"Error: unknown state '{state}'", file=sys.stderr)
+        sys.exit(1)
+
+    # Determine status directory
+    kiln_dir = Path(__file__).parent.parent
+    status_dir = kiln_dir / "status"
+    status_dir.mkdir(parents=True, exist_ok=True)
+
+    # Write status JSON
+    status_file = status_dir / f"{role}.json"
+    status = {
+        "role": role,
+        "state": state,
+        "detail": detail,
+        "since": datetime.utcnow().isoformat() + "Z",
+    }
+    status_file.write_text(json.dumps(status, indent=2) + "\n")
+
+    # Emit OSC 0 title-set escape sequence
+    emoji = STATE_EMOJIS[state]
+    title = f"{role} {emoji} {state}"
+    if detail:
+        title += f": {detail}"
+    osc_sequence = f"\033]0;{title}\007"
+    sys.stdout.write(osc_sequence)
+    sys.stdout.flush()
+
+if __name__ == "__main__":
+    main()

@@ -6,11 +6,13 @@ The turn is not over until Step 5 has also run: calling `/kiln-receive` again, i
 
 Repeat this sequence indefinitely:
 
-1. **Receive** — run `/kiln-receive`. Handles: `wait_for_message()`, persist to
+**Signal state change to terminal:** Before each step, call `python .kiln/tools/set-status.py {{ROLE}} <state>` so your tab title reflects where you are in the cycle. Emit these status signals at each transition (you may see the command fail silently if the status dir doesn't exist yet — that's harmless).
+
+1. **Receive** — call `python .kiln/tools/set-status.py {{ROLE}} waiting` first. Then run `/kiln-receive`. Handles: `wait_for_message()`, persist to
    `tmp/handoff-in.md`, auto-compact recovery, git merge, and log received.
    Do not proceed until the skill completes all its steps.
 
-2. **Delegate the work** — do not implement anything yourself. Invoke the `Agent` tool
+2. **Delegate the work** — call `python .kiln/tools/set-status.py {{ROLE}} delegating {{ROLE}}-worker` first. Then do not implement anything yourself. Invoke the `Agent` tool
    with `subagent_type: "{{ROLE}}-worker"` and `run_in_background: false` (you must
    block here — later steps depend on its result). The prompt must be self-contained:
    include the full content of `tmp/handoff-in.md`, your current branch/worktree, and
@@ -28,8 +30,8 @@ Repeat this sequence indefinitely:
    second time, do not retry further: proceed to Step 4 with a handoff that reports the
    blocker instead of normal work, so the loop keeps moving instead of stalling silently.
 
-4. **Send handoff** — run `/kiln-handoff`. Handles: log sent, squash, INSERT into
+4. **Send handoff** — call `python .kiln/tools/set-status.py {{ROLE}} handoff` first. Then run `/kiln-handoff`. Handles: log sent, squash, INSERT into
    messages, verify, and retry. Do not return to Step 1 until the skill confirms
    a queued row in the database.
 
-5. **Immediately return to Step 1** — call `/kiln-receive` now, in this same turn.
+5. **Immediately return to Step 1** — call `/kiln-receive` now, in this same turn. (Step 1 will re-emit the `waiting` status at its start.)
