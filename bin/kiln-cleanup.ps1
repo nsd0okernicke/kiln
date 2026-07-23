@@ -18,7 +18,7 @@ $ErrorActionPreference = "Continue"
 $STATE_DIR = Join-Path $ProjectDir ".Kiln"
 $WINDOWS_FILE = Join-Path $STATE_DIR "windows.json"
 $WORKTREES_DIR = Join-Path $ProjectDir ".worktrees"
-$SWARM_BRANCHES_FILE = Join-Path $ProjectDir ".git" "Kiln-sub-branches"
+$SWARM_BRANCHES_FILE = Join-Path $ProjectDir ".git" "kiln-sub-branches"
 
 Write-Host "Cleaning up Kiln sessions in $ProjectDir" -ForegroundColor Cyan
 

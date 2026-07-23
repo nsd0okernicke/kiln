@@ -168,7 +168,7 @@ install_git_hooks() {
 
   cat > "$hook_path" << 'EOF'
 #!/bin/sh
-BRANCH_LIST="$(git rev-parse --git-dir)/Kiln-sub-branches"
+BRANCH_LIST="$(git rev-parse --git-dir)/kiln-sub-branches"
 while read local_ref local_sha remote_ref remote_sha; do
   branch="${local_ref#refs/heads/}"
   if [ -f "$BRANCH_LIST" ] && grep -qxF "$branch" "$BRANCH_LIST"; then
@@ -318,7 +318,7 @@ prepare_workspace() {
 
 prepare_worktrees() {
   local i worktree_name worktree_path branch_name agent
-  : > "$WORKING_DIR/.git/Kiln-sub-branches"
+  : > "$WORKING_DIR/.git/kiln-sub-branches"
 
   for (( i = 1; i <= ${#ROLES[@]}; i++ )); do
     worktree_name="${WORKTREE_NAMES[$i]}"
@@ -357,6 +357,10 @@ prepare_worktrees() {
 
     # Create .mcp.json in worktree root with MCP server configuration
     local db_path="$STATE_DIR/messages.db"
+    local channel_script="$(dirname "$SCRIPT_DIR")/kiln/mcp-server/channel.py"
+    local logs_dir="$STATE_DIR/logs"
+    mkdir -p "$logs_dir"
+    local channel_log="$logs_dir/channel-$role.log"
     cat > "$worktree_path/.mcp.json" << EOF
 {
   "name": "kiln-$role",
@@ -364,6 +368,16 @@ prepare_worktrees() {
     "kiln-db": {
       "command": "npx",
       "args": ["mcp-sqlite", "$db_path"]
+    },
+    "kiln-channel": {
+      "command": "python",
+      "args": ["$channel_script"],
+      "env": {
+        "KILN_ROLE": "$role",
+        "KILN_DB_PATH": "$db_path",
+        "KILN_BRANCH": "$branch_name",
+        "KILN_CHANNEL_LOG": "$channel_log"
+      }
     }
   }
 }
@@ -372,7 +386,7 @@ EOF
     # Create tmp directory for temporary files
     mkdir -p "$worktree_path/tmp"
 
-    echo "$branch_name" >> "$WORKING_DIR/.git/Kiln-sub-branches"
+    echo "$branch_name" >> "$WORKING_DIR/.git/kiln-sub-branches"
   done
 }
 
