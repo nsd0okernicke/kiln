@@ -387,6 +387,14 @@ EOF
     mkdir -p "$worktree_path/tmp"
     mkdir -p "$STATE_DIR/status"
 
+    # Copy worker agent definitions into worktree's .claude/agents/ so Claude Code can find them
+    local worktree_agents_dir="$worktree_path/.claude/agents"
+    mkdir -p "$worktree_agents_dir"
+    local project_agents_dir="$WORKING_DIR/.claude/agents"
+    if [[ -d "$project_agents_dir" ]]; then
+      find "$project_agents_dir" -maxdepth 1 -name "*-worker.md" -exec cp {} "$worktree_agents_dir/" \;
+    fi
+
     echo "$branch_name" >> "$WORKING_DIR/.git/kiln-sub-branches"
   done
 }

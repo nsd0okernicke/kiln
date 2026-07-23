@@ -454,6 +454,16 @@ function Prepare-Worktrees {
         $json = Get-ClaudeConfigJson
         Set-Content -Path $worktreeSettingsFile -Value $json -Encoding UTF8
 
+        # Copy worker agent definitions into worktree's .claude/agents/ so Claude Code can find them
+        $worktreeAgentsDir = Join-Path $worktreeClaudeDir "agents"
+        New-Item -ItemType Directory -Force -Path $worktreeAgentsDir | Out-Null
+        $projectAgentsDir = Join-Path $WorkingDir ".claude" "agents"
+        if (Test-Path $projectAgentsDir) {
+            Get-ChildItem -Path $projectAgentsDir -Filter "*-worker.md" | ForEach-Object {
+                Copy-Item -Path $_.FullName -Destination $worktreeAgentsDir -Force
+            }
+        }
+
         # Create .mcp.json in worktree root with MCP server configuration
         $claudeJsonPath = Join-Path $worktreePath ".mcp.json"
         $dbPath = Join-Path $STATE_DIR "messages.db"
