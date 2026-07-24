@@ -195,7 +195,7 @@ conn = sqlite3.connect(db)
 conn.execute('''CREATE TABLE IF NOT EXISTS messages (
   id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))), sender TEXT NOT NULL, target TEXT NOT NULL,
   priority INTEGER DEFAULT 50, status TEXT DEFAULT 'queued',
-  content TEXT NOT NULL, created_at TEXT NOT NULL,
+  content TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')),
   delivered_at TEXT, acked_at TEXT, processed_at TEXT, error TEXT,
   branch TEXT NOT NULL DEFAULT 'main')''')
 conn.execute('CREATE INDEX IF NOT EXISTS idx_target_branch_status ON messages(target,branch,status)')
@@ -212,7 +212,7 @@ if ($LASTEXITCODE -eq 0) {
 CREATE TABLE IF NOT EXISTS messages (
   id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))), sender TEXT NOT NULL, target TEXT NOT NULL,
   priority INTEGER DEFAULT 50, status TEXT DEFAULT 'queued',
-  content TEXT NOT NULL, created_at TEXT NOT NULL,
+  content TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')),
   delivered_at TEXT, acked_at TEXT, processed_at TEXT, error TEXT,
   branch TEXT NOT NULL DEFAULT 'main');
 CREATE INDEX IF NOT EXISTS idx_target_branch_status ON messages(target,branch,status);

@@ -43,8 +43,10 @@ Repeat this sequence indefinitely on subsequent cycles:
    git commit -m "{{COMMIT_FORMAT}}"
    ```
 
-8. **Send handoff** — call `write_query` to INSERT into `messages` with `target='{{HANDOFF_TARGET}}'`,
-   `branch='{{BRANCH}}'`, and `content` formatted per Handoff Message Format in Workflow Rules.
+8. **Send handoff** — call `write_query` to INSERT into `messages` with `sender='{{ROLE}}'`,
+   `target='{{HANDOFF_TARGET}}'`, `branch='{{BRANCH}}'`, `content` formatted per Handoff Message
+   Format in Workflow Rules, and `created_at=datetime('now')`. Always set `created_at` explicitly
+   with `datetime('now')` — that's SQLite's UTC clock; never omit it or use `'localtime'`.
    Verify: `SELECT id FROM messages WHERE sender='{{ROLE}}' AND branch='{{BRANCH}}' ORDER BY created_at DESC LIMIT 1`
    If no row is found, INSERT again before returning to step 1.
 

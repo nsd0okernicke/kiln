@@ -213,7 +213,7 @@ CREATE TABLE IF NOT EXISTS messages (
   priority INTEGER DEFAULT 50,
   status TEXT DEFAULT 'queued',
   content TEXT NOT NULL,
-  created_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
   delivered_at TEXT,
   acked_at TEXT,
   processed_at TEXT,

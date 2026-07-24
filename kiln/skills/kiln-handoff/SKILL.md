@@ -54,16 +54,20 @@ and the squash commit hash from Step 2.
 Call `kiln-db` MCP `write_query`:
 
 ```sql
-INSERT INTO messages (sender, target, priority, status, content, branch)
+INSERT INTO messages (sender, target, priority, status, content, branch, created_at)
 VALUES (
   '<your role>',
   '<handoff target>',
   50,
   'queued',
   '<formatted message from Step 3>',
-  '<your branch>'
+  '<your branch>',
+  datetime('now')
 )
 ```
+
+`created_at` must always be set with `datetime('now')` exactly as shown — that's SQLite's UTC
+clock. Never omit this column or use `'localtime'`.
 
 ### Step 5 — Verify (and retry if needed)
 
