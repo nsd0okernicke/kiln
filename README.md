@@ -470,7 +470,23 @@ The framework provides the standard `dev` profile with tab-based layout:
 - **worktree** — `@current` to work in the main directory, or any name (creates `.worktrees/<name>/`)
   - Use `@current` for coordinator/review roles that work on the current branch
   - Use separate worktree names for roles that need isolation (e.g., each agent on its own branch)
-- **model** — (Claude agents only) which Claude model to use, e.g., `claude-haiku-4-5-20251001`, `claude-sonnet-4-6`, `claude-opus-4-8`
+- **model** — (Claude agents only) which Claude model to use, e.g., `claude-haiku-4-5-20251001`, `claude-sonnet-5`, `claude-opus-4-8`
+- **workerModel** — (Claude agents only, `mode: "auto"` roles only, optional) pins the `<role>-worker` subagent this shell dispatches each cycle to a different model than the shell itself. If omitted, the worker subagent inherits the shell's model (Claude Code's default behavior for subagents with no `model` frontmatter).
+
+**Decoupling shell and worker models:** In Phase 6 (Shell + Worker-Subagent Delegation), the persistent wrapper shell only does `LISTEN → DELEGATE → SEND` — it never reasons about the actual task, that's entirely the worker subagent's job. This means the shell can run on a cheap/fast model (e.g. Haiku) while the worker that does the real TDD/implementation work runs on a stronger model (e.g. Sonnet):
+
+```json
+{
+  "role": "coder",
+  "agent": "claude",
+  "worktree": "coder",
+  "mode": "auto",
+  "model": "claude-haiku-4-5-20251001",
+  "workerModel": "claude-sonnet-5"
+}
+```
+
+This is wired via Claude Code's subagent `model:` frontmatter field: `Write-GeneratedWorkerAgent` in `bin/kiln.ps1` writes `model: <workerModel>` into the generated `.claude/agents/<role>-worker.md` file when `workerModel` is set. Claude Code resolves a dispatched subagent's model from its own frontmatter, independent of the parent session's model — so the Haiku shell's worker subagent genuinely runs as Sonnet, not Haiku. The framework's default `dev` profile (`kiln/profiles.json`) demonstrates this: `coder`/`refactorer`/`architect` shells run on Haiku, their workers run on Sonnet.
 
 ### Layout Configurations
 

@@ -103,11 +103,15 @@ function Load-KilnProfile {
         $worktree = $terminal.worktree -replace "'", "''"
         $agent = $terminal.agent -replace "'", "''"
         $model = $terminal.model -replace "'", "''"
+        $workerModel = $terminal.workerModel -replace "'", "''"
         $assignments += "`$TERMINAL_${i}_ROLE = '$role';"
         $assignments += "`$TERMINAL_${i}_WORKTREE = '$worktree';"
         $assignments += "`$TERMINAL_${i}_AGENT = '$agent';"
         if ($model) {
             $assignments += "`$TERMINAL_${i}_MODEL = '$model';"
+        }
+        if ($workerModel) {
+            $assignments += "`$TERMINAL_${i}_WORKER_MODEL = '$workerModel';"
         }
         $mode = ""
         if ($terminal.PSObject.Properties.Name -contains "mode") {

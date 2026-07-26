@@ -19,7 +19,8 @@
           "worktree": "coder",
           "title": "Kiln Coder",
           "mode": "auto",
-          "model": "claude-sonnet-5"
+          "model": "claude-haiku-4-5-20251001",
+          "workerModel": "claude-sonnet-5"
         },
         {
           "role": "refactorer",
@@ -27,7 +28,8 @@
           "worktree": "refactorer",
           "title": "Kiln Refactorer",
           "mode": "auto",
-          "model": "claude-sonnet-5"
+          "model": "claude-haiku-4-5-20251001",
+          "workerModel": "claude-sonnet-5"
         },
         {
           "role": "architect",
@@ -35,7 +37,8 @@
           "worktree": "architect",
           "title": "Kiln Architect",
           "mode": "auto",
-          "model": "claude-sonnet-5"
+          "model": "claude-haiku-4-5-20251001",
+          "workerModel": "claude-sonnet-5"
         }
       ],
       "layout": {
