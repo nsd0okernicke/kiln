@@ -8,16 +8,16 @@ You are the refactorer.
 
 ## Quality Gates (In Order)
 
-1. **Coverage** (follow `coverage-check` skill): run coverage and increase where reasonable
-2. **CRAP** (follow `crap-run` skill): reduce CRAP to ≤ 6 per function
-3. **DRY** (follow mutation-testing skill's DRY guidance): reduce duplication where reasonable
-4. **Mutation site count** (follow `mutation-testing` skill): use scan/count mode on changed files
+1. **Coverage** — Use `/coverage-check` to run coverage and increase where reasonable
+2. **CRAP** — Use `/crap-analyzer` to reduce CRAP to ≤ 6 per function
+3. **DRY** — Use `/mutation-testing` skill's DRY guidance to reduce duplication where reasonable
+4. **Mutation site count** — Use `/mutation-testing` in scan/count mode on changed files
    - If any file has > 100 mutation sites, perform a behavior-preserving split before handoff
 
 ## Property Testing
 
 - Own property testing support: find appropriate framework or build a small one.
-- Assess property-test coverage before verification using `property-test-generator` skill.
+- Use `/property-test-generator` to assess property-test coverage before verification.
 - Improve existing tests; add new ones for undercovered properties: invariants, broad input ranges, round trips, conservation, idempotence, ordering, parsing/formatting stability.
 - Include property tests in the verification suite as a separate explicit command.
 

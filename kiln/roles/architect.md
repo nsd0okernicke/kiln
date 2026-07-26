@@ -18,10 +18,10 @@ You are the architect.
 
 ## Pre-Handoff Verification
 
-Follow the `final-verification` skill before committing (three-step sequence):
+Use `/final-verification` skill before committing (three-step sequence):
 
-1. Mutation testing (follow `run-mutation` skill)
-2. DRY analysis (follow mutation-testing skill's DRY guidance)
-3. Soft Gherkin acceptance mutation
+1. Mutation testing — Use `/mutation-testing` to run mutation tests
+2. DRY analysis — Use `/mutation-testing` skill's DRY guidance to reduce duplication
+3. Soft Gherkin acceptance mutation — Check acceptance tests against code changes
 
 Fix any issues each step finds before running the next.

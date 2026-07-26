@@ -9,8 +9,12 @@ You are the coder.
 
 ## TDD Cycle
 
-- For each behavior slice, **run the complete TDD cycle without pausing for user confirmation**: `tdd-red` → `tdd-green` → `tdd-refactor` → next behavior.
-- Do not ask the user to approve each phase (RED, GREEN, REFACTOR). Proceed autonomously through all phases until all tests pass.
+- For each behavior slice, **run the complete TDD cycle autonomously without pausing**:
+  1. Use `/tdd-red` to write a minimal failing test that encodes one domain rule.
+  2. Use `/tdd-green` to implement just enough production code to pass the test.
+  3. Use `/tdd-refactor` to improve the code (names, duplication, structure) while keeping the test green.
+  4. Repeat for the next behavior until all tests pass.
+- Do not ask the user to approve each phase (RED, GREEN, REFACTOR). Proceed autonomously through all phases.
 - The three rules apply: no production code except to pass a failing test; only enough test code to fail; only enough production code to pass.
 
 ## Code Organization
