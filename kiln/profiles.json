@@ -11,7 +11,7 @@
           "worktree": "@current",
           "title": "Kiln Specifier",
           "mode": "manual",
-          "model": "claude-haiku-4-5-20251001"
+          "model": "claude-sonnet-5"
         },
         {
           "role": "coder",
@@ -19,7 +19,7 @@
           "worktree": "coder",
           "title": "Kiln Coder",
           "mode": "auto",
-          "model": "claude-haiku-4-5-20251001"
+          "model": "claude-sonnet-5"
         },
         {
           "role": "refactorer",
@@ -27,7 +27,7 @@
           "worktree": "refactorer",
           "title": "Kiln Refactorer",
           "mode": "auto",
-          "model": "claude-haiku-4-5-20251001"
+          "model": "claude-sonnet-5"
         },
         {
           "role": "architect",
@@ -35,7 +35,7 @@
           "worktree": "architect",
           "title": "Kiln Architect",
           "mode": "auto",
-          "model": "claude-haiku-4-5-20251001"
+          "model": "claude-sonnet-5"
         }
       ],
       "layout": {
@@ -62,7 +62,7 @@
           "worktree": "@current",
           "title": "Kiln CI",
           "mode": "auto",
-          "model": "claude-haiku-4-5-20251001"
+          "model": "claude-sonnet-5"
         }
       ],
       "layout": {
@@ -86,7 +86,7 @@
           "worktree": "@current",
           "title": "Kiln Self-Test",
           "mode": "auto",
-          "model": "claude-haiku-4-5-20251001"
+          "model": "claude-sonnet-5"
         },
         {
           "role": "specifier",
@@ -94,7 +94,7 @@
           "worktree": "specifier",
           "title": "Kiln Specifier",
           "mode": "manual",
-          "model": "claude-haiku-4-5-20251001"
+          "model": "claude-sonnet-5"
         },
         {
           "role": "coder",
@@ -102,7 +102,7 @@
           "worktree": "coder",
           "title": "Kiln Coder",
           "mode": "auto",
-          "model": "claude-haiku-4-5-20251001"
+          "model": "claude-sonnet-5"
         },
         {
           "role": "refactorer",
@@ -110,7 +110,7 @@
           "worktree": "refactorer",
           "title": "Kiln Refactorer",
           "mode": "auto",
-          "model": "claude-haiku-4-5-20251001"
+          "model": "claude-sonnet-5"
         },
         {
           "role": "architect",
@@ -118,7 +118,7 @@
           "worktree": "architect",
           "title": "Kiln Architect",
           "mode": "auto",
-          "model": "claude-haiku-4-5-20251001"
+          "model": "claude-sonnet-5"
         }
       ],
       "layout": {
@@ -147,7 +147,7 @@
           "worktree": "specifier",
           "title": "Kiln Specifier [DEBUG]",
           "mode": "manual",
-          "model": "claude-haiku-4-5-20251001"
+          "model": "claude-sonnet-5"
         },
         {
           "role": "coder",
@@ -155,7 +155,7 @@
           "worktree": "coder",
           "title": "Kiln Coder [DEBUG]",
           "mode": "auto",
-          "model": "claude-haiku-4-5-20251001"
+          "model": "claude-sonnet-5"
         },
         {
           "role": "refactorer",
@@ -163,7 +163,7 @@
           "worktree": "refactorer",
           "title": "Kiln Refactorer [DEBUG]",
           "mode": "auto",
-          "model": "claude-haiku-4-5-20251001"
+          "model": "claude-sonnet-5"
         },
         {
           "role": "architect",
@@ -171,7 +171,7 @@
           "worktree": "architect",
           "title": "Kiln Architect [DEBUG]",
           "mode": "auto",
-          "model": "claude-haiku-4-5-20251001"
+          "model": "claude-sonnet-5"
         }
       ],
       "layout": {
@@ -199,7 +199,7 @@
           "worktree": "@current",
           "title": "Kiln Coder",
           "mode": "auto",
-          "model": "claude-haiku-4-5-20251001"
+          "model": "claude-sonnet-5"
         }
       ],
       "layout": {
@@ -318,7 +318,7 @@
           "worktree": "coder",
           "title": "Kiln Coder",
           "mode": "auto",
-          "model": "claude-haiku-4-5-20251001"
+          "model": "claude-sonnet-5"
         },
         {
           "role": "refactorer",
@@ -326,7 +326,7 @@
           "worktree": "refactorer",
           "title": "Kiln Refactorer",
           "mode": "auto",
-          "model": "claude-haiku-4-5-20251001"
+          "model": "claude-sonnet-5"
         },
         {
           "role": "architect",
@@ -334,7 +334,7 @@
           "worktree": "architect",
           "title": "Kiln Architect",
           "mode": "auto",
-          "model": "claude-haiku-4-5-20251001"
+          "model": "claude-sonnet-5"
         }
       ],
       "layout": {
@@ -385,7 +385,7 @@
           "worktree": "coder",
           "title": "Kiln Coder",
           "mode": "auto",
-          "model": "claude-haiku-4-5-20251001"
+          "model": "claude-sonnet-5"
         },
         {
           "role": "refactorer",
@@ -393,7 +393,7 @@
           "worktree": "refactorer",
           "title": "Kiln Refactorer",
           "mode": "auto",
-          "model": "claude-haiku-4-5-20251001"
+          "model": "claude-sonnet-5"
         },
         {
           "role": "architect",
@@ -401,7 +401,7 @@
           "worktree": "architect",
           "title": "Kiln Architect",
           "mode": "auto",
-          "model": "claude-haiku-4-5-20251001"
+          "model": "claude-sonnet-5"
         }
       ],
       "layout": {
