@@ -313,6 +313,13 @@ prepare_workspace() {
   mkdir -p "$STATE_DIR" "$PROMPTS_DIR" "$WORKTREES_DIR" "$TMUX_SOCKET_DIR"
   printf '%s\n' "$TMUX_SOCKET" > "$TMUX_SOCKET_FILE"
   check_helper_scripts
+
+  # Seed framework tools into project state directory so agents can invoke set-status.py
+  local framework_tools_dir="$(dirname "$SCRIPT_DIR")/kiln/tools"
+  if [[ -d "$framework_tools_dir" ]]; then
+    mkdir -p "$STATE_DIR/tools"
+    cp -r "$framework_tools_dir/." "$STATE_DIR/tools/"
+  fi
 }
 
 

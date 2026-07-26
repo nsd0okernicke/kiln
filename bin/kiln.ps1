@@ -342,6 +342,13 @@ function Write-ClaudeConfig {
         New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
         $statusDir = Join-Path $STATE_DIR "status"
         New-Item -ItemType Directory -Force -Path $statusDir | Out-Null
+        # Seed framework tools into project state directory so agents can invoke set-status.py
+        $frameworkToolsDir = Join-Path $frameworkRoot "kiln" "tools"
+        $stateToolsDir = Join-Path $STATE_DIR "tools"
+        if (Test-Path $frameworkToolsDir) {
+            New-Item -ItemType Directory -Force -Path $stateToolsDir | Out-Null
+            Copy-Item -Path (Join-Path $frameworkToolsDir "*") -Destination $stateToolsDir -Recurse -Force
+        }
         $channelLog = Join-Path $logsDir "channel-$currentRole.log"
         $channelLogEscaped = $channelLog -replace '\\', '\\'
         $mcpContent = @"
