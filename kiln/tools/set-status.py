@@ -11,7 +11,7 @@ Usage: python set-status.py <role> <state> [detail]
 
 import sys
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 STATE_EMOJIS = {
@@ -45,7 +45,7 @@ def main():
         "role": role,
         "state": state,
         "detail": detail,
-        "since": datetime.utcnow().isoformat() + "Z",
+        "since": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
     status_file.write_text(json.dumps(status, indent=2) + "\n")
 
