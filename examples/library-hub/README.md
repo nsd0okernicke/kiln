@@ -178,7 +178,7 @@ Domain classes are **pure Python dataclasses** with no ORM (SQLAlchemy) or schem
 Flat layout — no `src/` wrapper. Each service is a Python package at the project root:
 
 ```text
-<service>/                           (Python package, e.g. catalog/ or loan/)
+<service>/                           (Python package, e.g. catalog/ or loans/)
 ├── __init__.py
 ├── domain/
 │   ├── <entity>.py                  (pure dataclasses, business logic)
@@ -203,6 +203,21 @@ Flat layout — no `src/` wrapper. Each service is a Python package at the proje
 
 Gherkin feature files live at the project root in `features/` (not inside a service directory).
 
+## Running Services Locally
+
+To start each service for manual testing or development:
+
+```bash
+# Catalog service (default port 8000)
+uvicorn catalog.infrastructure.api.main:app --reload
+
+# Loans service (alternate port to avoid conflict)
+uvicorn loans.infrastructure.api.main:app --reload --port 8001
+```
+
+Both services expect environment setup (database connections, RabbitMQ, etc.) — see
+Infrastructure section for bootstrap requirements.
+
 ---
 
 ## Tech Stack (Locked Decisions)
@@ -216,7 +231,7 @@ Gherkin feature files live at the project root in `features/` (not inside a serv
 - **Testing**: pytest with async support (`pytest-asyncio`)
 - **BDD / Acceptance Tests**: `pytest-bdd` — feature files in `features/`, step implementations in `tests/acceptance/steps/`
 - **Acceptance Fixtures**: Testcontainers (`testcontainers[postgres,rabbitmq]`) — use real PostgreSQL and RabbitMQ; do NOT use in-memory SQLite for acceptance tests
-- **Quality Tools**: `mutmut` (mutation testing), `mypy` (strict type checking), `ruff` (linting + formatting), `radon` (complexity/CRAP)
+- **Quality Tools**: `mutmut` (mutation testing), `mypy` (strict type checking), `ruff` (linting + formatting), `radon` (complexity/CRAP), `hypothesis` (property-based testing)
 - **Package Manager**: `uv`
 
 All services use the same tech stack. No divergence.
@@ -229,7 +244,7 @@ All gates are checked before handoff. Do not send a handoff if any gate fails.
 
 - **Mutation Testing**: `domain/` and `application/` must achieve mutation score ≥ 80% — `mutmut run --paths domain,application`
 - **Test Coverage**: All code must achieve > 90% — `coverage run -m pytest && coverage report`
-- **Type Checking**: All code must pass `mypy` in strict mode, no `type: ignore` without explanation — `mypy catalog/ loan/ --strict`
+- **Type Checking**: All code must pass `mypy` in strict mode, no `type: ignore` without explanation — `mypy catalog/ loans/ --strict`
 - **Code Style**: Must pass `ruff` and `black` — `ruff check . && black --check .`
 
 ---
@@ -240,6 +255,8 @@ All gates are checked before handoff. Do not send a handoff if any gate fails.
 
 **Acceptance Tests** (`tests/acceptance/`): pytest-bdd step implementations that execute the `.feature` files in `features/`. Each step file must call `scenarios("features/<file>.feature")` so pytest treats the Gherkin scenarios as live test cases — without this the `.feature` files are dead documentation. Use Testcontainers for real PostgreSQL and RabbitMQ — do not use in-memory SQLite here.
 
+**Property Tests** (`tests/property/`): Hypothesis-based randomized tests for domain invariants and edge cases. Organized per service and layer (mirroring `tests/unit/`), covering domain entities, value objects, validation rules, and application-layer transformations. Property tests exercise a broad input space and verify that business rules hold under any valid state.
+
 **Test Organization**:
 
 ```text
@@ -249,7 +266,7 @@ tests/
 │   ├── catalog/
 │   │   ├── domain/         (unit tests for catalog domain)
 │   │   └── application/    (unit tests for catalog application services)
-│   └── loan/
+│   └── loans/
 │       ├── domain/
 │       └── application/
 └── acceptance/
@@ -266,7 +283,7 @@ features/                    (Gherkin specs — owned by specifier, do not modif
 | `pytest tests/unit/` | Unit tests only — quick feedback |
 | `pytest tests/acceptance/` | Acceptance tests (requires running containers) |
 | `pytest --cov=catalog --cov=loan` | Coverage report |
-| `mutmut run --paths-to-mutate catalog/domain,catalog/application,loan/domain,loan/application` | Mutation testing |
+| `mutmut run --paths-to-mutate catalog/domain,catalog/application,loans/domain,loans/application` | Mutation testing |
 
 ---
 

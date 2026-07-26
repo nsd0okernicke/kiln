@@ -22,7 +22,7 @@ The project uses a shared virtual environment at `<project_root>/.venv`.
 
 ## Package Layout
 
-Two flat Python packages at the project root — no `src/` wrapper:
+One flat Python package per bounded context at the project root — no `src/` wrapper:
 
 ```
 catalog/          ← Python package (import as 'catalog')
@@ -30,8 +30,12 @@ catalog/          ← Python package (import as 'catalog')
   domain/         ← entities, value objects, domain events, port interfaces (ABCs)
   application/    ← use cases; imports domain only, never infrastructure
   infrastructure/ ← FastAPI routers, SQLAlchemy models, RabbitMQ adapters
-loan/             ← same structure
+loans/            ← same structure; plural/singular naming matches the README section heading and this package's name everywhere
+users/            ← same structure; any additional services follow the same pattern
 ```
+
+The project root holds no business logic — it is orchestration and configuration only:
+`pyproject.toml`, `.venv`, `features/`, `tests/`, `README.md`.
 
 Dependency direction: `infrastructure` → `application` → `domain`. Never the reverse.
 Domain classes are pure Python dataclasses — no SQLAlchemy or Pydantic imports allowed.
@@ -47,14 +51,25 @@ tests/
     catalog/
       domain/       ← unit tests for catalog domain (pure Python, no I/O)
       application/  ← unit tests for catalog application services (mocked ports)
-    loan/
+      infrastructure/
+    loans/
       domain/
       application/
+      infrastructure/
   acceptance/
     conftest.py     ← Testcontainers session fixtures
     steps/
       catalog_steps.py   ← pytest-bdd step implementations for features/cat-*.feature
       loan_steps.py      ← pytest-bdd step implementations for features/loan-*.feature
+  property/         ← Property-based tests (see /property-test-generator skill)
+    catalog/
+      domain/       ← hypothesis-based tests for domain invariants
+      application/
+      infrastructure/
+    loans/
+      domain/
+      application/
+      infrastructure/
 features/           ← Gherkin specs (do not modify; owned by specifier)
 ```
 
@@ -77,6 +92,7 @@ pytest-bdd>=7.0
 testcontainers[postgres,rabbitmq]>=3.7
 pytest-asyncio>=0.21
 pytest-cov>=4.1
+hypothesis>=6.0
 mutmut>=2.4
 mypy>=1.5
 ruff>=0.1
@@ -90,11 +106,23 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 ```
 
+## Local Run
+
+To start each service locally for manual testing or development:
+
+```bash
+# Catalog service (default port 8000)
+uvicorn catalog.infrastructure.api.main:app --reload
+
+# Loans service (alternate port to avoid conflict)
+uvicorn loans.infrastructure.api.main:app --reload --port 8001
+```
+
 ## Quality Gates
 
 Run before every handoff:
 
-- Mutation score ≥ 80% on `domain/` and `application/`: `mutmut run --paths-to-mutate catalog/domain,catalog/application,loan/domain,loan/application`
-- Coverage ≥ 90%: `pytest --cov=catalog --cov=loan --cov-report=term-missing`
-- Type checking: `mypy catalog/ loan/ --strict`
+- Mutation score ≥ 80% on `domain/` and `application/`: `mutmut run --paths-to-mutate catalog/domain,catalog/application,loans/domain,loans/application`
+- Coverage ≥ 90%: `pytest --cov=catalog --cov=loans --cov-report=term-missing`
+- Type checking: `mypy catalog/ loans/ --strict`
 - Lint: `ruff check . && ruff format --check .`
