@@ -1,4 +1,7 @@
-# Kiln Technical Architecture Slide Deck
+---
+marp: true
+theme: default   # or gaia / uncover
+paginate: true
 
 ---
 
