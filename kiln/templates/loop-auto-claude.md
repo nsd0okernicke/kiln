@@ -2,7 +2,7 @@
 
 **CRITICAL: "Work complete" or "tests pass" is NOT end-of-turn — neither is a verified
 handoff, nor a returned subagent report. The wrapper must not stop early.
-The turn is not over until Step 5 has also run: calling `/kiln-receive` again, in this same response.**
+The turn is not over until Step 7 has also run: calling `/kiln-receive` again, in this same response.**
 
 Repeat this sequence indefinitely:
 
@@ -11,8 +11,11 @@ Repeat this sequence indefinitely:
 1. **Receive** — call `python .kiln/tools/set-status.py {{ROLE}} waiting` first. Then run `/kiln-receive`. Handles: `wait_for_message()`, persist to
    `tmp/handoff-in.md`, auto-compact recovery, git merge, and log received.
    Do not proceed until the skill completes all its steps.
+   Extract the `id` field from the `/kiln-receive` result and save it for Step 2.
 
-2. **Delegate the work** — call `python .kiln/tools/set-status.py {{ROLE}} delegating {{ROLE}}-worker` first. Then do not implement anything yourself. Invoke the `Agent` tool
+2. **Mark as processing** — Immediately call the `mark_processing(message_id)` MCP tool to transition the message from `delivered` to `processing` state. This signals that work has begun.
+
+3. **Delegate the work** — call `python .kiln/tools/set-status.py {{ROLE}} delegating {{ROLE}}-worker` first. Then do not implement anything yourself. Invoke the `Agent` tool
    with `subagent_type: "{{ROLE}}-worker"` and `run_in_background: false` (you must
    block here — later steps depend on its result). The prompt must be self-contained:
    include the full content of `tmp/handoff-in.md`, your current branch/worktree, and
@@ -22,16 +25,18 @@ Repeat this sequence indefinitely:
    them in the prompt, and do not do this work yourself.
 
    For `system-communication-test` messages: skip delegation entirely — forward the
-   message as-is to `{{HANDOFF_TARGET}}` using `/kiln-handoff` immediately.
+   message as-is to `{{HANDOFF_TARGET}}` using `/kiln-handoff` immediately. Mark as processed after forwarding.
 
-3. **Handle a failed or blocked report** — if the subagent's report says it could not
+4. **Handle a failed or blocked report** — if the subagent's report says it could not
    finish (blocked, failing tests, unclear task), invoke it again once more, in this
    same turn, including its failure report as feedback in the new prompt. If it fails a
-   second time, do not retry further: proceed to Step 4 with a handoff that reports the
+   second time, do not retry further: proceed to Step 5 with a handoff that reports the
    blocker instead of normal work, so the loop keeps moving instead of stalling silently.
 
-4. **Send handoff** — call `python .kiln/tools/set-status.py {{ROLE}} handoff` first. Then run `/kiln-handoff`. Handles: log sent, squash, INSERT into
+5. **Send handoff** — call `python .kiln/tools/set-status.py {{ROLE}} handoff` first. Then run `/kiln-handoff`. Handles: log sent, squash, INSERT into
    messages, verify, and retry. Do not return to Step 1 until the skill confirms
    a queued row in the database.
 
-5. **Immediately return to Step 1** — call `/kiln-receive` now, in this same turn. (Step 1 will re-emit the `waiting` status at its start.)
+6. **Mark as processed** — Call `mark_processed(message_id)` to transition the message from `processing` to `processed` state, signaling completion. This completes the handoff cycle.
+
+7. **Immediately return to Step 1** — call `/kiln-receive` now, in this same turn. (Step 1 will re-emit the `waiting` status at its start.)

@@ -16,6 +16,7 @@ Call `wait_for_message()` from the `kiln-channel` MCP server.
 
 - If the result is `{"received": false}`, call it again immediately. Keep calling until `received` is `true`.
 - Once a message arrives: **immediately write the full message content verbatim to `tmp/handoff-in.md`** before doing anything else.
+- **Extract and save the `id` field** from the result — you will need it to call `mark_processing()` and `mark_processed()` in the loop.
 
 ### Step 2 — Auto-compact recovery (if needed)
 

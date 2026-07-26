@@ -57,8 +57,8 @@ mcp = FastMCP("kiln-channel")
 
 
 def _fetch_and_deliver() -> dict | None:
-    """Return the next queued message and atomically mark it delivered, or None."""
-    log.debug("polling DB for queued messages (role=%s branch=%s)", MY_ROLE, BRANCH)
+    """Return the next queued or delivered message and atomically mark it delivered, or None."""
+    log.debug("polling DB for queued/delivered messages (role=%s branch=%s)", MY_ROLE, BRANCH)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     try:
@@ -67,7 +67,7 @@ def _fetch_and_deliver() -> dict | None:
             """
             SELECT id, sender, priority, content, created_at
             FROM messages
-            WHERE target = ? AND branch = ? AND status = 'queued'
+            WHERE target = ? AND branch = ? AND status IN ('queued', 'delivered')
             ORDER BY priority ASC, created_at ASC
             LIMIT 1
             """,
@@ -75,7 +75,7 @@ def _fetch_and_deliver() -> dict | None:
         )
         row = cur.fetchone()
         if not row:
-            log.debug("no queued messages found")
+            log.debug("no queued/delivered messages found")
             return None
         log.info(
             "message found: id=%s sender=%s priority=%s created_at=%s",
@@ -146,6 +146,56 @@ def get_channel_status() -> dict:
     except Exception as exc:
         log.error("get_channel_status failed: %s", exc)
         return {"status": "error", "error": str(exc)}
+
+
+@mcp.tool()
+def mark_processing(message_id: str) -> dict:
+    """Mark a message as being actively processed by the agent."""
+    log.debug("mark_processing called for id=%s", message_id)
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE messages SET status='processing' WHERE id=?",
+            (message_id,),
+        )
+        conn.commit()
+        rows_affected = cur.rowcount
+        conn.close()
+        if rows_affected > 0:
+            log.info("marked id=%s as processing", message_id)
+            return {"success": True, "message_id": message_id, "status": "processing"}
+        else:
+            log.warning("no message found with id=%s", message_id)
+            return {"success": False, "error": f"message id {message_id} not found"}
+    except Exception as exc:
+        log.error("mark_processing failed: %s", exc)
+        return {"success": False, "error": str(exc)}
+
+
+@mcp.tool()
+def mark_processed(message_id: str) -> dict:
+    """Mark a message as fully processed by the agent."""
+    log.debug("mark_processed called for id=%s", message_id)
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE messages SET status='processed', processed_at=strftime('%Y-%m-%dT%H:%M:%SZ', 'now', 'utc') WHERE id=?",
+            (message_id,),
+        )
+        conn.commit()
+        rows_affected = cur.rowcount
+        conn.close()
+        if rows_affected > 0:
+            log.info("marked id=%s as processed", message_id)
+            return {"success": True, "message_id": message_id, "status": "processed"}
+        else:
+            log.warning("no message found with id=%s", message_id)
+            return {"success": False, "error": f"message id {message_id} not found"}
+    except Exception as exc:
+        log.error("mark_processed failed: %s", exc)
+        return {"success": False, "error": str(exc)}
 
 
 if __name__ == "__main__":
