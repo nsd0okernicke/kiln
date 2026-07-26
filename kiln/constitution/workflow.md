@@ -17,10 +17,9 @@ Kiln uses a SQLite message database at `.kiln/messages.db` in the project root f
 
 **Handoff Mechanics:**
 - For handoffs, the underlying mechanism is the MCP `kiln-db` `write_query` tool: Claude agents send it via `/kiln-handoff` (which calls `write_query` internally); Copilot agents call `write_query` directly per their loop instructions.
-- Start every handoff message with: `Re-read your role and constitution.`
 - The specifier invents a short, stable handoff name for each accepted specification handoff.
 - Every later handoff for that work must include the specifier handoff name.
-- Handoffs must report only essential state, not prescribe process. After the opening line, include exactly these fields and no other prose: sender role, specifier handoff name, branch name, and commit hash.
+- Handoffs must report only essential state, not prescribe process. Include exactly these fields and no other prose: sender role, specifier handoff name, branch name, and commit hash (see Handoff Message Format template).
 - Do not tell the receiving role how to do its job, repeat your process, or ask it to continue sender-owned responsibilities. The normal request is: `Apply your own role rules to this state.`
 - When receiving a handoff, ignore sender process narrative and decide next actions only from your own role prompt, the constitution, and the current project state.
 - If the expected git layout or assigned worktree is missing, stop and report instead of silently working in the wrong place.
@@ -38,7 +37,6 @@ Do not squash the merge commit itself — only squash your own work commits on t
 All handoff messages must include a **timestamp** for user visibility when running cycles manually. Format your handoff message as follows:
 
 ```text
-Re-read your role and constitution.
 Sender: <role-name>
 Handoff: <specifier-handoff-name>
 Branch: <branch-name>
