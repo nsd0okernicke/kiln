@@ -1112,6 +1112,16 @@ try {
 
 Load-ConfigFromProfile
 Prepare-Workspace
+
+# Generate worker agent definitions before preparing worktrees so they can be copied in
+for ($i = 0; $i -lt $global:ROLES.Count; $i++) {
+    $role = $global:ROLES[$i]
+    $agent = $global:AGENTS[$i]
+    if ($agent -eq "claude" -and $global:MODES[$i] -eq "auto") {
+        Write-GeneratedWorkerAgent -Role $role
+    }
+}
+
 Prepare-Worktrees
 Prepare-AgentConfigs
 
@@ -1194,10 +1204,6 @@ if ($TerminalBackend -eq "wezterm") {
         Write-Verbose "Role: '$role', DisplayName: '$displayName', Agent: '$agent', Model: '$model'"
 
         Write-GeneratedCLAUDEmd -Index $i -Role $role -WorktreePath $worktreePath -Agent $agent -Mode $global:MODES[$i]
-        if ($agent -eq "claude" -and $global:MODES[$i] -eq "auto") {
-            Write-GeneratedWorkerAgent -Role $role
-        }
-
         $cmd = Build-WezTermAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Role $role
 
         $roleData += [PSCustomObject]@{
@@ -1221,9 +1227,6 @@ if ($TerminalBackend -eq "wezterm") {
         $worktreePath = $global:WORKTREE_PATHS[$i]
         $agent = $global:AGENTS[$i]
         Write-GeneratedCLAUDEmd -Index $i -Role $role -WorktreePath $worktreePath -Agent $agent -Mode $global:MODES[$i]
-        if ($agent -eq "claude" -and $global:MODES[$i] -eq "auto") {
-            Write-GeneratedWorkerAgent -Role $role
-        }
         Write-Host "  [$($global:DISPLAY_NAMES[$i])] configured" -ForegroundColor Cyan
     }
 
