@@ -681,10 +681,11 @@ function Write-GeneratedCLAUDEmd {
 
     # Render each block, join with horizontal rules.
     # For 'auto' mode roles (Claude agents with subagent delegation), exclude the role block
-    # since that's now in the worker subagent. Instead include a wrapper-prompt that clarifies
-    # the wrapper's limited responsibilities. For 'manual' mode (e.g., specifier), include the role block.
+    # since that's now in the worker subagent. Also exclude project/engineering (they're in the
+    # worker file and duplicated here; the shell never does implementation work). For 'manual'
+    # mode (e.g., specifier), include the role block and full constitution.
     if ($Mode -eq "auto" -and $Agent -eq "claude") {
-        $blocks = @($wrapperPromptBlock, $loopBlock, $runtimeBlock, $constitutionBlock, $project, $engineering, $workflow) | Where-Object { $_ }
+        $blocks = @($wrapperPromptBlock, $loopBlock, $runtimeBlock, $workflow) | Where-Object { $_ }
     } else {
         $blocks = @($roleBlock, $loopBlock, $runtimeBlock, $constitutionBlock, $project, $engineering, $workflow) | Where-Object { $_ }
     }
