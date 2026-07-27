@@ -111,6 +111,12 @@ config.mouse_bindings = {
   },
 }
 
+-- Shared across gui-startup (populates role_map) and update-status (reads):
+local role_map    = {}
+local roles_json  = os.getenv('Kiln_ROLES_JSON') or '[]'
+local roles       = wezterm.json_parse(roles_json)
+local project_dir = os.getenv('Kiln_PROJECT_DIR') or ''
+
 wezterm.on('format-window-title', function(tab, pane, tabs, panes, config)
   local title = tab.tab_title
   if title and #title > 0 then
@@ -119,12 +125,43 @@ wezterm.on('format-window-title', function(tab, pane, tabs, panes, config)
   return 'Kiln'
 end)
 
+-- Live per-role status bar. NOTE: this reads .kiln/status/<role>.json rather
+-- than the pane's own OSC-0 title. set-status.py writes both, but the title
+-- is unreliable: Claude Code (running in that same pane) also writes its own
+-- OSC-0 title on every render tick (spinner frames, idle icon, ...), and
+-- since it updates far more often than set-status.py, it almost always wins
+-- the race — in practice the pane title just shows Claude Code's own chrome.
+-- The JSON file has no such contention, so it's the reliable channel.
+wezterm.on('update-status', function(window, pane)
+  if not roles or #roles == 0 or project_dir == '' then
+    return
+  end
+
+  local parts = {}
+  for _, r in ipairs(roles) do
+    local title = nil
+    local status_path = project_dir .. '/.kiln/status/' .. r.role .. '.json'
+    local f = io.open(status_path, 'r')
+    if f then
+      local content = f:read('*a')
+      f:close()
+      local ok, status = pcall(wezterm.json_parse, content)
+      if ok and status and status.title then
+        title = status.title
+      end
+    end
+    if not title or #title == 0 then
+      title = r.name or r.role
+    end
+    table.insert(parts, title)
+  end
+
+  window:set_right_status(table.concat(parts, '  │  ') .. '  ')
+end)
+
 wezterm.on('gui-startup', function(cmd)
   local mux = wezterm.mux
-  local roles_json      = os.getenv('Kiln_ROLES_JSON')      or '[]'
   local layout_json     = os.getenv('Kiln_LAYOUT_JSON')     or ''
-  local project_dir     = os.getenv('Kiln_PROJECT_DIR')     or ''
-  local roles = wezterm.json_parse(roles_json)
 
   if not roles or #roles == 0 then
     return
@@ -145,7 +182,6 @@ wezterm.on('gui-startup', function(cmd)
   config.color_scheme = color_schemes[scheme_idx]
 
   local all_panes = {}
-  local role_map = {}
 
   -- Parse layout structure
   local layout = nil
