@@ -1,0 +1,39 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "Segoe UI, system-ui, sans-serif",
+    "fontSize": "17px",
+    "primaryColor": "#cde2fb",
+    "primaryTextColor": "#0b0b0b",
+    "primaryBorderColor": "#184f95",
+    "lineColor": "#52514e",
+    "textColor": "#0b0b0b",
+    "labelBoxBkgColor": "#fcfcfb",
+    "labelBoxBorderColor": "#c3c2b7",
+    "labelTextColor": "#0b0b0b",
+    "transitionColor": "#52514e",
+    "transitionLabelColor": "#0b0b0b",
+    "stateBkg": "#cde2fb",
+    "stateLabelColor": "#0b0b0b"
+  }
+}}%%
+stateDiagram-v2
+    direction LR
+
+    classDef queued fill:#cde2fb,color:#0b0b0b,stroke:#184f95,stroke-width:1.5px
+    classDef delivered fill:#6da7ec,color:#0b0b0b,stroke:#184f95,stroke-width:1.5px
+    classDef processing fill:#2a78d6,color:#ffffff,stroke:#184f95,stroke-width:1.5px
+    classDef processed fill:#184f95,color:#ffffff,stroke:#0d366b,stroke-width:1.5px
+
+    [*] --> Queued
+    Queued --> Delivered : wait_for_message()
+    Delivered --> Processing : mark_processing()
+    Processing --> Processed : mark_processed()
+    Processed --> [*]
+
+    Processing --> Delivered : timeout\nrecoverable — next cycle\nre-picks up queued or delivered
+
+    class Queued queued
+    class Delivered delivered
+    class Processing processing
+    class Processed processed

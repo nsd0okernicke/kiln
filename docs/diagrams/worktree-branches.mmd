@@ -1,0 +1,36 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "Segoe UI, system-ui, sans-serif",
+    "fontSize": "16px",
+    "git0": "#52514e",
+    "git1": "#eb6834",
+    "git2": "#1baf7a",
+    "gitInv0": "#ffffff",
+    "gitInv1": "#ffffff",
+    "gitInv2": "#ffffff",
+    "gitBranchLabel0": "#ffffff",
+    "gitBranchLabel1": "#ffffff",
+    "gitBranchLabel2": "#ffffff",
+    "commitLabelColor": "#0b0b0b",
+    "commitLabelBackground": "#fcfcfb",
+    "tagLabelColor": "#ffffff",
+    "tagLabelBackground": "#184f95",
+    "tagLabelBorder": "#0d366b"
+  }
+}}%%
+gitGraph
+    commit id: "main: feature start"
+    branch feature/agent-coder
+    checkout feature/agent-coder
+    commit id: "coder: red"
+    commit id: "coder: green"
+    commit id: "coder: refactor"
+    checkout main
+    branch feature/agent-review
+    checkout feature/agent-review
+    commit id: "architect: review notes"
+    checkout main
+    merge feature/agent-coder id: "squash: coder work" tag: "handoff"
+    merge feature/agent-review id: "squash: review" tag: "handoff"
+    commit id: "next cycle"

@@ -1,0 +1,31 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "Segoe UI, system-ui, sans-serif",
+    "fontSize": "17px",
+    "primaryColor": "#2a78d6",
+    "primaryTextColor": "#0b0b0b",
+    "primaryBorderColor": "#184f95",
+    "lineColor": "#52514e",
+    "textColor": "#0b0b0b",
+    "edgeLabelBackground": "#fcfcfb"
+  }
+}}%%
+flowchart LR
+    Q("<b>MCP Queue</b><br/>kiln-db / kiln-channel")
+    S("<b>Shell</b><br/>persistent, thin CLAUDE.md")
+    W("<b>Worker Subagent</b><br/>disposable, full context")
+
+    Q -->|"wait_for_message()<br/>mark_processing()"| S
+    S -->|"Agent tool dispatch<br/>&lt;role&gt;-worker"| W
+    W -->|"final result only"| S
+    S -->|"mark_processed()<br/>/kiln-handoff"| Q
+    Q -.->|"loop: every cycle, same response"| Q
+
+    classDef queue fill:#c3c2b7,color:#0b0b0b,stroke:#898781,stroke-width:2px
+    classDef shell fill:#2a78d6,color:#ffffff,stroke:#184f95,stroke-width:2px
+    classDef worker fill:#eb6834,color:#ffffff,stroke:#a8431e,stroke-width:2px
+
+    class Q queue
+    class S shell
+    class W worker

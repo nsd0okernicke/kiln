@@ -33,49 +33,29 @@ paginate: true
 
 ## Slide 3: Agent Cycle and Role Handoff
 
-- Agents are assigned roles: specifier, coder, architect, reviewer, selftest.
-- Typical cycle:
-  1. `specifier` writes acceptance tests / task context
-  2. `coder` implements code via TDD in a dedicated worktree
-  3. `refactorer` applies quality gates (coverage, CRAP, DRY, mutation testing)
-  4. `architect` reviews structure and enforces architecture rules
-  5. Loop returns to specifier for next feature
-- Kiln uses MCP messages to route tasks and hand off work between agents.
-- Each agent runs in its own git worktree and branch (e.g., `main-coder`, `feature/ABC-refactorer`).
+- Kiln routes work through role-based agents via MCP messages; each hop hands off into its own git worktree and branch (e.g., `main-coder`).
+- Cycle loops back to `specifier` once `architect` approves — ready for the next feature.
 
-> Visual hint: circular flow diagram labeled with roles, branch names, and arrow directions.
+![w:1150](images/diagram-agent-cycle.svg)
 
 ---
 
 ## Slide 4: Worktree and Merge Strategy
 
-- Each agent works in a separate git worktree when possible.
-- Benefits:
-  - isolated changes per role
-  - lower conflict risk during parallel exploration
-  - cleaner agent-specific history
-- Merge strategy:
-  - prefer squash/rebase before merging into main branch
-  - preserve logical work units while avoiding noisy commit history
-  - keep branch metadata for debugging and rollback
-- Example: `main` ← `feature/agent-coder` ← `feature/agent-review`
+- Each agent works in a separate git worktree — isolated changes, lower conflict risk, cleaner per-role history.
+- Squash before merging into `main`: logical work units, no noisy commit history, branch metadata kept for rollback.
 
-> Visual hint: git branch/worktree diagram with main line and side worktrees.
+![w:700](images/diagram-worktree-branches.svg)
 
 ---
 
 ## Slide 5: Message Lifecycle and Recovery
 
-- Messages flow through a 4-state lifecycle in the SQLite queue:
-  - **Queued**: Created by sender, waiting for receiver to pick it up
-  - **Delivered**: Retrieved by receiver via `wait_for_message()`, work about to start
-  - **Processing**: Receiver calls `mark_processing()`, work actively underway
-  - **Processed**: Receiver calls `mark_processed()` after handoff completes
-- Recovery: If an agent times out after `delivered` but before `processed`, the next cycle can pick up the message (checking both `queued` and `delivered` states)
-- Benefit: Full visibility into agent work; zero message loss; testable state transitions.
-- Inspection: `kiln-db.ps1 stats` shows counts per state; `wait_for_message()` logs to `.kiln/logs/channel-<role>.log`
+- Messages flow through a 4-state lifecycle in the SQLite queue — full visibility, zero message loss, testable transitions.
+- Recovery: a timeout after `delivered` but before `processed` is safe — the next cycle re-picks up either state.
+- Inspection: `kiln-db.ps1 stats` for counts per state; `.kiln/logs/channel-<role>.log` for `wait_for_message()` activity.
 
-> Visual hint: state machine diagram with queued→delivered→processing→processed transitions and recovery arrow.
+![w:1150](images/diagram-message-lifecycle.svg)
 
 ---
 
@@ -97,40 +77,20 @@ paginate: true
 
 ## Slide 6: Shell + Worker-Subagent Delegation (Phase 6)
 
-- Claude agents in `auto`-mode roles run as **thin persistent shells** that never accumulate context.
-- Each cycle, the shell:
-  1. Calls `/kiln-receive` to get the next handoff (waits indefinitely if none queued)
-  2. Calls `mark_processing()` to transition message to `processing` state
-  3. Dispatches the `Agent` tool with `subagent_type: "<role>-worker"` (blocking)
-  4. Calls `mark_processed()` after handoff completes
-  5. Loops back to step 1 in the **same response**
-- Worker subagent (`.claude/agents/<role>-worker.md`):
-  - Gets full role + engineering + project constitution (not workflow, not MCP tools)
-  - Is disposable — its full working transcript never enters the shell's context
-  - Can invoke project Skills (`/tdd-red`, `/tdd-green`, `/coverage-check`, etc.)
-  - Reports only final results back to shell
-- Benefit: Shell CLAUDE.md stays ~140 lines through unlimited cycles; worker gets fresh context per cycle
-- Validation: 8+ cycle run against LibraryHub with 50+ tests, zero stalls, zero message loss.
+- **Thin persistent shell** never accumulates context; the **disposable worker subagent** gets full role/engineering/project context and can invoke project Skills (`/tdd-red`, `/tdd-green`, ...).
+- Result: shell CLAUDE.md stays ~140 lines through unlimited cycles. Validated 8+ cycles on LibraryHub, 50+ tests, zero stalls.
 
-> Visual hint: two boxes (shell + worker) with arrows showing message in, work dispatch, result back, then loop arrow.
+![w:1050](images/diagram-shell-worker.svg)
 
 ---
 
 ## Slide 7: Terminal Layouts and Launch Workflow
 
-- Launch scripts arrange terminals for agent sessions and shared tools.
-- Typical layout:
-  - left pane: active agent shell
-  - right pane: git status / worktree monitor
-  - bottom pane: MCP server logs and shared inbox
-- Launch flow:
-  1. start `Kiln`/profile script
-  2. prepare agent configs
-  3. launch agent clients with MCP socket path
-  4. open terminals/worktrees in coordinated layout
-- Value: immediate visibility into agent state, git context, and orchestration logs.
+- Each role (Specifier, Coder, Refactorer, Architect) gets its own Claude Code session — backend (`-Terminal wezterm|windowsTerminal`) and layout (`-Layout panes|tabs`) are independent choices.
 
-> Visual hint: terminal grid mockup with labeled panes.
+| WezTerm - Panes                    | WezTerm - Tabs                    | Windows Terminal - Panes      | Windows Terminal - Tabs      |
+| ---------------------------------- | --------------------------------- | ----------------------------- | ---------------------------- |
+| ![w:290](images/wezterm_panes.jpg) | ![w:290](images/wezterm_tabs.jpg) | ![w:290](images/wt_panes.jpg) | ![w:290](images/wt_tabs.jpg) |
 
 ---
 
