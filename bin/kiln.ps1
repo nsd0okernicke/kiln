@@ -471,6 +471,16 @@ function Prepare-Worktrees {
             }
         }
 
+        # Copy worker agent definitions into worktree's .github/agents/ so Copilot CLI can find them
+        $worktreeGithubAgentsDir = Join-Path $worktreePath ".github" "agents"
+        New-Item -ItemType Directory -Force -Path $worktreeGithubAgentsDir | Out-Null
+        $projectGithubAgentsDir = Join-Path $WorkingDir ".github" "agents"
+        if (Test-Path $projectGithubAgentsDir) {
+            Get-ChildItem -Path $projectGithubAgentsDir -Filter "*-worker.agent.md" | ForEach-Object {
+                Copy-Item -Path $_.FullName -Destination $worktreeGithubAgentsDir -Force
+            }
+        }
+
         # Create .mcp.json in worktree root with MCP server configuration
         $claudeJsonPath = Join-Path $worktreePath ".mcp.json"
         $dbPath = Join-Path $STATE_DIR "messages.db"
@@ -665,7 +675,8 @@ function Write-GeneratedCLAUDEmd {
     New-Item -ItemType Directory -Force -Path $WorktreePath | Out-Null
 
     # Load template blocks in order: wrapper-prompt (auto-mode only) -> loop -> runtime -> constitution -> role
-    $wrapperPromptBlock = if ($Mode -eq "auto" -and $Agent -eq "claude") { Get-KilnTemplate "wrapper-prompt-auto-$Agent" } else { $null }
+    $hasWorkerDelegation = $Agent -eq "claude" -or $Agent -eq "copilot"
+    $wrapperPromptBlock = if ($Mode -eq "auto" -and $hasWorkerDelegation) { Get-KilnTemplate "wrapper-prompt-auto-$Agent" } else { $null }
     $loopBlock         = Get-KilnTemplate "loop-$Mode-$Agent"
     $runtimeBlock      = Get-KilnTemplate "runtime-$Agent"
     $constitutionBlock = Get-KilnConstitutionHeader
@@ -687,11 +698,11 @@ function Write-GeneratedCLAUDEmd {
     }
 
     # Render each block, join with horizontal rules.
-    # For 'auto' mode roles (Claude agents with subagent delegation), exclude the role block
-    # since that's now in the worker subagent. Also exclude project/engineering (they're in the
+    # For 'auto' mode roles with worker delegation (Claude or Copilot), exclude the role block
+    # since that's now in the worker agent. Also exclude project/engineering (they're in the
     # worker file and duplicated here; the shell never does implementation work). For 'manual'
     # mode (e.g., specifier), include the role block and full constitution.
-    if ($Mode -eq "auto" -and $Agent -eq "claude") {
+    if ($Mode -eq "auto" -and $hasWorkerDelegation) {
         $blocks = @($wrapperPromptBlock, $loopBlock, $runtimeBlock, $workflow) | Where-Object { $_ }
     } else {
         $blocks = @($roleBlock, $loopBlock, $runtimeBlock, $constitutionBlock, $project, $engineering, $workflow) | Where-Object { $_ }
@@ -708,22 +719,15 @@ function Write-GeneratedCLAUDEmd {
 function Write-GeneratedWorkerAgent {
     param(
         [string]$Role,
+        [string]$Agent = "claude",
         [string]$Model = ""
     )
 
-    # The worker subagent does the role's actual implementation work for one cycle,
-    # dispatched by the persistent shell agent's loop template (Step 2). It gets the
+    # The worker agent does the role's actual implementation work for one cycle,
+    # dispatched by the persistent shell agent's loop template. It gets the
     # role + engineering/project constitution, but not workflow.md (handoff/messaging
-    # protocol stays the shell's concern) and no MCP/Agent tools (no messaging, no
-    # recursive subagent spawning).
-    #
-    # Generated in the main project's .claude/agents/ directory (not the worktree's),
-    # so Claude Code's agent discovery finds it when the shell agent (running in the
-    # worktree) spawns the subagent via the Agent tool.
-    $agentsDir = Join-Path $WorkingDir ".claude" "agents"
-    New-Item -ItemType Directory -Force -Path $agentsDir | Out-Null
-    $outPath = Join-Path $agentsDir "$Role-worker.md"
-
+    # protocol stays the shell's concern) and no MCP/recursive-delegation tools (no
+    # messaging, no spawning further subagents).
     $roleBlock   = Get-KilnRole $Role
     $engineering = Get-KilnConstitution "engineering"
     $project     = Get-KilnConstitution "project"
@@ -736,17 +740,53 @@ function Write-GeneratedWorkerAgent {
     $blocks = @($roleBlock, $project, $engineering) | Where-Object { $_ }
     $body   = ($blocks | ForEach-Object { Apply-Substitutions $_ $subs }) -join "`n`n---`n`n"
 
-    $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-    $frontmatter  = "---`n"
-    $frontmatter += "name: $Role-worker`n"
-    $frontmatter += "description: Performs the $Role role's implementation work for one handoff cycle. Dispatched by the persistent $Role shell agent's message loop; not for direct/standalone use.`n"
-    $frontmatter += "tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell, Skill, NotebookEdit, TodoWrite`n"
-    if ($Model) {
-        $frontmatter += "model: $Model`n"
+    $timestamp   = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    $description = "Performs the $Role role's implementation work for one handoff cycle. Dispatched by the persistent $Role shell agent's message loop; not for direct/standalone use."
+
+    if ($Agent -eq "copilot") {
+        # Generated in the main project's .github/agents/ (Copilot custom-agent
+        # discovery path: project-level agents live under .github/agents/, per
+        # https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/create-custom-agents-for-cli),
+        # so the wrapper session (running in the worktree) can delegate to it by
+        # name. tools: is a strict allowlist, empirically confirmed against a live
+        # copilot CLI session — listing only read/write/shell (no MCP server name)
+        # excludes messaging access, mirroring the Claude worker's isolation. The
+        # description must not contain a raw ':' — unquoted, that breaks YAML
+        # frontmatter parsing (confirmed empirically: "mapping values are not
+        # allowed in this context").
+        $agentsDir = Join-Path $WorkingDir ".github" "agents"
+        New-Item -ItemType Directory -Force -Path $agentsDir | Out-Null
+        $outPath = Join-Path $agentsDir "$Role-worker.agent.md"
+
+        $frontmatter  = "---`n"
+        $frontmatter += "name: $Role-worker`n"
+        $frontmatter += "description: $description`n"
+        $frontmatter += "tools:`n"
+        $frontmatter += "  - read`n"
+        $frontmatter += "  - write`n"
+        $frontmatter += "  - shell`n"
+        $frontmatter += "---`n`n"
+        $frontmatter += "<!-- Auto-generated by kiln.ps1 on $timestamp -->`n"
+        $frontmatter += "<!-- DO NOT EDIT MANUALLY -->`n`n"
+    } else {
+        # Generated in the main project's .claude/agents/ directory (not the worktree's),
+        # so Claude Code's agent discovery finds it when the shell agent (running in the
+        # worktree) spawns the subagent via the Agent tool.
+        $agentsDir = Join-Path $WorkingDir ".claude" "agents"
+        New-Item -ItemType Directory -Force -Path $agentsDir | Out-Null
+        $outPath = Join-Path $agentsDir "$Role-worker.md"
+
+        $frontmatter  = "---`n"
+        $frontmatter += "name: $Role-worker`n"
+        $frontmatter += "description: $description`n"
+        $frontmatter += "tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell, Skill, NotebookEdit, TodoWrite`n"
+        if ($Model) {
+            $frontmatter += "model: $Model`n"
+        }
+        $frontmatter += "---`n`n"
+        $frontmatter += "<!-- Auto-generated by kiln.ps1 on $timestamp -->`n"
+        $frontmatter += "<!-- DO NOT EDIT MANUALLY -->`n`n"
     }
-    $frontmatter += "---`n`n"
-    $frontmatter += "<!-- Auto-generated by kiln.ps1 on $timestamp -->`n"
-    $frontmatter += "<!-- DO NOT EDIT MANUALLY -->`n`n"
 
     Set-Content $outPath ($frontmatter + $body) -Encoding UTF8
 }
@@ -1128,10 +1168,10 @@ Prepare-Workspace
 for ($i = 0; $i -lt $global:ROLES.Count; $i++) {
     $role = $global:ROLES[$i]
     $agent = $global:AGENTS[$i]
-    if ($agent -eq "claude" -and $global:MODES[$i] -eq "auto") {
+    if (($agent -eq "claude" -or $agent -eq "copilot") -and $global:MODES[$i] -eq "auto") {
         $varWorkerModel = "TERMINAL_${i}_WORKER_MODEL"
         $workerModel = Get-Variable -Name $varWorkerModel -ValueOnly -ErrorAction SilentlyContinue
-        Write-GeneratedWorkerAgent -Role $role -Model $workerModel
+        Write-GeneratedWorkerAgent -Role $role -Agent $agent -Model $workerModel
     }
 }
 

@@ -60,7 +60,14 @@
       "Bash(pwsh -NoProfile -File './bin/install-sqlite.ps1')",
       "Bash(pwsh -NoProfile -Command \"Remove-Item 'C:\\\\projekte\\\\library-hub\\\\.swarmforge\\\\messages.db' -ErrorAction SilentlyContinue; . .\\\\lib\\\\swarmforge-db.ps1; Initialize-SwarmForgeDb -ProjectRoot 'C:\\\\projekte\\\\library-hub' 2>&1\")",
       "Bash(pwsh -NoProfile -Command '. .\\\\lib\\\\swarmforge-db.ps1; $msgs = Get-AllMessages -ProjectRoot '\\\\''C:\\\\projekte\\\\library-hub'\\\\'' -Limit 1; Write-Host \"Found $\\($msgs.Count\\) message\\(s\\)\" -ForegroundColor Green')",
-      "Bash(pwsh -NoProfile -Command '. .\\\\lib\\\\swarmforge-db.ps1; $msgs = Get-AllMessages -ProjectRoot '\\\\''C:\\\\projekte\\\\library-hub'\\\\''; Write-Host \"Found $\\($msgs.Count\\) message\\(s\\)\" -ForegroundColor Green')"
+      "Bash(pwsh -NoProfile -Command '. .\\\\lib\\\\swarmforge-db.ps1; $msgs = Get-AllMessages -ProjectRoot '\\\\''C:\\\\projekte\\\\library-hub'\\\\''; Write-Host \"Found $\\($msgs.Count\\) message\\(s\\)\" -ForegroundColor Green')",
+      "WebFetch(domain:docs.github.com)",
+      "Bash(where copilot *)",
+      "Bash(copilot --version)",
+      "Bash(copilot --help)",
+      "Bash(copilot agent *)",
+      "Bash(copilot agents *)",
+      "Bash(copilot help *)"
     ],
     "additionalDirectories": [
       "C:\\projekte\\swarm-forge\\examples\\library-hub",
