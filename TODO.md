@@ -218,7 +218,110 @@ Distinct from Section 1 (launching Codex/Grok at all) — this is about letting 
 
 ---
 
-## 5. Technical Slide Deck
+## 5. Human-Entry 5-Agent Profile
+
+**Goal:** Create a new profile combining human-guided story/requirements gathering with autonomous execution.
+
+**Pattern:** Two-tab layout — Tab 1 single manual agent for human interaction (stories, grill-me skills, etc.); Tab 2 compact 2×2 grid with specifier, coder, refactorer, architect. Specifier switches to auto mode (delegating to `specifier-worker`).
+
+**Entry point:** Human tab handoff → specifier's inbox; specifier then enters its normal auto-delegation cycle. No new loop mechanics needed — specifier's auto loop already expects to *receive* a message from the queue before delegating, so the human tab's handoff just becomes its first inbound message.
+
+**Requirements:**
+- [ ] Create `specifier-worker.md` subagent definition (follows same pattern as coder/refactorer/architect workers)
+- [ ] Add `storyteller` or similar manual role to constitution (if reusing roles, can adapt "specifier" to auto mode instead)
+- [ ] Add new profile to `kiln/framework/profiles.json` (e.g., `"human-autonomous"`)
+- [ ] Test end-to-end: human tab → handoff → specifier auto-delegates → full cycle
+
+---
+
+## 6. Skills Audit & Improvement (2026-07-29)
+
+**Summary:** Inventory of 27 skills; 15 actively used, 5 infrastructure, 7 unused/exploratory. Multiple gaps identified in orchestration, preconditions, and error handling.
+
+### Inventory & Usage Classification
+
+**Critical (3)** — Core loop infrastructure, no workaround:
+- `kiln-handoff` — full send sequence (handoff messaging framework)
+- `kiln-receive` — full receive sequence (handoff messaging framework)
+- `gherkin-spec-workflow` — specifier's feature-writing workflow with mutation testing
+
+**Important (11)** — Called by core roles or quality verification:
+- TDD triad: `tdd-red`, `tdd-green`, `tdd-refactor`, `tdd-coordinator` (coder workflow)
+- Quality gates: `final-verification`, `mutation-testing`, `coverage-check`, `crap-analyzer`, `property-test-generator`, `run-mutation` (refactorer/architect)
+- Pre-work: `concept-generator` (pre-specification ideation)
+
+**Optional (13)** — Helper/exploratory skills, user-invoked:
+- Manual reviews: `architectural-reviewer`, `code-review-tdd`, `review`
+- Documentation: `documentation-updater`
+- Exploration: `grill-me`, `grill-with-docs`, `kickoff`, `zoom-out`, `caveman`
+- Language-specific: `crap-run` (Python), `aps-setup` (APS tools)
+- Deprecated: `acceptance-test-writer` (use `gherkin-spec-workflow` instead)
+
+### Gaps & Improvement Opportunities
+
+1. **Missing: Skill Orchestration Documentation**
+   - Roles mention multiple skills but don't document dependencies or optimal sequencing
+   - Action: Create `SKILL_ORCHESTRATION.md` showing execution order for refactorer quality gates (coverage → CRAP → mutation → property-test)
+
+2. **Deprecated: acceptance-test-writer**
+   - Warns to use `gherkin-spec-workflow` instead, but both exist
+   - Action: Mark as deprecated in SKILL.md or clarify narrow use case
+
+3. **Missing: Skill Preconditions & Tool Availability**
+   - Many skills (coverage-check, crap-analyzer, mutation-testing) require external tools (coverage.py, radon, PIT, gherkin-mutator)
+   - No centralized tool availability checking before invocation
+   - Action: Create precondition checklist per role; add tool-check step to role startup
+
+4. **Broken: zoom-out Skill**
+   - Marked `disable-model-invocation: true`; cannot be called via `/zoom-out`
+   - Action: Document invocation path or remove if deprecated
+
+5. **Missing: Error Recovery Workflows**
+   - Many skills document "If tools unavailable", but roles don't show fallback paths
+   - Action: Add error branches in refactorer/architect when external tools fail
+
+6. **Unclear Ownership: mutation-testing Coordination**
+   - Used by both architect (final-verification) and refactorer (quality gates)
+   - No coordination on who runs first or how manifests are shared
+   - Action: Designate single owner (recommend architect) for mutation manifests; document handoff protocol
+
+7. **Missing: Tool Version Pins**
+   - No declared minimum versions for radon, coverage.py, PIT, gherkin-mutator
+   - Action: Add tool versions to constitution/engineering.md
+
+8. **Knowledge Gap: property-test-generator Placement**
+   - Only mentioned in refactorer; no explicit entry point or invocation context in roles
+   - Action: Document when/why to invoke in refactorer quality-gate sequence
+
+### Known Limitations (Per Skill)
+
+| Skill | Limitation | Workaround |
+|---|---|---|
+| aps-setup | Requires Go toolchain; 5-15min setup | Build once, cache binaries |
+| crap-run | Python-specific (radon-based) | Use generic crap-analyzer for other languages |
+| crap-analyzer | JVM threshold=30, Python threshold≤6 | Document per-project threshold in constitution |
+| coverage-check | Requires language-specific tool; variable thresholds | Document thresholds per project (e.g., LINE≥80%, BRANCH≥75%) |
+| gherkin-spec-workflow | User approval gate (Step 4) blocks automation | Expect manual cycle; no auto-merge path |
+| mutation-testing | 15-45min runtime; modules >100 sites slow significantly | Split large modules; use differential mode |
+| property-test-generator | Requires library (Kotest/Hypothesis/fast-check) | Check build file; recommend adding if missing |
+| run-mutation | Silent timeouts on slow test suites | Use `--verbose --progress`; add timeout wrapper |
+| zoom-out | disable-model-invocation: true; no skill invocation path | Direct instruction only; require explicit user question |
+| acceptance-test-writer | ⚠️ Deprecated; use gherkin-spec-workflow instead | Redirect all specifier usage to gherkin-spec |
+
+### Recommended Action Items
+
+- [ ] Create `kiln/project/constitution/skill-orchestration.md` documenting dependency chains and execution order
+- [ ] Mark `acceptance-test-writer` as deprecated in SKILL.md with redirect to `gherkin-spec-workflow`
+- [ ] Add tool precondition checks to role startup; fail gracefully with clear "missing tool" messages
+- [ ] Document `zoom-out` invocation path or remove if truly obsolete
+- [ ] Define mutation-testing ownership protocol — architect owns acceptance mutation, shared manifest format
+- [ ] Pin external tool versions in `constitution/engineering.md` (radon, coverage.py, PIT, gherkin-mutator)
+- [ ] Add property-test-generator entry point and trigger conditions in refactorer role rules
+- [ ] Test all "tool unavailable" error paths in refactorer/architect workflows
+
+---
+
+## 7. Technical Slide Deck
 
 **Goal:** Prepare a slide deck outline visualizing Kiln's architecture and workflow.
 
