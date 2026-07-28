@@ -108,6 +108,34 @@ if (Test-Path $githubSkillsDir) {
     Write-Host "  ✓ Removed .github/skills/"
 }
 
+# Remove root .mcp.json (generated for @current-mode roles by Prepare-Workspace)
+$rootMcpPath = Join-Path $ProjectDir ".mcp.json"
+if (Test-Path $rootMcpPath) {
+    Remove-Item $rootMcpPath -Force -ErrorAction SilentlyContinue
+    Write-Host "  ✓ Removed .mcp.json"
+}
+
+# Remove generated worker agent definitions. Filtered by the generator's own
+# naming suffix so any hand-authored custom agents alongside them (a user's
+# own .claude/agents/*.md or .github/agents/*.agent.md) are left untouched.
+$claudeAgentsDir = Join-Path $ProjectDir ".claude" "agents"
+if (Test-Path $claudeAgentsDir) {
+    $removed = Get-ChildItem -Path $claudeAgentsDir -Filter "*-worker.md" -ErrorAction SilentlyContinue
+    if ($removed) {
+        $removed | Remove-Item -Force -ErrorAction SilentlyContinue
+        Write-Host "  ✓ Removed .claude/agents/*-worker.md"
+    }
+}
+
+$githubAgentsDir = Join-Path $ProjectDir ".github" "agents"
+if (Test-Path $githubAgentsDir) {
+    $removed = Get-ChildItem -Path $githubAgentsDir -Filter "*-worker.agent.md" -ErrorAction SilentlyContinue
+    if ($removed) {
+        $removed | Remove-Item -Force -ErrorAction SilentlyContinue
+        Write-Host "  ✓ Removed .github/agents/*-worker.agent.md"
+    }
+}
+
 # Step 5: Remove state directories
 Write-Host ""
 Write-Host "Step 5: Removing state directories..."

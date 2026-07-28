@@ -118,20 +118,41 @@ ensure_initial_gitignore() {
 
   if [[ ! -f "$gitignore_file" ]]; then
     cat > "$gitignore_file" <<'EOF'
-.kiln/
+.kiln
 .worktrees/
+.mcp.json
+.claude/agents/*-worker.md
 EOF
     return
   fi
 
-  if ! grep -qx '.kiln/' "$gitignore_file"; then
-    echo '.kiln/' >> "$gitignore_file"
+  # No trailing slash on .kiln: each worktree gets .kiln created as a symlink
+  # back to the shared state dir (see the worktree_Kiln_dir assignment below),
+  # and a trailing-slash pattern only matches real directories, not symlinks —
+  # with the slash, the symlink stays untracked-but-not-ignored and can get
+  # swept into a commit, later breaking merges that try to check it out.
+  # Mirrors the same fix in kiln.ps1's Ensure-InitialGitignore.
+  if ! grep -qxF '.kiln' "$gitignore_file"; then
+    echo '.kiln' >> "$gitignore_file"
   fi
 
-  if ! grep -qx '.worktrees/' "$gitignore_file"; then
+  if ! grep -qxF '.worktrees/' "$gitignore_file"; then
     echo '.worktrees/' >> "$gitignore_file"
   fi
 
+  # .mcp.json and worker agent files (write_worker_agent_file) are regenerated
+  # per-worktree/per-role with different content each time. If tracked, every
+  # role's copy differs, so every /kiln-receive merge would hit an add/add
+  # conflict — same rationale as kiln.ps1's Ensure-InitialGitignore. Scoped to
+  # the *-worker.md suffix, not the whole .claude/agents/ dir, so a user's own
+  # hand-authored custom agents there stay tracked.
+  if ! grep -qxF '.mcp.json' "$gitignore_file"; then
+    echo '.mcp.json' >> "$gitignore_file"
+  fi
+
+  if ! grep -qxF '.claude/agents/*-worker.md' "$gitignore_file"; then
+    echo '.claude/agents/*-worker.md' >> "$gitignore_file"
+  fi
 }
 
 ensure_runtime_git_excludes() {
@@ -141,8 +162,8 @@ ensure_runtime_git_excludes() {
   touch "$exclude_file"
 
   local pattern
-  for pattern in ".kiln/" ".worktrees/"; do
-    if ! grep -qx "$pattern" "$exclude_file"; then
+  for pattern in ".kiln" ".worktrees/" ".mcp.json" ".claude/agents/*-worker.md"; do
+    if ! grep -qxF "$pattern" "$exclude_file"; then
       echo "$pattern" >> "$exclude_file"
     fi
   done

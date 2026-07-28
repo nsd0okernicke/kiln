@@ -67,7 +67,9 @@
       "Bash(copilot --help)",
       "Bash(copilot agent *)",
       "Bash(copilot agents *)",
-      "Bash(copilot help *)"
+      "Bash(copilot help *)",
+      "Bash(zsh --version)",
+      "Bash(bash -n \"c:\\\\projekte\\\\agentic-coding\\\\kiln\\\\bin\\\\kiln-cleanup.sh\")"
     ],
     "additionalDirectories": [
       "C:\\projekte\\swarm-forge\\examples\\library-hub",

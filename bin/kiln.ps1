@@ -118,6 +118,11 @@ function Ensure-InitialGitignore {
         $needsClaudeMd = $content -notmatch '^\s*CLAUDE\.md\s*$'
         $needsMcpJson = $content -notmatch '^\s*\.mcp\.json\s*$'
         $needsTmp = $content -notmatch '^\s*tmp/\s*$'
+        # Worker agent files (Write-GeneratedWorkerAgent) are generated/regenerated the same
+        # way — scoped to the *-worker.md suffix, not the whole .claude/agents/ dir, so a
+        # user's own hand-authored custom agents there stay tracked. .github/agents/ is
+        # already covered by the broader .github/ pattern above.
+        $needsClaudeAgents = $content -notmatch '^\s*\.claude/agents/\*-worker\.md\s*$'
 
         if ($needsKiln) { Add-Content $gitignorePath ".kiln" -Encoding UTF8 }
         if ($needsWorktrees) { Add-Content $gitignorePath ".worktrees/" -Encoding UTF8 }
@@ -126,6 +131,7 @@ function Ensure-InitialGitignore {
         if ($needsClaudeMd) { Add-Content $gitignorePath "CLAUDE.md" -Encoding UTF8 }
         if ($needsMcpJson) { Add-Content $gitignorePath ".mcp.json" -Encoding UTF8 }
         if ($needsTmp) { Add-Content $gitignorePath "tmp/" -Encoding UTF8 }
+        if ($needsClaudeAgents) { Add-Content $gitignorePath ".claude/agents/*-worker.md" -Encoding UTF8 }
     } else {
         # Create new .gitignore with essential patterns
         $gitignoreContent = @'
@@ -153,6 +159,7 @@ venv/
 .worktrees/
 .github/
 .claude/skills
+.claude/agents/*-worker.md
 CLAUDE.md
 .mcp.json
 tmp/
