@@ -117,6 +117,15 @@ local roles_json  = os.getenv('Kiln_ROLES_JSON') or '[]'
 local roles       = wezterm.json_parse(roles_json)
 local project_dir = os.getenv('Kiln_PROJECT_DIR') or ''
 
+-- Status-bar badge background per state (edit freely to taste).
+local STATE_COLORS = {
+  waiting    = '#2a7d33',  -- green  — idle, nothing needed from you
+  receiving  = '#2a5db0',  -- blue   — picking up a handoff
+  delegating = '#b03a2a',  -- red    — actively working
+  handoff    = '#5c4aa0',  -- violet — wrapping up / sending
+}
+local STATE_COLOR_DEFAULT = '#4a4a48'  -- unknown state / no status file yet
+
 wezterm.on('format-window-title', function(tab, pane, tabs, panes, config)
   local title = tab.tab_title
   if title and #title > 0 then
@@ -137,26 +146,37 @@ wezterm.on('update-status', function(window, pane)
     return
   end
 
-  local parts = {}
-  for _, r in ipairs(roles) do
+  local segments = {}
+  for i, r in ipairs(roles) do
     local title = nil
+    local state = nil
     local status_path = project_dir .. '/.kiln/status/' .. r.role .. '.json'
     local f = io.open(status_path, 'r')
     if f then
       local content = f:read('*a')
       f:close()
       local ok, status = pcall(wezterm.json_parse, content)
-      if ok and status and status.title then
+      if ok and status then
         title = status.title
+        state = status.state
       end
     end
     if not title or #title == 0 then
       title = r.name or r.role
     end
-    table.insert(parts, title)
-  end
 
-  window:set_right_status(table.concat(parts, '  │  ') .. '  ')
+    table.insert(segments, { Background = { Color = STATE_COLORS[state] or STATE_COLOR_DEFAULT } })
+    table.insert(segments, { Foreground = { Color = '#ffffff' } })
+    table.insert(segments, { Text = ' ' .. title .. ' ' })
+    table.insert(segments, 'ResetAttributes')
+
+    if i < #roles then
+      table.insert(segments, { Text = ' ' })
+    end
+  end
+  table.insert(segments, { Text = '  ' })
+
+  window:set_right_status(wezterm.format(segments))
 end)
 
 wezterm.on('gui-startup', function(cmd)
