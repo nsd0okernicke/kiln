@@ -74,12 +74,39 @@
       "Bash(grep -n '\"kiln\\\\\\\\\\\\\\\\constitution\\\\|\"kiln\\\\\\\\\\\\\\\\roles\\\\|\"kiln\\\\\\\\\\\\\\\\skills\\\\|\"kiln\\\\\\\\\\\\\\\\profiles\\\\|kiln\\\\\\\\\\\\\\\\constitution\\\\|kiln\\\\\\\\\\\\\\\\roles\\\\|kiln\\\\\\\\\\\\\\\\skills\\\\|kiln\\\\\\\\\\\\\\\\templates\\\\|kiln\\\\\\\\\\\\\\\\mcp-server' bin/kiln-init.ps1)",
       "Bash(bash -n \"c:\\\\projekte\\\\agentic-coding\\\\kiln\\\\bin\\\\kiln-init.sh\")",
       "Bash(grep -n 'WORKTREE_PATHS\\\\[\\\\$' bin/kiln.sh)",
-      "Bash(bash -n \"c:\\\\projekte\\\\agentic-coding\\\\kiln\\\\bin\\\\kiln.sh\")"
+      "Bash(bash -n \"c:\\\\projekte\\\\agentic-coding\\\\kiln\\\\bin\\\\kiln.sh\")",
+      "Bash(codex --version)",
+      "Bash(codex --help)",
+      "Bash(grok --version)",
+      "Bash(grok --help)",
+      "PowerShell(Get-Command codex -ErrorAction SilentlyContinue)",
+      "PowerShell(codex --version 2>&1)",
+      "PowerShell(npm list -g --depth=0 2>&1)",
+      "Bash(grok mcp *)",
+      "Bash(find 'C:\\\\Users\\\\okernicke' -maxdepth 2 -iname *grok*)",
+      "PowerShell(Get-ChildItem -Path \"$env:USERPROFILE\\\\.codex\" -Recurse -Depth 1 -ErrorAction SilentlyContinue | Select-Object FullName; Get-Content \"$env:USERPROFILE\\\\.codex\\\\config.toml\" -ErrorAction SilentlyContinue; Get-Content \"$env:USERPROFILE\\\\.codex\\\\version.json\" -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-ChildItem -Path \"$env:USERPROFILE\\\\.codex\\\\packages\\\\standalone\" -ErrorAction SilentlyContinue; Get-ChildItem -Path \"$env:USERPROFILE\\\\.codex\" -ErrorAction SilentlyContinue | Select-Object Name; Get-Content \"$env:USERPROFILE\\\\.codex\\\\installation_id\" -ErrorAction SilentlyContinue)",
+      "Bash(npm view *)",
+      "Bash(GROK_CONFIG_DIR=/tmp/grok-test grok mcp list)",
+      "Read(//tmp/**)",
+      "Bash(grep -n -i \"mcp\\\\|confirm\\\\|approve\\\\|trust\\\\|dangerous\\\\|sandbox\" /tmp/grok-readme.txt | head -80)",
+      "Bash(mkdir -p /tmp/codex-home-test && echo done)",
+      "Bash(bash -n \"c:/projekte/agentic-coding/kiln/bin/kiln.sh\")",
+      "Bash(bash -n \"/tmp/kiln-syntax-test.sh\")",
+      "Bash(awk '/^write_codex_instructions_file\\\\\\(\\\\\\) \\\\{/,/^\\\\}/' \"c:/projekte/agentic-coding/kiln/bin/kiln.sh\")",
+      "Bash(bash /tmp/kiln-sh-test/real_func.sh)",
+      "Bash(echo \"===exit $?===\")",
+      "WebFetch(domain:developers.openai.com)",
+      "WebFetch(domain:learn.chatgpt.com)",
+      "Bash(python3 -c ' *)",
+      "Bash(awk '/^write_codex_worker_agent_file\\\\\\(\\\\\\) \\\\{/,/^\\\\}/' \"c:/projekte/agentic-coding/kiln/bin/kiln.sh\")",
+      "Bash(bash /tmp/kiln-sh-test2/f.sh)"
     ],
     "additionalDirectories": [
       "C:\\projekte\\swarm-forge\\examples\\library-hub",
       "C:\\projekte\\library-hub\\swarmforge",
-      "C:\\Users\\olive"
+      "C:\\Users\\olive",
+      "\\tmp"
     ]
   }
 }

@@ -116,6 +116,7 @@ function Ensure-InitialGitignore {
         # three — confirmed live: an agent got stuck exactly here and had to escalate instead
         # of resolving it, since these files were never supposed to be shared across roles.
         $needsClaudeMd = $content -notmatch '^\s*CLAUDE\.md\s*$'
+        $needsAgentsMd = $content -notmatch '^\s*AGENTS\.md\s*$'
         $needsMcpJson = $content -notmatch '^\s*\.mcp\.json\s*$'
         $needsTmp = $content -notmatch '^\s*tmp/\s*$'
         # Worker agent files (Write-GeneratedWorkerAgent) are generated/regenerated the same
@@ -123,15 +124,18 @@ function Ensure-InitialGitignore {
         # user's own hand-authored custom agents there stay tracked. .github/agents/ is
         # already covered by the broader .github/ pattern above.
         $needsClaudeAgents = $content -notmatch '^\s*\.claude/agents/\*-worker\.md\s*$'
+        $needsCodexAgents = $content -notmatch '^\s*\.codex/agents/\*-worker\.toml\s*$'
 
         if ($needsKiln) { Add-Content $gitignorePath ".kiln" -Encoding UTF8 }
         if ($needsWorktrees) { Add-Content $gitignorePath ".worktrees/" -Encoding UTF8 }
         if ($needsGithub) { Add-Content $gitignorePath ".github/" -Encoding UTF8 }
         if ($needsClaudeSkills) { Add-Content $gitignorePath ".claude/skills" -Encoding UTF8 }
         if ($needsClaudeMd) { Add-Content $gitignorePath "CLAUDE.md" -Encoding UTF8 }
+        if ($needsAgentsMd) { Add-Content $gitignorePath "AGENTS.md" -Encoding UTF8 }
         if ($needsMcpJson) { Add-Content $gitignorePath ".mcp.json" -Encoding UTF8 }
         if ($needsTmp) { Add-Content $gitignorePath "tmp/" -Encoding UTF8 }
         if ($needsClaudeAgents) { Add-Content $gitignorePath ".claude/agents/*-worker.md" -Encoding UTF8 }
+        if ($needsCodexAgents) { Add-Content $gitignorePath ".codex/agents/*-worker.toml" -Encoding UTF8 }
     } else {
         # Create new .gitignore with essential patterns
         $gitignoreContent = @'
@@ -160,7 +164,9 @@ venv/
 .github/
 .claude/skills
 .claude/agents/*-worker.md
+.codex/agents/*-worker.toml
 CLAUDE.md
+AGENTS.md
 .mcp.json
 tmp/
 '@
@@ -491,6 +497,17 @@ function Prepare-Worktrees {
             }
         }
 
+        # Copy worker agent definitions into worktree's .codex/agents/ so Codex CLI's
+        # project-scoped custom-agent discovery can find them
+        $worktreeCodexAgentsDir = Join-Path $worktreePath ".codex" "agents"
+        New-Item -ItemType Directory -Force -Path $worktreeCodexAgentsDir | Out-Null
+        $projectCodexAgentsDir = Join-Path $WorkingDir ".codex" "agents"
+        if (Test-Path $projectCodexAgentsDir) {
+            Get-ChildItem -Path $projectCodexAgentsDir -Filter "*-worker.toml" | ForEach-Object {
+                Copy-Item -Path $_.FullName -Destination $worktreeCodexAgentsDir -Force
+            }
+        }
+
         # Create .mcp.json in worktree root with MCP server configuration
         $claudeJsonPath = Join-Path $worktreePath ".mcp.json"
         $dbPath = Join-Path $STATE_DIR "messages.db"
@@ -627,6 +644,35 @@ function Prepare-AgentConfigs {
     }
 }
 
+function Prepare-CodexConfigs {
+    # Unlike Copilot (one shared global ~/.copilot/mcp-config.json), each Codex role gets
+    # its own isolated CODEX_HOME under .kiln/codex-home/<role>/ with its own config.toml.
+    # CODEX_HOME is a real, confirmed-working Codex CLI env var for relocating its entire
+    # config dir — using it instead of overwriting the user's real ~/.codex/config.toml
+    # avoids clobbering their own model/sandbox/profile settings the way Copilot's
+    # single-global-file approach would. kiln-db only (no kiln-channel): Codex has no
+    # confirmed support for a long-blocking MCP tool call, so codex roles poll instead —
+    # same limitation as Copilot today (see TODO.md Track D).
+    $dbPath = Join-Path $STATE_DIR "messages.db"
+    $dbPathEscaped = $dbPath -replace '\\', '\\'
+
+    for ($i = 0; $i -lt $global:AGENTS.Count; $i++) {
+        if ($global:AGENTS[$i] -ne "codex") { continue }
+        $role = $global:ROLES[$i]
+
+        $codexHome = Join-Path $STATE_DIR "codex-home" $role
+        New-Item -ItemType Directory -Force -Path $codexHome | Out-Null
+
+        $configToml = @"
+[mcp_servers.kiln-db]
+command = "npx"
+args = ["mcp-sqlite", "$dbPathEscaped"]
+"@
+        Set-Content -Path (Join-Path $codexHome "config.toml") -Value $configToml -Encoding UTF8
+        Write-Host "Created CODEX_HOME config for role '$role' at $codexHome" -ForegroundColor Green
+    }
+}
+
 function Get-KilnTemplate([string]$Name) {
     Get-Content (Join-Path $KILN_BUNDLED_DIR "framework" "templates" "$Name.md") -Raw -ErrorAction Stop
 }
@@ -679,13 +725,21 @@ function Write-GeneratedCLAUDEmd {
         $instructionsDir = Join-Path $WorktreePath ".github"
         New-Item -ItemType Directory -Force -Path $instructionsDir | Out-Null
         $outPath = Join-Path $instructionsDir "copilot-instructions.md"
+    } elseif ($Agent -eq "codex") {
+        # Codex CLI's project-instructions convention (confirmed against the installed
+        # binary's own string table, not just docs) — analogous to CLAUDE.md.
+        $outPath = Join-Path $WorktreePath "AGENTS.md"
     } else {
         $outPath = Join-Path $WorktreePath "CLAUDE.md"
     }
     New-Item -ItemType Directory -Force -Path $WorktreePath | Out-Null
 
     # Load template blocks in order: wrapper-prompt (auto-mode only) -> loop -> runtime -> constitution -> role
-    $hasWorkerDelegation = $Agent -eq "claude" -or $Agent -eq "copilot"
+    # Codex's own multi-agent spawn tools (spawn_agent/assign_agent_task/wait_agent/close_agent,
+    # the "multi_agent" feature — stable and enabled by default, confirmed directly against a
+    # live codex.exe install) give it real worker delegation, same shape as Claude's Agent tool
+    # or Copilot's custom agents.
+    $hasWorkerDelegation = $Agent -eq "claude" -or $Agent -eq "copilot" -or $Agent -eq "codex"
     $wrapperPromptBlock = if ($Mode -eq "auto" -and $hasWorkerDelegation) { Get-KilnTemplate "wrapper-prompt-auto-$Agent" } else { $null }
     $loopBlock         = Get-KilnTemplate "loop-$Mode-$Agent"
     $runtimeBlock      = Get-KilnTemplate "runtime-$Agent"
@@ -778,6 +832,32 @@ function Write-GeneratedWorkerAgent {
         $frontmatter += "---`n`n"
         $frontmatter += "<!-- Auto-generated by kiln.ps1 on $timestamp -->`n"
         $frontmatter += "<!-- DO NOT EDIT MANUALLY -->`n`n"
+    } elseif ($Agent -eq "codex") {
+        # Generated in the main project's .codex/agents/ directory (not the worktree's),
+        # per Codex CLI's project-scoped custom-agent convention (confirmed against
+        # official docs: developers.openai.com/codex/subagents), so the wrapper session
+        # (running in the worktree) can spawn it by name via its multi-agent tools
+        # (spawn_agent/assign_agent_task/wait_agent/close_agent — the "multi_agent"
+        # feature, stable and enabled by default). mcp_servers = {} excludes messaging
+        # access, mirroring the Claude/Copilot worker's isolation. developer_instructions
+        # uses a TOML literal string ('''...''') rather than a basic string so the role/
+        # constitution content's own backticks, quotes, and Windows-path backslashes don't
+        # need escaping.
+        $agentsDir = Join-Path $WorkingDir ".codex" "agents"
+        New-Item -ItemType Directory -Force -Path $agentsDir | Out-Null
+        $outPath = Join-Path $agentsDir "$Role-worker.toml"
+
+        $toml  = "# Auto-generated by kiln.ps1 on $timestamp`n"
+        $toml += "# DO NOT EDIT MANUALLY`n`n"
+        $toml += "name = ""$Role-worker""`n"
+        $toml += "description = ""$description""`n"
+        $toml += "mcp_servers = {}`n"
+        $toml += "developer_instructions = '''`n"
+        $toml += "$body`n"
+        $toml += "'''`n"
+
+        Set-Content $outPath $toml -Encoding UTF8
+        return
     } else {
         # Generated in the main project's .claude/agents/ directory (not the worktree's),
         # so Claude Code's agent discovery finds it when the shell agent (running in the
@@ -823,6 +903,10 @@ function Build-WezTermAgentCommand {
         }
         "copilot" {
             $command = "copilot --allow-all"
+        }
+        "codex" {
+            $codexHome = Join-Path $STATE_DIR "codex-home" $Role
+            $command = "`$env:CODEX_HOME = '$codexHome'; codex --dangerously-bypass-approvals-and-sandbox 'Start your role session.'"
         }
         default {
             $command = "echo 'Agent $Agent not supported'"
@@ -1073,6 +1157,10 @@ function Get-WindowsTerminalAgentCommand {
                 return "copilot --allow-all"
             }
         }
+        "codex" {
+            $codexHome = Join-Path $STATE_DIR "codex-home" $Role
+            return "`$env:CODEX_HOME = '$codexHome'; codex --dangerously-bypass-approvals-and-sandbox 'Start your role session.'"
+        }
         default {
             return "echo 'Agent $Agent not supported'"
         }
@@ -1179,7 +1267,7 @@ Prepare-Workspace
 for ($i = 0; $i -lt $global:ROLES.Count; $i++) {
     $role = $global:ROLES[$i]
     $agent = $global:AGENTS[$i]
-    if (($agent -eq "claude" -or $agent -eq "copilot") -and $global:MODES[$i] -eq "auto") {
+    if (($agent -eq "claude" -or $agent -eq "copilot" -or $agent -eq "codex") -and $global:MODES[$i] -eq "auto") {
         $varWorkerModel = "TERMINAL_${i}_WORKER_MODEL"
         $workerModel = Get-Variable -Name $varWorkerModel -ValueOnly -ErrorAction SilentlyContinue
         Write-GeneratedWorkerAgent -Role $role -Agent $agent -Model $workerModel
@@ -1188,6 +1276,7 @@ for ($i = 0; $i -lt $global:ROLES.Count; $i++) {
 
 Prepare-Worktrees
 Prepare-AgentConfigs
+Prepare-CodexConfigs
 
 # Create tmp directory for handoff files (used by all agents)
 $tmpDir = Join-Path $WorkingDir "tmp"

@@ -240,6 +240,29 @@
         "DEBUG": "false"
       }
     },
+    "codex-test": {
+      "description": "Single Codex agent for MCP testing, using worker-subagent delegation via Codex's built-in multi-agent spawn tools.",
+      "terminals": [
+        {
+          "role": "coder",
+          "agent": "codex",
+          "worktree": "@current",
+          "title": "Kiln Codex Test",
+          "mode": "auto"
+        }
+      ],
+      "layout": {
+        "type": "tabs",
+        "roles": [
+          "coder"
+        ]
+      },
+      "messageBackend": "sqlite",
+      "logLevel": "info",
+      "env": {
+        "DEBUG": "false"
+      }
+    },
     "compact": {
       "description": "Compact pane layout with all roles in one tab",
       "terminals": [

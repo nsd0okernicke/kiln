@@ -206,7 +206,7 @@ kiln/
 │   │   └── skills/                   # Agent skills (optional)
 │   └── framework/                # Never copied — read directly from this install
 │       ├── profiles.json             # Default configuration profiles (framework defaults only)
-│       ├── templates/                # Loop/runtime templates injected into generated CLAUDE.md/copilot-instructions.md
+│       ├── templates/                # Loop/runtime templates injected into generated CLAUDE.md/copilot-instructions.md/AGENTS.md
 │       ├── mcp-server/               # Python MCP servers bundled with the framework
 │       │   ├── channel.py            # kiln-channel: blocking wait_for_message() receiver
 │       │   └── requirements.txt      # mcp>=1.0.0
@@ -289,7 +289,8 @@ By default, **all projects use the framework's `kiln/framework/profiles.json`**,
 - Both are merged into each agent's generated instruction file:
   - **Claude agents**: `CLAUDE.md` in the worktree root
   - **Copilot agents**: `.github/copilot-instructions.md` in the worktree root
-  - **Other backends**: Similar instruction file per backend
+  - **Codex agents**: `AGENTS.md` in the worktree root — Codex CLI's own project-instructions convention (confirmed against the installed binary's string table)
+  - **Grok**: not yet supported — see Known Limitations
 
 This ensures every agent operates with full constitutional context plus its specific role directives.
 
@@ -297,6 +298,7 @@ This ensures every agent operates with full constitutional context plus its spec
 
 - **Claude**: worker defined in a generated `.claude/agents/<role>-worker.md`, dispatched via Claude Code's `Agent` tool (blocking, deterministic — the shell explicitly invokes `subagent_type: "<role>-worker"`). No access to the `Agent` tool itself (no recursive subagent spawning) and no MCP messaging tools — it can only read/write/edit/test in its worktree. Its full working transcript never enters the shell's own context — only its final report does, which is what keeps the shell's context small and repetitive cycle over cycle, rather than filling up with the noise of the actual implementation work.
 - **Copilot**: worker defined in a generated `.github/agents/<role>-worker.agent.md` (GitHub Copilot CLI's custom-agent format), dispatched by prose instruction — the shell's loop template tells it to delegate to the named custom agent, and Copilot CLI's own harness resolves that to a subagent call with its own isolated context window. `tools:` is scoped to `read, write, shell` — no MCP server names listed, so it has no messaging access, mirroring the Claude worker's isolation. Unlike Claude's `Agent` tool, this delegation is the model's own judgment call rather than a guaranteed deterministic invocation — GitHub has tuned Copilot CLI to be more selective about delegating on its own, so the wrapper prompt explicitly instructs it to always delegate even when it judges it could finish faster itself.
+- **Codex**: worker defined in a generated `.codex/agents/<role>-worker.toml` (Codex CLI's own project-scoped custom-agent format — required fields `name`, `description`, `developer_instructions`; confirmed against official docs at `developers.openai.com/codex/subagents`), dispatched via Codex's built-in multi-agent spawn tools (`spawn_agent`/`assign_agent_task`/`wait_agent`/`close_agent` — the `multi_agent` feature, stable and enabled by default, confirmed directly against a live `codex.exe` install). `mcp_servers = {}` in the worker's TOML excludes messaging access, mirroring the Claude/Copilot worker's isolation.
 
 ### Default Workflow
 
@@ -309,6 +311,8 @@ The default four-agent workflow runs in a continuous loop. Each Claude shell age
 5. **Immediately return to step 1, in the same turn** — a sent and verified handoff is not the end of the cycle; the loop template is explicit that the turn isn't over until `/kiln-receive` has run again (this closes a stall we found in live testing, where an agent would finish a verified handoff and simply stop instead of waiting for the next message)
 
 **Copilot follows the same shape** (receive → delegate → retry-once-on-failure → handoff → loop again in the same turn) but via its own inline polling loop (`loop-auto-copilot.md`) rather than the `/kiln-receive`/`/kiln-handoff` skills — it polls `messages` directly via SQL (`read_query`/`write_query`), since Copilot has no blocking `kiln-channel` MCP tool, and squashes/logs the same way inline rather than through a shared skill file.
+
+**Codex follows the same shape too** (`loop-auto-codex.md`) — poll via SQL (same as Copilot, no blocking channel), delegate to the `<role>-worker` custom agent via Codex's built-in multi-agent spawn tools (`spawn_agent`/`assign_agent_task`/`wait_agent`/`close_agent`), retry once on failure, then squash/log/handoff inline, same as Copilot. `manual` mode is also available for Codex (e.g. for a human-supervised role like `specifier`) using `loop-manual-codex.md`, same as any other backend.
 
 The cycle flows: **specifier → coder → refactorer → architect → specifier**
 
@@ -1031,6 +1035,7 @@ If the test hangs or fails:
 - ✓ Built-in communication health check (selftest agent)
 - ✓ Logbook tracking of all handoffs and agent actions
 - ✓ Shell + worker-subagent delegation for Claude `auto`-mode roles — persistent thin shells dispatch work to disposable worker subagents, keeping shell context at ~140 lines through unlimited cycles
+- ✓ Codex agent support, including worker-subagent delegation via Codex's own multi-agent spawn tools — generated `AGENTS.md` + `.codex/agents/<role>-worker.toml`, isolated per-role `CODEX_HOME` MCP config, `--dangerously-bypass-approvals-and-sandbox` launch flag
 
 ### ⚠️ Security Considerations
 
@@ -1038,8 +1043,8 @@ If the test hangs or fails:
 
 - **Claude agents**: `--permission-mode bypassPermissions` (auto-approve all MCP tools and file operations)
 - **Copilot agents**: `--allow-all` (auto-approve GitHub Copilot tools and file access)
-- **Codex agents**: Similar permission bypass mechanism (TBD in implementation)
-- **Grok agents**: Similar permission bypass mechanism (TBD in implementation)
+- **Codex agents**: `--dangerously-bypass-approvals-and-sandbox` (auto-approve all tool calls and disable the sandbox — Codex's own explicitly-named equivalent). Each Codex role also gets its own isolated config directory via the `CODEX_HOME` env var (`.kiln/codex-home/<role>/`), so Kiln never overwrites your real `~/.codex/config.toml`.
+- **Grok**: not implemented — see Known Limitations
 
 This means agents can read/write/execute any file in their worktree without prompting. This is intentional for autonomous development workflows but should be understood as a security trade-off.
 
@@ -1056,8 +1061,8 @@ This means agents can read/write/execute any file in their worktree without prom
 - **Real feature workflows are continuously validated** — multi-cycle specifier → coder → refactorer → architect chains run successfully against the LibraryHub example; 8+ cycle test runs show stable state flow with 34+ processed messages and zero stalls or message loss
 - **Error handling** — Minimal error recovery in agent workflows; graceful degradation not yet implemented
 - **Scaling** — Tested with 4 agents over 8+ cycles with stable performance; behavior with 10+ agents unknown
-- **Multi-agent backend validation** — Framework supports `claude` (validated, including Phase 6 shell+worker delegation live-tested through 8+ cycles) and `copilot` (worker delegation implemented and confirmed against a live CLI session, but not yet exercised through a full multi-cycle swarm run the way Claude has been); `codex` and `grok` support planned but not yet implemented
-- **`kiln.sh` has no loop/runtime template injection** — Unix agents are launched from a much thinner instruction file than Windows' generated `CLAUDE.md`, with no `auto`/`manual` mode concept; the receive→delegate→handoff loop and Phase 6's delegation pattern may not be active there until this pre-existing gap is closed
+- **Multi-agent backend validation** — Framework supports `claude` (validated, including Phase 6 shell+worker delegation live-tested through 8+ cycles), `copilot` (worker delegation implemented and confirmed against a live CLI session, but not yet exercised through a full multi-cycle swarm run the way Claude has been), and `codex` (worker delegation via Codex's own multi-agent spawn tools — MCP config, `AGENTS.md`/worker-`.toml` generation, and TOML validity verified directly against a live `codex.exe` install and official docs, but not yet exercised through a full multi-cycle swarm run or live spawn_agent call, since that requires `codex login` first). `grok` is not implemented: the actual installed `grok` CLI in this environment turned out to be a third-party project (`grok-cli-hurry-mode`, not an official xAI tool) whose persistent/interactive session has no non-interactive auto-approve path in its current build (confirmed by reading its bundled source) — only its one-shot `-p` headless mode auto-approves, which can't sustain Kiln's persistent per-role session model without a fundamentally different poll-and-relaunch design.
+- **`kiln.sh` has no loop/runtime template injection for Claude/Copilot** — Unix agents are launched from a much thinner instruction file than Windows' generated `CLAUDE.md`, with no `auto`/`manual` mode concept; the receive→delegate→handoff loop and Phase 6's delegation pattern may not be active there until this pre-existing gap is closed. (Codex's `kiln.sh` path was built to full parity with `kiln.ps1` regardless — its wrapper prompt and `.codex/agents/<role>-worker.toml` are hand-assembled rather than routed through the template mechanism, since `kiln.sh` has no `Get-KilnTemplate`-style loader at all, but the content and delegation pattern match.)
 
 ### Recommended Next Steps
 

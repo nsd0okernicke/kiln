@@ -13,49 +13,84 @@
 
 **Goal:** Enable MCP and full swarm integration for Codex and Grok backends
 
-**Current state:** `codex`/`grok` are accepted as config values (e.g. `kiln.ps1`'s agent-name validation) but have no case in the actual command builders (`Build-WezTermAgentCommand`, `Get-WindowsTerminalAgentCommand` in `bin/kiln.ps1`) — selecting either just echoes "Agent not supported" instead of launching anything.
+### 1.1 Codex Agent Implementation — done
 
-### 1.1 Codex Agent Implementation
+Implemented on both `kiln.ps1` and `kiln.sh`, including worker-subagent delegation.
+Verified directly against a live local `codex.exe` install (v0.145.0) plus official docs
+(`developers.openai.com/codex/subagents`): `CODEX_HOME` env var relocation confirmed
+working, the `[mcp_servers.*]` config.toml format confirmed via `codex mcp add` +
+`codex mcp list`, `--dangerously-bypass-approvals-and-sandbox` confirmed as the
+permission-bypass flag, `AGENTS.md` confirmed as the project-instructions filename (found
+in the binary's own string table), and — corrected after an initial research gap, see
+below — Codex's `multi_agent` feature (`spawn_agent`/`assign_agent_task`/`wait_agent`/
+`close_agent`) confirmed **stable and enabled by default** (`codex features list`), giving
+it real worker delegation shaped like Claude's `Agent` tool or Copilot's custom agents.
+Worker definitions are project-scoped TOML files (`.codex/agents/<role>-worker.toml`;
+required fields `name`/`description`/`developer_instructions`, `mcp_servers = {}` for
+isolation — same no-messaging-access isolation as the Claude/Copilot workers), generated
+by `Write-GeneratedWorkerAgent`/`write_codex_worker_agent_file` and validated as real TOML
+via Python's `tomllib`. Codex roles default to `auto` mode like Claude/Copilot (`manual`
+is still available, e.g. for a human-supervised role). A `codex-test` profile was added to
+`kiln/framework/profiles.json`.
 
-- [ ] **Research Codex MCP & Permission Support**
-  - Investigate if Codex CLI supports MCP servers
-  - Identify config file location and format (likely `~/.codex/config.json` or similar)
-  - Find equivalent to Claude's `--permission-mode bypassPermissions` or Copilot's `--allow-all`
-  - Document any authentication requirements or setup steps
+**Research correction (2026-07-28):** the first implementation pass concluded Codex had no
+worker-delegation mechanism, based only on `codex --help`'s top-level subcommand list. The
+user pushed back ("check the doc") — the `multi_agent` tool family is exposed as in-session
+tools to the model, not a CLI subcommand, so it was invisible to `--help`. Found by grepping
+the installed binary's string table (`spawn_agent`, `sub_agent_activity`, etc.) and then
+`codex features list`, then confirmed against official docs. Lesson: `--help` alone doesn't
+enumerate a coding agent's in-session tool surface — check feature flags and docs too.
 
-- [ ] **Implement Codex MCP Configuration**
-  - Add Codex detection to `Prepare-AgentConfigs` (PowerShell)
-  - Create `~/.codex/mcp-config.json` in `prepare_agent_configs` (Bash)
-  - Add a Codex case to `Build-WezTermAgentCommand` / `Get-WindowsTerminalAgentCommand` (`kiln.ps1`) and the Unix equivalent (`kiln.sh`)
-  - Include permission flags in the launch command
-  - Test with a `codex-test` profile
+- [x] Research Codex MCP & permission support (see above)
+- [x] Implement Codex MCP configuration — `Prepare-CodexConfigs`/`prepare_codex_configs`
+      write a per-role isolated `CODEX_HOME` (`.kiln/codex-home/<role>/config.toml`)
+      rather than overwriting the user's real `~/.codex/config.toml` the way Copilot's
+      single shared global file does
+- [x] Add Codex case to `Build-WezTermAgentCommand`/`Get-WindowsTerminalAgentCommand`
+      (`kiln.ps1`) and `launch_role`'s command switch (`kiln.sh`)
+- [x] Implement worker-subagent delegation — `.codex/agents/<role>-worker.toml` generation,
+      copied into each worktree the same way `.claude/agents/*-worker.md` and
+      `.github/agents/*-worker.agent.md` are
+- [ ] **Validate Codex integration live** — a full multi-cycle swarm run (WezTerm/Windows
+      Terminal pane launch, and separately a tmux launch on Unix) has not been done; only
+      the generation functions (MCP config, `AGENTS.md`, worker `.toml`, command strings)
+      were validated directly, the same verification approach used for Copilot's worker
+      delegation earlier. In particular, the exact `spawn_agent`/`assign_agent_task`/
+      `wait_agent`/`close_agent` call sequence the wrapper prompt asks the model to use
+      hasn't been observed live (requires `codex login` first) — the wrapper prompt
+      deliberately doesn't hard-code exact tool-call syntax (same level of abstraction as
+      the Copilot wrapper prompt), trusting Codex's own tool-use knowledge, but this should
+      be confirmed against a real session. `kiln.sh`'s codex path additionally can't be
+      live-tested at all in the current dev environment (no zsh/tmux on Windows), same
+      pre-existing constraint noted in section 3's Unix testing gaps.
+- [ ] **Codex skills wiring** — Codex CLI has its own `~/.codex/skills/` mechanism
+      (confirmed present in a local install) but its project-level discovery
+      path/format wasn't verified, so `Prepare-Skills`/`prepare_skills` deliberately
+      excludes `codex` for now (same as Copilot/Claude-only today). Investigate before
+      wiring it up.
 
-- [ ] **Validate Codex Integration**
-  - Launch a single Codex agent and verify MCP tool access
-  - Test message send/receive from other agents
-  - Verify Codex can read/write files in its worktree
-  - Check for any session/timeout issues
+### 1.2 Grok Agent Implementation — blocked, not implemented
 
-### 1.2 Grok Agent Implementation
+**Blocker found 2026-07-28**: the `grok` CLI actually resolvable on PATH in this
+environment is a third-party open-source project, `grok-cli-hurry-mode` (npm, one
+maintainer, not an official xAI tool). Reading its bundled source directly (not just its
+README) found that its persistent/interactive session has **no CLI flag, env var, or
+settings.json field** to auto-approve tool calls without a human present — the only
+in-session toggle is a `Shift+Tab` keypress, and a `skipConfirmationThisSession` field
+exists in the code but is never wired to anything. Its only genuine no-prompt mode is
+`-p "<prompt>"` (headless), which auto-approves but runs **one prompt and exits** — not a
+persistent session, incompatible with Kiln's `wait_for_message()`-loop model without a
+fundamentally different poll-and-relaunch design (re-invoke `grok -p` per incoming
+message, losing in-session memory continuity).
 
-- [ ] **Research Grok MCP & Permission Support**
-  - Investigate if Grok CLI supports MCP servers
-  - Identify config file location and format
-  - Find permission bypass mechanism (likely `--allow-all` or equivalent)
-  - Check for environment variables or config overrides
+Decision (user, 2026-07-28): implement Codex now, defer Grok. Revisit if either (a) a
+different/official Grok CLI with real unattended-session support appears, or (b) the
+poll-and-relaunch pattern becomes worth building for its own sake (would also generalize
+to any other one-shot-only backend).
 
-- [ ] **Implement Grok MCP Configuration**
-  - Add Grok detection to `Prepare-AgentConfigs` (PowerShell)
-  - Create `~/.grok/mcp-config.json` in `prepare_agent_configs` (Bash)
-  - Add a Grok case to the same command builders as above
-  - Include permission flags in the launch command
-  - Add a `grok-test` profile to `kiln/framework/profiles.json`
-
-- [ ] **Validate Grok Integration**
-  - Launch a single Grok agent and verify MCP tool access
-  - Test basic message passing in single-agent mode
-  - Verify file operations (read/write) in worktree
-  - Check terminal output and logging
+- [x] Research Grok MCP & permission support (see blocker above)
+- [ ] Implement Grok MCP configuration — deferred
+- [ ] Validate Grok integration — deferred
 
 ### 1.3 Multi-Agent Mixed Testing
 
@@ -114,7 +149,7 @@ Hooks run shell code at fixed lifecycle points regardless of what the LLM decide
 
 ### Track D — Non-Claude Agent Messaging Compatibility
 
-Distinct from Section 1 (launching Codex/Grok at all) — this is about letting *non-blocking* agents (Copilot today, Codex/Grok later) participate in the same message queue without a blocking channel.
+Distinct from Section 1 (launching Codex/Grok at all) — this is about letting *non-blocking* agents (Copilot and Codex today, Grok later if unblocked) participate in the same message queue without a blocking channel.
 
 - [ ] **`poll_for_message()` in `channel.py`** — non-blocking variant of the existing `_fetch_and_deliver()` used by `wait_for_message()`; single check, returns `{"received": false}` immediately if nothing's queued, so a non-Claude agent can call it in its own retry loop
 - [ ] **Agent-type-aware receive instructions** — `runtime-copilot.md` / `loop-*-copilot.md` should reference `poll_for_message()` (once it exists) instead of raw `read_query`, if `kiln-channel` becomes available to Copilot (next bullet)

@@ -101,6 +101,12 @@ if (Test-Path $copilotPath) {
     Write-Host "  ✓ Removed .github/copilot-instructions.md"
 }
 
+$agentsMdPath = Join-Path $ProjectDir "AGENTS.md"
+if (Test-Path $agentsMdPath) {
+    Remove-Item $agentsMdPath -Force -ErrorAction SilentlyContinue
+    Write-Host "  ✓ Removed AGENTS.md"
+}
+
 # Remove .github/skills
 $githubSkillsDir = Join-Path $ProjectDir ".github" "skills"
 if (Test-Path $githubSkillsDir) {

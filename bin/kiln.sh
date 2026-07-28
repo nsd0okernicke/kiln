@@ -123,6 +123,7 @@ ensure_initial_gitignore() {
 .worktrees/
 .mcp.json
 .claude/agents/*-worker.md
+.codex/agents/*-worker.toml
 EOF
     return
   fi
@@ -154,6 +155,10 @@ EOF
   if ! grep -qxF '.claude/agents/*-worker.md' "$gitignore_file"; then
     echo '.claude/agents/*-worker.md' >> "$gitignore_file"
   fi
+
+  if ! grep -qxF '.codex/agents/*-worker.toml' "$gitignore_file"; then
+    echo '.codex/agents/*-worker.toml' >> "$gitignore_file"
+  fi
 }
 
 ensure_runtime_git_excludes() {
@@ -163,7 +168,7 @@ ensure_runtime_git_excludes() {
   touch "$exclude_file"
 
   local pattern
-  for pattern in ".kiln" ".worktrees/" ".mcp.json" ".claude/agents/*-worker.md"; do
+  for pattern in ".kiln" ".worktrees/" ".mcp.json" ".claude/agents/*-worker.md" ".codex/agents/*-worker.toml"; do
     if ! grep -qxF "$pattern" "$exclude_file"; then
       echo "$pattern" >> "$exclude_file"
     fi
@@ -427,6 +432,15 @@ EOF
       find "$project_agents_dir" -maxdepth 1 -name "*-worker.md" -exec cp {} "$worktree_agents_dir/" \;
     fi
 
+    # Copy worker agent definitions into worktree's .codex/agents/ so Codex CLI's
+    # project-scoped custom-agent discovery can find them
+    local worktree_codex_agents_dir="$worktree_path/.codex/agents"
+    mkdir -p "$worktree_codex_agents_dir"
+    local project_codex_agents_dir="$WORKING_DIR/.codex/agents"
+    if [[ -d "$project_codex_agents_dir" ]]; then
+      find "$project_codex_agents_dir" -maxdepth 1 -name "*-worker.toml" -exec cp {} "$worktree_codex_agents_dir/" \;
+    fi
+
     echo "$branch_name" >> "$WORKING_DIR/.git/kiln-sub-branches"
   done
 }
@@ -510,6 +524,32 @@ prepare_agent_configs() {
 EOF
     echo -e "${GREEN}Created .mcp.json (MCP server configuration)${RESET}"
   fi
+}
+
+# Mirrors Prepare-CodexConfigs in kiln.ps1. Unlike Copilot (one shared global
+# ~/.copilot/mcp-config.json), each Codex role gets its own isolated CODEX_HOME under
+# .kiln/codex-home/<role>/ with its own config.toml. CODEX_HOME is a real, confirmed-working
+# Codex CLI env var for relocating its entire config dir — using it instead of overwriting
+# the user's real ~/.codex/config.toml avoids clobbering their own model/sandbox/profile
+# settings the way Copilot's single-global-file approach would. kiln-db only (no
+# kiln-channel): Codex has no confirmed support for a long-blocking MCP tool call, so codex
+# roles poll instead — same limitation as Copilot today (see TODO.md Track D).
+prepare_codex_configs() {
+  local i role codex_home db_path
+  db_path="$STATE_DIR/messages.db"
+
+  for (( i = 1; i <= ${#AGENTS[@]}; i++ )); do
+    [[ "${AGENTS[$i]}" == "codex" ]] || continue
+    role="${ROLES[$i]}"
+    codex_home="$STATE_DIR/codex-home/$role"
+    mkdir -p "$codex_home"
+    cat > "$codex_home/config.toml" << EOF
+[mcp_servers.kiln-db]
+command = "npx"
+args = ["mcp-sqlite", "$db_path"]
+EOF
+    echo -e "${GREEN}Created CODEX_HOME config for role '$role' at $codex_home${RESET}"
+  done
 }
 
 check_backend_dependencies() {
@@ -605,6 +645,133 @@ write_worker_agent_file() {
   } > "$out_path"
 }
 
+# Codex's own multi-agent spawn tools (spawn_agent/assign_agent_task/wait_agent/close_agent
+# — the "multi_agent" feature, stable and enabled by default, confirmed against official
+# docs at developers.openai.com/codex/subagents and directly against a live codex.exe
+# install) give it real worker delegation, the same shape as Claude's Agent tool or
+# Copilot's custom agents. Mirrors write_agent_instruction_file (Claude's thin wrapper),
+# but points at Codex's project-scoped custom-agent convention (.codex/agents/*.toml)
+# instead of .claude/agents/*.md, and names the spawn tools explicitly since Codex has no
+# single named tool like Claude's "Agent tool".
+write_codex_instructions_file() {
+  local role="$1"
+  local prompt_file="$2"
+
+  cat > "$prompt_file" <<EOF
+# Wrapper Agent — Message Loop Only
+
+**Your role: LISTEN → DELEGATE → SEND. Nothing else.**
+
+Do not do any of the ${role^^} work yourself. You are a thin wrapper that:
+1. Polls for messages via \`read_query\` (no blocking channel — see loop below)
+2. Delegates work to the \`${role}-worker\` custom agent using your multi-agent spawn
+   tools (\`spawn_agent\`/\`assign_agent_task\`/\`wait_agent\`/\`close_agent\`)
+3. Sends completed work via \`write_query\`
+4. Repeats
+
+The worker has all the ${role} role rules, quality gates, and standards baked into its
+\`developer_instructions\` (\`.codex/agents/${role}-worker.toml\`) and no \`mcp_servers\`
+configured — it cannot send or receive messages, only this wrapper session does that.
+
+Read kiln/project/constitution.md for workflow and routing rules.
+Read kiln/project/constitution/workflow.md for the handoff routing table and Commit
+Convention (commit message format) — this prompt does not repeat them.
+
+## Kiln Runtime Paths
+
+- **Project root**: $WORKING_DIR
+- **Message database**: $WORKING_DIR/.kiln/messages.db (access via MCP \`kiln-db\` server —
+  \`read_query\`/\`write_query\` tools; no blocking channel, use the polling loop below)
+- **Branch**: $current_branch — this is the ROOT branch. Do NOT substitute your worktree
+  sub-branch (e.g. \`${current_branch}-${role}\` would be wrong).
+- **Temporary files**: \`./tmp/\` (in your assigned worktree)
+
+## Interaction Loop
+
+Repeat this sequence indefinitely. **Do not stop after completing work — the loop is not
+complete until the handoff is sent (step 8).**
+
+1. **Poll** — call \`read_query\`:
+   \`\`\`sql
+   SELECT id, sender, content, created_at FROM messages
+   WHERE target='${role}' AND branch='$current_branch' AND status='queued'
+   ORDER BY priority ASC, created_at ASC LIMIT 1
+   \`\`\`
+   If empty, wait 15 seconds and repeat step 1. When found, mark it delivered:
+   \`\`\`sql
+   UPDATE messages SET status='delivered', delivered_at=datetime('now') WHERE id='<id>'
+   \`\`\`
+2. **Merge** — extract \`Branch:\`/\`Commit:\` from the message content, then run:
+   \`git merge <commit-hash>\`. This merge commit becomes the squash anchor for step 7.
+3. **Log received** — append a logbook.md entry: timestamp, full message content.
+4. **Delegate the work** — do not implement anything yourself. Delegate this task entirely
+   to the custom agent named \`${role}-worker\` using your multi-agent spawn tools. Give it
+   the full content of the received message, your current branch/worktree, and an explicit
+   request for a final report of what was implemented/verified and which files were
+   touched. For system-communication-test messages: skip delegation entirely — forward the
+   message as-is to the routing target from workflow.md and skip steps 5-8.
+5. **Handle a failed or blocked report** — if the worker's report says it could not finish,
+   delegate to it again once more, in this same turn, including its failure report as
+   feedback. If it fails a second time, proceed to step 6 with a handoff that reports the
+   blocker instead of normal work.
+6. **Log sent** — append a logbook.md entry: timestamp, brief summary. Commit as part of
+   the squash in step 7.
+7. **Squash** — squash all your commits since the merge commit:
+   \`\`\`sh
+   LAST_MERGE=\$(git log --merges -1 --format="%H")
+   git reset --soft "\${LAST_MERGE:-\$(git rev-list --max-parents=0 HEAD)}"
+   git commit -m "<format from workflow.md Commit Convention>"
+   \`\`\`
+8. **Send handoff** — call \`write_query\` to INSERT into \`messages\` with the target and
+   branch from workflow.md's routing table, and \`content\` formatted per Handoff Message
+   Format in Workflow Rules. Verify:
+   \`SELECT id FROM messages WHERE sender='${role}' AND branch='$current_branch' ORDER BY created_at DESC LIMIT 1\`
+   If no row is found, INSERT again before returning to step 1.
+9. Return to step 1.
+EOF
+}
+
+# Mirrors write_worker_agent_file (Claude), but writes Codex CLI's project-scoped
+# custom-agent TOML format (.codex/agents/<role>-worker.toml) instead of a Markdown file
+# with YAML frontmatter. Required TOML fields per official docs: name, description,
+# developer_instructions. mcp_servers = {} excludes messaging access, mirroring the
+# Claude/Copilot worker's isolation. developer_instructions uses a TOML literal string
+# ('''...''') rather than a basic string so the role/constitution content's own backticks,
+# quotes, and any backslashes don't need escaping.
+write_codex_worker_agent_file() {
+  local role="$1"
+
+  local agents_dir="$WORKING_DIR/.codex/agents"
+  mkdir -p "$agents_dir"
+  local out_path="$agents_dir/${role}-worker.toml"
+  local timestamp
+  timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
+
+  {
+    echo "# Auto-generated by kiln.sh on $timestamp"
+    echo "# DO NOT EDIT MANUALLY"
+    echo
+    echo "name = \"${role}-worker\""
+    echo "description = \"Performs the ${role} role's implementation work for one handoff cycle. Dispatched by the persistent ${role} shell agent's message loop; not for direct/standalone use.\""
+    echo "mcp_servers = {}"
+    echo "developer_instructions = '''"
+    cat "$KILN_PROJECT_DIR/roles/${role}.md"
+    if [[ -f "$KILN_PROJECT_DIR/constitution/project.md" ]]; then
+      echo
+      echo "---"
+      echo
+      cat "$KILN_PROJECT_DIR/constitution/project.md"
+    fi
+    if [[ -f "$KILN_PROJECT_DIR/constitution/engineering.md" ]]; then
+      echo
+      echo "---"
+      echo
+      cat "$KILN_PROJECT_DIR/constitution/engineering.md"
+    fi
+    echo "'''"
+  } > "$out_path"
+}
+
 send_initial_grok_prompt() {
   local session="$1"
   local display="$2"
@@ -630,9 +797,15 @@ launch_role() {
   local prompt_file="$PROMPTS_DIR/${role}.md"
   local launch_cmd=""
 
-  write_agent_instruction_file "$role" "$prompt_file" "$role_worktree"
+  if [[ "$agent" == "codex" ]]; then
+    write_codex_instructions_file "$role" "$prompt_file"
+  else
+    write_agent_instruction_file "$role" "$prompt_file" "$role_worktree"
+  fi
   if [[ "$agent" == "claude" ]]; then
     write_worker_agent_file "$role"
+  elif [[ "$agent" == "codex" ]]; then
+    write_codex_worker_agent_file "$role"
   fi
 
   case "$agent" in
@@ -640,7 +813,7 @@ launch_role() {
       launch_cmd="export PATH='$SCRIPT_DIR':\$PATH && cd '$role_worktree' && claude --mcp-config ./.mcp.json --append-system-prompt-file '$prompt_file' --permission-mode acceptEdits -n 'Kiln ${display}' \"\$(cat '$prompt_file')\""
       ;;
     codex)
-      launch_cmd="export PATH='$SCRIPT_DIR':\$PATH && cd '$role_worktree' && codex -C '$role_worktree' \"\$(cat '$prompt_file')\""
+      launch_cmd="export CODEX_HOME='$STATE_DIR/codex-home/$role' && export PATH='$SCRIPT_DIR':\$PATH && cd '$role_worktree' && codex -C '$role_worktree' --dangerously-bypass-approvals-and-sandbox \"\$(cat '$prompt_file')\""
       ;;
     copilot)
       launch_cmd="export PATH='$SCRIPT_DIR':\$PATH && cd '$role_worktree' && copilot --allow-all --name 'Kiln ${display}' -i \"\$(cat '$prompt_file')\""
@@ -720,6 +893,7 @@ else
   prepare_workspace
   prepare_worktrees
   prepare_agent_configs
+  prepare_codex_configs
 
   # Create tmp directory for temporary files (used by all agents)
   mkdir -p "$WORKING_DIR/tmp"
