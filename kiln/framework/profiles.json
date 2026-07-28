@@ -268,11 +268,11 @@
       "terminals": [
         {
           "role": "specifier",
-          "agent": "claude",
+          "agent": "copilot",
           "worktree": "@current",
           "title": "Kiln Specifier",
-          "mode": "manual",
-          "model": "claude-sonnet-5"
+          "mode": "manual"
+          
         },
         {
           "role": "coder",
@@ -292,11 +292,10 @@
         },
         {
           "role": "architect",
-          "agent": "claude",
+          "agent": "copilot",
           "worktree": "architect",
           "title": "Kiln Architect",
-          "mode": "auto",
-          "model": "claude-sonnet-5"
+          "mode": "auto"
         }
       ],
       "layout": {

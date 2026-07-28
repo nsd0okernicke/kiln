@@ -902,7 +902,7 @@ function Build-WezTermAgentCommand {
             $command = "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json --debug-file '$debugLog' -n '$DisplayName' 'Start your role session.'"
         }
         "copilot" {
-            $command = "copilot --allow-all"
+            $command = 'copilot --allow-all -i "Start your role session."'
         }
         "codex" {
             $codexHome = Join-Path $STATE_DIR "codex-home" $Role

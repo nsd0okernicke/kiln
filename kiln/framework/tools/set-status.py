@@ -11,6 +11,7 @@ Usage: python set-status.py <role> <state> [detail]
 
 import sys
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -34,9 +35,13 @@ def main():
         print(f"Error: unknown state '{state}'", file=sys.stderr)
         sys.exit(1)
 
-    # Determine status directory
-    kiln_dir = Path(__file__).parent.parent
-    status_dir = kiln_dir / "status"
+    # Determine status directory from project root environment variable
+    project_dir = os.environ.get("Kiln_PROJECT_DIR")
+    if not project_dir:
+        print("Error: Kiln_PROJECT_DIR environment variable not set", file=sys.stderr)
+        sys.exit(1)
+
+    status_dir = Path(project_dir) / ".kiln" / "status"
     status_dir.mkdir(parents=True, exist_ok=True)
 
     # Build the display title once, shared by the JSON file and the OSC

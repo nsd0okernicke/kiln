@@ -5,7 +5,9 @@ at startup. Begin at step 4 on first startup only.
 
 Repeat this sequence indefinitely on subsequent cycles:
 
-1. **Poll** — call `read_query`:
+**Signal state change to terminal:** Before each step, call `python .kiln/tools/set-status.py {{ROLE}} <state>` so your tab title reflects where you are in the cycle. Emit these status signals at each transition.
+
+1. **Poll** — call `python .kiln/tools/set-status.py {{ROLE}} waiting` first. Then call `read_query`:
    ```sql
    SELECT id, sender, content, created_at
    FROM messages
@@ -43,7 +45,7 @@ Repeat this sequence indefinitely on subsequent cycles:
    git commit -m "{{COMMIT_FORMAT}}"
    ```
 
-8. **Send handoff** — call `write_query` to INSERT into `messages` with `target='{{HANDOFF_TARGET}}'`,
+8. **Send handoff** — call `python .kiln/tools/set-status.py {{ROLE}} handoff` first. Then call `write_query` to INSERT into `messages` with `target='{{HANDOFF_TARGET}}'`,
    `branch='{{BRANCH}}'`, and `content` formatted per Handoff Message Format in Workflow Rules.
    Verify: `SELECT id FROM messages WHERE sender='{{ROLE}}' AND branch='{{BRANCH}}' ORDER BY created_at DESC LIMIT 1`
    If no row is found, INSERT again before returning to step 1.
