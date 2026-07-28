@@ -16,20 +16,29 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 STATE_EMOJIS = {
-    "waiting": "⏳",
-    "receiving": "🔀",
-    "delegating": "⚙",
-    "handoff": "↩",
+    "waiting": "💤",
+    "receiving": "📥",
+    "working": "🚀",
+    "approval": "👁️",
+    "delegating": "🔀",
+    "handoff": "📤",
 }
 
 def main():
     if len(sys.argv) < 3:
-        print("Usage: set-status.py <role> <state> [detail]", file=sys.stderr)
+        print("Usage: set-status.py <role> <state> [detail] [--mode=auto|manual]", file=sys.stderr)
         sys.exit(1)
 
     role = sys.argv[1]
     state = sys.argv[2]
-    detail = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] != "-" else None
+    detail = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] != "-" and not sys.argv[3].startswith("--") else None
+
+    # Parse mode from --mode=<mode> flag if present
+    mode = "auto"
+    for arg in sys.argv[3:]:
+        if arg.startswith("--mode="):
+            mode = arg.split("=", 1)[1]
+            break
 
     if state not in STATE_EMOJIS:
         print(f"Error: unknown state '{state}'", file=sys.stderr)
@@ -58,6 +67,7 @@ def main():
         "role": role,
         "state": state,
         "detail": detail,
+        "mode": mode,
         "since": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "title": title,
     }

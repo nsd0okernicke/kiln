@@ -119,12 +119,14 @@ local project_dir = os.getenv('Kiln_PROJECT_DIR') or ''
 
 -- Status-bar badge background per state (edit freely to taste).
 local STATE_COLORS = {
-  waiting    = '#2a7d33',  -- green  — idle, nothing needed from you
-  receiving  = '#2a5db0',  -- blue   — picking up a handoff
-  delegating = '#b03a2a',  -- red    — actively working
-  handoff    = '#5c4aa0',  -- violet — wrapping up / sending
+  waiting    = '#5ab363',  -- light green — idle, nothing needed from you
+  receiving  = '#7aadff',  -- light blue — waiting for message from queue
+  working    = '#ff7a5a',  -- light red — actively working on task
+  approval   = '#ffdd6a',  -- light orange — waiting for user approval
+  delegating = '#ff7a5a',  -- light red — actively delegating to worker
+  handoff    = '#ac9aff',  -- light violet — wrapping up / sending
 }
-local STATE_COLOR_DEFAULT = '#4a4a48'  -- unknown state / no status file yet
+local STATE_COLOR_DEFAULT = '#8a8a88'  -- unknown state / no status file yet (lighter gray)
 
 wezterm.on('format-window-title', function(tab, pane, tabs, panes, config)
   local title = tab.tab_title
@@ -146,10 +148,16 @@ wezterm.on('update-status', function(window, pane)
     return
   end
 
+  local MODE_EMOJIS = {
+    auto = '🤖',
+    manual = '🧑',
+  }
+
   local segments = {}
   for i, r in ipairs(roles) do
     local title = nil
     local state = nil
+    local mode = r.mode or 'auto'  -- Use mode from roleData as default
     local status_path = project_dir .. '/.kiln/status/' .. r.role .. '.json'
     local f = io.open(status_path, 'r')
     if f then
@@ -159,15 +167,24 @@ wezterm.on('update-status', function(window, pane)
       if ok and status then
         title = status.title
         state = status.state
+        mode = status.mode or mode  -- Override with status.mode if available
       end
     end
     if not title or #title == 0 then
       title = r.name or r.role
     end
 
+    -- For manual (specifier) role with no state yet, default to waiting (green)
+    if mode == 'manual' and (not state or #state == 0) then
+      state = 'waiting'
+    end
+
+    local mode_emoji = MODE_EMOJIS[mode] or ''
+    local display_title = mode_emoji .. ' ' .. title
+
     table.insert(segments, { Background = { Color = STATE_COLORS[state] or STATE_COLOR_DEFAULT } })
-    table.insert(segments, { Foreground = { Color = '#ffffff' } })
-    table.insert(segments, { Text = ' ' .. title .. ' ' })
+    table.insert(segments, { Foreground = { Color = '#000000' } })
+    table.insert(segments, { Text = ' ' .. display_title .. ' ' })
     table.insert(segments, 'ResetAttributes')
 
     if i < #roles then

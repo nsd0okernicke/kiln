@@ -754,6 +754,7 @@ function Write-GeneratedCLAUDEmd {
     $subs = @{
         "{{ROLE}}"           = $Role
         "{{ROLE_UPPER}}"     = $Role.ToUpper()
+        "{{MODE}}"           = $Mode
         "{{BRANCH}}"         = $CurrentBranch
         "{{DB_PATH}}"        = $dbPath
         "{{WORKTREE}}"       = (Split-Path -Leaf $WorktreePath)
@@ -902,7 +903,7 @@ function Build-WezTermAgentCommand {
             $command = "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json --debug-file '$debugLog' -n '$DisplayName' 'Start your role session.'"
         }
         "copilot" {
-            $command = 'copilot --allow-all -i "Start your role session."'
+            $command = "echo ────────────────────────────────────────────────────────────────────────────────────────& echo.& echo $DisplayName& echo.& echo ────────────────────────────────────────────────────────────────────────────────────────& echo.& copilot --allow-all -i ""Start your role session."""
         }
         "codex" {
             $codexHome = Join-Path $STATE_DIR "codex-home" $Role
@@ -1363,6 +1364,7 @@ if ($TerminalBackend -eq "wezterm") {
             role  = $role
             name  = $displayName
             agent = $agent
+            mode  = $global:MODES[$i]
             path  = $worktreePath
             cmd   = $cmd
         }

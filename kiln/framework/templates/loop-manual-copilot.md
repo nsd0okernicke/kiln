@@ -1,53 +1,32 @@
 # Interaction Loop
 
-**On first startup**: greet the user and ask what to work on. Do not poll for messages
-at startup. Begin at step 4 on first startup only.
+**On first startup**: call `python .kiln/tools/set-status.py {{ROLE}} waiting --mode={{MODE}}` first, then greet the user and ask what to work on. Begin at Step 2 on
+first startup only — do not call `wait_for_message()`.
+
+**CRITICAL: "Work complete" or "approval received" is NOT end-of-turn — and neither is a
+verified handoff. The turn is not over until Step 5 has also run: calling `/kiln-receive`
+again, in this same response. Do not stop, summarize, or wait for the user to say anything
+between Step 4 and Step 5.**
 
 Repeat this sequence indefinitely on subsequent cycles:
 
-**Signal state change to terminal:** Before each step, call `python .kiln/tools/set-status.py {{ROLE}} <state>` so your tab title reflects where you are in the cycle. Emit these status signals at each transition.
+**Signal state change to terminal:** Before each step, call `python .kiln/tools/set-status.py {{ROLE}} <state> --mode={{MODE}}` so your tab title reflects where you are in the cycle. Emit these status signals at each transition (you may see the command fail silently if the status dir doesn't exist yet — that's harmless).
 
-1. **Poll** — call `python .kiln/tools/set-status.py {{ROLE}} waiting` first. Then call `read_query`:
-   ```sql
-   SELECT id, sender, content, created_at
-   FROM messages
-   WHERE target='{{ROLE}}' AND branch='{{BRANCH}}' AND status='queued'
-   ORDER BY priority ASC, created_at ASC
-   LIMIT 1
-   ```
-   If the result is empty, wait 15 seconds and repeat step 1.
-   When a row is found, immediately mark it delivered:
-   ```sql
-   UPDATE messages SET status='delivered', delivered_at=datetime('now') WHERE id='<id>'
-   ```
+1. **Receive** — call `python .kiln/tools/set-status.py {{ROLE}} waiting --mode={{MODE}}` first (while blocking on `wait_for_message()`). Then run `/kiln-receive`. Handles: `wait_for_message()`, persist to
+   `tmp/handoff-in.md`, auto-compact recovery, git merge, and log received.
+   Do not proceed until the skill completes all its steps.
+   Note: `/kiln-receive` will upgrade status to "receiving" once a message arrives.
 
-2. **Merge** — extract `Branch:` and `Commit:` from the message content, then run:
-   ```sh
-   git merge <commit-hash>
-   ```
-   This merge commit becomes the squash anchor for step 7.
+2. **Work** — call `python .kiln/tools/set-status.py {{ROLE}} working --mode={{MODE}}` first. Then apply your role rules. The Role section above defines your work process.
+   For `system-communication-test` messages: forward as-is to `{{HANDOFF_TARGET}}`
+   using `/kiln-handoff` immediately — skip normal work and approval.
 
-3. **Log received** — append a logbook.md entry: timestamp, full message content.
+3. **Get approval** — call `python .kiln/tools/set-status.py {{ROLE}} approval --mode={{MODE}}` first. Then present your result to the user and ask for explicit approval.
+   Do not continue to Step 4 without approval.
 
-4. **Work** — apply your role rules. The Role section above defines your specific work process.
-   For system-communication-test messages, forward as-is to `{{HANDOFF_TARGET}}` and skip
-   steps 5–8.
+4. **Send handoff** — call `python .kiln/tools/set-status.py {{ROLE}} handoff --mode={{MODE}}` first. Then run `/kiln-handoff`. Handles: log sent, squash, INSERT into
+   messages, verify, and retry. Do not return to Step 1 until the skill confirms
+   a queued row in the database.
 
-5. **Get approval** — present your result to the user and ask for explicit approval.
-   Do not continue to step 6 without approval.
-
-6. **Log sent** — append a logbook.md entry: timestamp, brief summary. Commit as part of the squash in step 7.
-
-7. **Squash** — squash all your commits since the merge commit:
-   ```sh
-   LAST_MERGE=$(git log --merges -1 --format="%H")
-   git reset --soft "${LAST_MERGE:-$(git rev-list --max-parents=0 HEAD)}"
-   git commit -m "{{COMMIT_FORMAT}}"
-   ```
-
-8. **Send handoff** — call `python .kiln/tools/set-status.py {{ROLE}} handoff` first. Then call `write_query` to INSERT into `messages` with `target='{{HANDOFF_TARGET}}'`,
-   `branch='{{BRANCH}}'`, and `content` formatted per Handoff Message Format in Workflow Rules.
-   Verify: `SELECT id FROM messages WHERE sender='{{ROLE}}' AND branch='{{BRANCH}}' ORDER BY created_at DESC LIMIT 1`
-   If no row is found, INSERT again before returning to step 1.
-
-9. Return to step 1.
+5. **Immediately return to Step 1** — call `/kiln-receive` now, in this same turn, without
+   waiting for the user to say anything further. (Step 1 will re-emit the `waiting` status at its start.)

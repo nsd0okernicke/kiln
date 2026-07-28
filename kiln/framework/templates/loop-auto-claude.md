@@ -6,16 +6,16 @@ The turn is not over until Step 7 has also run: calling `/kiln-receive` again, i
 
 Repeat this sequence indefinitely:
 
-**Signal state change to terminal:** Before each step, call `python .kiln/tools/set-status.py {{ROLE}} <state>` so your tab title reflects where you are in the cycle. Emit these status signals at each transition (you may see the command fail silently if the status dir doesn't exist yet — that's harmless).
+**Signal state change to terminal:** Before each step, call `python .kiln/tools/set-status.py {{ROLE}} <state> --mode={{MODE}}` so your tab title reflects where you are in the cycle. Emit these status signals at each transition (you may see the command fail silently if the status dir doesn't exist yet — that's harmless).
 
-1. **Receive** — call `python .kiln/tools/set-status.py {{ROLE}} waiting` first. Then run `/kiln-receive`. Handles: `wait_for_message()`, persist to
+1. **Receive** — call `python .kiln/tools/set-status.py {{ROLE}} waiting --mode={{MODE}}` first. Then run `/kiln-receive`. Handles: `wait_for_message()`, persist to
    `tmp/handoff-in.md`, auto-compact recovery, git merge, and log received.
    Do not proceed until the skill completes all its steps.
    Extract the `id` field from the `/kiln-receive` result and save it for Step 2.
 
 2. **Mark as processing** — Immediately call the `mark_processing(message_id)` MCP tool to transition the message from `delivered` to `processing` state. This signals that work has begun.
 
-3. **Delegate the work** — call `python .kiln/tools/set-status.py {{ROLE}} delegating {{ROLE}}-worker` first. Then do not implement anything yourself. Invoke the `Agent` tool
+3. **Delegate the work** — call `python .kiln/tools/set-status.py {{ROLE}} delegating {{ROLE}}-worker --mode={{MODE}}` first. Then do not implement anything yourself. Invoke the `Agent` tool
    with `subagent_type: "{{ROLE}}-worker"` and `run_in_background: false` (you must
    block here — later steps depend on its result). The prompt must be self-contained:
    include the full content of `tmp/handoff-in.md`, your current branch/worktree, and
@@ -33,7 +33,7 @@ Repeat this sequence indefinitely:
    second time, do not retry further: proceed to Step 5 with a handoff that reports the
    blocker instead of normal work, so the loop keeps moving instead of stalling silently.
 
-5. **Send handoff** — call `python .kiln/tools/set-status.py {{ROLE}} handoff` first. Then run `/kiln-handoff`. Handles: log sent, squash, INSERT into
+5. **Send handoff** — call `python .kiln/tools/set-status.py {{ROLE}} handoff --mode={{MODE}}` first. Then run `/kiln-handoff`. Handles: log sent, squash, INSERT into
    messages, verify, and retry. Do not return to Step 1 until the skill confirms
    a queued row in the database.
 

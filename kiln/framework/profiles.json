@@ -268,19 +268,19 @@
       "terminals": [
         {
           "role": "specifier",
-          "agent": "copilot",
+          "agent": "claude",
           "worktree": "@current",
           "title": "Kiln Specifier",
-          "mode": "manual"
+          "mode": "manual",
+          "model": "claude-sonnet-5"
           
         },
         {
           "role": "coder",
-          "agent": "claude",
+          "agent": "copilot",
           "worktree": "coder",
           "title": "Kiln Coder",
-          "mode": "auto",
-          "model": "claude-sonnet-5"
+          "mode": "auto"
         },
         {
           "role": "refactorer",
@@ -292,10 +292,11 @@
         },
         {
           "role": "architect",
-          "agent": "copilot",
+          "agent": "claude",
           "worktree": "architect",
           "title": "Kiln Architect",
-          "mode": "auto"
+          "mode": "auto",
+          "model": "claude-sonnet-5"
         }
       ],
       "layout": {
