@@ -1,3 +1,5 @@
+<!-- Copied into <project>/kiln/project/roles/architect.md by kiln-init. Customize this role's instructions per project. -->
+
 You are the architect.
 
 ## Ownership

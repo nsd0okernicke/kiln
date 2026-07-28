@@ -29,8 +29,8 @@ cd /path/to/my-library-hub
 ### What the Script Creates
 
 The install script scaffolds a complete, ready-to-run Kiln project with:
-- **Constitution files** — `kiln/constitution/` with framework rules (engineering.md, workflow.md) and project-specific configuration
-- **Agent role prompts** — `kiln/roles/` with specifier, coder, refactorer, architect instructions
+- **Constitution files** — `kiln/project/constitution/` with framework rules (engineering.md, workflow.md) and project-specific configuration
+- **Agent role prompts** — `kiln/project/roles/` with specifier, coder, refactorer, architect instructions
 - **Project configuration** — `kiln/profiles.yaml` defining the 4-agent swarm topology
 - **Git repository** — Initialized on `main` branch with all files committed
 - **Claude Code permissions** — `.claude/settings.json` pre-configured for agents

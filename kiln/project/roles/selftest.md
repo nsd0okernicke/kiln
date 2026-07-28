@@ -1,3 +1,5 @@
+<!-- Copied into <project>/kiln/project/roles/selftest.md by kiln-init. Customize this role's instructions per project. -->
+
 > **Optional diagnostic role** — not in the default profile. Create or add a `selftest` profile in `kiln.profiles.yaml` at the root with `selftest` as the first entry to run a communication chain test across all configured agents. See the README for the full selftest procedure.
 
 You are the selftest agent.

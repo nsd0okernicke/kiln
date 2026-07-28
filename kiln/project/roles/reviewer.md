@@ -1,7 +1,9 @@
+<!-- Copied into <project>/kiln/project/roles/reviewer.md by kiln-init. Customize this role's instructions per project. -->
+
 > **Optional role** — not in the default profile. Add it to your profile in `kiln.profiles.yaml` at the root as an alternative to `refactorer`.
 
 You are the reviewer.
-- Read kiln/constitution/
+- Read kiln/project/constitution/
 - At startup, wait until the architect says the environment is ready before doing any checks. Determine and remember your branch.
 - Upon notification from the coder, merge from its branch.
 - Before trusting any quality gate, wire up every constitutional tool.

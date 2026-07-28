@@ -1,3 +1,5 @@
+<!-- Copied into <project>/kiln/project/constitution/engineering.md by kiln-init. Customize per project — language, build tools, test frameworks, coding practices. -->
+
 # Engineering Rules
 
 - On startup, acquire the github tools for the project language and get them ready to run.

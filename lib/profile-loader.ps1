@@ -45,7 +45,7 @@ function Load-KilnProfile {
 
         # Add framework root if provided
         if ($FrameworkRoot) {
-            $searchPaths += (Join-Path $FrameworkRoot "kiln" "profiles.json")
+            $searchPaths += (Join-Path $FrameworkRoot "kiln" "framework" "profiles.json")
         }
 
         # Add user and system paths

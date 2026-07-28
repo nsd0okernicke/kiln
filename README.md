@@ -63,13 +63,13 @@ See **"Running Kiln"** below for more options and customization.
 Kiln is a lightweight orchestration layer that:
 
 - Launches a **config-driven swarm** — specify each agent's role, AI tool/backend (claude/copilot/codex/grok), and workspace (main directory or isolated worktree)
-  - Uses framework defaults from `kiln/profiles.json`
+  - Uses framework defaults from `kiln/framework/profiles.json`
   - Projects can override by creating `kiln.profiles.json` at the root
   - Flexible terminal layouts: tabs, split panes, grids, or custom hierarchical arrangements
 - Creates one **terminal window/tab per role** — observe all agents in real time
   - Windows: WezTerm or Windows Terminal tabs/panes (WezTerm preferred)
   - Unix/macOS: tmux sessions + Terminal.app or WezTerm
-- Reads role behavior from `kiln/roles/<role>.md` files and a layered `kiln/constitution/` (workflow, engineering, project)
+- Reads role behavior from `kiln/project/roles/<role>.md` files and a layered `kiln/project/constitution/` (workflow, engineering, project)
 - Creates one **git worktree per agent** (except those using `@current`) under `.worktrees/` so agents don't collide — agents using `@current` work in the project root on the current branch
 - Supports per-role **agent backends**: `claude`, `copilot`, `codex`, or `grok` — configure via `agent` field in profiles
 - Creates **inter-agent messaging** via SQLite at `.kiln/messages.db` with full message lifecycle tracking, exposed through two MCP servers:
@@ -85,20 +85,23 @@ When you run `kiln-init`, it scaffolds a new Kiln project with:
 ```text
 my-project/
 ├── kiln/                         # Kiln configuration (version-controlled)
-│   ├── constitution/
-│   │   ├── workflow.md           # Handoff protocol
-│   │   ├── engineering.md        # Engineering practices & quality standards
-│   │   └── project.md            # Project-specific rules (language, architecture, constraints)
-│   ├── roles/                    # Role definitions for your agents
-│   │   ├── specifier.md
-│   │   ├── coder.md
-│   │   ├── refactorer.md
-│   │   ├── architect.md
-│   │   └── ...
-│   └── skills/                   # Optional: custom agent skills
+│   └── project/                  # Everything here is yours to customize — see kiln/project/README.md
+│       ├── constitution.md
+│       ├── constitution/
+│       │   ├── workflow.md           # Handoff protocol
+│       │   ├── engineering.md        # Engineering practices & quality standards
+│       │   └── project.md            # Project-specific rules (language, architecture, constraints)
+│       ├── roles/                    # Role definitions for your agents
+│       │   ├── specifier.md
+│       │   ├── coder.md
+│       │   ├── refactorer.md
+│       │   ├── architect.md
+│       │   └── ...
+│       └── skills/                   # Optional: custom agent skills
 ├── .kiln/                        # Runtime state (ephemeral, gitignored)
 │   ├── messages.db              # SQLite message queue
 │   ├── logs/                    # Agent logs
+│   ├── status/                  # Live per-role state (<role>.json), read by the WezTerm status bar
 │   └── ...
 ├── .worktrees/                   # Git worktrees (gitignored)
 │   ├── coder/
@@ -114,7 +117,7 @@ my-project/
 ```
 
 **Key points:**
-- `kiln/` is version-controlled (constitution, roles, skills)
+- `kiln/project/` is version-controlled (constitution, roles, skills) — customize freely, this is your project's own copy
 - `.kiln/` and `.worktrees/` are runtime/ephemeral (gitignored)
 - Profiles are inherited from the framework; create `kiln.profiles.json` at the root to override
 
@@ -193,16 +196,21 @@ kiln/
 │   └── kiln-window-watchdog.sh   # Window tracking (Unix tmux)
 │
 ├── kiln/                   # Master framework templates & default profiles
-│   ├── profiles.json             # Default configuration profiles (framework defaults only)
-│   ├── constitution/             # Shared constitution rules (copied to projects)
-│   │   ├── workflow.md           # Handoff protocol
-│   │   ├── engineering.md        # Engineering practices & quality standards
-│   │   └── project.md            # Project rules starter template (fill in language, constraints)
-│   ├── roles/                    # Role prompts (copied to projects)
-│   ├── mcp-server/               # Python MCP servers bundled with the framework
-│   │   ├── channel.py            # kiln-channel: blocking wait_for_message() receiver
-│   │   └── requirements.txt      # mcp>=1.0.0
-│   └── skills/                   # Agent skills (optional, copied to projects)
+│   ├── project/                  # Copied into every new project's kiln/project/ — customize freely
+│   │   ├── constitution.md
+│   │   ├── constitution/         # Shared constitution rules
+│   │   │   ├── workflow.md           # Handoff protocol
+│   │   │   ├── engineering.md        # Engineering practices & quality standards
+│   │   │   └── project.md            # Project rules starter template (fill in language, constraints)
+│   │   ├── roles/                    # Role prompts
+│   │   └── skills/                   # Agent skills (optional)
+│   └── framework/                # Never copied — read directly from this install
+│       ├── profiles.json             # Default configuration profiles (framework defaults only)
+│       ├── templates/                # Loop/runtime templates injected into generated CLAUDE.md/copilot-instructions.md
+│       ├── mcp-server/               # Python MCP servers bundled with the framework
+│       │   ├── channel.py            # kiln-channel: blocking wait_for_message() receiver
+│       │   └── requirements.txt      # mcp>=1.0.0
+│       └── tools/                    # set-status.py — re-seeded into .kiln/tools/ on every launch
 │
 ├── examples/                     # Example project briefs
 │   └── library-hub/README.md     # LibraryHub reference example
@@ -211,19 +219,19 @@ kiln/
 └── docs/                         # Documentation & assets
 ```
 
-**User Scripts** (`bin/`) are the entry points for Kiln operations. **Framework Internals** (`lib/`) are implementation details — developers shouldn't need to modify them. **Templates** (`kiln/`) are copied to new projects during scaffolding.
+**User Scripts** (`bin/`) are the entry points for Kiln operations. **Framework Internals** (`lib/`) are implementation details — developers shouldn't need to modify them. **`kiln/project/`** is copied to new projects during scaffolding and is meant to be customized. **`kiln/framework/`** is never copied — it's read directly from this install at generation/launch time, so edits there affect every project using this install.
 
 ---
 
 ## Core Features
 
-- **Config-Driven Topology** — The swarm shape comes from `kiln/profiles.json`, not hardcoded variables.
+- **Config-Driven Topology** — The swarm shape comes from `kiln/framework/profiles.json`, not hardcoded variables.
 - **Flexible Terminal Layouts** — Define custom tab and pane arrangements in your profile: simple tabs, split panes, 2×2 grids, hierarchical trees, or focus layouts (e.g., 1 full tab + 3-way split below).
 - **Role Injection** — Constitution (`workflow.md`, `engineering.md`, `project.md`) and role instructions (`roles/<role>.md`) are merged into each agent's instruction file (`CLAUDE.md` or `.github/copilot-instructions.md`), giving full context immediately.
-- **Project-Local Constitution** — Customize architecture, tech stack, and quality gates via `kiln/constitution/project.md`.
-- **Layered Rules** — `kiln/constitution/` contains `workflow.md` (handoffs), `engineering.md` (tools/practices), and `project.md` (arch/quality) — all applied to every agent.
+- **Project-Local Constitution** — Customize architecture, tech stack, and quality gates via `kiln/project/constitution/project.md`.
+- **Layered Rules** — `kiln/project/constitution/` contains `workflow.md` (handoffs), `engineering.md` (tools/practices), and `project.md` (arch/quality) — all applied to every agent.
 - **Backend Selection Per Role** — Each role can launch `claude`, `copilot`, `codex`, or `grok` via the `agent` field in profiles.
-- **Observable Swarm** — Watch all agents in one window (tabs or panes on Windows, tmux panes on Unix).
+- **Observable Swarm** — Watch all agents in one window (tabs or panes on Windows, tmux panes on Unix). On WezTerm, a live color-coded status bar shows each `auto`-mode role's current state (waiting/receiving/delegating/handoff) regardless of which tab or pane is focused.
 - **Cross-Platform** — Works on Windows, macOS, and Linux with zero duplication.
 
 ---
@@ -234,36 +242,37 @@ The recommended project layout is:
 
 ```text
 kiln/
-  roles/
-    architect.md             # Architect role (design review, approval)
-    coder.md                 # Coder role (TDD implementation)
-    refactorer.md            # Refactorer role (quality gates, refactoring)
-    specifier.md             # Specifier role (Gherkin acceptance tests)
-    reviewer.md              # Reviewer role (batch review alternative to refactorer)
-    selftest.md              # Selftest role (communication chain validation)
-  constitution/
-    workflow.md              # Handoff protocol, branch discipline, queue format
-    engineering.md           # Language, tools, dependencies, practices
-    project.md               # Project-specific architecture, tech stack, quality gates
+  project/
+    roles/
+      architect.md             # Architect role (design review, approval)
+      coder.md                 # Coder role (TDD implementation)
+      refactorer.md            # Refactorer role (quality gates, refactoring)
+      specifier.md             # Specifier role (Gherkin acceptance tests)
+      reviewer.md              # Reviewer role (batch review alternative to refactorer)
+      selftest.md              # Selftest role (communication chain validation)
+    constitution/
+      workflow.md              # Handoff protocol, branch discipline, queue format
+      engineering.md           # Language, tools, dependencies, practices
+      project.md               # Project-specific architecture, tech stack, quality gates
 
-# Optional: Override default profiles (framework uses kiln/profiles.json)
+# Optional: Override default profiles (framework uses kiln/framework/profiles.json)
 kiln.profiles.json           # Project-specific profiles (optional, at root)
 ```
 
-**Note:** Configuration profiles are inherited from the framework default (`kiln/profiles.json`). Projects can optionally override by creating `kiln.profiles.json` at the project root if they need custom profile definitions.
+**Note:** Configuration profiles are inherited from the framework default (`kiln/framework/profiles.json`). Projects can optionally override by creating `kiln.profiles.json` at the project root if they need custom profile definitions.
 
 ### Profile Loading & Inheritance
 
 Configuration profiles define which agents run, which roles they take, and where they work. Kiln uses a cascading search to find profiles:
 
 1. **Project root** (`kiln.profiles.json`) — Project-level overrides
-2. **Project config** (`kiln/profiles.json`) — Not used (projects don't copy profiles)
+2. **Project config** (`kiln/profiles.json`) — Not used (projects don't copy profiles here; not to be confused with `kiln/project/`, the customizable constitution/roles/skills bucket)
 3. **Project state** (`.kiln/profiles.json`) — Not used
-4. **Framework** (`kiln/profiles.json`) — Default profiles for all projects
+4. **Framework** (`kiln/framework/profiles.json`) — Default profiles for all projects
 5. **User home** (`~/.kiln/profiles.json`) — User-level defaults (optional)
 6. **System** (`/etc/kiln/profiles.json`) — System-wide defaults (optional)
 
-By default, **all projects use the framework's `kiln/profiles.json`**, which defines the standard 4-agent workflow (specifier, coder, refactorer, architect). This means new projects work immediately without configuration.
+By default, **all projects use the framework's `kiln/framework/profiles.json`**, which defines the standard 4-agent workflow (specifier, coder, refactorer, architect). This means new projects work immediately without configuration.
 
 **To customize profiles for a specific project**, create `kiln.profiles.json` at the project root. Kiln will use your custom profiles instead of the framework defaults.
 
@@ -284,21 +293,22 @@ By default, **all projects use the framework's `kiln/profiles.json`**, which def
 
 This ensures every agent operates with full constitutional context plus its specific role directives.
 
-**Worker Subagent Assembly (Claude, `auto`-mode roles):** each of these agents is a thin, persistent **shell** — it only listens, merges, commits, and hands off. The actual role work is delegated each cycle to a disposable **worker subagent**, dispatched via Claude Code's `Agent` tool and defined in a generated `.claude/agents/<role>-worker.md`:
+**Worker Subagent Assembly (`auto`-mode roles):** each of these agents is a thin, persistent **shell** — it only listens, merges, commits, and hands off. The actual role work is delegated each cycle to a disposable **worker**, built from the role file (`roles/<role>.md`) plus the `engineering.md` and `project.md` constitution — **not** `workflow.md`, since handoff/messaging protocol stays the shell's concern, not the worker's. The dispatch mechanism differs per backend:
 
-- Built from the role file (`roles/<role>.md`) plus the `engineering.md` and `project.md` constitution — **not** `workflow.md`, since handoff/messaging protocol stays the shell's concern, not the worker's
-- Has no access to the `Agent` tool itself (no recursive subagent spawning) and no MCP messaging tools — it can only read/write/edit/test in its worktree
-- Its full working transcript never enters the shell's own context — only its final report does, which is what keeps the shell's context small and repetitive cycle over cycle, rather than filling up with the noise of the actual implementation work
+- **Claude**: worker defined in a generated `.claude/agents/<role>-worker.md`, dispatched via Claude Code's `Agent` tool (blocking, deterministic — the shell explicitly invokes `subagent_type: "<role>-worker"`). No access to the `Agent` tool itself (no recursive subagent spawning) and no MCP messaging tools — it can only read/write/edit/test in its worktree. Its full working transcript never enters the shell's own context — only its final report does, which is what keeps the shell's context small and repetitive cycle over cycle, rather than filling up with the noise of the actual implementation work.
+- **Copilot**: worker defined in a generated `.github/agents/<role>-worker.agent.md` (GitHub Copilot CLI's custom-agent format), dispatched by prose instruction — the shell's loop template tells it to delegate to the named custom agent, and Copilot CLI's own harness resolves that to a subagent call with its own isolated context window. `tools:` is scoped to `read, write, shell` — no MCP server names listed, so it has no messaging access, mirroring the Claude worker's isolation. Unlike Claude's `Agent` tool, this delegation is the model's own judgment call rather than a guaranteed deterministic invocation — GitHub has tuned Copilot CLI to be more selective about delegating on its own, so the wrapper prompt explicitly instructs it to always delegate even when it judges it could finish faster itself.
 
 ### Default Workflow
 
-The default four-agent workflow runs in a continuous loop. Each Claude shell agent's generated `CLAUDE.md` combines a role file with a **loop template** that drives the cycle through two skills — `/kiln-receive` and `/kiln-handoff` (`kiln/skills/kiln-receive`, `kiln/skills/kiln-handoff`) — plus a delegated dispatch to that role's worker subagent in between:
+The default four-agent workflow runs in a continuous loop. Each Claude shell agent's generated `CLAUDE.md` combines a role file with a **loop template** that drives the cycle through two skills — `/kiln-receive` and `/kiln-handoff` (`kiln/project/skills/kiln-receive`, `kiln/project/skills/kiln-handoff`) — plus a delegated dispatch to that role's worker subagent in between:
 
 1. **`/kiln-receive`** — calls `wait_for_message()` via the `kiln-channel` MCP server (blocks until a handoff arrives), persists the message to `tmp/handoff-in.md` (survives auto-compact), merges the sender's commit (`git merge <commit>`), and logs a `[RECEIVED]` entry to `logbook.md`
 2. **Delegate the work** — the shell does not implement anything itself. It invokes the `Agent` tool (`subagent_type: "<role>-worker"`, blocking) with the handoff content and current branch/worktree; the worker subagent does the actual role-specific task (see below) and reports back what it did. `specifier` still additionally requires explicit user approval before continuing — it runs in `manual` mode and is not yet part of this delegation pattern (see Known Limitations).
 3. **Retry or escalate on failure** — if the worker reports it couldn't finish, the shell re-dispatches it once more with the failure as feedback; a second failure escalates to a handoff that reports the blocker instead of silently stalling.
 4. **`/kiln-handoff`** — logs a `[SENT]` entry, squashes work commits into one, `INSERT`s the handoff into `.kiln/messages.db` via `write_query`, then reads it back to verify the row landed — retrying the INSERT if it didn't
 5. **Immediately return to step 1, in the same turn** — a sent and verified handoff is not the end of the cycle; the loop template is explicit that the turn isn't over until `/kiln-receive` has run again (this closes a stall we found in live testing, where an agent would finish a verified handoff and simply stop instead of waiting for the next message)
+
+**Copilot follows the same shape** (receive → delegate → retry-once-on-failure → handoff → loop again in the same turn) but via its own inline polling loop (`loop-auto-copilot.md`) rather than the `/kiln-receive`/`/kiln-handoff` skills — it polls `messages` directly via SQL (`read_query`/`write_query`), since Copilot has no blocking `kiln-channel` MCP tool, and squashes/logs the same way inline rather than through a shared skill file.
 
 The cycle flows: **specifier → coder → refactorer → architect → specifier**
 
@@ -307,7 +317,7 @@ The cycle flows: **specifier → coder → refactorer → architect → specifie
 - **`refactorer`** — Runs quality gates (coverage → CRAP → DRY → mutation site count), refactors for testability, sends handoff to architect.
 - **`architect`** — Reviews module structure, runs pre-handoff verification (mutation → DRY → soft Gherkin), sends completion back to specifier.
 
-> **Optional role:** `reviewer` is an alternative to `refactorer` with a focus on batch processing and review pipelines. Add it to your profile in `kiln/profiles.json` to use it instead. See `kiln/roles/reviewer.md`.
+> **Optional role:** `reviewer` is an alternative to `refactorer` with a focus on batch processing and review pipelines. Add it to your profile in `kiln/framework/profiles.json` to use it instead. See `kiln/project/roles/reviewer.md`.
 
 ---
 
@@ -368,8 +378,8 @@ Kiln will create a git repository if one doesn't exist, initialize worktrees, an
 
 4. **Startup creates**:
    - Git worktrees under `.worktrees/` (one per non-@current role)
-   - Generated `CLAUDE.md` files in each worktree with embedded constitution + project + role content
-   - Generated `.claude/agents/<role>-worker.md` in each worktree (Claude, `auto`-mode roles) — the worker subagent definition the shell delegates its actual work to each cycle
+   - Generated `CLAUDE.md` (Claude agents) or `.github/copilot-instructions.md` (Copilot agents) in each worktree with embedded constitution + project + role content
+   - Generated worker agent definitions for `auto`-mode roles — `.claude/agents/<role>-worker.md` (Claude) or `.github/agents/<role>-worker.agent.md` (Copilot) — the worker definition the shell delegates its actual work to each cycle
    - Per-worktree `.mcp.json` with both `kiln-db` and `kiln-channel` configured (correct role and branch env vars injected)
    - Channel log files at `.kiln/logs/channel-<role>.log` for debugging
    - Claude Code debug log files at `.kiln/logs/claude-debug-<role>.log` (`--debug-file`) for diagnosing stalls after the fact
@@ -415,7 +425,7 @@ Kiln will create a git repository if one doesn't exist, initialize worktrees, an
 
 ## Configuration Profiles
 
-Kiln uses JSON profiles to define swarm topology. The default profile is `dev`, which creates the standard 4-agent swarm. All projects inherit the framework's default profiles from `kiln/profiles.json` automatically.
+Kiln uses JSON profiles to define swarm topology. The default profile is `dev`, which creates the standard 4-agent swarm. All projects inherit the framework's default profiles from `kiln/framework/profiles.json` automatically.
 
 **To customize profiles for a specific project**, create `kiln.profiles.json` at your project root. Kiln will use your custom profiles instead of the framework defaults.
 
@@ -465,7 +475,7 @@ The framework provides the standard `dev` profile with tab-based layout:
 
 **Terminal fields:**
 
-- **role** — maps to `kiln/roles/<role>.md` (must exist)
+- **role** — maps to `kiln/project/roles/<role>.md` (must exist)
 - **agent** — which AI tool to use: `claude`, `copilot`, `codex`, or `grok`
 - **worktree** — `@current` to work in the main directory, or any name (creates `.worktrees/<name>/`)
   - Use `@current` for coordinator/review roles that work on the current branch
@@ -486,7 +496,7 @@ The framework provides the standard `dev` profile with tab-based layout:
 }
 ```
 
-This is wired via Claude Code's subagent `model:` frontmatter field: `Write-GeneratedWorkerAgent` in `bin/kiln.ps1` writes `model: <workerModel>` into the generated `.claude/agents/<role>-worker.md` file when `workerModel` is set. Claude Code resolves a dispatched subagent's model from its own frontmatter, independent of the parent session's model — so the Haiku shell's worker subagent genuinely runs as Sonnet, not Haiku. The framework's default `dev` profile (`kiln/profiles.json`) demonstrates this: `coder`/`refactorer`/`architect` shells run on Haiku, their workers run on Sonnet.
+This is wired via Claude Code's subagent `model:` frontmatter field: `Write-GeneratedWorkerAgent` in `bin/kiln.ps1` writes `model: <workerModel>` into the generated `.claude/agents/<role>-worker.md` file when `workerModel` is set. Claude Code resolves a dispatched subagent's model from its own frontmatter, independent of the parent session's model — so the Haiku shell's worker subagent genuinely runs as Sonnet, not Haiku. The framework's default `dev` profile (`kiln/framework/profiles.json`) demonstrates this: `coder`/`refactorer`/`architect` shells run on Haiku, their workers run on Sonnet.
 
 ### Layout Configurations
 
@@ -725,6 +735,17 @@ Kiln dynamically generates a WezTerm configuration file at runtime to set up the
 Move-Item ~/.wezterm.lua.kiln-backup ~/.wezterm.lua -Force
 ```
 
+### Live Agent Status (WezTerm)
+
+Each `auto`-mode role's wrapper cycles through four states — **waiting** (idle, blocked on the next message), **receiving** (a message just arrived; persisting/merging/logging it before delegating), **delegating** (the worker has been dispatched and is doing the actual work), and **handoff** (sending the result) — signaled at each transition by `python .kiln/tools/set-status.py <role> <state> [detail]`. This writes two things:
+
+- **`.kiln/status/<role>.json`** — `{"role", "state", "detail", "since", "title"}`. Always reliable, readable on any platform/terminal.
+- **A terminal title OSC sequence** — unreliable on its own: the agent CLI running in that same pane also writes its own title on every render tick (spinner frames, idle icon, ...) and, updating far more often, usually wins the race.
+
+On WezTerm, Kiln's generated Lua config polls the status JSON files directly (not the contested pane title) roughly once a second and renders a live, color-coded status bar in the top-right of the window — one badge per role, background colored by state (green = waiting, blue = receiving, red = delegating, violet = handoff), visible regardless of which tab or pane is focused. This is what makes state visible even in grid/pane layouts like `compact`, where multiple roles share a single tab and would otherwise have no per-pane title of their own.
+
+On Windows Terminal, there's no equivalent scripting hook for a composite status bar — you can still read the JSON files directly (e.g. `Get-Content .kiln/status/coder.json`) to see live state.
+
 ### tmux Behavior (Unix Only)
 
 Kiln uses a project-specific tmux socket (recorded in `.kiln/tmux-socket`), so each project's swarm is isolated from other tmux sessions. It honors tmux `base-index` and `pane-base-index` settings when launching agents, so configurations that number windows from `1` work without requiring users to change their tmux preferences.
@@ -801,6 +822,8 @@ The cleanup script removes:
 - Git worktrees (`.worktrees/`) and associated branches
 - Swarm state (`.kiln/`)
 - Generated instruction files (`CLAUDE.md`, `.github/copilot-instructions.md`)
+- Generated worker agent files (`.claude/agents/*-worker.md`, `.github/agents/*-worker.agent.md`) — hand-authored custom agents alongside them are preserved
+- Root `.mcp.json` (generated for `@current`-mode roles)
 - Git hooks installed for swarm discipline
 - Terminal window/tab records
 
@@ -836,7 +859,7 @@ After launching Kiln, you can verify that inter-agent communication is working b
 
 ### Setup
 
-Create a `selftest` profile in `kiln/profiles.json` with the `selftest` role as the **first entry**:
+Create a `selftest` profile in `kiln/framework/profiles.json` with the `selftest` role as the **first entry**:
 
 ```json
 {
@@ -972,12 +995,12 @@ If the test hangs or fails:
 - **Phase 2: Cross-Platform Infrastructure** — Windows (PowerShell/Windows Terminal/WezTerm), Unix/macOS (zsh/tmux)
 - **Phase 3: Auto-Agent Communication** — SQLite message queues with MCP server, automated role-based message forwarding, full agent chain test passing
 - **Phase 4: Channel-Based Messaging** — Replaced SQL inbox polling with a blocking `wait_for_message()` Channel
-  - ✓ `kiln-channel` Python MCP server (`kiln/mcp-server/channel.py`) — polls SQLite and blocks until a message arrives, returns it already marked delivered
+  - ✓ `kiln-channel` Python MCP server (`kiln/framework/mcp-server/channel.py`) — polls SQLite and blocks until a message arrives, returns it already marked delivered
   - ✓ Per-worktree `.mcp.json` generated with `kiln-db` + `kiln-channel`, correct `KILN_ROLE`/`KILN_BRANCH` env vars injected per agent
   - ✓ Channel debug logs at `.kiln/logs/channel-<role>.log`
   - ✓ `-Stop` flag on `kiln.ps1` to kill orphaned MCP server processes after terminal close
 - **Phase 5: Skill-Based Handoff Hardening** — Moved the raw receive/handoff mechanics out of the loop templates into two dedicated skills, and closed stall/merge failure modes found through live multi-cycle testing against the LibraryHub example
-  - ✓ `/kiln-receive` and `/kiln-handoff` skills (`kiln/skills/kiln-receive`, `kiln/skills/kiln-handoff`) own the full receive/send sequence, including verify-and-retry on the handoff INSERT
+  - ✓ `/kiln-receive` and `/kiln-handoff` skills (`kiln/project/skills/kiln-receive`, `kiln/project/skills/kiln-handoff`) own the full receive/send sequence, including verify-and-retry on the handoff INSERT
   - ✓ Loop templates' "not end-of-turn" guardrail now explicitly covers looping back to `/kiln-receive`, not just the handoff-sent step — closes a confirmed stall where an agent finished a verified handoff and simply stopped instead of waiting for the next message
   - ✓ `.gitignore` fixes for symlinked/regenerated paths (`.kiln`, `CLAUDE.md`, `.mcp.json`, `tmp/`) that were getting accidentally committed and causing every `/kiln-receive` merge to hit conflicts
   - ✓ `.gitignore` is now committed before any worktree is created, even in a pre-existing repo, so new worktrees actually inherit it
@@ -1033,7 +1056,7 @@ This means agents can read/write/execute any file in their worktree without prom
 - **Real feature workflows are continuously validated** — multi-cycle specifier → coder → refactorer → architect chains run successfully against the LibraryHub example; 8+ cycle test runs show stable state flow with 34+ processed messages and zero stalls or message loss
 - **Error handling** — Minimal error recovery in agent workflows; graceful degradation not yet implemented
 - **Scaling** — Tested with 4 agents over 8+ cycles with stable performance; behavior with 10+ agents unknown
-- **Multi-agent backend validation** — Framework supports `claude` (validated) and `copilot` (partial); `codex` and `grok` support planned but not yet implemented
+- **Multi-agent backend validation** — Framework supports `claude` (validated, including Phase 6 shell+worker delegation live-tested through 8+ cycles) and `copilot` (worker delegation implemented and confirmed against a live CLI session, but not yet exercised through a full multi-cycle swarm run the way Claude has been); `codex` and `grok` support planned but not yet implemented
 - **`kiln.sh` has no loop/runtime template injection** — Unix agents are launched from a much thinner instruction file than Windows' generated `CLAUDE.md`, with no `auto`/`manual` mode concept; the receive→delegate→handoff loop and Phase 6's delegation pattern may not be active there until this pre-existing gap is closed
 
 ### Recommended Next Steps

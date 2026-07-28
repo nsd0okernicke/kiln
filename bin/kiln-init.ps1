@@ -49,7 +49,7 @@ if (-not (Test-Path "$FrameworkRoot\kiln")) {
 if ($ListProfiles) {
     Write-Host "Available Kiln configuration profiles:" -ForegroundColor Green
     Write-Host ""
-    $profilesPath = Join-Path $FrameworkRoot "kiln" "profiles.json"
+    $profilesPath = Join-Path $FrameworkRoot "kiln" "framework" "profiles.json"
     $config = Get-Content -Path $profilesPath -Raw | ConvertFrom-Json
     foreach ($profileProp in $config.profiles.PSObject.Properties) {
         $desc = $profileProp.Value.description
@@ -79,9 +79,10 @@ function Write-ClaudeCodeConfig {
 }
 
 $KilnDir = Join-Path $Target "kiln"
-$constitutionDir = Join-Path $KilnDir "constitution"
-$rolesDir = Join-Path $KilnDir "roles"
-$skillsDir = Join-Path $KilnDir "skills"
+$KilnProjectDir = Join-Path $KilnDir "project"
+$constitutionDir = Join-Path $KilnProjectDir "constitution"
+$rolesDir = Join-Path $KilnProjectDir "roles"
+$skillsDir = Join-Path $KilnProjectDir "skills"
 $KilnInfraDir = Join-Path $Target ".kiln"
 
 try {
@@ -97,7 +98,7 @@ catch {
 }
 
 
-$frameworkConstitution = Join-Path $FrameworkRoot "kiln\constitution"
+$frameworkConstitution = Join-Path $FrameworkRoot "kiln\project\constitution"
 @("engineering.md", "workflow.md", "project.md") | ForEach-Object {
     $source = Join-Path $frameworkConstitution $_
     $dest = Join-Path $constitutionDir $_
@@ -107,7 +108,7 @@ $frameworkConstitution = Join-Path $FrameworkRoot "kiln\constitution"
 }
 Write-Host "✓ Copied constitution files" -ForegroundColor Green
 
-$frameworkRoles = Join-Path $FrameworkRoot "kiln\roles"
+$frameworkRoles = Join-Path $FrameworkRoot "kiln\project\roles"
 if (Test-Path $frameworkRoles) {
     Get-ChildItem -Path $frameworkRoles -Filter "*.md" | ForEach-Object {
         Copy-Item -Path $_.FullName -Destination $rolesDir -Force
@@ -118,7 +119,7 @@ if (Test-Path $frameworkRoles) {
 # Note: Profiles are not copied to the target project.
 # Projects inherit framework profiles; override by creating kiln.profiles.json at project root if needed.
 
-$frameworkSkills = Join-Path $FrameworkRoot "kiln\skills"
+$frameworkSkills = Join-Path $FrameworkRoot "kiln\project\skills"
 if (Test-Path $frameworkSkills) {
     Get-ChildItem -Path $frameworkSkills -Directory | ForEach-Object {
         # Remove any pre-existing copy first (e.g. from a prior kiln-init run) so a stale or
@@ -134,21 +135,16 @@ if (Test-Path $frameworkSkills) {
 
 
 
-$constitutionMdPath = Join-Path $KilnDir "constitution.md"
-$constitutionMdContent = @'
-# Kiln Constitution
-
-This file takes precedence over subordinate files.
-Read and obey the following subordinate documents in order.
-
-1. kiln/constitution/project.md
-2. kiln/constitution/engineering.md
-3. kiln/constitution/workflow.md
-
-If two subordinate files conflict, the earlier file wins.
-'@
-Set-Content -Path $constitutionMdPath -Value $constitutionMdContent -Encoding UTF8
-Write-Host "✓ Created constitution.md" -ForegroundColor Green
+# Copy the framework's real constitution.md instead of synthesizing our own — this used to
+# be an independently hardcoded heredoc here (and a second, differently-worded one in
+# kiln-init.sh) that could drift from the framework's actual file. Now there's one source
+# of truth, copied like everything else in kiln/project/.
+$frameworkConstitutionMd = Join-Path $FrameworkRoot "kiln\project\constitution.md"
+$constitutionMdPath = Join-Path $KilnProjectDir "constitution.md"
+if (Test-Path $frameworkConstitutionMd) {
+    Copy-Item -Path $frameworkConstitutionMd -Destination $constitutionMdPath -Force
+    Write-Host "✓ Copied constitution.md" -ForegroundColor Green
+}
 
 
 Write-ClaudeCodeConfig -ProjectPath $Target
@@ -178,7 +174,7 @@ if ($Example -eq "library-hub") {
         Copy-Item -Path $exampleReadme -Destination (Join-Path $Target "README.md") -Force
         Write-Host "✓ Copied example README.md" -ForegroundColor Green
     }
-    $exampleProjectMd = Join-Path $FrameworkRoot "examples\$Example\kiln\constitution\project.md"
+    $exampleProjectMd = Join-Path $FrameworkRoot "examples\$Example\kiln\project\constitution\project.md"
     if (Test-Path $exampleProjectMd) {
         Copy-Item -Path $exampleProjectMd -Destination (Join-Path $constitutionDir "project.md") -Force
         Write-Host "✓ Copied example-specific project.md" -ForegroundColor Green
@@ -298,7 +294,7 @@ Write-Host "✓ Project created successfully: $Target" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Cyan
 Write-Host "  1. cd $Target"
-Write-Host "  2. Review kiln/constitution/ and kiln/roles/"
+Write-Host "  2. Review kiln/project/constitution/ and kiln/project/roles/"
 Write-Host "  3. git add kiln/ .claude/ && git commit -m 'Add Kiln configuration'"
 Write-Host "  4. Run: kiln.ps1 to launch agents"
 Write-Host ""

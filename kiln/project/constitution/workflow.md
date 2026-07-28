@@ -1,3 +1,5 @@
+<!-- Copied into <project>/kiln/project/constitution/workflow.md by kiln-init. Framework default handoff protocol — customize only if your project's workflow genuinely differs. -->
+
 # Workflow Rules
 
 ## Message Queue

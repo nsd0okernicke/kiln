@@ -331,7 +331,7 @@ function Write-ClaudeConfig {
     $projectMcp = Join-Path $WorkingDir ".mcp.json"
     $dbPath = Join-Path $STATE_DIR "messages.db"
     $dbPathEscaped = $dbPath -replace '\\', '\\'
-    $channelScript = Join-Path $frameworkRoot "kiln" "mcp-server" "channel.py"
+    $channelScript = Join-Path $frameworkRoot "kiln" "framework" "mcp-server" "channel.py"
     $channelScriptEscaped = $channelScript -replace '\\', '\\'
 
     # Find the first @current role — that role gets kiln-channel in the root .mcp.json
@@ -349,8 +349,11 @@ function Write-ClaudeConfig {
         New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
         $statusDir = Join-Path $STATE_DIR "status"
         New-Item -ItemType Directory -Force -Path $statusDir | Out-Null
-        # Seed framework tools into project state directory so agents can invoke set-status.py
-        $frameworkToolsDir = Join-Path $frameworkRoot "kiln" "tools"
+        # Seed framework tools into project state directory so agents can invoke set-status.py.
+        # tools/ lives under kiln/framework/ (framework-owned) but, unlike the rest of that
+        # bucket, gets copied fresh into the project's ephemeral .kiln/tools/ on every launch
+        # rather than referenced by path or copied once at scaffold time.
+        $frameworkToolsDir = Join-Path $frameworkRoot "kiln" "framework" "tools"
         $stateToolsDir = Join-Path $STATE_DIR "tools"
         if (Test-Path $frameworkToolsDir) {
             New-Item -ItemType Directory -Force -Path $stateToolsDir | Out-Null
@@ -492,7 +495,7 @@ function Prepare-Worktrees {
         $claudeJsonPath = Join-Path $worktreePath ".mcp.json"
         $dbPath = Join-Path $STATE_DIR "messages.db"
         $dbPathEscaped = $dbPath -replace '\\', '\\'
-        $channelScript = Join-Path (Split-Path -Parent $SCRIPT_DIR) "kiln" "mcp-server" "channel.py"
+        $channelScript = Join-Path (Split-Path -Parent $SCRIPT_DIR) "kiln" "framework" "mcp-server" "channel.py"
         $channelScriptEscaped = $channelScript -replace '\\', '\\'
         $logsDir = Join-Path $STATE_DIR "logs"
         New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
@@ -533,7 +536,7 @@ function Prepare-Worktrees {
 }
 
 function Prepare-Skills {
-    $skillsSource = Join-Path $KILN_DIR "skills"
+    $skillsSource = Join-Path $KILN_PROJECT_DIR "skills"
     if (-not (Test-Path $skillsSource)) {
         Write-Host "  [skills] No skills directory found at: $skillsSource" -ForegroundColor Gray
         return
@@ -625,20 +628,20 @@ function Prepare-AgentConfigs {
 }
 
 function Get-KilnTemplate([string]$Name) {
-    Get-Content (Join-Path $KILN_BUNDLED_DIR "templates" "$Name.md") -Raw -ErrorAction Stop
+    Get-Content (Join-Path $KILN_BUNDLED_DIR "framework" "templates" "$Name.md") -Raw -ErrorAction Stop
 }
 
 function Get-KilnConstitution([string]$Name) {
-    Get-Content (Join-Path $KILN_DIR "constitution" "$Name.md") -Raw -ErrorAction Stop
+    Get-Content (Join-Path $KILN_PROJECT_DIR "constitution" "$Name.md") -Raw -ErrorAction Stop
 }
 
 function Get-KilnConstitutionHeader {
-    $path = Join-Path $KILN_DIR "constitution.md"
+    $path = Join-Path $KILN_PROJECT_DIR "constitution.md"
     if (Test-Path $path) { Get-Content $path -Raw } else { $null }
 }
 
 function Get-KilnRole([string]$Role) {
-    $raw = Get-Content (Join-Path $KILN_DIR "roles" "$Role.md") -Raw -ErrorAction Stop
+    $raw = Get-Content (Join-Path $KILN_PROJECT_DIR "roles" "$Role.md") -Raw -ErrorAction Stop
     $stripped = ($raw -replace '(?ms)^## (Message Loop|Interaction Loop).*?(?=^## |\z)', '').TrimStart("`r", "`n")
     "# Role`n`n" + $stripped
 }
@@ -1128,10 +1131,11 @@ $WorkingDir = (Resolve-Path $WorkingDir).Path
 
 # Initialize directory paths now that WorkingDir is resolved to absolute path
 $KILN_DIR = Join-Path $WorkingDir "kiln"
+$KILN_PROJECT_DIR = Join-Path $KILN_DIR "project"
 $STATE_DIR = Join-Path $WorkingDir ".kiln"
 
 # Handoff routing table — parsed from workflow.md at startup
-$HandoffTargets = Read-HandoffRoutingTable (Join-Path $KILN_DIR "constitution" "workflow.md")
+$HandoffTargets = Read-HandoffRoutingTable (Join-Path $KILN_PROJECT_DIR "constitution" "workflow.md")
 
 # Commit format strings per role
 $CommitFormats = @{

@@ -69,7 +69,12 @@
       "Bash(copilot agents *)",
       "Bash(copilot help *)",
       "Bash(zsh --version)",
-      "Bash(bash -n \"c:\\\\projekte\\\\agentic-coding\\\\kiln\\\\bin\\\\kiln-cleanup.sh\")"
+      "Bash(bash -n \"c:\\\\projekte\\\\agentic-coding\\\\kiln\\\\bin\\\\kiln-cleanup.sh\")",
+      "Bash(grep -n 'mcp-server\\\\|Join-Path \\\\$KILN_DIR\\\\|Join-Path \\\\$KILN_BUNDLED_DIR\\\\|\\\\$KILN_DIR = \\\\|Read-HandoffRoutingTable' bin/kiln.ps1)",
+      "Bash(grep -n '\"kiln\\\\\\\\\\\\\\\\constitution\\\\|\"kiln\\\\\\\\\\\\\\\\roles\\\\|\"kiln\\\\\\\\\\\\\\\\skills\\\\|\"kiln\\\\\\\\\\\\\\\\profiles\\\\|kiln\\\\\\\\\\\\\\\\constitution\\\\|kiln\\\\\\\\\\\\\\\\roles\\\\|kiln\\\\\\\\\\\\\\\\skills\\\\|kiln\\\\\\\\\\\\\\\\templates\\\\|kiln\\\\\\\\\\\\\\\\mcp-server' bin/kiln-init.ps1)",
+      "Bash(bash -n \"c:\\\\projekte\\\\agentic-coding\\\\kiln\\\\bin\\\\kiln-init.sh\")",
+      "Bash(grep -n 'WORKTREE_PATHS\\\\[\\\\$' bin/kiln.sh)",
+      "Bash(bash -n \"c:\\\\projekte\\\\agentic-coding\\\\kiln\\\\bin\\\\kiln.sh\")"
     ],
     "additionalDirectories": [
       "C:\\projekte\\swarm-forge\\examples\\library-hub",

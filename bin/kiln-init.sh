@@ -66,7 +66,7 @@ if [ $LIST_PROFILES -eq 1 ]; then
     echo "Available Kiln configuration profiles:"
     echo ""
     source "$FRAMEWORK_ROOT/lib/profile-loader.sh"
-    get_available_profiles "$FRAMEWORK_ROOT/kiln"
+    get_available_profiles "$FRAMEWORK_ROOT/kiln/framework"
     exit 0
 fi
 
@@ -85,35 +85,35 @@ fi
 echo "Creating Kiln project: $TARGET"
 
 # Create directory structure
-mkdir -p "$TARGET/kiln/constitution"
-mkdir -p "$TARGET/kiln/roles"
-mkdir -p "$TARGET/kiln/skills"
+mkdir -p "$TARGET/kiln/project/constitution"
+mkdir -p "$TARGET/kiln/project/roles"
+mkdir -p "$TARGET/kiln/project/skills"
 mkdir -p "$TARGET/.kiln"
 echo "✓ Created directory structure"
 
 # Copy constitution files
-for file in engineering.md workflow.md; do
-    if [ -f "$KILN_DIR/constitution/$file" ]; then
-        cp "$KILN_DIR/constitution/$file" "$TARGET/kiln/constitution/"
+for file in engineering.md workflow.md project.md; do
+    if [ -f "$KILN_DIR/project/constitution/$file" ]; then
+        cp "$KILN_DIR/project/constitution/$file" "$TARGET/kiln/project/constitution/"
     fi
 done
 echo "✓ Copied constitution files"
 
 # Copy role files
-if [ -d "$KILN_DIR/roles" ]; then
-    for file in "$KILN_DIR/roles"/*.md; do
+if [ -d "$KILN_DIR/project/roles" ]; then
+    for file in "$KILN_DIR/project/roles"/*.md; do
         if [ -f "$file" ]; then
-            cp "$file" "$TARGET/kiln/roles/"
+            cp "$file" "$TARGET/kiln/project/roles/"
         fi
     done
     echo "✓ Copied role files"
 fi
 
 # Copy skills directory
-if [ -d "$KILN_DIR/skills" ]; then
-    for skill_dir in "$KILN_DIR/skills"/*; do
+if [ -d "$KILN_DIR/project/skills" ]; then
+    for skill_dir in "$KILN_DIR/project/skills"/*; do
         if [ -d "$skill_dir" ]; then
-            cp -r "$skill_dir" "$TARGET/kiln/skills/"
+            cp -r "$skill_dir" "$TARGET/kiln/project/skills/"
         fi
     done
     echo "✓ Copied skills"
@@ -143,33 +143,17 @@ EOF
 echo "✓ Created .mcp.json (MCP server configuration)"
 
 
-# Write starter project.md
-cat > "$TARGET/kiln/constitution/project.md" << 'EOF'
-# Project Rules
+# project.md is copied above along with engineering.md/workflow.md — this used to be an
+# independently hardcoded heredoc here (out of sync with both the framework's real project.md
+# and with kiln-init.ps1's starter content) — now there's one source of truth.
 
-- This project is configured for Kiln with four Codex-backed agents: specifier, coder, refactorer, and architect.
-- Project language: Python.
-- Preserve project-local Kiln configuration under `Kiln/`.
-- Keep swarm state local under `.Kiln/` (SQLite message queue) and worktrees under `.worktrees/`.
-- Prefer terse, explicit handoffs that report state and request role-appropriate review. Do not include verifications or sender process narrative.
-- Do not change another role's prompt or workflow ownership without explicit user direction.
-EOF
-echo "✓ Created project.md"
-
-# Write constitution.md
-cat > "$TARGET/kiln/constitution.md" << 'EOF'
-# Kiln Constitution
-
-This file takes precedence over subordinate files.
-Read and obey the following subordinate documents in order.
-
-1. `Kiln/constitution/project.md`
-2. `Kiln/constitution/engineering.md`
-3. `Kiln/constitution/workflow.md`
-
-If two subordinate files conflict, the earlier file wins.
-EOF
-echo "✓ Created constitution.md"
+# Copy the framework's real constitution.md instead of synthesizing our own — this used to be
+# an independently hardcoded heredoc (with a stale `Kiln/`-capitalized path bug) that could
+# drift from the framework's actual file. Now there's one source of truth.
+if [ -f "$KILN_DIR/project/constitution.md" ]; then
+    cp "$KILN_DIR/project/constitution.md" "$TARGET/kiln/project/constitution.md"
+    echo "✓ Copied constitution.md"
+fi
 
 
 # Write Claude Code configuration (copy template from framework)
@@ -192,9 +176,9 @@ if [ "$EXAMPLE" = "library-hub" ]; then
         cp "$FRAMEWORK_ROOT/examples/library-hub/README.md" "$TARGET/README.md"
         echo "✓ Copied example README.md"
     fi
-    example_project_md="$FRAMEWORK_ROOT/examples/$EXAMPLE/kiln/constitution/project.md"
+    example_project_md="$FRAMEWORK_ROOT/examples/$EXAMPLE/kiln/project/constitution/project.md"
     if [ -f "$example_project_md" ]; then
-        cp "$example_project_md" "$TARGET/kiln/constitution/project.md"
+        cp "$example_project_md" "$TARGET/kiln/project/constitution/project.md"
         echo "✓ Copied example-specific project.md"
     fi
 fi
@@ -278,8 +262,8 @@ echo "✓ Project created successfully: $TARGET"
 echo ""
 echo "Next steps:"
 echo "  1. cd $TARGET"
-echo "  2. Review Kiln/constitution/ and Kiln/roles/"
-echo "  3. git add Kiln/ .claude/ && git commit -m 'Add Kiln configuration'"
-echo "  4. Update Kiln/constitution/engineering.md if needed (tech stack, language rules)"
-echo "  5. Run: ./Kiln.sh to launch the multi-agent session"
+echo "  2. Review kiln/project/constitution/ and kiln/project/roles/"
+echo "  3. git add kiln/ .claude/ && git commit -m 'Add Kiln configuration'"
+echo "  4. Update kiln/project/constitution/engineering.md if needed (tech stack, language rules)"
+echo "  5. Run: ./kiln.sh to launch the multi-agent session"
 

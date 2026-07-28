@@ -2,9 +2,9 @@
 
 ## Notes
 
-- Message queue: SQLite at `.kiln/messages.db`, accessed via two MCP servers — `kiln-db` (generic `mcp-sqlite`, read/write) and `kiln-channel` (`kiln/mcp-server/channel.py`, blocking `wait_for_message()` for Claude agents; Copilot has no channel, only `kiln-db` polling)
-- Receive/handoff mechanics live in the `/kiln-receive` and `/kiln-handoff` skills (`kiln/skills/kiln-receive`, `kiln/skills/kiln-handoff`), not inline in role files or the loop templates
-- Testing: use the `selftest` profile (`kiln/profiles.json`) — see README "Communication System Health Check"
+- Message queue: SQLite at `.kiln/messages.db`, accessed via two MCP servers — `kiln-db` (generic `mcp-sqlite`, read/write) and `kiln-channel` (`kiln/framework/mcp-server/channel.py`, blocking `wait_for_message()` for Claude agents; Copilot has no channel, only `kiln-db` polling)
+- Receive/handoff mechanics live in the `/kiln-receive` and `/kiln-handoff` skills (`kiln/project/skills/kiln-receive`, `kiln/project/skills/kiln-handoff`), not inline in role files or the loop templates
+- Testing: use the `selftest` profile (`kiln/framework/profiles.json`) — see README "Communication System Health Check"
 - Diagnostics: `bin/kiln-db.ps1` (`list-messages`/`show-message`/`stats`/`retry-message`/`clear-old`), `.kiln/logs/channel-<role>.log`, `.kiln/logs/claude-debug-<role>.log` (`--debug-file`)
 
 ---
@@ -49,7 +49,7 @@
   - Create `~/.grok/mcp-config.json` in `prepare_agent_configs` (Bash)
   - Add a Grok case to the same command builders as above
   - Include permission flags in the launch command
-  - Add a `grok-test` profile to `kiln/profiles.json`
+  - Add a `grok-test` profile to `kiln/framework/profiles.json`
 
 - [ ] **Validate Grok Integration**
   - Launch a single Grok agent and verify MCP tool access
@@ -88,7 +88,7 @@
 
 ## 3. Handoff Reliability Hardening
 
-**Context:** Kiln runs persistent, always-on Claude agents communicating via the SQLite message queue. Historically ~10% of cycles failed — an agent would complete its work but never send (or never resume waiting for) the next handoff. Live multi-cycle testing against the LibraryHub example this session found and fixed one confirmed root cause: the loop templates' "not end-of-turn" guardrail only covered through the handoff-sent step, not the return to `/kiln-receive` — so a verified handoff looked like a valid stopping point. That's fixed (`kiln/templates/loop-*-claude.md`), along with the `/kiln-handoff` skill's own verify-and-retry on the INSERT.
+**Context:** Kiln runs persistent, always-on Claude agents communicating via the SQLite message queue. Historically ~10% of cycles failed — an agent would complete its work but never send (or never resume waiting for) the next handoff. Live multi-cycle testing against the LibraryHub example this session found and fixed one confirmed root cause: the loop templates' "not end-of-turn" guardrail only covered through the handoff-sent step, not the return to `/kiln-receive` — so a verified handoff looked like a valid stopping point. That's fixed (`kiln/framework/templates/loop-*-claude.md`), along with the `/kiln-handoff` skill's own verify-and-retry on the INSERT.
 
 The tracks below are further hardening layers — useful if stalls recur with a different root cause, or to make enforcement deterministic (code) rather than relying on prompt wording:
 
@@ -107,7 +107,7 @@ Hooks run shell code at fixed lifecycle points regardless of what the LLM decide
 ### Track C — Watcher/Orchestrator Process (near-100% reliability, high effort)
 
 - [ ] Add a `workflow_state` table (`agent`, `branch`, `state`, `last_updated`; states `WAITING | EXECUTING | COMMITTED | HANDOFF_SENT`)
-- [ ] `kiln/mcp-server/watcher.py` — polls `workflow_state` every ~10s; if an agent is stuck in `EXECUTING` past a timeout (default 15 min), INSERTs a corrective message into that agent's own inbox ("handoff not sent, complete it now")
+- [ ] `kiln/framework/mcp-server/watcher.py` — polls `workflow_state` every ~10s; if an agent is stuck in `EXECUTING` past a timeout (default 15 min), INSERTs a corrective message into that agent's own inbox ("handoff not sent, complete it now")
 - [ ] Infer state transitions from existing DB/git activity (delivered message → `EXECUTING`; new outgoing message → `HANDOFF_SENT`; next `wait_for_message()` → `WAITING`) rather than adding new tools agents must remember to call
 - [ ] New optional `-Watcher` switch on `kiln.ps1`; extend `-Stop` to also kill `watcher.py` processes (same pattern as the existing `channel.py` kill list)
 - [ ] **Escalation path if the watcher's nudge-based approach isn't enough**: a fuller orchestrator that owns *all* state transitions — agent only executes the task and signals completion; the orchestrator (deterministic code) does the squash/handoff/state-update itself. Bigger redesign (agents become "smart task executors" rather than full workflow owners); only worth it if Track C's lighter nudge approach proves insufficient in practice.
@@ -148,12 +148,12 @@ Distinct from Section 1 (launching Codex/Grok at all) — this is about letting 
   - Semantic search: embeddings (Claude API or local)
 
 - [ ] **Implement MCP server**
-  - `kiln/mcp-server/doc-server.py`
+  - `kiln/framework/mcp-server/doc-server.py`
   - Register alongside existing `kiln-db` server
   - Expose `search_documentation`, `get_document`, `list_sources` tools
   - Cache documents in SQLite (`.kiln/docs.db`)
 
-- [ ] **Configuration in `kiln/profiles.json`**
+- [ ] **Configuration in `kiln/framework/profiles.json`**
   - Add optional `documentation` field per profile:
 
     ```json
@@ -166,7 +166,7 @@ Distinct from Section 1 (launching Codex/Grok at all) — this is about letting 
 
 - [ ] **Integration with agent roles**
   - Inject documentation server config into `CLAUDE.md` for specifier, architect
-  - Document usage in `kiln/constitution/workflow.md`
+  - Document usage in `kiln/project/constitution/workflow.md`
   - Add to selftest: verify agents can query documentation
 
 - [ ] **CLI utilities**

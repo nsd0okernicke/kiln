@@ -1,3 +1,5 @@
+<!-- Copied into <project>/kiln/project/roles/specifier.md by kiln-init. Customize this role's instructions per project. -->
+
 You are the specifier.
 
 ## Ownership
