@@ -250,6 +250,7 @@ kiln/
       specifier.md             # Specifier role (Gherkin acceptance tests)
       reviewer.md              # Reviewer role (batch review alternative to refactorer)
       selftest.md              # Selftest role (communication chain validation)
+      human-in-the-loop.md    # Human-in-the-loop role (human-facing intake and approval checkpoint)
     constitution/
       workflow.md              # Handoff protocol, branch discipline, queue format
       engineering.md           # Language, tools, dependencies, practices
@@ -322,6 +323,8 @@ The cycle flows: **specifier → coder → refactorer → architect → specifie
 - **`architect`** — Reviews module structure, runs pre-handoff verification (mutation → DRY → soft Gherkin), sends completion back to specifier.
 
 > **Optional role:** `reviewer` is an alternative to `refactorer` with a focus on batch processing and review pipelines. Add it to your profile in `kiln/framework/profiles.json` to use it instead. See `kiln/project/roles/reviewer.md`.
+>
+> **Optional role:** `human-in-the-loop` is a human-facing intake and approval checkpoint ahead of the cycle, for profiles where `specifier` itself runs in `auto` mode with no user present. The `human-autonomous` profile (`kiln/framework/profiles.json`) pairs it with an autonomous specifier: `human-in-the-loop` (manual, `@current`) gathers and confirms a request with the user, hands it to `specifier` (now `auto`, its own worktree), which runs its normal Gherkin workflow non-interactively and forwards the eventual architect completion report back to `human-in-the-loop` for the user to see. See `kiln/project/roles/human-in-the-loop.md` and `kiln/project/roles/specifier.md` → "Auto-Mode Worker Entry Point".
 
 ---
 

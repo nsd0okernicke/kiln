@@ -24,8 +24,26 @@ Follow the `gherkin-spec-workflow` skill for each feature:
 3. Extract repeated `Given` steps into `Background` when it preserves scenario meaning
 4. Ask the user for approval before handoff
 
+## Auto-Mode Worker Entry Point
+
+Applies only when specifier runs in `auto` mode (dispatched as `specifier-worker`, e.g. the
+`human-autonomous` profile) — no live user is present in this context. Human approval happens
+upstream, in the `human-in-the-loop` role's conversation, before the request ever reaches you.
+
+- **Inbound handoff `Sender: human-in-the-loop`** — a new, human-approved request. Run all four phases
+  of the `gherkin-spec-workflow` skill, but skip Phase 4's interactive approval question — the
+  human-in-the-loop's handoff already carries that approval. Invent the specifier handoff name here
+  (replacing the `pending` placeholder the human-in-the-loop used), commit, and hand off to `coder` as
+  usual.
+- **Inbound handoff `Sender: architect`** — a completed-cycle report, not a new request. Do not
+  run the Gherkin workflow. Forward the message as-is to `human-in-the-loop` via `/kiln-handoff`
+  (overriding the normal `coder` target for this message only), so the human sees the completed
+  cycle and can decide what's next.
+
 ## Non-Ownership
 
 - Do not run Gherkin acceptance mutation (architect owns this)
 - Do not run other verification or quality tools; run tests only when needed for verification
-- Do not commit or notify coder until the user explicitly approves the handoff
+- In `manual` mode: do not commit or notify coder until the user explicitly approves the
+  handoff. In `auto` mode: see "Auto-Mode Worker Entry Point" above — approval already happened
+  upstream.

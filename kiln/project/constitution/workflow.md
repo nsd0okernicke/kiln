@@ -56,8 +56,14 @@ Next role: <next-role-name>
 
 | Role | Sends to |
 | ---- | -------- |
+| human-in-the-loop | specifier |
 | specifier | coder |
 | coder | refactorer |
 | refactorer | architect |
 | architect | specifier |
 | selftest | selftest |
+
+**Note (`human-autonomous` profile only):** `specifier` overrides this default for one case —
+when it receives a handoff from `architect` (a completed-cycle report) instead of `human-in-the-loop`
+(a new request), it forwards to `human-in-the-loop` instead of `coder`. See `roles/specifier.md` →
+"Auto-Mode Worker Entry Point".

@@ -100,7 +100,10 @@
       "WebFetch(domain:learn.chatgpt.com)",
       "Bash(python3 -c ' *)",
       "Bash(awk '/^write_codex_worker_agent_file\\\\\\(\\\\\\) \\\\{/,/^\\\\}/' \"c:/projekte/agentic-coding/kiln/bin/kiln.sh\")",
-      "Bash(bash /tmp/kiln-sh-test2/f.sh)"
+      "Bash(bash /tmp/kiln-sh-test2/f.sh)",
+      "Bash(python -c \"import json; json.load\\(open\\('kiln/framework/profiles.json'\\)\\)\")",
+      "Bash(pwsh -NoProfile -File \"./bin/kiln-init.ps1\" -Target \"C:\\\\projekte\\\\agentic-coding\\\\library-hub-testrun5\" -Example library-hub)",
+      "PowerShell(pwsh -NoProfile -File \".\\\\bin\\\\kiln.ps1\" -WorkingDir \"C:\\\\projekte\\\\agentic-coding\\\\library-hub-testrun5\" -ProfileName \"human-autonomous\")"
     ],
     "additionalDirectories": [
       "C:\\projekte\\swarm-forge\\examples\\library-hub",

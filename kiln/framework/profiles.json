@@ -121,6 +121,87 @@
         "DEBUG": "false"
       }
     },
+    "human-autonomous": {
+      "description": "Human-guided request intake (human-in-the-loop) feeding a fully autonomous specifier -> coder -> refactorer -> architect cycle",
+      "terminals": [
+        {
+          "role": "human-in-the-loop",
+          "agent": "claude",
+          "worktree": "@current",
+          "title": "Kiln Human-in-the-Loop",
+          "mode": "manual",
+          "model": "claude-sonnet-5"
+        },
+        {
+          "role": "specifier",
+          "agent": "claude",
+          "worktree": "specifier",
+          "title": "Kiln Specifier",
+          "mode": "auto",
+          "model": "claude-sonnet-5"
+        },
+        {
+          "role": "coder",
+          "agent": "claude",
+          "worktree": "coder",
+          "title": "Kiln Coder",
+          "mode": "auto",
+          "model": "claude-sonnet-5"
+        },
+        {
+          "role": "refactorer",
+          "agent": "claude",
+          "worktree": "refactorer",
+          "title": "Kiln Refactorer",
+          "mode": "auto",
+          "model": "claude-sonnet-5"
+        },
+        {
+          "role": "architect",
+          "agent": "claude",
+          "worktree": "architect",
+          "title": "Kiln Architect",
+          "mode": "auto",
+          "model": "claude-sonnet-5"
+        }
+      ],
+      "layout": {
+        "tabs": [
+          {
+            "title": "Human-in-the-Loop",
+            "panes": [
+              {
+                "role": "human-in-the-loop"
+              }
+            ]
+          },
+          {
+            "title": "Autonomous Cycle",
+            "gridRows": 2,
+            "gridCols": 2,
+            "panes": [
+              {
+                "role": "specifier"
+              },
+              {
+                "role": "coder"
+              },
+              {
+                "role": "refactorer"
+              },
+              {
+                "role": "architect"
+              }
+            ]
+          }
+        ]
+      },
+      "messageBackend": "sqlite",
+      "logLevel": "info",
+      "env": {
+        "DEBUG": "false"
+      }
+    },
     "dual-pane": {
       "description": "Two tabs with two panes each",
       "terminals": [

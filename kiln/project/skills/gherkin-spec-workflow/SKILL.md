@@ -146,6 +146,11 @@ Feature: Order processing
 
 **Goal**: Present the refined feature file to the user for approval before handing off to the coder.
 
+**Skip this phase when running as `specifier-worker` in `auto` mode** (no live user in that
+context — see `roles/specifier.md` → "Auto-Mode Worker Entry Point"). Approval already happened
+upstream, in the `human-in-the-loop` role's conversation with the user; proceed straight to the
+commit message and handoff to coder below.
+
 **Steps**:
 1. Render the complete feature file (Gherkin with Background and Scenarios)
 2. Show the mutation-aware parameter table

@@ -227,16 +227,27 @@ Distinct from Section 1 (launching Codex/Grok at all) — this is about letting 
 **Entry point:** Human tab handoff → specifier's inbox; specifier then enters its normal auto-delegation cycle. No new loop mechanics needed — specifier's auto loop already expects to *receive* a message from the queue before delegating, so the human tab's handoff just becomes its first inbound message.
 
 **Requirements:**
-- [ ] Create `specifier-worker.md` subagent definition (follows same pattern as coder/refactorer/architect workers)
-- [ ] Add `storyteller` or similar manual role to constitution (if reusing roles, can adapt "specifier" to auto mode instead)
-- [ ] Add new profile to `kiln/framework/profiles.json` (e.g., `"human-autonomous"`)
-- [ ] Test end-to-end: human tab → handoff → specifier auto-delegates → full cycle
+- [x] ~~Create `specifier-worker.md` subagent definition~~ — not needed: `Write-GeneratedWorkerAgent`
+      in `kiln.ps1` already generates `<role>-worker.md` generically for any role with `mode: auto`,
+      driven purely by the profile's role list. Setting `specifier`'s `mode` to `auto` in the new
+      profile is sufficient; the framework generates `specifier-worker.md` automatically.
+- [x] Add `human-in-the-loop` manual role — `kiln/project/roles/human-in-the-loop.md`. Also required an
+      addition to `specifier.md` ("Auto-Mode Worker Entry Point") since specifier had never run in
+      `auto` mode before (README previously documented it as manual-only): it skips the interactive
+      approval question (no live user in worker context — approval already happened upstream via
+      human-in-the-loop) and, on receiving the architect's completion handback, forwards it to
+      `human-in-the-loop` instead of running the Gherkin workflow again. Routing documented in
+      `constitution/workflow.md`.
+- [x] Add new profile to `kiln/framework/profiles.json` — `"human-autonomous"`
+- [ ] **Test end-to-end: human tab → handoff → specifier auto-delegates → full cycle** — not done
+      yet; requires actually launching the profile (real terminals, real agent processes) rather
+      than a file/config change. Do this before relying on the profile for real work.
 
 ---
 
 ## 6. Skills Audit & Improvement (2026-07-29)
 
-**Summary:** Inventory of 27 skills; 15 actively used, 5 infrastructure, 7 unused/exploratory. Multiple gaps identified in orchestration, preconditions, and error handling.
+**Summary:** Inventory of 27 skills (now 26 — `acceptance-test-writer` removed 2026-07-29); 15 actively used, 5 infrastructure, 7 unused/exploratory. Multiple gaps identified in orchestration, preconditions, and error handling.
 
 ### Inventory & Usage Classification
 
@@ -255,7 +266,7 @@ Distinct from Section 1 (launching Codex/Grok at all) — this is about letting 
 - Documentation: `documentation-updater`
 - Exploration: `grill-me`, `grill-with-docs`, `kickoff`, `zoom-out`, `caveman`
 - Language-specific: `crap-run` (Python), `aps-setup` (APS tools)
-- Deprecated: `acceptance-test-writer` (use `gherkin-spec-workflow` instead)
+- ~~Deprecated: `acceptance-test-writer`~~ — removed 2026-07-29, use `gherkin-spec-workflow` instead
 
 ### Gaps & Improvement Opportunities
 
@@ -263,9 +274,9 @@ Distinct from Section 1 (launching Codex/Grok at all) — this is about letting 
    - Roles mention multiple skills but don't document dependencies or optimal sequencing
    - Action: Create `SKILL_ORCHESTRATION.md` showing execution order for refactorer quality gates (coverage → CRAP → mutation → property-test)
 
-2. **Deprecated: acceptance-test-writer**
-   - Warns to use `gherkin-spec-workflow` instead, but both exist
-   - Action: Mark as deprecated in SKILL.md or clarify narrow use case
+2. ~~**Deprecated: acceptance-test-writer**~~ — resolved 2026-07-29: skill removed entirely
+   (nothing in `roles/`, `templates/`, or `profiles.json` referenced it; `gherkin-spec-workflow`
+   is the specifier's only acceptance-test skill).
 
 3. **Missing: Skill Preconditions & Tool Availability**
    - Many skills (coverage-check, crap-analyzer, mutation-testing) require external tools (coverage.py, radon, PIT, gherkin-mutator)
@@ -310,8 +321,8 @@ Distinct from Section 1 (launching Codex/Grok at all) — this is about letting 
 
 ### Recommended Action Items
 
-- [ ] Create `kiln/project/constitution/skill-orchestration.md` documenting dependency chains and execution order
-- [ ] Mark `acceptance-test-writer` as deprecated in SKILL.md with redirect to `gherkin-spec-workflow`
+- [x] Create `kiln/project/constitution/skill-orchestration.md` documenting dependency chains and execution order
+- [x] ~~Mark `acceptance-test-writer` as deprecated~~ — removed the skill entirely instead (nothing referenced it)
 - [ ] Add tool precondition checks to role startup; fail gracefully with clear "missing tool" messages
 - [ ] Document `zoom-out` invocation path or remove if truly obsolete
 - [ ] Define mutation-testing ownership protocol — architect owns acceptance mutation, shared manifest format
