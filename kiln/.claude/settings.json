@@ -115,6 +115,36 @@
       "PowerShell(| *)",
       "PowerShell(.*)"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__kiln-channel__wait_for_message",
+        "hooks": [
+          { "type": "command", "command": "python .kiln/tools/status-hook.py" }
+        ]
+      },
+      {
+        "matcher": "Task|Agent",
+        "hooks": [
+          { "type": "command", "command": "python .kiln/tools/status-hook.py" }
+        ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          { "type": "command", "command": "python .kiln/tools/status-hook.py" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__kiln-channel__wait_for_message",
+        "hooks": [
+          { "type": "command", "command": "python .kiln/tools/status-hook.py" }
+        ]
+      }
+    ]
   }
 }
 

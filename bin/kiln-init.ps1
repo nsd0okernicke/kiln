@@ -25,7 +25,7 @@ param(
     [string]$Example = "",
 
     [Parameter(Mandatory=$false)]
-    [string]$Profile = "dev",
+    [string]$Profile = "default",
 
     [Parameter(Mandatory=$false)]
     [switch]$NoGit = $false,

@@ -113,8 +113,31 @@
       "PowerShell(| Sort-Object *)",
       "PowerShell(| Select-Object *)",
       "PowerShell(| *)",
-      "PowerShell(.*)"
+      "PowerShell(.*)",
+      "Bash(ls -la ~/.kiln/ 2>/dev/null; cat ~/.kiln/profiles.json 2>/dev/null; echo \"---\"; ls -la /c/ProgramData/kiln/ 2>/dev/null)",
+      "Read(//c/ProgramData/**)",
+      "Bash(pwsh -NoProfile -Command '. .\\\\lib\\\\profile-loader.ps1; Get-KilnDefaultProfileName -ProjectRoot \"C:\\\\projekte\\\\agentic-coding\\\\library-hub-testrun3\" -FrameworkRoot \\(Resolve-Path .\\).Path')",
+      "Bash(timeout 15 pwsh -NoProfile -File \"./bin/kiln.ps1\" -WorkingDir \"C:\\\\projekte\\\\agentic-coding\\\\library-hub-testrun3\")",
+      "Bash(tasklist //FI \"IMAGENAME eq wezterm-gui.exe\")",
+      "Bash(tasklist //FI \"IMAGENAME eq wezterm.exe\")",
+      "Bash(tasklist //FI \"IMAGENAME eq claude.exe\")",
+      "Bash(tasklist //FI \"IMAGENAME eq node.exe\")",
+      "Bash(rm -rf \"/c/projekte/agentic-coding/library-hub-testrun3/.worktrees/architect\" \"/c/projekte/agentic-coding/library-hub-testrun3/.worktrees/coder\" \"/c/projekte/agentic-coding/library-hub-testrun3/.worktrees/refactorer\" \"/c/projekte/agentic-coding/library-hub-testrun3/.worktrees/specifier\" && ls -la \"/c/projekte/agentic-coding/library-hub-testrun3/.worktrees\")",
+      "Bash(python3 -c ' *)",
+      "Bash(sqlite3 \"C:/projekte/agentic-coding/library-hub-testrun3/.kiln/messages.db\" \".tables\")",
+      "Bash(sqlite3 \"C:/projekte/agentic-coding/library-hub-testrun3/.kiln/messages.db\" \".schema messages\")",
+      "Bash(sqlite3 -header -column \"C:/projekte/agentic-coding/library-hub-testrun3/.kiln/messages.db\" \"SELECT id, from_role, to_role, branch, status, created_at, delivered_at FROM messages ORDER BY id;\")",
+      "Bash(sqlite3 -header -column \"C:/projekte/agentic-coding/library-hub-testrun3/.kiln/messages.db\" \"SELECT id, sender, target, branch, status, created_at, delivered_at, processed_at FROM messages ORDER BY created_at;\")",
+      "Bash(git -C \"/c/projekte/agentic-coding/kiln\" ls-files kiln/framework/tools/)",
+      "Bash(python -c ' *)",
+      "Read(//tmp/**)",
+      "Bash(python kiln/framework/tools/status-hook.py)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(python -c \"import json; json.load\\(open\\('kiln/.claude/settings.json'\\)\\); print\\('valid JSON'\\)\")",
+      "Bash(git check-ignore *)"
+    ],
+    "additionalDirectories": [
+      "C:\\projekte\\agentic-coding\\library-hub-testrun3\\.worktrees\\architect"
     ]
   }
 }
-

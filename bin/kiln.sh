@@ -936,7 +936,6 @@ if (( DRY_RUN )); then
   echo -e "${CYAN}${BOLD}"
   echo "  ╔═══════════════════════════════════════════════╗"
   echo "  ║           Kiln v1.0 Starting            ║"
-  echo "  ║   Disciplined agents build better software    ║"
   echo "  ╚═══════════════════════════════════════════════╝"
   echo -e "${RESET}"
   echo -e "${YELLOW}[DRY RUN] Would launch agents via: $(terminal_backend_label)${RESET}"
@@ -961,7 +960,6 @@ done
 echo -e "${CYAN}${BOLD}"
 echo "  ╔═══════════════════════════════════════════════╗"
 echo "  ║           Kiln v1.0 Starting            ║"
-echo "  ║   Disciplined agents build better software    ║"
 echo "  ╚═══════════════════════════════════════════════╝"
 echo -e "${RESET}"
 

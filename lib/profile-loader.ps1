@@ -14,11 +14,72 @@ Supports cascading lookup: project-local > user config > system config.
 Path to the project root where profiles.json is located.
 
 .PARAMETER Profile
-Name of the profile to load (default: 'dev').
+Name of the profile to load (default: 'default').
 
 .PARAMETER ConfigPath
 Optional path to profiles.json. If not provided, searches standard locations.
 #>
+
+function Find-KilnProfilesConfig {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ProjectRoot,
+
+        [Parameter(Mandatory=$false)]
+        [string]$FrameworkRoot = ""
+    )
+
+    $searchPaths = @(
+        (Join-Path -Path $ProjectRoot -ChildPath "kiln.profiles.json"),
+        (Join-Path -Path $ProjectRoot -ChildPath (Join-Path -Path "kiln" -ChildPath "profiles.json")),
+        (Join-Path -Path $ProjectRoot -ChildPath (Join-Path -Path ".kiln" -ChildPath "profiles.json"))
+    )
+
+    # Add framework root if provided
+    if ($FrameworkRoot) {
+        $searchPaths += (Join-Path -Path $FrameworkRoot -ChildPath (Join-Path -Path "kiln" -ChildPath (Join-Path -Path "framework" -ChildPath "profiles.json")))
+    }
+
+    # Add user and system paths
+    $searchPaths += @(
+        (Join-Path -Path $env:USERPROFILE -ChildPath (Join-Path -Path ".kiln" -ChildPath "profiles.json")),
+        "C:\ProgramData\kiln\profiles.json"
+    )
+
+    foreach ($path in $searchPaths) {
+        if (Test-Path $path) {
+            Write-Verbose "Found profiles.json at: $path"
+            return $path
+        }
+    }
+
+    throw "Could not find profiles.json. Searched: $($searchPaths -join ', ')"
+}
+
+function Get-KilnDefaultProfileName {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ProjectRoot,
+
+        [Parameter(Mandatory=$false)]
+        [string]$FrameworkRoot = "",
+
+        [Parameter(Mandatory=$false)]
+        [string]$FallbackName = "default"
+    )
+
+    try {
+        $configPath = Find-KilnProfilesConfig -ProjectRoot $ProjectRoot -FrameworkRoot $FrameworkRoot
+        $config = Get-Content -Path $configPath -Raw | ConvertFrom-Json
+        if ($config.default) {
+            return $config.default
+        }
+    } catch {
+        Write-Verbose "Could not determine default profile from profiles.json: $_"
+    }
+
+    return $FallbackName
+}
 
 function Load-KilnProfile {
     param(
@@ -26,7 +87,7 @@ function Load-KilnProfile {
         [string]$ProjectRoot,
 
         [Parameter(Mandatory=$false)]
-        [string]$Profile = "dev",
+        [string]$Profile = "default",
 
         [Parameter(Mandatory=$false)]
         [string]$ConfigPath = "",
@@ -37,34 +98,7 @@ function Load-KilnProfile {
 
     # Find profiles.json if not provided
     if (-not $ConfigPath) {
-        $searchPaths = @(
-            (Join-Path -Path $ProjectRoot -ChildPath "kiln.profiles.json"),
-            (Join-Path -Path $ProjectRoot -ChildPath (Join-Path -Path "kiln" -ChildPath "profiles.json")),
-            (Join-Path -Path $ProjectRoot -ChildPath (Join-Path -Path ".kiln" -ChildPath "profiles.json"))
-        )
-
-        # Add framework root if provided
-        if ($FrameworkRoot) {
-            $searchPaths += (Join-Path -Path $FrameworkRoot -ChildPath (Join-Path -Path "kiln" -ChildPath (Join-Path -Path "framework" -ChildPath "profiles.json")))
-        }
-
-        # Add user and system paths
-        $searchPaths += @(
-            (Join-Path -Path $env:USERPROFILE -ChildPath (Join-Path -Path ".kiln" -ChildPath "profiles.json")),
-            "C:\ProgramData\kiln\profiles.json"
-        )
-
-        foreach ($path in $searchPaths) {
-            if (Test-Path $path) {
-                $ConfigPath = $path
-                Write-Verbose "Found profiles.json at: $ConfigPath"
-                break
-            }
-        }
-
-        if (-not $ConfigPath) {
-            throw "Could not find profiles.json. Searched: $($searchPaths -join ', ')"
-        }
+        $ConfigPath = Find-KilnProfilesConfig -ProjectRoot $ProjectRoot -FrameworkRoot $FrameworkRoot
     }
 
     # Load and parse JSON

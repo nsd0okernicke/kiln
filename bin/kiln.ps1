@@ -97,6 +97,16 @@ function Write-DirectoryGitignore {
     }
 }
 
+function Add-GitignoreEntry {
+    param([string]$Path, [string]$Entry)
+
+    try {
+        Add-Content -Path $Path -Value $Entry -Encoding UTF8
+    } catch {
+        Write-Host "Warning: Could not update .gitignore entry '$Entry': $_" -ForegroundColor Yellow
+    }
+}
+
 function Ensure-InitialGitignore {
     $gitignorePath = Join-Path $WorkingDir ".gitignore"
     if (Test-Path $gitignorePath) {
@@ -126,16 +136,16 @@ function Ensure-InitialGitignore {
         $needsClaudeAgents = $content -notmatch '^\s*\.claude/agents/\*-worker\.md\s*$'
         $needsCodexAgents = $content -notmatch '^\s*\.codex/agents/\*-worker\.toml\s*$'
 
-        if ($needsKiln) { Add-Content $gitignorePath ".kiln" -Encoding UTF8 }
-        if ($needsWorktrees) { Add-Content $gitignorePath ".worktrees/" -Encoding UTF8 }
-        if ($needsGithub) { Add-Content $gitignorePath ".github/" -Encoding UTF8 }
-        if ($needsClaudeSkills) { Add-Content $gitignorePath ".claude/skills" -Encoding UTF8 }
-        if ($needsClaudeMd) { Add-Content $gitignorePath "CLAUDE.md" -Encoding UTF8 }
-        if ($needsAgentsMd) { Add-Content $gitignorePath "AGENTS.md" -Encoding UTF8 }
-        if ($needsMcpJson) { Add-Content $gitignorePath ".mcp.json" -Encoding UTF8 }
-        if ($needsTmp) { Add-Content $gitignorePath "tmp/" -Encoding UTF8 }
-        if ($needsClaudeAgents) { Add-Content $gitignorePath ".claude/agents/*-worker.md" -Encoding UTF8 }
-        if ($needsCodexAgents) { Add-Content $gitignorePath ".codex/agents/*-worker.toml" -Encoding UTF8 }
+        if ($needsKiln) { Add-GitignoreEntry -Path $gitignorePath -Entry ".kiln" }
+        if ($needsWorktrees) { Add-GitignoreEntry -Path $gitignorePath -Entry ".worktrees/" }
+        if ($needsGithub) { Add-GitignoreEntry -Path $gitignorePath -Entry ".github/" }
+        if ($needsClaudeSkills) { Add-GitignoreEntry -Path $gitignorePath -Entry ".claude/skills" }
+        if ($needsClaudeMd) { Add-GitignoreEntry -Path $gitignorePath -Entry "CLAUDE.md" }
+        if ($needsAgentsMd) { Add-GitignoreEntry -Path $gitignorePath -Entry "AGENTS.md" }
+        if ($needsMcpJson) { Add-GitignoreEntry -Path $gitignorePath -Entry ".mcp.json" }
+        if ($needsTmp) { Add-GitignoreEntry -Path $gitignorePath -Entry "tmp/" }
+        if ($needsClaudeAgents) { Add-GitignoreEntry -Path $gitignorePath -Entry ".claude/agents/*-worker.md" }
+        if ($needsCodexAgents) { Add-GitignoreEntry -Path $gitignorePath -Entry ".codex/agents/*-worker.toml" }
     } else {
         # Create new .gitignore with essential patterns
         $gitignoreContent = @'
@@ -204,10 +214,14 @@ function Initialize-GitRepo {
         # .kiln symlink (and anything else meant to be ignored) stays unprotected in each
         # worktree, and the next broad `git add` there can accidentally track it — which later
         # breaks merges that try to check that tracked symlink out over a locked messages.db.
-        $gitignoreTracked = git -C $WorkingDir ls-files --error-unmatch .gitignore 2>$null
-        if (-not $gitignoreTracked) {
-            git -C $WorkingDir add .gitignore | Out-Null
-            git -C $WorkingDir commit -m "kiln: ensure .gitignore is tracked before creating worktrees" 2>&1 | Out-Null
+        try {
+            $gitignoreTracked = git -C $WorkingDir ls-files --error-unmatch .gitignore 2>$null
+            if (-not $gitignoreTracked) {
+                git -C $WorkingDir add .gitignore 2>$null | Out-Null
+                git -C $WorkingDir commit -m "kiln: ensure .gitignore is tracked before creating worktrees" 2>&1 | Out-Null
+            }
+        } catch {
+            Write-Host "Warning: Could not verify .gitignore tracking: $_" -ForegroundColor Yellow
         }
     }
 }
@@ -452,7 +466,13 @@ function Prepare-Worktrees {
         }
 
         # Create symlink to shared .kiln directory (use relative path for portability)
-        $relativeStatePath = [System.IO.Path]::GetRelativePath($worktreePath, $STATE_DIR)
+        $targetStatePath = [System.IO.Path]::GetFullPath($STATE_DIR)
+        $relativeStatePath = [System.IO.Path]::GetFullPath((Join-Path $worktreePath ".kiln"))
+        $relativeStatePath = Resolve-Path -LiteralPath $relativeStatePath -ErrorAction SilentlyContinue
+        if ($relativeStatePath) {
+            $relativeStatePath = $relativeStatePath.Path
+        }
+        $relativeStatePath = $targetStatePath
         try {
             New-Item -ItemType SymbolicLink -Path $worktreeKilnDir -Target $relativeStatePath -Force -ErrorAction Stop | Out-Null
             Write-Host "    [$role] ✓ Symlinked .kiln → $relativeStatePath" -ForegroundColor Green
@@ -687,7 +707,11 @@ function Get-KilnConstitutionHeader {
 }
 
 function Get-KilnRole([string]$Role) {
-    $raw = Get-Content (Join-Path $KILN_PROJECT_DIR "roles/$Role.md") -Raw -ErrorAction Stop
+    $rolePath = Join-Path $KILN_PROJECT_DIR "roles/$Role.md"
+    if (-not (Test-Path $rolePath)) {
+        return $null
+    }
+    $raw = Get-Content $rolePath -Raw -ErrorAction Stop
     $stripped = ($raw -replace '(?ms)^## (Message Loop|Interaction Loop).*?(?=^## |\z)', '').TrimStart("`r", "`n")
     "# Role`n`n" + $stripped
 }
@@ -701,6 +725,9 @@ function Apply-Substitutions([string]$Text, [hashtable]$Map) {
 
 function Read-HandoffRoutingTable([string]$Path) {
     $table = @{}
+    if (-not (Test-Path $Path)) {
+        return $table
+    }
     $fileContent = Get-Content $Path -Raw
     $tableMatches = [regex]::Matches($fileContent, '(?m)^\|\s*(\w+)\s*\|\s*(\w+)\s*\|')
     foreach ($m in $tableMatches) {
@@ -1244,13 +1271,14 @@ $CurrentBranch = git -C $WorkingDir rev-parse --abbrev-ref HEAD 2>$null
 if (-not $CurrentBranch -or $CurrentBranch -eq "HEAD") { $CurrentBranch = "kiln" }
 
 # Load configuration profile
+. "$SCRIPT_DIR\..\lib\profile-loader.ps1"
+$frameworkRoot = Split-Path -Parent $SCRIPT_DIR
+
 if (-not $ProfileName) {
-    $ProfileName = "dev"
+    $ProfileName = Get-KilnDefaultProfileName -ProjectRoot $WorkingDir -FrameworkRoot $frameworkRoot
 }
 
 Write-Host "Loading configuration profile: $ProfileName" -ForegroundColor Cyan
-. "$SCRIPT_DIR\..\lib\profile-loader.ps1"
-$frameworkRoot = Split-Path -Parent $SCRIPT_DIR
 try {
     $profileVars = Load-KilnProfile -ProjectRoot $WorkingDir -FrameworkRoot $frameworkRoot -Profile $ProfileName
     if ($profileVars) {
@@ -1359,7 +1387,6 @@ Set-Content (Join-Path $STATE_DIR "runtime.env") "terminal=$TerminalBackend" -En
 
 Write-Host "  ╔═══════════════════════════════════════════════╗" -ForegroundColor Cyan
 Write-Host "  ║         Kiln v0.1 Starting                    ║" -ForegroundColor Cyan
-Write-Host "  ║    Disciplined agents build better software   ║" -ForegroundColor Cyan
 Write-Host "  ╚═══════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
 

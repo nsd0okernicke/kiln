@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "description": "Kiln configuration profiles for different development scenarios",
-  "default": "compact",
+  "default": "default",
   "profiles": {
     "compact": {
       "description": "Compact pane layout with all roles in one tab (2x2 grid)",
@@ -121,43 +121,52 @@
         "DEBUG": "false"
       }
     },
-    "human-autonomous": {
+    "default": {
       "description": "Human-guided request intake (human-in-the-loop) feeding a fully autonomous specifier -> coder -> refactorer -> architect cycle",
       "terminals": [
         {
           "role": "human-in-the-loop",
-          "agent": "copilot",
+          "agent": "claude",
           "worktree": "@current",
           "title": "Kiln Human-in-the-Loop",
-          "mode": "manual"
+          "mode": "manual",
+          "model": "claude-sonnet-5"
         },
         {
           "role": "specifier",
-          "agent": "copilot",
+          "agent": "claude",
           "worktree": "specifier",
           "title": "Kiln Specifier",
-          "mode": "auto"
+          "mode": "auto",
+          "model": "claude-haiku-4-5-20251001",
+          "workerModel": "claude-sonnet-5"
         },
         {
           "role": "coder",
-          "agent": "copilot",
+          "agent": "claude",
           "worktree": "coder",
           "title": "Kiln Coder",
-          "mode": "auto"
+          "mode": "auto",
+          "model": "claude-haiku-4-5-20251001",
+          "workerModel": "claude-sonnet-5"
         },
         {
           "role": "refactorer",
-          "agent": "copilot",
+          "agent": "claude",
           "worktree": "refactorer",
           "title": "Kiln Refactorer",
-          "mode": "auto"
+          "mode": "auto",
+          "model": "claude-haiku-4-5-20251001",
+          "workerModel": "claude-sonnet-5"
         },
         {
           "role": "architect",
-          "agent": "copilot",
+          "agent": "claude",
           "worktree": "architect",
           "title": "Kiln Architect",
-          "mode": "auto"
+          "mode": "auto",
+          "model": "claude-haiku-4-5-20251001",
+          "workerModel": "claude-sonnet-5"
         }
       ],
       "layout": {
