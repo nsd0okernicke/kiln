@@ -324,7 +324,7 @@ The cycle flows: **specifier → coder → refactorer → architect → specifie
 
 > **Optional role:** `reviewer` is an alternative to `refactorer` with a focus on batch processing and review pipelines. Add it to your profile in `kiln/framework/profiles.json` to use it instead. See `kiln/project/roles/reviewer.md`.
 >
-> **Optional role:** `human-in-the-loop` is a human-facing intake and approval checkpoint ahead of the cycle, for profiles where `specifier` itself runs in `auto` mode with no user present. The `human-autonomous` profile (`kiln/framework/profiles.json`) pairs it with an autonomous specifier: `human-in-the-loop` (manual, `@current`) gathers and confirms a request with the user, hands it to `specifier` (now `auto`, its own worktree), which runs its normal Gherkin workflow non-interactively and forwards the eventual architect completion report back to `human-in-the-loop` for the user to see. See `kiln/project/roles/human-in-the-loop.md` and `kiln/project/roles/specifier.md` → "Auto-Mode Worker Entry Point".
+> **Optional role:** `human-in-the-loop` is a human-facing intake and approval checkpoint ahead of the cycle, for profiles where `specifier` itself runs in `auto` mode with no user present. The framework's **`default` profile** (`kiln/framework/profiles.json`) pairs it with an autonomous specifier: `human-in-the-loop` (manual, `@current`) gathers and confirms a request with the user, hands it to `specifier` (now `auto`, its own worktree), which runs its normal Gherkin workflow non-interactively and forwards the eventual architect completion report back to `human-in-the-loop` for the user to see. See `kiln/project/roles/human-in-the-loop.md` and `kiln/project/roles/specifier.md` → "Auto-Mode Worker Entry Point".
 
 ---
 
@@ -367,7 +367,7 @@ Kiln will create a git repository if one doesn't exist, initialize worktrees, an
    Optional profile and terminal control:
 
    ```powershell
-   # Run the default 'dev' profile (standard 4-agent swarm with tab layout)
+   # Run the default 'default' profile (human-in-the-loop intake feeding an autonomous specifier -> coder -> refactorer -> architect cycle)
    .\bin\kiln.ps1 -WorkingDir .
 
    # Run a different profile (e.g., 'compact' with different layout or agent configuration)
@@ -432,53 +432,93 @@ Kiln will create a git repository if one doesn't exist, initialize worktrees, an
 
 ## Configuration Profiles
 
-Kiln uses JSON profiles to define swarm topology. The default profile is `dev`, which creates the standard 4-agent swarm. All projects inherit the framework's default profiles from `kiln/framework/profiles.json` automatically.
+Kiln uses JSON profiles to define swarm topology. The default profile is `default`, whose name is set by the top-level `"default"` key in `kiln/framework/profiles.json` (`Get-KilnDefaultProfileName` in `lib/profile-loader.ps1` resolves it at launch if `-ProfileName` isn't given). All projects inherit the framework's default profiles from `kiln/framework/profiles.json` automatically.
 
 **To customize profiles for a specific project**, create `kiln.profiles.json` at your project root. Kiln will use your custom profiles instead of the framework defaults.
 
 ### Framework Default Profile
 
-The framework provides the standard `dev` profile with tab-based layout:
+The framework's `default` profile pairs a human-facing intake role with a fully autonomous specifier → coder → refactorer → architect cycle: `human-in-the-loop` runs `manual` in the main directory (`@current`) to gather and confirm the request with you, then the other four roles run `auto` in their own worktrees with no human input needed. Each `auto` role is a Haiku shell that delegates the actual work to a Sonnet worker subagent each cycle (see "Decoupling shell and worker models" below):
 
 ```json
 {
   "profiles": {
-    "dev": {
-      "description": "Standard 4-agent swarm with isolated worktrees",
+    "default": {
+      "description": "Human-guided request intake (human-in-the-loop) feeding a fully autonomous specifier -> coder -> refactorer -> architect cycle",
       "terminals": [
         {
-          "role": "specifier",
-          "agent": "copilot",
+          "role": "human-in-the-loop",
+          "agent": "claude",
           "worktree": "@current",
-          "model": "claude-haiku-4-5-20251001"
+          "mode": "manual",
+          "model": "claude-sonnet-5"
+        },
+        {
+          "role": "specifier",
+          "agent": "claude",
+          "worktree": "specifier",
+          "mode": "auto",
+          "model": "claude-haiku-4-5-20251001",
+          "workerModel": "claude-sonnet-5"
         },
         {
           "role": "coder",
           "agent": "claude",
           "worktree": "coder",
-          "model": "claude-haiku-4-5-20251001"
+          "mode": "auto",
+          "model": "claude-haiku-4-5-20251001",
+          "workerModel": "claude-sonnet-5"
         },
         {
           "role": "refactorer",
           "agent": "claude",
           "worktree": "refactorer",
-          "model": "claude-haiku-4-5-20251001"
+          "mode": "auto",
+          "model": "claude-haiku-4-5-20251001",
+          "workerModel": "claude-sonnet-5"
         },
         {
           "role": "architect",
           "agent": "claude",
           "worktree": "architect",
-          "model": "claude-haiku-4-5-20251001"
+          "mode": "auto",
+          "model": "claude-haiku-4-5-20251001",
+          "workerModel": "claude-sonnet-5"
         }
       ],
       "layout": {
-        "type": "tabs",
-        "roles": ["specifier", "coder", "refactorer", "architect"]
+        "tabs": [
+          {
+            "title": "Human-in-the-Loop",
+            "panes": [{"role": "human-in-the-loop"}]
+          },
+          {
+            "title": "Autonomous Cycle",
+            "gridRows": 2,
+            "gridCols": 2,
+            "panes": [
+              {"role": "specifier"},
+              {"role": "coder"},
+              {"role": "refactorer"},
+              {"role": "architect"}
+            ]
+          }
+        ]
       }
     }
   }
 }
 ```
+
+### Other Bundled Profiles
+
+`kiln/framework/profiles.json` also ships:
+
+- **`compact`** — the standard 4-agent swarm (specifier, coder, refactorer, architect; no `human-in-the-loop`), all in one tab as a 2×2 grid.
+- **`tabs`** — the same 4-agent swarm, one role per tab instead of a grid.
+- **`dual-pane`** — the same 4-agent swarm across two tabs, two roles side-by-side per tab.
+
+Switch to any of these with `-ProfileName <name>` (Windows) or `--profile <name>` (Unix).
 
 **Terminal fields:**
 
@@ -503,7 +543,7 @@ The framework provides the standard `dev` profile with tab-based layout:
 }
 ```
 
-This is wired via Claude Code's subagent `model:` frontmatter field: `Write-GeneratedWorkerAgent` in `bin/kiln.ps1` writes `model: <workerModel>` into the generated `.claude/agents/<role>-worker.md` file when `workerModel` is set. Claude Code resolves a dispatched subagent's model from its own frontmatter, independent of the parent session's model — so the Haiku shell's worker subagent genuinely runs as Sonnet, not Haiku. The framework's default `dev` profile (`kiln/framework/profiles.json`) demonstrates this: `coder`/`refactorer`/`architect` shells run on Haiku, their workers run on Sonnet.
+This is wired via Claude Code's subagent `model:` frontmatter field: `Write-GeneratedWorkerAgent` in `bin/kiln.ps1` writes `model: <workerModel>` into the generated `.claude/agents/<role>-worker.md` file when `workerModel` is set. Claude Code resolves a dispatched subagent's model from its own frontmatter, independent of the parent session's model — so the Haiku shell's worker subagent genuinely runs as Sonnet, not Haiku. The framework's `default` profile (`kiln/framework/profiles.json`) demonstrates this: `specifier`/`coder`/`refactorer`/`architect` shells run on Haiku, their workers run on Sonnet.
 
 ### Layout Configurations
 
@@ -642,7 +682,7 @@ Launch a specific profile with the `-ProfileName` (Windows) or `--profile` (Unix
 ./kiln.sh . --profile staging
 ```
 
-If no profile is specified, `dev` is used by default. The working directory argument is required.
+If no profile is specified, the framework's `default` profile is used. The working directory argument is required.
 
 ### Gitflow-Aware Branch Naming
 
