@@ -244,7 +244,12 @@ while read local_ref local_sha remote_ref remote_sha; do
 done
 exit 0
 '@
-    Set-Content -Path $hookPath -Value $hookContent -Encoding UTF8
+    # Set-Content -Encoding UTF8 always writes a BOM (on both Windows PowerShell
+    # and pwsh), which breaks Git's shebang detection on this file and makes
+    # push fail with "cannot spawn .git/hooks/pre-push: No such file or directory".
+    # Write BOM-less UTF-8 with LF endings directly instead.
+    $hookContent = $hookContent -replace "`r`n", "`n"
+    [System.IO.File]::WriteAllText($hookPath, $hookContent, (New-Object System.Text.UTF8Encoding($false)))
 }
 
 function Display-NameForRole {

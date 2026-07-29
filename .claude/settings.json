@@ -134,7 +134,8 @@
       "Bash(python kiln/framework/tools/status-hook.py)",
       "Bash(echo \"exit: $?\")",
       "Bash(python -c \"import json; json.load\\(open\\('kiln/.claude/settings.json'\\)\\); print\\('valid JSON'\\)\")",
-      "Bash(git check-ignore *)"
+      "Bash(git check-ignore *)",
+      "Bash(xxd .git/hooks/pre-push)"
     ],
     "additionalDirectories": [
       "C:\\projekte\\agentic-coding\\library-hub-testrun3\\.worktrees\\architect"
