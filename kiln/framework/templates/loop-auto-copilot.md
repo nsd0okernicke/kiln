@@ -46,15 +46,15 @@ until the handoff is sent (step 8).**
 
 6. **Log sent** — append a logbook.md entry: timestamp, brief summary. Commit as part of the squash in step 7.
 
-7. **Squash** — squash all your commits since the merge commit:
+7. **Squash** — squash all your commits since the merge commit into one concise, agent-prefixed commit:
    ```sh
    LAST_MERGE=$(git log --merges -1 --format="%H")
    git reset --soft "${LAST_MERGE:-$(git rev-list --max-parents=0 HEAD)}"
-   git commit -m "{{COMMIT_FORMAT}}"
+   git commit -m "[{{ROLE}}] <short outcome-focused summary>"
    ```
 
 8. **Send handoff** — call `python .kiln/tools/set-status.py {{ROLE}} handoff --mode={{MODE}}` first. Then call `write_query` to INSERT into `messages` with `target='{{HANDOFF_TARGET}}'`,
-   `branch='{{BRANCH}}'`, and `content` formatted per Handoff Message Format in Workflow Rules.
+   `branch='{{BRANCH}}'`, `created_at=datetime('now','localtime')`, and `content` formatted per Handoff Message Format in Workflow Rules.
    Verify: `SELECT id FROM messages WHERE sender='{{ROLE}}' AND branch='{{BRANCH}}' ORDER BY created_at DESC LIMIT 1`
    If no row is found, INSERT again before returning to step 1.
 

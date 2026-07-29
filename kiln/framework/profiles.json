@@ -126,43 +126,38 @@
       "terminals": [
         {
           "role": "human-in-the-loop",
-          "agent": "claude",
+          "agent": "copilot",
           "worktree": "@current",
           "title": "Kiln Human-in-the-Loop",
-          "mode": "manual",
-          "model": "claude-sonnet-5"
+          "mode": "manual"
         },
         {
           "role": "specifier",
-          "agent": "claude",
+          "agent": "copilot",
           "worktree": "specifier",
           "title": "Kiln Specifier",
-          "mode": "auto",
-          "model": "claude-sonnet-5"
+          "mode": "auto"
         },
         {
           "role": "coder",
-          "agent": "claude",
+          "agent": "copilot",
           "worktree": "coder",
           "title": "Kiln Coder",
-          "mode": "auto",
-          "model": "claude-sonnet-5"
+          "mode": "auto"
         },
         {
           "role": "refactorer",
-          "agent": "claude",
+          "agent": "copilot",
           "worktree": "refactorer",
           "title": "Kiln Refactorer",
-          "mode": "auto",
-          "model": "claude-sonnet-5"
+          "mode": "auto"
         },
         {
           "role": "architect",
-          "agent": "claude",
+          "agent": "copilot",
           "worktree": "architect",
           "title": "Kiln Architect",
-          "mode": "auto",
-          "model": "claude-sonnet-5"
+          "mode": "auto"
         }
       ],
       "layout": {

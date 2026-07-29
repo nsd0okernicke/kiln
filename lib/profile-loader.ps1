@@ -38,19 +38,19 @@ function Load-KilnProfile {
     # Find profiles.json if not provided
     if (-not $ConfigPath) {
         $searchPaths = @(
-            (Join-Path $ProjectRoot "kiln.profiles.json"),
-            (Join-Path $ProjectRoot "kiln" "profiles.json"),
-            (Join-Path $ProjectRoot ".kiln" "profiles.json")
+            (Join-Path -Path $ProjectRoot -ChildPath "kiln.profiles.json"),
+            (Join-Path -Path $ProjectRoot -ChildPath (Join-Path -Path "kiln" -ChildPath "profiles.json")),
+            (Join-Path -Path $ProjectRoot -ChildPath (Join-Path -Path ".kiln" -ChildPath "profiles.json"))
         )
 
         # Add framework root if provided
         if ($FrameworkRoot) {
-            $searchPaths += (Join-Path $FrameworkRoot "kiln" "framework" "profiles.json")
+            $searchPaths += (Join-Path -Path $FrameworkRoot -ChildPath (Join-Path -Path "kiln" -ChildPath (Join-Path -Path "framework" -ChildPath "profiles.json")))
         }
 
         # Add user and system paths
         $searchPaths += @(
-            (Join-Path $env:USERPROFILE ".kiln" "profiles.json"),
+            (Join-Path -Path $env:USERPROFILE -ChildPath (Join-Path -Path ".kiln" -ChildPath "profiles.json")),
             "C:\ProgramData\kiln\profiles.json"
         )
 

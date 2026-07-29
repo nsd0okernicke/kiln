@@ -65,7 +65,7 @@ function Get-TerminalBackend {
 function Import-TerminalAdapter {
     param([string]$Backend)
 
-    $adapterPath = Join-Path $SCRIPT_DIR ".." "lib" "terminal-adapters" "$Backend.ps1"
+    $adapterPath = Join-Path -Path $SCRIPT_DIR -ChildPath (Join-Path -Path ".." -ChildPath (Join-Path -Path "lib" -ChildPath (Join-Path -Path "terminal-adapters" -ChildPath "$Backend.ps1")))
 
     if (!(Test-Path $adapterPath)) {
         Write-Host "Error: Unknown terminal backend '$Backend'. Expected adapter file: $adapterPath" -ForegroundColor Red
@@ -337,7 +337,7 @@ function Write-ClaudeConfig {
     $projectMcp = Join-Path $WorkingDir ".mcp.json"
     $dbPath = Join-Path $STATE_DIR "messages.db"
     $dbPathEscaped = $dbPath -replace '\\', '\\'
-    $channelScript = Join-Path $frameworkRoot "kiln" "framework" "mcp-server" "channel.py"
+    $channelScript = Join-Path -Path $frameworkRoot -ChildPath (Join-Path -Path "kiln" -ChildPath (Join-Path -Path "framework" -ChildPath (Join-Path -Path "mcp-server" -ChildPath "channel.py")))
     $channelScriptEscaped = $channelScript -replace '\\', '\\'
 
     # Find the first @current role — that role gets kiln-channel in the root .mcp.json
@@ -359,7 +359,7 @@ function Write-ClaudeConfig {
         # tools/ lives under kiln/framework/ (framework-owned) but, unlike the rest of that
         # bucket, gets copied fresh into the project's ephemeral .kiln/tools/ on every launch
         # rather than referenced by path or copied once at scaffold time.
-        $frameworkToolsDir = Join-Path $frameworkRoot "kiln" "framework" "tools"
+        $frameworkToolsDir = Join-Path -Path $frameworkRoot -ChildPath (Join-Path -Path "kiln" -ChildPath (Join-Path -Path "framework" -ChildPath "tools"))
         $stateToolsDir = Join-Path $STATE_DIR "tools"
         if (Test-Path $frameworkToolsDir) {
             New-Item -ItemType Directory -Force -Path $stateToolsDir | Out-Null
@@ -588,9 +588,9 @@ function Prepare-Skills {
 
         # Determine skills directory based on agent type
         $skillsDir = if ($agent -eq "copilot") {
-            Join-Path $worktreePath ".github" "skills"
+            Join-Path $worktreePath ".github/skills"
         } else {
-            Join-Path $worktreePath ".claude" "skills"
+            Join-Path $worktreePath ".claude/skills"
         }
 
         # Always recreate so removed skills don't linger
@@ -660,7 +660,7 @@ function Prepare-CodexConfigs {
         if ($global:AGENTS[$i] -ne "codex") { continue }
         $role = $global:ROLES[$i]
 
-        $codexHome = Join-Path $STATE_DIR "codex-home" $role
+        $codexHome = Join-Path $STATE_DIR "codex-home/$role"
         New-Item -ItemType Directory -Force -Path $codexHome | Out-Null
 
         $configToml = @"
@@ -674,11 +674,11 @@ args = ["mcp-sqlite", "$dbPathEscaped"]
 }
 
 function Get-KilnTemplate([string]$Name) {
-    Get-Content (Join-Path $KILN_BUNDLED_DIR "framework" "templates" "$Name.md") -Raw -ErrorAction Stop
+    Get-Content (Join-Path $KILN_BUNDLED_DIR "framework/templates/$Name.md") -Raw -ErrorAction Stop
 }
 
 function Get-KilnConstitution([string]$Name) {
-    Get-Content (Join-Path $KILN_PROJECT_DIR "constitution" "$Name.md") -Raw -ErrorAction Stop
+    Get-Content (Join-Path $KILN_PROJECT_DIR "constitution/$Name.md") -Raw -ErrorAction Stop
 }
 
 function Get-KilnConstitutionHeader {
@@ -687,7 +687,7 @@ function Get-KilnConstitutionHeader {
 }
 
 function Get-KilnRole([string]$Role) {
-    $raw = Get-Content (Join-Path $KILN_PROJECT_DIR "roles" "$Role.md") -Raw -ErrorAction Stop
+    $raw = Get-Content (Join-Path $KILN_PROJECT_DIR "roles/$Role.md") -Raw -ErrorAction Stop
     $stripped = ($raw -replace '(?ms)^## (Message Loop|Interaction Loop).*?(?=^## |\z)', '').TrimStart("`r", "`n")
     "# Role`n`n" + $stripped
 }
@@ -819,7 +819,7 @@ function Write-GeneratedWorkerAgent {
         # description must not contain a raw ':' — unquoted, that breaks YAML
         # frontmatter parsing (confirmed empirically: "mapping values are not
         # allowed in this context").
-        $agentsDir = Join-Path $WorkingDir ".github" "agents"
+        $agentsDir = Join-Path -Path $WorkingDir -ChildPath (Join-Path -Path ".github" -ChildPath "agents")
         New-Item -ItemType Directory -Force -Path $agentsDir | Out-Null
         $outPath = Join-Path $agentsDir "$Role-worker.agent.md"
 
@@ -844,7 +844,7 @@ function Write-GeneratedWorkerAgent {
         # uses a TOML literal string ('''...''') rather than a basic string so the role/
         # constitution content's own backticks, quotes, and Windows-path backslashes don't
         # need escaping.
-        $agentsDir = Join-Path $WorkingDir ".codex" "agents"
+        $agentsDir = Join-Path -Path $WorkingDir -ChildPath (Join-Path -Path ".codex" -ChildPath "agents")
         New-Item -ItemType Directory -Force -Path $agentsDir | Out-Null
         $outPath = Join-Path $agentsDir "$Role-worker.toml"
 
@@ -863,7 +863,7 @@ function Write-GeneratedWorkerAgent {
         # Generated in the main project's .claude/agents/ directory (not the worktree's),
         # so Claude Code's agent discovery finds it when the shell agent (running in the
         # worktree) spawns the subagent via the Agent tool.
-        $agentsDir = Join-Path $WorkingDir ".claude" "agents"
+        $agentsDir = Join-Path -Path $WorkingDir -ChildPath (Join-Path -Path ".claude" -ChildPath "agents")
         New-Item -ItemType Directory -Force -Path $agentsDir | Out-Null
         $outPath = Join-Path $agentsDir "$Role-worker.md"
 
@@ -891,7 +891,7 @@ function Build-WezTermAgentCommand {
         [string]$Role = ""
     )
 
-    if (-not $Model) {
+    if ($Agent -eq "claude" -and -not $Model) {
         Write-Warning "No model specified for $DisplayName; agent command may fail"
     }
 
@@ -903,7 +903,8 @@ function Build-WezTermAgentCommand {
             $command = "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json --debug-file '$debugLog' -n '$DisplayName' 'Start your role session.'"
         }
         "copilot" {
-            $command = "echo ────────────────────────────────────────────────────────────────────────────────────────& echo.& echo $DisplayName& echo.& echo ────────────────────────────────────────────────────────────────────────────────────────& echo.& copilot --allow-all -i ""Start your role session."""
+            $copilotModelArg = if ($Model) { " --model '$Model'" } else { "" }
+            $command = "echo ────────────────────────────────────────────────────────────────────────────────────────& echo.& echo $DisplayName& echo.& echo ────────────────────────────────────────────────────────────────────────────────────────& echo.& copilot --allow-all$copilotModelArg -i ""Start your role session."""
         }
         "codex" {
             $codexHome = Join-Path $STATE_DIR "codex-home" $Role
@@ -1138,7 +1139,7 @@ function Get-WindowsTerminalAgentCommand {
         [string]$Role = ""
     )
 
-    if (-not $Model) {
+    if ($Agent -eq "claude" -and -not $Model) {
         Write-Warning "No model specified for $DisplayName; agent command may fail"
     }
 
@@ -1152,10 +1153,11 @@ function Get-WindowsTerminalAgentCommand {
             }
         }
         "copilot" {
+            $copilotModelArg = if ($Model) { " --model '$Model'" } else { "" }
             if ($DisplayName) {
-                return "copilot --allow-all --name ""$DisplayName"""
+                return "copilot --allow-all$copilotModelArg --name ""$DisplayName"""
             } else {
-                return "copilot --allow-all"
+                return "copilot --allow-all$copilotModelArg"
             }
         }
         "codex" {
@@ -1179,7 +1181,7 @@ switch ($TerminalBackend) {
     "wt" { Test-Dependency wt }
     "wezterm" {
         Test-Dependency wezterm
-        $adapterPath = Join-Path $SCRIPT_DIR ".." "lib" "terminal-adapters" "wezterm.ps1"
+        $adapterPath = Join-Path -Path $SCRIPT_DIR -ChildPath (Join-Path -Path ".." -ChildPath (Join-Path -Path "lib" -ChildPath (Join-Path -Path "terminal-adapters" -ChildPath "wezterm.ps1")))
         if (!(Test-Path $adapterPath)) {
             Write-Host "Error: Terminal adapter not found: $adapterPath" -ForegroundColor Red
             exit 1
@@ -1224,7 +1226,7 @@ $KILN_PROJECT_DIR = Join-Path $KILN_DIR "project"
 $STATE_DIR = Join-Path $WorkingDir ".kiln"
 
 # Handoff routing table — parsed from workflow.md at startup
-$HandoffTargets = Read-HandoffRoutingTable (Join-Path $KILN_PROJECT_DIR "constitution" "workflow.md")
+$HandoffTargets = Read-HandoffRoutingTable (Join-Path $KILN_PROJECT_DIR "constitution/workflow.md")
 
 # Commit format strings per role
 $CommitFormats = @{
@@ -1293,6 +1295,7 @@ New-Item -ItemType Directory -Force -Path $dbDir | Out-Null
 
 $pythonScript = @"
 import sqlite3, os
+
 db = r'$dbPath'
 conn = sqlite3.connect(db)
 conn.execute('''CREATE TABLE IF NOT EXISTS messages (
@@ -1302,6 +1305,26 @@ conn.execute('''CREATE TABLE IF NOT EXISTS messages (
   delivered_at TEXT, acked_at TEXT, processed_at TEXT, error TEXT,
   branch TEXT NOT NULL DEFAULT 'main')''')
 conn.execute('CREATE INDEX IF NOT EXISTS idx_target_branch_status ON messages(target,branch,status)')
+
+# Repair older message tables that were created with created_at as NOT NULL but without
+# a default, so handoff inserts do not fail when agents omit the timestamp column.
+cols = conn.execute('PRAGMA table_info(messages)').fetchall()
+created_at_col = next((row for row in cols if row[1] == 'created_at'), None)
+if created_at_col and created_at_col[4] is None and created_at_col[3] == 1:
+    conn.execute('ALTER TABLE messages RENAME TO messages_old')
+    conn.execute('''CREATE TABLE messages (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))), sender TEXT NOT NULL, target TEXT NOT NULL,
+      priority INTEGER DEFAULT 50, status TEXT DEFAULT 'queued',
+      content TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime')),
+      delivered_at TEXT, acked_at TEXT, processed_at TEXT, error TEXT,
+      branch TEXT NOT NULL DEFAULT 'main')''')
+    conn.execute("""INSERT INTO messages (id, sender, target, priority, status, content, created_at, delivered_at, acked_at, processed_at, error, branch)
+      SELECT id, sender, target, priority, status, content,
+             COALESCE(created_at, datetime('now', 'localtime')), delivered_at, acked_at, processed_at, error, branch
+      FROM messages_old""")
+    conn.execute('DROP TABLE messages_old')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_target_branch_status ON messages(target,branch,status)')
+
 conn.execute('PRAGMA journal_mode=WAL')
 conn.commit()
 conn.close()

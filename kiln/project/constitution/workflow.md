@@ -28,11 +28,11 @@ Kiln uses a SQLite message database at `.kiln/messages.db` in the project root f
 
 ## Commit Convention
 
-Before sending any handoff, squash all your own commits since the last merge into one commit (the exact git commands are provided in your handoff steps — `/kiln-handoff` for Claude agents, the loop's squash step for Copilot agents).
+Before sending any handoff, squash all your own commits since the last merge into one single, human-readable commit (the exact git commands are provided in your handoff steps — `/kiln-handoff` for Claude agents, the loop's squash step for Copilot agents).
 
-**Format:** `{{COMMIT_FORMAT}}`
+The squash commit must begin with the agent role in brackets and then describe the outcome of the work, for example `[Specifier] Add acceptance criteria for order intake`, `[Coder] Implement order creation via TDD`, `[Refactorer] Improve coverage and remove duplication`, `[Architect] Validate module boundaries and mutation safety`, or `[Human-in-the-loop] Hand off approved request for specification`.
 
-Do not squash the merge commit itself — only squash your own work commits on top of it.
+Use concise, imperative wording. Do not use merge-only or log-only messages, and do not squash the merge commit itself — only squash your own work commits on top of it.
 
 ## Handoff Message Format
 

@@ -14,7 +14,7 @@ Look these up from your Runtime Configuration section (already in context):
 - **Your role name** — shown as `Role:`
 - **Your branch** — shown as `Branch:` (the root branch, not the worktree sub-branch)
 - **Your handoff target** — from the Handoff Routing table in Workflow Rules
-- **Your commit format** — from your Role section (e.g., `[Coder] <feature> - TDD implementation of <what>`)
+- **Your commit prefix** — use your role name in brackets (for example `[Coder]`, `[Specifier]`, `[Architect]`, or `[Human-in-the-loop]`) and add a short outcome-focused summary
 
 ## Steps
 
@@ -33,12 +33,12 @@ Do not commit yet — this gets folded into the squash.
 
 ### Step 2 — Squash
 
-Squash all your commits since the last merge commit:
+Squash all your commits since the last merge commit into one concise, agent-prefixed commit:
 
 ```sh
 LAST_MERGE=$(git log --merges -1 --format="%H")
 git reset --soft "${LAST_MERGE:-$(git rev-list --max-parents=0 HEAD)}"
-git commit -m "<your commit format from Role section>"
+git commit -m "[<your role>] <short outcome-focused summary>"
 ```
 
 Note the resulting commit hash — you need it in Step 3.
@@ -54,13 +54,14 @@ and the squash commit hash from Step 2.
 Call `kiln-db` MCP `write_query`:
 
 ```sql
-INSERT INTO messages (sender, target, priority, status, content, branch)
+INSERT INTO messages (sender, target, priority, status, content, created_at, branch)
 VALUES (
   '<your role>',
   '<handoff target>',
   50,
   'queued',
   '<formatted message from Step 3>',
+  datetime('now', 'localtime'),
   '<your branch>'
 )
 ```
