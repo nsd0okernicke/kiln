@@ -14,6 +14,265 @@ DRY_RUN=0
 WORKING_DIR=""
 CONFIG_PROFILE=""
 
+# --- kiln-init (project scaffolding), folded in from the former standalone kiln-init.sh ---
+# Renamed init_* to avoid colliding with this file's own initialize_git_repo (idempotent,
+# launch-time git setup — different from the one-time init below). Behavior preserved as-is
+# from kiln-init.sh; not reconciled with kiln.ps1's version (see TODO.md §6/§8 for tracked
+# parity gaps — e.g. no --no-git flag here, target must not already exist, matching
+# kiln-init.sh's existing behavior).
+#
+# Defined here, before the normal arg-parsing loop below, because `init` must be dispatched
+# before that loop's `cd "$WORKING_DIR"` (which requires the directory to already exist —
+# an init target usually doesn't yet).
+
+init_write_claude_code_config() {
+  local target="$1" framework_root="$2"
+  mkdir -p "$target/.claude"
+  cat > "$target/.claude/.gitignore" << 'EOF'
+*
+EOF
+  local template_settings="$framework_root/kiln/.claude/settings.json"
+  if [[ -f "$template_settings" ]]; then
+    cp "$template_settings" "$target/.claude/settings.json"
+    echo "✓ Created .claude/settings.json"
+  else
+    echo "Warning: Could not find Claude settings template at $template_settings" >&2
+  fi
+}
+
+init_scaffold_directories() {
+  local target="$1"
+  mkdir -p "$target/kiln/project/constitution"
+  mkdir -p "$target/kiln/project/roles"
+  mkdir -p "$target/kiln/project/skills"
+  mkdir -p "$target/.kiln"
+  echo "✓ Created directory structure"
+}
+
+init_copy_constitution_files() {
+  local target="$1" kiln_dir="$2"
+  for file in engineering.md workflow.md project.md; do
+    if [[ -f "$kiln_dir/project/constitution/$file" ]]; then
+      cp "$kiln_dir/project/constitution/$file" "$target/kiln/project/constitution/"
+    fi
+  done
+  echo "✓ Copied constitution files"
+
+  # Copy the framework's real constitution.md instead of synthesizing our own — one source
+  # of truth, copied like everything else in kiln/project/.
+  if [[ -f "$kiln_dir/project/constitution.md" ]]; then
+    cp "$kiln_dir/project/constitution.md" "$target/kiln/project/constitution.md"
+    echo "✓ Copied constitution.md"
+  fi
+}
+
+init_copy_role_files() {
+  local target="$1" kiln_dir="$2"
+  if [[ -d "$kiln_dir/project/roles" ]]; then
+    for file in "$kiln_dir/project/roles"/*.md; do
+      [[ -f "$file" ]] && cp "$file" "$target/kiln/project/roles/"
+    done
+    echo "✓ Copied role files"
+  fi
+}
+
+init_copy_skills() {
+  local target="$1" kiln_dir="$2"
+  if [[ -d "$kiln_dir/project/skills" ]]; then
+    for skill_dir in "$kiln_dir/project/skills"/*; do
+      [[ -d "$skill_dir" ]] && cp -r "$skill_dir" "$target/kiln/project/skills/"
+    done
+    echo "✓ Copied skills"
+  fi
+}
+
+init_copy_framework_mcp_json() {
+  local target="$1" framework_root="$2"
+  if [[ -f "$framework_root/kiln/.mcp.json" ]]; then
+    cp "$framework_root/kiln/.mcp.json" "$target/kiln/"
+    echo "✓ Copied MCP configuration"
+  fi
+}
+
+init_write_mcp_json() {
+  local target="$1"
+  # kiln-db only. The launcher's own prepare_agent_configs replaces this with the full
+  # kiln-db + kiln-channel version on first real `kiln.sh` launch.
+  local db_path="$target/.kiln/messages.db"
+  cat > "$target/.mcp.json" << EOF
+{
+  "mcpServers": {
+    "kiln-db": {
+      "command": "npx",
+      "args": ["mcp-sqlite", "$db_path"]
+    }
+  }
+}
+EOF
+  echo "✓ Created .mcp.json (MCP server configuration)"
+}
+
+init_copy_example_brief() {
+  local target="$1" framework_root="$2" example="$3"
+  [[ "$example" == "library-hub" ]] || return 0
+  if [[ -f "$framework_root/examples/library-hub/README.md" ]]; then
+    cp "$framework_root/examples/library-hub/README.md" "$target/README.md"
+    echo "✓ Copied example README.md"
+  fi
+  local example_project_md="$framework_root/examples/$example/kiln/project/constitution/project.md"
+  if [[ -f "$example_project_md" ]]; then
+    cp "$example_project_md" "$target/kiln/project/constitution/project.md"
+    echo "✓ Copied example-specific project.md"
+  fi
+}
+
+init_initialize_messages_db() {
+  local target="$1"
+  echo ""
+  echo "Initializing database..."
+  local messages_db="$target/.kiln/messages.db"
+  if command -v sqlite3 &>/dev/null; then
+    sqlite3 "$messages_db" << 'SQL'
+PRAGMA journal_mode=WAL;
+CREATE TABLE IF NOT EXISTS messages (
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  sender TEXT NOT NULL,
+  target TEXT NOT NULL,
+  priority INTEGER DEFAULT 50,
+  status TEXT DEFAULT 'queued',
+  content TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  delivered_at TEXT,
+  acked_at TEXT,
+  processed_at TEXT,
+  error TEXT,
+  branch TEXT NOT NULL DEFAULT 'main'
+);
+CREATE INDEX IF NOT EXISTS idx_target_branch_status ON messages(target,branch,status);
+SQL
+    if [[ $? -eq 0 ]]; then
+      echo "✓ Initialized message database"
+    else
+      echo "Warning: Failed to initialize database with sqlite3" >&2
+    fi
+  else
+    echo "Warning: sqlite3 not found; message database initialization skipped" >&2
+  fi
+}
+
+init_initialize_git_repo() {
+  local target="$1"
+  echo ""
+  echo "Initializing git repository..."
+  if ! command -v git &> /dev/null; then
+    echo "Error: Git is not installed or not in PATH."
+    exit 1
+  fi
+  (
+    cd "$target"
+    git init >/dev/null
+    git branch -M main 2>/dev/null || true
+    cat > .gitignore << 'GITIGNORE'
+.DS_Store
+.env
+.env.local
+*.pyc
+__pycache__/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.Kiln/
+.worktrees/
+GITIGNORE
+  )
+  echo "✓ Initialized git repository on branch 'main'"
+}
+
+run_kiln_init() {
+  local profile="dev" example="" target="" list_profiles=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --profile=*) profile="${1#--profile=}"; shift ;;
+      --profile) profile="$2"; shift 2 ;;
+      --example=*) example="${1#--example=}"; shift ;;
+      --example) example="$2"; shift 2 ;;
+      --list-profiles) list_profiles=1; shift ;;
+      -*) echo "Unknown option: $1"; exit 1 ;;
+      *) [[ -z "$target" ]] && target="$1" || { echo "Unexpected argument: $1"; exit 1; }; shift ;;
+    esac
+  done
+
+  local init_script_dir init_framework_root init_kiln_dir
+  init_script_dir="$(cd "$(dirname "$0")" && pwd)"
+  init_framework_root="$(cd "$init_script_dir/.." && pwd)"
+  init_kiln_dir="$init_framework_root/kiln"
+
+  if [[ ! -d "$init_kiln_dir" ]]; then
+    echo "Error: Could not find Kiln framework directory."
+    echo "This script must be run from the Kiln repository root (bin/kiln.sh)."
+    exit 1
+  fi
+
+  if [[ $list_profiles -eq 1 ]]; then
+    echo "Available Kiln configuration profiles:"
+    echo ""
+    source "$init_framework_root/lib/profile-loader.sh"
+    get_available_profiles "$init_framework_root/kiln/framework"
+    return 0
+  fi
+
+  if [[ -z "$target" ]]; then
+    echo "Usage: kiln.sh init <target-path> [--example <example-name>] [--profile <profile-name>]"
+    exit 1
+  fi
+  if [[ -e "$target" ]]; then
+    echo "Error: Target directory already exists: $target"
+    exit 1
+  fi
+
+  echo "Creating Kiln project: $target"
+  init_scaffold_directories "$target"
+  init_copy_constitution_files "$target" "$init_kiln_dir"
+  init_copy_role_files "$target" "$init_kiln_dir"
+  init_copy_skills "$target" "$init_kiln_dir"
+  init_copy_framework_mcp_json "$target" "$init_framework_root"
+  # Note: Profiles are not copied to the target project. Projects inherit framework profiles;
+  # override by creating kiln.profiles.yaml at project root if needed.
+  init_write_mcp_json "$target"
+  init_write_claude_code_config "$target" "$init_framework_root"
+  init_copy_example_brief "$target" "$init_framework_root" "$example"
+  init_initialize_messages_db "$target"
+  init_initialize_git_repo "$target"
+
+  echo ""
+  echo "✓ Project created successfully: $target"
+  echo ""
+  echo "Next steps:"
+  echo "  1. cd $target"
+  echo "  2. Review kiln/project/constitution/ and kiln/project/roles/"
+  echo "  3. git add kiln/ .claude/ && git commit -m 'Add Kiln configuration'"
+  echo "  4. Update kiln/project/constitution/engineering.md if needed (tech stack, language rules)"
+  echo "  5. Run: ./kiln.sh to launch the multi-agent session"
+}
+
+if [[ "${1:-}" == "init" ]]; then
+  shift
+  run_kiln_init "$@"
+  exit 0
+fi
+
 for arg in "$@"; do
   case "$arg" in
     --dry-run) DRY_RUN=1 ;;

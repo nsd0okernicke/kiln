@@ -1,4 +1,4 @@
-<!-- Copied into <project>/kiln/project/roles/reviewer.md by kiln-init. Customize this role's instructions per project. -->
+<!-- Copied into <project>/kiln/project/roles/reviewer.md during project init (kiln.ps1 -Init / kiln.sh init). Customize this role's instructions per project. -->
 
 > **Optional role** — not in the default profile. Add it to your profile in `kiln.profiles.yaml` at the root as an alternative to `refactorer`.
 

@@ -1,4 +1,4 @@
-<!-- Copied into <project>/kiln/project/constitution/project.md by kiln-init. Customize per project — architecture, tech stack, quality gates. -->
+<!-- Copied into <project>/kiln/project/constitution/project.md during project init (kiln.ps1 -Init / kiln.sh init). Customize per project — architecture, tech stack, quality gates. -->
 
 # Project Rules
 

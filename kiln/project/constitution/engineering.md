@@ -1,4 +1,4 @@
-<!-- Copied into <project>/kiln/project/constitution/engineering.md by kiln-init. Customize per project — language, build tools, test frameworks, coding practices. -->
+<!-- Copied into <project>/kiln/project/constitution/engineering.md during project init (kiln.ps1 -Init / kiln.sh init). Customize per project — language, build tools, test frameworks, coding practices. -->
 
 # Engineering Rules
 

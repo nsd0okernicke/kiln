@@ -1,4 +1,4 @@
-<!-- Copied into <project>/kiln/project/roles/refactorer.md by kiln-init. Customize this role's instructions per project. -->
+<!-- Copied into <project>/kiln/project/roles/refactorer.md during project init (kiln.ps1 -Init / kiln.sh init). Customize this role's instructions per project. -->
 
 You are the refactorer.
 

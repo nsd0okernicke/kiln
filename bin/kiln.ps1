@@ -2,13 +2,41 @@
 # Kiln Windows Entry Point
 # Orchestrates multi-agent development on Windows Terminal or WezTerm with Claude Code skills
 
+# $Command must stay the FIRST declared parameter: in a plain param() block (no
+# [CmdletBinding()] — that would pull in a built-in -Debug common parameter that collides with
+# this script's own $Debug switch below) positional slots are assigned by declaration order.
+# Without $Command claiming position 0, a stray positional token (e.g. someone typing the
+# Unix-style `kiln.ps1 init -WorkingDir X` instead of `-Init`) falls through to whichever
+# parameter is next in position order once -WorkingDir is satisfied by name — it silently
+# landed in $Terminal ("Using terminal backend: init"), producing a confusing failure much
+# later instead of a clear one. Only "init" is recognized here (as equivalent to -Init);
+# anything else is a clear error rather than a silent mis-bind.
 param(
+    [string]$Command = "",
+
+    [Alias("Target")]
     [string]$WorkingDir = (Get-Location).Path,
     [string]$Terminal = $null,
+    [Alias("Profile")]
     [string]$ProfileName = $null,
     [switch]$Debug = $false,
-    [switch]$Stop = $false
+    [switch]$Stop = $false,
+
+    # -Init: scaffold a new project instead of launching the swarm (see Invoke-KilnInit below).
+    # Folded in from the former standalone kiln-init.ps1 (TODO.md §8) — that script has been
+    # removed. -WorkingDir/-Target is the scaffold target in this mode.
+    [switch]$Init = $false,
+    [string]$Example = "",
+    [switch]$NoGit = $false,
+    [switch]$ListProfiles = $false
 )
+
+if ($Command -eq "init") {
+    $Init = $true
+} elseif ($Command) {
+    Write-Host "Unknown argument '$Command'. Did you mean 'init' (to scaffold a project) or -Init? For everything else use named flags, e.g. -WorkingDir." -ForegroundColor Red
+    exit 1
+}
 
 $ErrorActionPreference = "Stop"
 
@@ -206,9 +234,9 @@ function Initialize-GitRepo {
             exit 1
         }
     } else {
-        # kiln-init.ps1 always creates .git itself, so this branch is what actually runs for
+        # `kiln.ps1 -Init` always creates .git itself, so this branch is what actually runs for
         # every real kiln project — the "$isNewRepo" branch above almost never fires in
-        # practice. If .gitignore was never committed (kiln-init.ps1 writes it but deliberately
+        # practice. If .gitignore was never committed (-Init writes it but deliberately
         # leaves the first commit to the user), commit it now, before Prepare-Worktrees creates
         # any worktree branches from HEAD. Otherwise `git worktree add` won't check it out, the
         # .kiln symlink (and anything else meant to be ignored) stays unprotected in each
@@ -1202,7 +1230,299 @@ function Get-WindowsTerminalAgentCommand {
     }
 }
 
+# --- kiln-init (project scaffolding), folded in from the former standalone kiln-init.ps1 ---
+# Renamed Kiln-Init* to avoid colliding with this file's own Initialize-GitRepo (idempotent,
+# launch-time git setup — different from the one-time init below) and Write-ClaudeConfig
+# (per-worktree, launch-time — different from the one-time root .claude/settings.json write
+# below). Behavior preserved as-is from kiln-init.ps1; not reconciled with kiln.sh's version
+# (see TODO.md §6/§8 for tracked parity gaps).
+
+function Write-KilnInitClaudeCodeConfig {
+    param([string]$ProjectPath)
+    $claudeDir = Join-Path $ProjectPath ".claude"
+    New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null
+    Set-Content -Path (Join-Path $claudeDir ".gitignore") -Value "*" -Encoding UTF8
+    $templateSettings = Join-Path $KILN_BUNDLED_DIR ".claude" "settings.json"
+    $targetSettings = Join-Path $claudeDir "settings.json"
+    if (Test-Path $templateSettings) {
+        Copy-Item -Path $templateSettings -Destination $targetSettings -Force
+    }
+}
+
+function New-KilnInitScaffold {
+    param([string]$Target)
+    $constitutionDir = Join-Path $Target "kiln" "project" "constitution"
+    $rolesDir = Join-Path $Target "kiln" "project" "roles"
+    $skillsDir = Join-Path $Target "kiln" "project" "skills"
+    $kilnInfraDir = Join-Path $Target ".kiln"
+    try {
+        New-Item -ItemType Directory -Path $constitutionDir -Force | Out-Null
+        New-Item -ItemType Directory -Path $rolesDir -Force | Out-Null
+        New-Item -ItemType Directory -Path $skillsDir -Force | Out-Null
+        New-Item -ItemType Directory -Path $kilnInfraDir -Force | Out-Null
+        Write-Host "✓ Created directory structure" -ForegroundColor Green
+    } catch {
+        Write-Host "Error creating directories: $_" -ForegroundColor Red
+        exit 1
+    }
+}
+
+function Copy-KilnInitConstitutionFiles {
+    param([string]$Target)
+    $constitutionDir = Join-Path $Target "kiln" "project" "constitution"
+    $frameworkConstitution = Join-Path $KILN_BUNDLED_DIR "project" "constitution"
+    @("engineering.md", "workflow.md", "project.md") | ForEach-Object {
+        $source = Join-Path $frameworkConstitution $_
+        $dest = Join-Path $constitutionDir $_
+        if (Test-Path $source) {
+            Copy-Item -Path $source -Destination $dest -Force
+        }
+    }
+    Write-Host "✓ Copied constitution files" -ForegroundColor Green
+
+    # Copy the framework's real constitution.md instead of synthesizing our own — one source
+    # of truth, copied like everything else in kiln/project/.
+    $frameworkConstitutionMd = Join-Path $KILN_BUNDLED_DIR "project" "constitution.md"
+    $constitutionMdPath = Join-Path $Target "kiln" "project" "constitution.md"
+    if (Test-Path $frameworkConstitutionMd) {
+        Copy-Item -Path $frameworkConstitutionMd -Destination $constitutionMdPath -Force
+        Write-Host "✓ Copied constitution.md" -ForegroundColor Green
+    }
+}
+
+function Copy-KilnInitRoleFiles {
+    param([string]$Target)
+    $rolesDir = Join-Path $Target "kiln" "project" "roles"
+    $frameworkRoles = Join-Path $KILN_BUNDLED_DIR "project" "roles"
+    if (Test-Path $frameworkRoles) {
+        Get-ChildItem -Path $frameworkRoles -Filter "*.md" | ForEach-Object {
+            Copy-Item -Path $_.FullName -Destination $rolesDir -Force
+        }
+        Write-Host "✓ Copied role files" -ForegroundColor Green
+    }
+}
+
+function Copy-KilnInitSkills {
+    param([string]$Target)
+    $skillsDir = Join-Path $Target "kiln" "project" "skills"
+    $frameworkSkills = Join-Path $KILN_BUNDLED_DIR "project" "skills"
+    if (Test-Path $frameworkSkills) {
+        Get-ChildItem -Path $frameworkSkills -Directory | ForEach-Object {
+            # Remove any pre-existing copy first (e.g. from a prior init run) so a stale or
+            # partially-copied skill directory can never linger or shadow the fresh one.
+            $destSkillDir = Join-Path $skillsDir $_.Name
+            if (Test-Path $destSkillDir) {
+                Remove-Item -Path $destSkillDir -Recurse -Force
+            }
+            Copy-Item -Path $_.FullName -Destination $skillsDir -Recurse -Force
+        }
+        Write-Host "✓ Copied skills" -ForegroundColor Green
+    }
+}
+
+function Write-KilnInitMcpJson {
+    param([string]$Target)
+    # kiln-db only (for Claude agents); Copilot gets its own ~/.copilot/mcp-config.json instead
+    # (Prepare-AgentConfigs). The launcher's own Write-ClaudeConfig replaces this with the full
+    # kiln-db + kiln-channel version on first real `kiln.ps1` launch.
+    $dbPath = Join-Path $Target ".kiln" "messages.db"
+    $dbPathEscaped = $dbPath -replace '\\', '\\'
+    $mcpJsonPath = Join-Path $Target ".mcp.json"
+    $mcpJson = @"
+{
+  "mcpServers": {
+    "kiln-db": {
+      "command": "npx",
+      "args": ["mcp-sqlite", "$dbPathEscaped"]
+    }
+  }
+}
+"@
+    Set-Content -Path $mcpJsonPath -Value $mcpJson -Encoding UTF8
+    Write-Host "✓ Created .mcp.json (MCP server configuration)" -ForegroundColor Green
+}
+
+function Copy-KilnInitExampleBrief {
+    param([string]$Target, [string]$ExampleName)
+    if ($ExampleName -ne "library-hub") { return }
+    $frameworkRoot = Split-Path -Parent $KILN_BUNDLED_DIR
+    $exampleReadme = Join-Path $frameworkRoot "examples" "library-hub" "README.md"
+    if (Test-Path $exampleReadme) {
+        Copy-Item -Path $exampleReadme -Destination (Join-Path $Target "README.md") -Force
+        Write-Host "✓ Copied example README.md" -ForegroundColor Green
+    }
+    $exampleProjectMd = Join-Path $frameworkRoot "examples" $ExampleName "kiln" "project" "constitution" "project.md"
+    if (Test-Path $exampleProjectMd) {
+        $constitutionDir = Join-Path $Target "kiln" "project" "constitution"
+        Copy-Item -Path $exampleProjectMd -Destination (Join-Path $constitutionDir "project.md") -Force
+        Write-Host "✓ Copied example-specific project.md" -ForegroundColor Green
+    }
+}
+
+function Initialize-KilnInitMessagesDb {
+    param([string]$Target)
+    Write-Host ""
+    Write-Host "Initializing database..." -ForegroundColor Cyan
+    $dbPath = Join-Path $Target ".kiln" "messages.db"
+    $pythonScript = @"
+import sqlite3, os
+db = r'$dbPath'
+conn = sqlite3.connect(db)
+conn.execute('''CREATE TABLE IF NOT EXISTS messages (
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))), sender TEXT NOT NULL, target TEXT NOT NULL,
+  priority INTEGER DEFAULT 50, status TEXT DEFAULT 'queued',
+  content TEXT NOT NULL, created_at TEXT NOT NULL,
+  delivered_at TEXT, acked_at TEXT, processed_at TEXT, error TEXT,
+  branch TEXT NOT NULL DEFAULT 'main')''')
+conn.execute('CREATE INDEX IF NOT EXISTS idx_target_branch_status ON messages(target,branch,status)')
+conn.execute('PRAGMA journal_mode=WAL')
+conn.commit()
+conn.close()
+"@
+    python -c $pythonScript 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "✓ Initialized message database" -ForegroundColor Green
+    } else {
+        Write-Host "Warning: Failed to initialize database via Python, trying direct sqlite3..." -ForegroundColor Yellow
+        $sqliteScript = @"
+CREATE TABLE IF NOT EXISTS messages (
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))), sender TEXT NOT NULL, target TEXT NOT NULL,
+  priority INTEGER DEFAULT 50, status TEXT DEFAULT 'queued',
+  content TEXT NOT NULL, created_at TEXT NOT NULL,
+  delivered_at TEXT, acked_at TEXT, processed_at TEXT, error TEXT,
+  branch TEXT NOT NULL DEFAULT 'main');
+CREATE INDEX IF NOT EXISTS idx_target_branch_status ON messages(target,branch,status);
+PRAGMA journal_mode=WAL;
+"@
+        $sqliteScript | sqlite3 $dbPath
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "✓ Initialized message database via sqlite3" -ForegroundColor Green
+        } else {
+            Write-Host "Warning: Could not initialize database (sqlite3 not found)" -ForegroundColor Yellow
+            Write-Host "Kiln messaging requires either Python or sqlite3 to be installed." -ForegroundColor Yellow
+        }
+    }
+}
+
+function Initialize-KilnInitGitRepo {
+    param([string]$Target, [switch]$SkipGit)
+    if ($SkipGit) {
+        Write-Host ""
+        Write-Host "Skipping git initialization (use -NoGit for existing repos)" -ForegroundColor Cyan
+        return
+    }
+    Write-Host ""
+    Write-Host "Initializing git repository..." -ForegroundColor Cyan
+    try {
+        git --version | Out-Null
+    } catch {
+        Write-Host "Error: Git is not installed or not in PATH." -ForegroundColor Red
+        exit 1
+    }
+    try {
+        $isGitRepo = git -C $Target rev-parse --git-dir 2>$null
+        $gitInitialized = $?
+        if (-not $gitInitialized) {
+            git -C $Target init | Out-Null
+            git -C $Target branch -M main 2>$null | Out-Null
+            Write-Host "✓ Initialized new git repository on branch 'main'" -ForegroundColor Green
+        } else {
+            Write-Host "✓ Using existing git repository" -ForegroundColor Green
+        }
+        $gitignorePath = Join-Path $Target ".gitignore"
+        $gitignoreContent = @'
+.DS_Store
+.env
+.env.local
+*.pyc
+__pycache__/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.kiln
+.worktrees/
+.github/
+.claude/skills
+CLAUDE.md
+.mcp.json
+tmp/
+'@
+        Set-Content -Path $gitignorePath -Value $gitignoreContent -Encoding UTF8
+        Write-Host "✓ Created .gitignore" -ForegroundColor Green
+    } catch {
+        Write-Host "Error during git initialization: $_" -ForegroundColor Red
+        exit 1
+    }
+}
+
+function Invoke-KilnInit {
+    if (-not (Test-Path $KILN_BUNDLED_DIR)) {
+        Write-Host "Error: Could not find kiln framework directory." -ForegroundColor Red
+        Write-Host "This script must be run from bin/kiln.ps1 (in the Kiln repository)." -ForegroundColor Yellow
+        exit 1
+    }
+
+    if ($ListProfiles) {
+        Write-Host "Available Kiln configuration profiles:" -ForegroundColor Green
+        Write-Host ""
+        $profilesPath = Join-Path $KILN_BUNDLED_DIR "framework" "profiles.json"
+        $config = Get-Content -Path $profilesPath -Raw | ConvertFrom-Json
+        foreach ($profileProp in $config.profiles.PSObject.Properties) {
+            Write-Host "  $($profileProp.Name)`t$($profileProp.Value.description)" -ForegroundColor Cyan
+        }
+        return
+    }
+
+    $target = $WorkingDir
+    if (Test-Path $target) {
+        Write-Host "Initializing Kiln in existing directory: $target" -ForegroundColor Green
+    } else {
+        Write-Host "Creating Kiln project: $target" -ForegroundColor Green
+    }
+    New-Item -ItemType Directory -Path $target -Force | Out-Null
+
+    New-KilnInitScaffold -Target $target
+    Copy-KilnInitConstitutionFiles -Target $target
+    Copy-KilnInitRoleFiles -Target $target
+    # Note: Profiles are not copied to the target project. Projects inherit framework profiles;
+    # override by creating kiln.profiles.json at project root if needed.
+    Copy-KilnInitSkills -Target $target
+    Write-KilnInitClaudeCodeConfig -ProjectPath $target
+    Write-Host "✓ Created .claude/settings.json" -ForegroundColor Green
+    Write-KilnInitMcpJson -Target $target
+    Copy-KilnInitExampleBrief -Target $target -ExampleName $Example
+    Initialize-KilnInitMessagesDb -Target $target
+    Initialize-KilnInitGitRepo -Target $target -SkipGit:$NoGit
+
+    Write-Host ""
+    Write-Host "✓ Project created successfully: $target" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Next steps:" -ForegroundColor Cyan
+    Write-Host "  1. cd $target"
+    Write-Host "  2. Review kiln/project/constitution/ and kiln/project/roles/"
+    Write-Host "  3. git add kiln/ .claude/ && git commit -m 'Add Kiln configuration'"
+    Write-Host "  4. Run: kiln.ps1 to launch agents"
+    Write-Host ""
+}
+
 # Main flow
+
+if ($Init) {
+    Invoke-KilnInit
+    exit 0
+}
 Test-Dependency git
 
 # Detect and load terminal adapter

@@ -1,4 +1,4 @@
-<!-- Copied into <project>/kiln/project/roles/human-in-the-loop.md by kiln-init. Customize this role's instructions per project. -->
+<!-- Copied into <project>/kiln/project/roles/human-in-the-loop.md during project init (kiln.ps1 -Init / kiln.sh init). Customize this role's instructions per project. -->
 
 > **Part of the framework's `default` profile** (`kiln/framework/profiles.json`) — the single
 > human-facing entry point ahead of an otherwise fully autonomous specifier → coder → refactorer →

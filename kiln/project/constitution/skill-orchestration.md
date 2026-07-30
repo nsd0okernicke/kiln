@@ -1,4 +1,4 @@
-<!-- Copied into <project>/kiln/project/constitution/skill-orchestration.md by kiln-init. Framework default skill dependency chain — customize only if your project adds/removes quality-gate skills. -->
+<!-- Copied into <project>/kiln/project/constitution/skill-orchestration.md during project init (kiln.ps1 -Init / kiln.sh init). Framework default skill dependency chain — customize only if your project adds/removes quality-gate skills. -->
 
 # Skill Orchestration
 

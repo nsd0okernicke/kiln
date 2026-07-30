@@ -18,17 +18,19 @@ The fastest way to get a working Kiln project: run the install script.
 
 **Windows (PowerShell):**
 ```powershell
-.\bin\kiln-init.ps1 -Target C:\path\to\my-project
+.\bin\kiln.ps1 -Init -WorkingDir C:\path\to\my-project
 cd C:\path\to\my-project
 ```
 
 **Unix/macOS:**
 ```bash
-./bin/kiln-init.sh /path/to/my-project
+./bin/kiln.sh init /path/to/my-project
 cd /path/to/my-project
 ```
 
 This scaffolds a complete Kiln project with configuration, role files, and git initialization.
+(`-Init`/`init` used to be a separate `kiln-init.ps1`/`kiln-init.sh` script — that's now folded
+into the main entrypoint, and the old scripts have been removed.)
 
 ### 2. (Optional) Use an Example
 
@@ -36,12 +38,12 @@ Include an example project brief by adding the `-Example` flag:
 
 **Windows:**
 ```powershell
-.\bin\kiln-init.ps1 -Target C:\path\to\library-hub -Example library-hub
+.\bin\kiln.ps1 -Init -WorkingDir C:\path\to\library-hub -Example library-hub
 ```
 
 **Unix/macOS:**
 ```bash
-./bin/kiln-init.sh /path/to/library-hub --example library-hub
+./bin/kiln.sh init /path/to/library-hub --example library-hub
 ```
 
 ### 3. Launch the Swarm
@@ -86,9 +88,9 @@ Kiln is a lightweight orchestration layer that:
 
 *The default profile in WezTerm — one tab for the human-facing intake role, one tab with the autonomous four-role cycle running as a grid.*
 
-### Project Structure Created by `kiln-init`
+### Project Structure Created by `kiln.ps1 -Init` / `kiln.sh init`
 
-When you run `kiln-init`, it scaffolds a new Kiln project with:
+When you run init, it scaffolds a new Kiln project with:
 
 ```text
 my-project/
@@ -180,10 +182,8 @@ The Kiln repository is organized for clarity and maintainability:
 ```text
 kiln/
 ├── bin/                          # User-facing scripts
-│   ├── kiln.sh             # Main launcher (Unix/macOS)
-│   ├── kiln.ps1            # Main launcher (Windows)
-│   ├── kiln-init.sh            # Project scaffolding (Unix/macOS)
-│   ├── kiln-init.ps1           # Project scaffolding (Windows)
+│   ├── kiln.sh             # Main launcher (Unix/macOS) + project scaffolding (init)
+│   ├── kiln.ps1            # Main launcher (Windows) + project scaffolding (-Init)
 │   ├── kiln-cleanup.sh          # Manual cleanup (Unix/macOS)
 │   ├── kiln-cleanup.ps1         # Manual cleanup (Windows)
 │   ├── clear-messages.sh         # Clear message queue (testing utility)
@@ -359,7 +359,7 @@ Kiln will create a git repository if one doesn't exist, initialize worktrees, an
 1. **Create a new project** from the Kiln repository root:
 
    ```powershell
-   .\bin\kiln-init.ps1 -Target C:\path\to\my-project
+   .\bin\kiln.ps1 -Init -WorkingDir C:\path\to\my-project
    cd C:\path\to\my-project
    ```
 
@@ -368,7 +368,7 @@ Kiln will create a git repository if one doesn't exist, initialize worktrees, an
 2. **Optional: Include an example brief** (library-hub):
 
    ```powershell
-   .\bin\kiln-init.ps1 -Target C:\path\to\library-hub -Example library-hub
+   .\bin\kiln.ps1 -Init -WorkingDir C:\path\to\library-hub -Example library-hub
    ```
 
    This adds the example README.md as your project brief so agents immediately know what to build.
@@ -415,7 +415,7 @@ Kiln will create a git repository if one doesn't exist, initialize worktrees, an
 1. **Create a new project** from the Kiln repository root:
 
    ```sh
-   ./bin/kiln-init.sh /path/to/my-project
+   ./bin/kiln.sh init /path/to/my-project
    cd /path/to/my-project
    ```
 
@@ -424,7 +424,7 @@ Kiln will create a git repository if one doesn't exist, initialize worktrees, an
 2. **Optional: Include an example brief** (library-hub):
 
    ```sh
-   ./bin/kiln-init.sh /path/to/library-hub --example library-hub
+   ./bin/kiln.sh init /path/to/library-hub --example library-hub
    ```
 
    This adds the example README.md as your project brief so agents immediately know what to build.
@@ -907,12 +907,12 @@ To scaffold a new LibraryHub project:
 
 **Windows:**
 ```powershell
-.\bin\kiln-init.ps1 -Target C:\my-library-hub -Example library-hub
+.\bin\kiln.ps1 -Init -WorkingDir C:\my-library-hub -Example library-hub
 ```
 
 **Unix/macOS:**
 ```bash
-./bin/kiln-init.sh /path/to/my-library-hub --example library-hub
+./bin/kiln.sh init /path/to/my-library-hub --example library-hub
 ```
 
 This creates a complete, ready-to-run project with the LibraryHub brief included.

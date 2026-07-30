@@ -142,7 +142,7 @@ end (no zsh available to test in the environment this was fixed from).
 
 ### Decide first
 
-- [ ] Spike: map `kiln.ps1` / `kiln.sh` / `kiln-init.*` surface area and shared vs divergent logic
+- [ ] Spike: map `kiln.ps1` / `kiln.sh` surface area (including the folded-in `-Init`/`init` scaffolding, see §8) and shared vs divergent logic
 - [ ] Choose approach:
   - **A.** Stay dual-shell; extract shared logic aggressively
   - **B.** Python core CLI (`kiln` entrypoint) calling thin terminal adapters
@@ -152,16 +152,24 @@ end (no zsh available to test in the environment this was fixed from).
 
 ---
 
-## 8. Unify `kiln-init` into main CLI
+## 8. Unify `kiln-init` into main CLI ✅ Done (2026-07-30)
 
 **Goal:** One entrypoint for users — `kiln init` / `.\kiln.ps1 init` instead of separate `kiln-init.ps1` / `kiln-init.sh`.
 
-### Work
+**Done, stayed dual-shell** (no Python CLI — that's still the separate, undecided §7): `kiln.ps1 -Init -WorkingDir <path>` / `kiln.sh init <path>` now scaffold a project directly. `-Target` works as a backward-compatible alias for `-WorkingDir` on the PS side. `kiln-init.ps1`/`kiln-init.sh` briefly existed as thin deprecated wrappers, then were removed outright (2026-07-30) once README/docs no longer referenced them — calling them directly no longer works, use `kiln.ps1 -Init`/`kiln.sh init`.
 
-- [ ] Design subcommand surface: `init`, (future) `stop`, `doc-*`, cleanup helpers
-- [ ] Fold scaffold logic from `kiln-init.*` into main scripts (or into Python CLI if §7 lands first)
-- [ ] Preserve flags (`-Target` / path, `-Example` / `--example`)
-- [ ] Deprecate standalone init scripts with a thin wrapper or clear migration note in README
+**PS positional-arg bug found and fixed post-merge:** `kiln.ps1 init -WorkingDir X` (Unix-style syntax tried on the PS side) silently bound the stray `init` token to `$Terminal` instead of erroring, because PowerShell assigns unclaimed positional tokens to the next parameter in declaration order. Fixed by adding an explicit `$Command` parameter as the first declaration (claims position 0): `"init"` is now treated as `-Init`, anything else errors clearly instead of silently mis-binding. (A first attempt at fixing this via `[CmdletBinding(PositionalBinding=$false)]` introduced a *second* bug — it auto-adds a built-in `-Debug` common parameter that collides with kiln.ps1's own `-Debug` switch — reverted in favor of the declaration-order approach, which needs no `CmdletBinding`.)
+
+Folded in **as-is**, bugs and parity gaps included (left for a separate pass, likely folded into §6): Bash's init still lacks a `-NoGit` equivalent and still requires the target not to already exist; Bash still copies an extra `kiln/.mcp.json` framework file PS doesn't; PS/Bash still default the (inert) `-Profile`/`--profile` flag differently (`default` vs `dev`).
+
+Functionally verified end-to-end on Windows (fresh scaffold, `-Target` alias, `-Example library-hub`, `-NoGit`, `-ListProfiles`, and the deprecated wrapper all tested against real output). Bash/zsh side verified by syntax-check only (no zsh available in the environment this was built in) — worth a real run on Unix/WSL.
+
+~~### Work~~
+
+- [x] Design subcommand surface: `-Init` (PS switch) / `init` (Bash leading positional subcommand) — `stop`/`doc-*`/cleanup helpers deliberately not addressed here
+- [x] Fold scaffold logic from `kiln-init.*` into main scripts
+- [x] Preserve flags (`-Target` / path, `-Example` / `--example`)
+- [x] Deprecate standalone init scripts with a thin wrapper
 - [ ] Update Quick Start docs
 
 ---
@@ -199,7 +207,7 @@ end (no zsh available to test in the environment this was fixed from).
 2. **§1.1–1.2** Codex live validation + mixed-agent confidence
 3. **§6** Unix parity (or pair with §7 if choosing Python)
 4. **§3** Skills hardening (quality of autonomous runs)
-5. **§5 / §8** Layout + CLI ergonomics
+5. ~~**§5 / §8** Layout + CLI ergonomics~~ — done
 6. **§2** Documentation MCP (net-new capability)
 7. **§7** Full Python port only if dual-shell cost stays high after smaller extractions
 8. **§9** Local traffic proxy (measure first, then optimize tokens)

@@ -16,13 +16,13 @@ Run the install script **from the Kiln repository root**:
 
 **Windows (PowerShell):**
 ```powershell
-.\bin\kiln-init.ps1 -Target C:\path\to\my-library-hub -Example library-hub
+.\bin\kiln.ps1 -Init -WorkingDir C:\path\to\my-library-hub -Example library-hub
 cd C:\path\to\my-library-hub
 ```
 
 **Unix/macOS (Bash):**
 ```bash
-./bin/kiln-init.sh /path/to/my-library-hub --example library-hub
+./bin/kiln.sh init /path/to/my-library-hub --example library-hub
 cd /path/to/my-library-hub
 ```
 

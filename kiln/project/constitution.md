@@ -1,4 +1,4 @@
-<!-- Copied into <project>/kiln/project/constitution.md by kiln-init. States load order only — rarely needs editing. -->
+<!-- Copied into <project>/kiln/project/constitution.md during project init (kiln.ps1 -Init / kiln.sh init). States load order only — rarely needs editing. -->
 
 # Kiln Constitution
 
