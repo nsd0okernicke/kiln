@@ -453,7 +453,17 @@ function Prepare-Workspace {
     New-Item -ItemType Directory -Force -Path $STATE_DIR, $WORKTREES_DIR | Out-Null
     Write-DirectoryGitignore $STATE_DIR
     Write-DirectoryGitignore $WORKTREES_DIR
-    Write-DirectoryGitignore $KILN_DIR
+    # kiln/ (unlike .kiln/ and .worktrees/) is meant to be version-controlled — kiln/project/
+    # holds the constitution/roles/skills every worktree needs to actually check out via git.
+    # A prior version of this function blanket-ignored it with Write-DirectoryGitignore, which
+    # silently excluded kiln/project/ from every commit — new worktrees ended up with no kiln/
+    # directory at all, since `git worktree add` only checks out tracked content. Self-heal any
+    # project still carrying that generated file (exact fingerprint: a lone "*").
+    $kilnDirGitignore = Join-Path $KILN_DIR ".gitignore"
+    if ((Test-Path $kilnDirGitignore) -and ((Get-Content -Path $kilnDirGitignore -Raw).Trim() -eq "*")) {
+        Remove-Item -Path $kilnDirGitignore -Force
+        Write-Host "Removed stray kiln/.gitignore that was blanket-ignoring kiln/project/" -ForegroundColor Yellow
+    }
 
     Write-ClaudeConfig
 }
@@ -948,7 +958,8 @@ function Build-WezTermAgentCommand {
         [string]$DisplayName,
         [string]$WorktreePath,
         [string]$Model = "",
-        [string]$Role = ""
+        [string]$Role = "",
+        [string]$Mode = "auto"
     )
 
     if ($Agent -eq "claude" -and -not $Model) {
@@ -956,11 +967,12 @@ function Build-WezTermAgentCommand {
     }
 
     $command = ""
+    $permissionMode = if ($Mode -eq "manual") { "default" } else { "bypassPermissions" }
 
     switch ($Agent) {
         "claude" {
             $debugLog = Join-Path $STATE_DIR "logs" "claude-debug-$Role.log"
-            $command = "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json --debug-file '$debugLog' -n '$DisplayName' 'Start your role session.'"
+            $command = "claude --model $Model --permission-mode $permissionMode --mcp-config ./.mcp.json --debug-file '$debugLog' -n '$DisplayName' 'Start your role session.'"
         }
         "copilot" {
             $copilotModelArg = if ($Model) { " --model '$Model'" } else { "" }
@@ -1049,7 +1061,7 @@ function Build-WindowsTerminalTabsLayout {
         $wtArgs += "--colorScheme", $AgentColors[$i % $AgentColors.Count]
         $wtArgs += "pwsh", "-NoExit", "-Command"
 
-        $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Role $Roles[$i]
+        $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Role $Roles[$i] -Mode $global:MODES[$i]
         $wtArgs += $agentCmd
     }
 
@@ -1178,7 +1190,7 @@ function Build-WindowsTerminalTabsArrayLayout {
                 }
 
                 $colorIdx = $roleIdx % $AgentColors.Count
-                $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Role $roleInPane
+                $agentCmd = Get-WindowsTerminalAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Role $roleInPane -Mode $global:MODES[$roleIdx]
                 $wtArgs += "-d", $worktreePath
                 $wtArgs += "--colorScheme", $AgentColors[$colorIdx]
                 $wtArgs += "pwsh", "-NoExit", "-Command"
@@ -1196,20 +1208,23 @@ function Get-WindowsTerminalAgentCommand {
         [string]$DisplayName,
         [string]$WorktreePath,
         [string]$Model = "",
-        [string]$Role = ""
+        [string]$Role = "",
+        [string]$Mode = "auto"
     )
 
     if ($Agent -eq "claude" -and -not $Model) {
         Write-Warning "No model specified for $DisplayName; agent command may fail"
     }
 
+    $permissionMode = if ($Mode -eq "manual") { "default" } else { "bypassPermissions" }
+
     switch ($Agent) {
         "claude" {
             $debugLog = Join-Path $STATE_DIR "logs" "claude-debug-$Role.log"
             if ($DisplayName) {
-                return "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json --debug-file ""$debugLog"" -n ""$DisplayName"" ""Start your role session."""
+                return "claude --model $Model --permission-mode $permissionMode --mcp-config ./.mcp.json --debug-file ""$debugLog"" -n ""$DisplayName"" ""Start your role session."""
             } else {
-                return "claude --model $Model --permission-mode bypassPermissions --mcp-config ./.mcp.json --debug-file ""$debugLog"" ""Start your role session."""
+                return "claude --model $Model --permission-mode $permissionMode --mcp-config ./.mcp.json --debug-file ""$debugLog"" ""Start your role session."""
             }
         }
         "copilot" {
@@ -1741,7 +1756,7 @@ if ($TerminalBackend -eq "wezterm") {
         Write-Verbose "Role: '$role', DisplayName: '$displayName', Agent: '$agent', Model: '$model'"
 
         Write-GeneratedCLAUDEmd -Index $i -Role $role -WorktreePath $worktreePath -Agent $agent -Mode $global:MODES[$i]
-        $cmd = Build-WezTermAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Role $role
+        $cmd = Build-WezTermAgentCommand -Agent $agent -DisplayName $displayName -WorktreePath $worktreePath -Model $model -Role $role -Mode $global:MODES[$i]
 
         $roleData += [PSCustomObject]@{
             role  = $role

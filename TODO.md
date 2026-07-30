@@ -115,6 +115,22 @@ Both fixed by rewriting `prepare_agent_configs()` to mirror `kiln.ps1`'s `Write-
 `Prepare-AgentConfigs` almost line-for-line. Still needs a live Unix/WSL run to confirm end to
 end (no zsh available to test in the environment this was fixed from).
 
+**Found and fixed later (2026-07-30) — unrelated `kiln.ps1`-only bug, same neighborhood:**
+`Prepare-Workspace` called `Write-DirectoryGitignore $KILN_DIR`, writing a blanket `*`
+`kiln/.gitignore` into the *version-controlled* `kiln/` directory (should only ever apply to
+`.kiln/`/`.worktrees/`) — this had been noticed once before mid-session and worked around locally
+by deleting the stray file, without fixing the generator. It then caused real damage in a live
+run: `kiln/project/` (constitution, roles, skills) was never git-tracked, so every new worktree
+(`git worktree add`) came up with **no `kiln/` directory at all**. Worker-agent prompts still
+came out correct (`Write-GeneratedWorkerAgent` reads `kiln/project/` straight off disk, not via
+git, at launch time), so this hadn't broken agent behavior yet — but `kiln/project/` changes could
+never be committed or merged going forward. Fixed by removing the `Write-DirectoryGitignore
+$KILN_DIR` call entirely and adding a self-heal step: if a project still carries the generated
+file (exact fingerprint — a lone `*`), `Prepare-Workspace` now deletes it on next launch.
+`kiln.sh` never had this bug (no per-directory `kiln/.gitignore` writer exists there). Verified:
+fresh `-Init` no longer creates the file (`kiln/` shows as plain untracked, not ignored, in
+`git status`); isolated repro confirmed the self-heal removes a pre-existing `*`-only file.
+
 ---
 
 ## 6. Unix / `kiln.sh` parity
