@@ -497,11 +497,23 @@ prepare_skills() {
   done
 }
 
+# Mirrors kiln.ps1's Write-ClaudeConfig (root .mcp.json section) and Prepare-AgentConfigs.
+# Two independent things live here because they're both "root-level, not per-worktree" config:
+#
+# A. Root .mcp.json for whichever role has worktree @current/none/master — that role runs
+#    directly in the project root (no worktree of its own), so its .mcp.json has to sit there
+#    too. Gets both kiln-db and kiln-channel, same as every per-worktree copy, regardless of
+#    that role's agent backend (kiln.ps1 doesn't gate on backend either — an unused kiln-channel
+#    entry is harmless for a non-Claude @current role, and gating here would just be a source of
+#    drift between platforms).
+# B. ~/.copilot/mcp-config.json — Copilot CLI's own global MCP config location, only written if
+#    a Copilot agent exists anywhere in the swarm. Unrelated to (A); a swarm can need one, the
+#    other, both, or neither.
 prepare_agent_configs() {
-  # Create ~/.copilot/mcp-config.json for Copilot agents (if any exist in the swarm)
-  local i db_path has_copilot
+  local i db_path has_copilot current_role
   db_path="$STATE_DIR/messages.db"
   has_copilot=0
+  current_role=""
 
   for (( i = 1; i <= ${#AGENTS[@]}; i++ )); do
     if [[ "${AGENTS[$i]}" == "copilot" ]]; then
@@ -510,8 +522,40 @@ prepare_agent_configs() {
     fi
   done
 
-  if [[ $has_copilot -eq 1 ]]; then
-    # Create .mcp.json in project root (Copilot agents look here for MCP config)
+  for (( i = 1; i <= ${#ROLES[@]}; i++ )); do
+    local wt_name="${WORKTREE_NAMES[$i]}"
+    if [[ "$wt_name" == "none" || "$wt_name" == "master" || "$wt_name" == "@current" ]]; then
+      current_role="${ROLES[$i]}"
+      break
+    fi
+  done
+
+  if [[ -n "$current_role" ]]; then
+    local logs_dir="$STATE_DIR/logs"
+    local channel_script="$(dirname "$SCRIPT_DIR")/kiln/framework/mcp-server/channel.py"
+    mkdir -p "$logs_dir" "$STATE_DIR/status"
+    local channel_log="$logs_dir/channel-$current_role.log"
+    cat > "$WORKING_DIR/.mcp.json" << EOF
+{
+  "mcpServers": {
+    "kiln-db": {
+      "command": "npx",
+      "args": ["mcp-sqlite", "$db_path"]
+    },
+    "kiln-channel": {
+      "command": "python",
+      "args": ["$channel_script"],
+      "env": {
+        "KILN_ROLE": "$current_role",
+        "KILN_DB_PATH": "$db_path",
+        "KILN_BRANCH": "$current_branch",
+        "KILN_CHANNEL_LOG": "$channel_log"
+      }
+    }
+  }
+}
+EOF
+  else
     cat > "$WORKING_DIR/.mcp.json" << EOF
 {
   "mcpServers": {
@@ -522,7 +566,23 @@ prepare_agent_configs() {
   }
 }
 EOF
-    echo -e "${GREEN}Created .mcp.json (MCP server configuration)${RESET}"
+  fi
+  echo -e "${GREEN}Created .mcp.json (MCP server configuration)${RESET}"
+
+  if [[ $has_copilot -eq 1 ]]; then
+    local copilot_dir="$HOME/.copilot"
+    mkdir -p "$copilot_dir"
+    cat > "$copilot_dir/mcp-config.json" << EOF
+{
+  "mcpServers": {
+    "kiln-db": {
+      "command": "npx",
+      "args": ["mcp-sqlite", "$db_path"]
+    }
+  }
+}
+EOF
+    echo -e "${GREEN}Created ~/.copilot/mcp-config.json${RESET}"
   fi
 }
 

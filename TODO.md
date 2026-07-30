@@ -89,16 +89,31 @@ Slim update only — no new architecture research.
 
 ---
 
-## 5. Project layout — `.mcp.json` placement
+## 5. Project layout — `.mcp.json` placement ✅ Decided (2026-07-30)
 
 **Question:** Root `.mcp.json` exists for `@current` roles; worktrees get their own copy. Is root the right place long-term?
 
-### Investigate / decide
+**Decision: keep it at project root, no relocation.** Every `claude` launch already passes
+`--mcp-config ./.mcp.json` explicitly (`kiln.ps1:935,1182,1184`), so the location isn't
+Claude-Code-imposed — but root is also Claude Code's own ecosystem-standard discovery
+convention, is already correctly gitignored and cleaned up on both platforms, and `.kiln/` (the
+obvious alternative) is symlinked identically into every worktree so it can't hold
+per-role-differentiated content anyway.
 
-- [ ] Document current generation rules (root vs per-worktree, Claude vs other backends)
-- [ ] Decide target layout (e.g. keep root for `@current` only; never commit generated files; or move template under `kiln/framework/`)
-- [ ] Align `.gitignore`, cleanup scripts, and README project-structure section
-- [ ] Implement if the decision moves files or generation paths
+**Found and fixed along the way — two real `kiln.sh` bugs, unrelated to placement:**
+
+- `bin/kiln.sh`'s `prepare_agent_configs()` never wrote a root `.mcp.json` for a Claude
+  `@current` role unless a Copilot agent happened to also be in the swarm — meaning the
+  flagship all-Claude `default` profile (`human-in-the-loop` as `@current`) was effectively
+  broken on Unix (`--mcp-config ./.mcp.json` pointed at a file that never existed).
+- The same function's own comment claimed it wrote `~/.copilot/mcp-config.json` (matching
+  `kiln.ps1`'s `Prepare-AgentConfigs`, the location Copilot CLI actually reads), but the body
+  never did — it wrote an incomplete file to the project root instead. Copilot agents likely had
+  no working MCP config on Unix either.
+
+Both fixed by rewriting `prepare_agent_configs()` to mirror `kiln.ps1`'s `Write-ClaudeConfig` +
+`Prepare-AgentConfigs` almost line-for-line. Still needs a live Unix/WSL run to confirm end to
+end (no zsh available to test in the environment this was fixed from).
 
 ---
 
