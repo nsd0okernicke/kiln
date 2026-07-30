@@ -114,15 +114,26 @@ EOF
 
 init_copy_example_brief() {
   local target="$1" framework_root="$2" example="$3"
-  [[ "$example" == "library-hub" ]] || return 0
-  if [[ -f "$framework_root/examples/library-hub/README.md" ]]; then
-    cp "$framework_root/examples/library-hub/README.md" "$target/README.md"
+  [[ -n "$example" ]] || return 0
+  local example_dir="$framework_root/examples/$example"
+  if [[ ! -d "$example_dir" ]]; then
+    echo "Warning: example '$example' not found under examples/ — skipping brief copy." >&2
+    return 0
+  fi
+  if [[ -f "$example_dir/README.md" ]]; then
+    cp "$example_dir/README.md" "$target/README.md"
     echo "✓ Copied example README.md"
   fi
-  local example_project_md="$framework_root/examples/$example/kiln/project/constitution/project.md"
-  if [[ -f "$example_project_md" ]]; then
-    cp "$example_project_md" "$target/kiln/project/constitution/project.md"
-    echo "✓ Copied example-specific project.md"
+  # Copy every file the example overrides (project.md, engineering.md, ...) rather than a
+  # hardcoded single filename, so new examples need no further script changes here.
+  local example_constitution_dir="$example_dir/kiln/project/constitution"
+  if [[ -d "$example_constitution_dir" ]]; then
+    local f
+    for f in "$example_constitution_dir"/*; do
+      [[ -f "$f" ]] || continue
+      cp "$f" "$target/kiln/project/constitution/$(basename "$f")"
+    done
+    echo "✓ Copied example-specific constitution files"
   fi
 }
 

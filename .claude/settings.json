@@ -152,7 +152,14 @@
       "Bash(rm -rf \"/c/Users/OKERNI~1/AppData/Local/Temp/1/claude/c--projekte-agentic-coding-kiln/00aa5005-b56f-4fc9-beaf-178d436d4d65/scratchpad/kiln-init-test\" \"/c/Users/OKERNI~1/AppData/Local/Temp/1/claude/c--projekte-agentic-coding-kiln/00aa5005-b56f-4fc9-beaf-178d436d4d65/scratchpad/kiln-init-test2\")",
       "Bash(bash -c ' *)",
       "PowerShell($errors = $null; $tokens = $null; $ast = [System.Management.Automation.Language.Parser]::ParseFile\\(\"c:\\\\projekte\\\\agentic-coding\\\\kiln\\\\bin\\\\kiln.ps1\", [ref]$tokens, [ref]$errors\\); if \\($errors.Count -eq 0\\) { \"syntax OK\" } else { $errors | ForEach-Object { $_.Message + \" at line \" + $_.Extent.StartLineNumber } })",
-      "Bash(rm -rf \"/c/Users/OKERNI~1/AppData/Local/Temp/1/claude/c--projekte-agentic-coding-kiln/00aa5005-b56f-4fc9-beaf-178d436d4d65/scratchpad/pb-test\"*)"
+      "Bash(rm -rf \"/c/Users/OKERNI~1/AppData/Local/Temp/1/claude/c--projekte-agentic-coding-kiln/00aa5005-b56f-4fc9-beaf-178d436d4d65/scratchpad/pb-test\"*)",
+      "Bash(pwsh -NoProfile -Command '[System.Management.Automation.Language.Parser]::ParseFile\\('\\\\''bin/kiln.ps1'\\\\'', [ref]$null, [ref]$errors\\) | Out-Null; if \\($errors.Count -gt 0\\) { $errors | ForEach-Object { Write-Host $_.Message } } else { Write-Host '\\\\''OK - no syntax errors'\\\\'' }')",
+      "Bash(pwsh -NoProfile -Command '$errors = $null; [System.Management.Automation.Language.Parser]::ParseFile\\(\"bin/kiln.ps1\", [ref]$null, [ref]$errors\\) | Out-Null; if \\($errors.Count -gt 0\\) { $errors | ForEach-Object { Write-Host $_.Message } } else { Write-Host \"OK - no syntax errors\" }')",
+      "Bash(pwsh -NoProfile -File \"./bin/kiln.ps1\" -Init -WorkingDir \"C:\\\\tmp\\\\kiln-example-test-java\" -Example library-hub-java -NoGit)",
+      "Bash(pwsh -NoProfile -File \"./bin/kiln.ps1\" -Init -WorkingDir \"C:\\\\tmp\\\\kiln-example-test-original\" -Example library-hub -NoGit)",
+      "Bash(pwsh -NoProfile -File \"./bin/kiln.ps1\" -Init -WorkingDir \"C:\\\\tmp\\\\kiln-example-test-badname\" -Example totally-not-real -NoGit)",
+      "Bash(pwsh -NoProfile -File \"./bin/kiln.ps1\" -Init -WorkingDir \"C:\\\\tmp\\\\kiln-example-test-battlezone\" -Example battlezone -NoGit)",
+      "Bash(grep -n \"^## Examples\\\\|^### LibraryHub\\\\|^---$\" README.md)"
     ],
     "additionalDirectories": [
       "C:\\projekte\\agentic-coding\\library-hub-testrun3\\.worktrees\\architect",

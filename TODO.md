@@ -201,38 +201,104 @@ Functionally verified end-to-end on Windows (fresh scaffold, `-Target` alias, `-
 
 ---
 
-## 10. New example projects: LibraryHub (Java/Spring) and Battlezone
+## 10. New example projects: LibraryHub (Java/Spring) and Battlezone ✅ Done (2026-07-30)
 
 **Goal:** Add two new reference examples under `examples/`, following the same pattern as
 `examples/library-hub/README.md` — each needs a full project brief plus a matching
 `kiln/project/` starter set (`constitution/project.md`, `constitution/engineering.md`, and any
 other project-specific role/constitution tweaks), not just a spec document.
 
-### 10.1 LibraryHub — Java/Spring variant
+### 10.0 Prerequisite — generalize the example-brief copy logic ✅ Done (2026-07-30)
 
-- [ ] New example dir (e.g. `examples/library-hub-java/`) — same domain/user stories as the
-  existing Python LibraryHub, ported to Java/Spring Boot tech stack
-- [ ] `README.md` brief: architecture, bounded contexts, user stories, layering rules, tech stack,
-  quality gates, testing strategy (mirror the structure of the existing Python brief)
-- [ ] `project.md` / `engineering.md` starter content — Java/Spring build tool (Maven/Gradle),
-  test framework (JUnit5), quality tools (JaCoCo, PIT, Checkstyle/SonarQube — see
-  `skill-orchestration.md`'s existing Java/Kotlin tool mapping row), mutation/CRAP thresholds
-- [ ] Decide: reuse the existing Python LibraryHub's domain 1:1, or let the Java port diverge
-  where idiomatic (package layout, DI conventions)
+**Decided (2026-07-30):** `examples/<name>/kiln/project/constitution/` is the right home for
+per-example `project.md`/`engineering.md` (this already matches the existing
+`examples/library-hub/kiln/project/constitution/project.md`). But `Copy-KilnInitExampleBrief`
+(`bin/kiln.ps1:1345`) and `init_copy_example_brief` (`bin/kiln.sh:115`) are both hardcoded to the
+literal string `"library-hub"` — even the README copy step is gated behind
+`if ($ExampleName -ne "library-hub") { return }` — so neither new example would work until this
+is fixed, regardless of which one lands first.
 
-### 10.2 Battlezone (1980 Atari) — something totally different
+**Decision: generalize to copy the whole directory.** Drop the hardcoded name check; copy every
+file present in `examples/<name>/kiln/project/constitution/` (not just `project.md`) over the
+scaffolded defaults, so `engineering.md` (and anything else an example needs to override) is
+picked up automatically without another code change per example.
 
-- [ ] New example dir (e.g. `examples/battlezone/`) — a from-scratch game implementation, not a
-  CRUD service; pick and document target stack/platform first (language, rendering approach,
-  vector-graphics feel vs modern equivalent)
-- [ ] `README.md` brief: game mechanics/rules, scope (MVP feature set vs full arcade fidelity),
-  architecture (game loop, rendering, input, collision), out-of-scope list
-- [ ] `project.md` / `engineering.md` starter content — matching tech stack, test strategy for a
-  game (what "TDD" and "coverage" even mean here — likely simulation/logic layer tested,
-  rendering excluded), quality gates adapted from the CRUD-service defaults
-- [ ] Sanity-check the existing role files/constitution assume a typical layered
-  service — flag anything that needs a game-specific tweak (e.g. `workflow.md` handoff cadence,
-  `engineering.md` tool mapping) rather than silently forcing the CRUD shape onto it
+- [x] `bin/kiln.ps1`: removed the `"library-hub"` literal check in `Copy-KilnInitExampleBrief`;
+  replaced the single hardcoded `project.md` copy with a loop over all files in
+  `examples/<name>/kiln/project/constitution/`. Also added a yellow warning (not a hard error) if
+  `-Example <name>` points at a directory that doesn't exist under `examples/`, instead of
+  silently doing nothing.
+- [x] `bin/kiln.sh`: same change in `init_copy_example_brief`, same warning-not-error behavior
+- [x] Verified: fresh `-Example library-hub-java` scaffold on Windows actually copies README.md,
+  the Maven-flavored `project.md`, *and* `engineering.md` (previously never copied for any
+  example, including the original `library-hub` — it happened to not matter there since the
+  framework's scaffolded default `engineering.md` is already Python-flavored). Re-verified
+  `-Example library-hub` still produces byte-identical output to before the change (no
+  regression), and an unknown example name (`-Example totally-not-real`) now warns and continues
+  instead of erroring. Bash/zsh side verified by syntax-check only (`bash -n`, patched around the
+  one pre-existing zsh-only `<->` construct) — no zsh available in this environment to run live.
+
+### 10.1 LibraryHub — Java/Spring variant ✅ Done (2026-07-30)
+
+**Decided:** reuse the Python LibraryHub's domain, bounded contexts, and user stories **1:1**
+(same CAT-1..6 / LOAN-0..5, same two-service split) so the two examples stay directly comparable
+— but let package layout and DI diverge to be idiomatic Java/Spring rather than a literal
+transliteration: multi-module Maven build (parent POM + `catalog-service`/`loans-service`
+modules) with a standard `src/main/java/...` tree, instead of the Python original's flat
+no-`src/`-wrapper layout.
+
+- [x] New example dir `examples/library-hub-java/` — same domain/user stories as the existing
+  Python LibraryHub, ported to Java/Spring Boot
+- [x] `README.md` brief: architecture, bounded contexts, user stories, layering rules, tech stack,
+  quality gates, testing strategy (mirrors the structure of the existing Python brief)
+- [x] `project.md` / `engineering.md` — Maven multi-module build (parent POM), Spring Boot 3.x
+  (MVC, not WebFlux), Spring Data JPA with PostgreSQL, Spring AMQP with RabbitMQ, JUnit 5 with
+  Cucumber-JVM, Testcontainers, and jqwik, JaCoCo coverage, PIT mutation/CRAP (threshold 30,
+  matches `skill-orchestration.md`'s Java/Kotlin row), Checkstyle/Spotless, ArchUnit layering
+- [x] **§10.0** generalization landed — `-Example library-hub-java` now scaffolds correctly
+- [x] End-to-end smoke test: `kiln.ps1 -Init -Example library-hub-java` on Windows, confirmed
+  README.md, `project.md`, and `engineering.md` all land with this example's Maven/Spring content
+  (not the framework's Python defaults); `-Example library-hub` regression-checked unaffected
+
+### 10.2 Battlezone (1980 Atari) — something totally different ✅ Done (2026-07-30)
+
+**Decided (stack):** Python 3.10+ + `pygame` (SDL2-backed — confirmed cross-platform on Windows
+and Linux, no platform-specific code needed). Chosen over a TypeScript/Canvas rewrite because it
+reuses the framework's existing Python tool table as-is (`pytest`, `mutmut`, `radon`, `mypy`) —
+the "totally different" axis is the domain (real-time game vs CRUD service) and architecture
+(fixed-timestep loop vs request/response), not a third from-scratch toolchain.
+
+**Decided (architecture fit):** kept the same 3-layer `infrastructure → application → domain`
+dependency discipline as `library-hub`, just remapped — `infrastructure/` is pygame
+(window/input/rendering) instead of HTTP/DB, `domain/`+`application/` is the pure, fully
+testable simulation core (movement, collision, AI state machine, 3D→screen projection math,
+scoring). `GameSession.tick()` → `FrameState` is the one boundary object between the testable
+core and the environment-bound shell — no `pygame` import ever crosses into `domain/` or
+`application/`.
+
+**Decided (testing for a game):** unit + Hypothesis property tests + headless `pytest-bdd`
+acceptance tests all run directly against `domain/`/`application/` with zero pygame involvement
+(no window ever opens in CI/agent runs). `infrastructure/` (the actual window, input polling,
+drawing) has no automated gate — it's verified by a manual playtest step before any handoff that
+touches it, called out explicitly in both `README.md` and `project.md`.
+
+- [x] New example dir `examples/battlezone/` — game implementation, not a CRUD service; stack and
+  rendering approach (hand-rolled wireframe projection, no 3D engine) decided and documented above
+- [x] `README.md` brief: game mechanics (TANK-#/AI-#/WORLD-#/GAME-#/HUD-# user stories), explicit
+  MVP scope (tanks only, no saucers/sound/persistence/networking — see Out of Scope), architecture
+  (game loop, rendering, input, collision), out-of-scope list
+- [x] `project.md` / `engineering.md` — Python/pygame tech stack, quality gates explicitly scoped
+  to `domain/`+`application/` only (mutation ≥80%, coverage >90%, strict mypy), `infrastructure/`
+  excluded and covered by manual playtest instead; `engineering.md` adds the pygame/headless-test
+  notes (`SDL_VIDEODRIVER=dummy` if ever needed, the "never import pygame in domain/application"
+  rule) the framework's generic Python default doesn't know about
+- [x] Sanity-checked `kiln/project/roles/coder.md` and `constitution/workflow.md` — neither
+  hardcodes anything HTTP/REST/DB-specific (`coder.md`'s "HTTP routers, DB models" is illustrative
+  phrasing, not an enforced assumption); `constitution/engineering.md`'s existing "environmentally
+  unsuitable modules that open GUIs... or hang under automated tests" rule already anticipated
+  exactly this case. **No changes needed to role files or `workflow.md`.**
+- [x] End-to-end smoke test: `kiln.ps1 -Init -Example battlezone` on Windows, confirmed README.md,
+  `project.md`, and `engineering.md` all land with this example's content
 
 ---
 
@@ -242,7 +308,7 @@ other project-specific role/constitution tweaks), not just a spec document.
 2. **§1.1–1.2** Codex live validation + mixed-agent confidence
 3. **§6** Unix parity (or pair with §7 if choosing Python)
 4. **§3** Skills hardening (quality of autonomous runs)
-5. **§10** New example projects (LibraryHub Java/Spring, Battlezone)
+5. ~~**§10** New example projects (LibraryHub Java/Spring, Battlezone)~~ — done
 6. ~~**§5 / §8** Layout + CLI ergonomics~~ — done
 7. **§2** Documentation MCP (net-new capability)
 8. **§7** Full Python port only if dual-shell cost stays high after smaller extractions

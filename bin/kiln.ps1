@@ -1344,18 +1344,27 @@ function Write-KilnInitMcpJson {
 
 function Copy-KilnInitExampleBrief {
     param([string]$Target, [string]$ExampleName)
-    if ($ExampleName -ne "library-hub") { return }
+    if (-not $ExampleName) { return }
     $frameworkRoot = Split-Path -Parent $KILN_BUNDLED_DIR
-    $exampleReadme = Join-Path $frameworkRoot "examples" "library-hub" "README.md"
+    $exampleDir = Join-Path $frameworkRoot "examples" $ExampleName
+    if (-not (Test-Path $exampleDir)) {
+        Write-Host "Warning: example '$ExampleName' not found under examples/ — skipping brief copy." -ForegroundColor Yellow
+        return
+    }
+    $exampleReadme = Join-Path $exampleDir "README.md"
     if (Test-Path $exampleReadme) {
         Copy-Item -Path $exampleReadme -Destination (Join-Path $Target "README.md") -Force
         Write-Host "✓ Copied example README.md" -ForegroundColor Green
     }
-    $exampleProjectMd = Join-Path $frameworkRoot "examples" $ExampleName "kiln" "project" "constitution" "project.md"
-    if (Test-Path $exampleProjectMd) {
+    # Copy every file the example overrides (project.md, engineering.md, ...) rather than a
+    # hardcoded single filename, so new examples need no further script changes here.
+    $exampleConstitutionDir = Join-Path $exampleDir "kiln" "project" "constitution"
+    if (Test-Path $exampleConstitutionDir) {
         $constitutionDir = Join-Path $Target "kiln" "project" "constitution"
-        Copy-Item -Path $exampleProjectMd -Destination (Join-Path $constitutionDir "project.md") -Force
-        Write-Host "✓ Copied example-specific project.md" -ForegroundColor Green
+        Get-ChildItem -Path $exampleConstitutionDir -File | ForEach-Object {
+            Copy-Item -Path $_.FullName -Destination (Join-Path $constitutionDir $_.Name) -Force
+        }
+        Write-Host "✓ Copied example-specific constitution files" -ForegroundColor Green
     }
 }
 

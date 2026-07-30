@@ -34,7 +34,8 @@ into the main entrypoint, and the old scripts have been removed.)
 
 ### 2. (Optional) Use an Example
 
-Include an example project brief by adding the `-Example` flag:
+Include an example project brief by adding the `-Example` flag with any directory name under
+`examples/` (e.g. `library-hub`, `library-hub-java`, `battlezone`):
 
 **Windows:**
 ```powershell
@@ -45,6 +46,10 @@ Include an example project brief by adding the `-Example` flag:
 ```bash
 ./bin/kiln.sh init /path/to/library-hub --example library-hub
 ```
+
+This copies `examples/<name>/README.md` as the project brief, plus any files the example ships
+under `examples/<name>/kiln/project/constitution/` (e.g. a Java-specific `project.md`/
+`engineering.md`) over the scaffolded defaults — see **Examples** below for the full list.
 
 ### 3. Launch the Swarm
 
@@ -221,7 +226,9 @@ kiln/
 │       └── tools/                    # set-status.py — re-seeded into .kiln/tools/ on every launch
 │
 ├── examples/                     # Example project briefs
-│   └── library-hub/README.md     # LibraryHub reference example
+│   ├── library-hub/               # LibraryHub reference example (Python/FastAPI)
+│   ├── library-hub-java/          # LibraryHub reference example (Java/Spring Boot)
+│   └── battlezone/                # BattleZone reference example (Python/pygame game, not a CRUD service)
 │
 ├── tests/                        # Framework tests
 └── docs/                         # Documentation & assets
@@ -288,7 +295,7 @@ By default, **all projects use the framework's `kiln/framework/profiles.json`**,
 
 - **`constitution/workflow.md`** — Defines handoff protocol, git worktree discipline, and cross-agent communication rules.
 - **`constitution/engineering.md`** — Specifies language, build tools, test frameworks, quality tools, and coding practices.
-- **`constitution/project.md`** — Project-specific rules: language, architecture constraints, quality thresholds. Initialized from the framework starter template; fill in or extend for your project. Example projects (like library-hub) keep detailed technical rules in their `README.md` so agents get them as part of the project brief.
+- **`constitution/project.md`** — Project-specific rules: language, architecture constraints, quality thresholds. Initialized from the framework starter template; fill in or extend for your project. Example projects keep detailed technical rules in their `README.md` as the project brief, and can also ship their own `project.md`/`engineering.md` under `examples/<name>/kiln/project/constitution/` — `-Example <name>` copies those over the scaffolded defaults (e.g. `library-hub-java` overrides both to point at its Maven/Spring toolchain instead of the framework's Python defaults).
 
 **Agent Instruction Assembly:** Constitution and role instructions are **always combined** at startup:
 
@@ -365,7 +372,7 @@ Kiln will create a git repository if one doesn't exist, initialize worktrees, an
 
    This scaffolds the project with all necessary files: constitution, roles, tools, and git initialization.
 
-2. **Optional: Include an example brief** (library-hub):
+2. **Optional: Include an example brief** (`library-hub`, `library-hub-java`, or `battlezone` — see **Examples** below):
 
    ```powershell
    .\bin\kiln.ps1 -Init -WorkingDir C:\path\to\library-hub -Example library-hub
@@ -421,7 +428,7 @@ Kiln will create a git repository if one doesn't exist, initialize worktrees, an
 
    This scaffolds the project with all necessary files: constitution, roles, tools, and git initialization.
 
-2. **Optional: Include an example brief** (library-hub):
+2. **Optional: Include an example brief** (`library-hub`, `library-hub-java`, or `battlezone` — see **Examples** below):
 
    ```sh
    ./bin/kiln.sh init /path/to/library-hub --example library-hub
@@ -899,11 +906,16 @@ The cleanup script removes:
 
 ## Examples
 
-The repository includes example project briefs under `examples/`. These are intended to be used with the install scripts.
+The repository includes example project briefs under `examples/`. These are intended to be used with the install scripts via `-Example <name>` / `--example <name>`, where `<name>` is any directory under `examples/`.
+
+Each example directory can contain:
+
+- `README.md` — the project brief, copied to the new project's root
+- `kiln/project/constitution/*.md` (optional) — example-specific overrides (e.g. `project.md`, `engineering.md`) copied over the scaffolded defaults, so an example can point agents at its own toolchain instead of the framework's generic starter rules
+
+### LibraryHub (Python/FastAPI)
 
 - `examples/library-hub/README.md` — LibraryHub, a FastAPI microservices project with hexagonal architecture, RabbitMQ event-driven communication, and full TDD/mutation-testing quality gates. Includes architecture & layering rules, tech stack, quality gates, and testing strategy — all as part of the project brief so agents have complete technical context. This serves as the reference implementation for Kiln.
-
-To scaffold a new LibraryHub project:
 
 **Windows:**
 ```powershell
@@ -915,7 +927,35 @@ To scaffold a new LibraryHub project:
 ./bin/kiln.sh init /path/to/my-library-hub --example library-hub
 ```
 
-This creates a complete, ready-to-run project with the LibraryHub brief included.
+### LibraryHub (Java/Spring Boot)
+
+- `examples/library-hub-java/README.md` — the same LibraryHub domain, bounded contexts, and user stories, reimplemented on Java 21 + Spring Boot 3 (Spring MVC, Spring Data JPA, Spring AMQP), Maven multi-module, JUnit 5 + Cucumber-JVM + Testcontainers + jqwik, JaCoCo/PIT/Checkstyle/ArchUnit for quality gates. Ships its own `constitution/project.md` and `constitution/engineering.md` overriding the framework's Python-flavored defaults with this stack's tooling.
+
+**Windows:**
+```powershell
+.\bin\kiln.ps1 -Init -WorkingDir C:\my-library-hub-java -Example library-hub-java
+```
+
+**Unix/macOS:**
+```bash
+./bin/kiln.sh init /path/to/my-library-hub-java --example library-hub-java
+```
+
+### BattleZone (Python/pygame — not a CRUD service)
+
+- `examples/battlezone/README.md` — a from-scratch, single-player reimplementation of Atari's 1980 vector-graphics tank combat arcade game: a first-person wireframe tank simulator built on Python + `pygame`. Deliberately a different shape from LibraryHub — one real-time application with a fixed-timestep game loop instead of networked services — but keeps the same layering discipline: a fully unit/mutation/property-tested `domain`+`application` simulation core (movement, collision, AI, 3D-to-screen projection math, scoring), with the pygame window/input/rendering shell as the one environment-bound boundary, verified by manual playtest instead of automated gates. Ships its own `constitution/project.md` and `constitution/engineering.md`.
+
+**Windows:**
+```powershell
+.\bin\kiln.ps1 -Init -WorkingDir C:\my-battlezone -Example battlezone
+```
+
+**Unix/macOS:**
+```bash
+./bin/kiln.sh init /path/to/my-battlezone --example battlezone
+```
+
+Any of these commands creates a complete, ready-to-run project with the corresponding brief and constitution overrides included.
 
 ---
 
