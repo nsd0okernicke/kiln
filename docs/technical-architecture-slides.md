@@ -1,135 +1,109 @@
 ---
 marp: true
-theme: default   # or gaia / uncover
+theme: default
 paginate: true
+---
+
+<!-- _class: lead -->
+
+![w:140](images/logo.png)
+
+# Kiln
+
+**An orchestration platform that turns swarms of AI agents into reliable, professional software engineers.**
+
+Technical overview — topology, wrapper/worker delegation, and the handoff loop
 
 ---
 
-## Slide 1: Kiln Technical Architecture
+## What Kiln Does
 
-- Title: "Kiln: MCP-based Multi-Agent Development Workflow"
-- Subtitle: "Technical view, agent cycle, merge strategy, and terminal orchestration"
-- Presenter note: set expectations that this deck is about internal infrastructure and workflow, not product UI.
-
-> Visual hint: simple title slide with project name and a small architecture icon or flow symbol.
-
----
-
-## Slide 2: High-Level System Overview
-
-- Kiln coordinates multiple AI agents through an MCP server, SQLite messaging, and git worktrees.
-- Core components:
-  - `kiln-channel` MCP server — blocking `wait_for_message()` with message lifecycle tracking
-  - `kiln-db` MCP server — SQL read/write for handoff messages
-  - SQLite message queue (`.kiln/messages.db`) with state tracking: queued → delivered → processing → processed
-  - Agent clients: Claude (thin wrappers + worker subagents), Copilot, future Codex/Grok
-  - Git branches/worktrees for isolated agent work
-  - Profiles, launch scripts, and terminal layout orchestrator
-- Value: deterministic agent handoff, message recovery on timeout, clean agent-specific branches, and auditable merge points.
-
-> Visual hint: a block diagram with components, message state machine, and arrows.
+- Launches a **config-driven swarm** — each role's AI backend, worktree, and mode come from a JSON profile, not hardcoded scripts
+- Gives each role its **own terminal** (tab/pane) and its **own git worktree** — agents never collide on files or branches
+- Wires **inter-agent messaging** through SQLite (`.kiln/messages.db`) via two MCP servers — `kiln-db` (write) and `kiln-channel` (blocking `wait_for_message()`)
+- Injects a layered **constitution** (`workflow.md`, `engineering.md`, `project.md`) + a **role file** into every agent at startup
+- Cross-platform: Windows (PowerShell + WezTerm/Windows Terminal), Unix/macOS (zsh + tmux)
 
 ---
 
-## Slide 3: Agent Cycle and Role Handoff
+## The Default Profile
 
-- Kiln routes work through role-based agents via MCP messages; each hop hands off into its own git worktree and branch (e.g., `main-coder`).
-- Cycle loops back to `specifier` once `architect` approves — ready for the next feature.
+A human-facing intake role feeds a fully autonomous four-role cycle:
 
-![w:1150](images/diagram-agent-cycle.svg)
+![w:1000](images/agentic_coding_topology_human_left_v3.svg)
 
----
-
-## Slide 4: Worktree and Merge Strategy
-
-- Each agent works in a separate git worktree — isolated changes, lower conflict risk, cleaner per-role history.
-- Squash before merging into `main`: logical work units, no noisy commit history, branch metadata kept for rollback.
-
-![w:700](images/diagram-worktree-branches.svg)
+`human-in-the-loop` (manual, `@current`) gathers and confirms the request, then **specifier → coder → refactorer → architect** run unattended and report back.
 
 ---
 
-## Slide 5: Message Lifecycle and Recovery
+## The Handoff Loop
 
-- Messages flow through a 4-state lifecycle in the SQLite queue — full visibility, zero message loss, testable transitions.
-- Recovery: a timeout after `delivered` but before `processed` is safe — the next cycle re-picks up either state.
-- Inspection: `kiln-db.ps1 stats` for counts per state; `.kiln/logs/channel-<role>.log` for `wait_for_message()` activity.
+Every `auto`-mode role's wrapper drives the same five-step cycle, every turn:
 
-![w:1150](images/diagram-message-lifecycle.svg)
+1. **`/kiln-receive`** — blocks on `wait_for_message()`, merges the sender's commit, logs it
+2. **Delegate** — dispatches the actual work to a disposable `<role>-worker` subagent
+3. **Retry once** on worker failure, then escalate instead of stalling
+4. **`/kiln-handoff`** — squashes commits, writes the message, verifies it landed
+5. **Loop back to step 1** — in the same turn, no exceptions
 
----
-
-## Slide 5a: Merged Agent Instructions (`claude.md` / `copilot-instructions.md`)
-
-- Kiln merges instruction sources into a unified agent guidance document.
-- Purpose:
-  - ensure Claude and Copilot receive consistent rules
-  - centralize behavior expectations and workflow policies
-- Key merged concepts:
-  - allowed workspace operations
-  - message handling and handoff protocols
-  - commit/branch discipline and role definitions
-- Keep the combined file as a single reference for all configured agents.
-
-> Visual hint: two document icons merged into one, with a shared rulebook overlay.
+Messages move through one lifecycle: `queued` → `delivered` → `processing` → `processed`.
 
 ---
 
-## Slide 6: Wrapper + Worker-Subagent Delegation (Phase 6)
+## Wrapper + Worker Delegation
 
-- **Thin persistent wrapper** never accumulates context; the **disposable worker subagent** gets full role/engineering/project context and can invoke project Skills (`/tdd-red`, `/tdd-green`, ...).
-- Result: wrapper CLAUDE.md stays ~140 lines through unlimited cycles. Validated 8+ cycles on LibraryHub, 50+ tests, zero stalls.
+The persistent **wrapper** never does the work itself — it only listens, delegates, and hands off. The disposable **worker** gets full context and does the actual task.
 
-![w:1050](images/diagram-wrapper-worker.svg)
+![w:950](images/diagram-wrapper-worker.png)
 
----
-
-## Slide 7: Terminal Layouts and Launch Workflow
-
-- Each role (Specifier, Coder, Refactorer, Architect) gets its own Claude Code session — backend (`-Terminal wezterm|windowsTerminal`) and layout (`-Layout panes|tabs`) are independent choices.
-
-| WezTerm - Panes                    | WezTerm - Tabs                    | Windows Terminal - Panes      | Windows Terminal - Tabs      |
-| ---------------------------------- | --------------------------------- | ----------------------------- | ---------------------------- |
-| ![w:290](images/wezterm_panes.jpg) | ![w:290](images/wezterm_tabs.jpg) | ![w:290](images/wt_panes.jpg) | ![w:290](images/wt_tabs.jpg) |
+Result: wrapper context stays flat and small no matter how many cycles run — the worker's transcript never enters it, only its final report does.
 
 ---
 
-## Slide 8: Technical Highlights and Best Practices
+## One Role, Concretely: the Coder
 
-- Keep agent profiles and launch helpers in sync for reliable agent startup
-- Document dependency injection points: agent config, workspace root, MCP socket
-- Emphasize auditability:
-  - SQLite message queue with full state tracking (queued/delivered/processing/processed)
-  - git commit metadata (squashed per handoff, traced in logbook.md)
-  - terminal/log trace per role (channel logs + claude debug logs)
-- Message queue inspection: `kiln-db.ps1 stats`, `kiln-db.ps1 list-messages <role>`, direct SQL queries
-- Future-proofing:
-  - Add Codex/Grok agent support
-  - Support push notifications and hybrid MCP delivery
-  - Bring `kiln.sh` (Unix) to parity with Phase 6 wrapper/worker pattern
+![w:1050](images/diagram-coder-internal-cycle.svg)
 
-> Visual hint: checklist with icons for consistency, auditability, extensibility, and monitoring.
+The wrapper half (right) is identical for every role. Only the worker's inner loop (left) changes — a refactorer-worker runs coverage → CRAP → mutation gates instead of TDD red/green/refactor.
 
 ---
 
-## Slide 9: How to Use This Deck
+## Watching It Run
 
-- Use the outline to create a graphical slide deck in your preferred tool.
-- Prioritize diagrams (in order of importance):
-  1. Message state lifecycle (Slide 5) — the foundation of reliability
-  2. Agent cycle with roles (Slide 3) — what agents do
-  3. Wrapper + worker pattern (Slide 6) — how agents stay efficient
-  4. Worktree/branch strategy (Slide 4) — isolation and merge discipline
-- Keep wording concise and technical; let visuals carry the workflow
-- Add a final appendix showing: team roles, file locations, key config files, and how to inspect message queue health
+![w:950](images/kiln1.png)
 
-> Visual hint: roadmap/list slide with prioritized diagrams and next steps.
+The default profile in WezTerm — a Human-in-the-Loop tab alongside an Autonomous Cycle tab, all four roles visible in a 2×2 grid with live status badges.
 
 ---
 
-## Key Takeaways
+## Agent Backends
 
-- **Phase 6 is live**: Wrapper + worker-subagent delegation validated through 8+ cycles with 50+ tests
-- **Message lifecycle ensures reliability**: Full state tracking + recovery on timeout
-- **Wrapper context stays small**: ~140 lines through unlimited cycles (Phase 6 achievement)
-- **Ready for production**: Multi-agent swarms can now run indefinitely without stalls or message loss
+Same wrapper/worker shape, different dispatch mechanism per backend:
+
+- **Claude** — worker is a generated `.claude/agents/<role>-worker.md`, dispatched deterministically via the `Agent` tool
+- **Copilot** — worker is a generated `.github/agents/<role>-worker.agent.md`; delegation is prose-instructed, not tool-enforced
+- **Codex** — worker is a generated `.codex/agents/<role>-worker.toml`, dispatched via Codex's own `spawn_agent`/`assign_agent_task` tools
+- **Grok** — blocked: only third-party CLIs available today, no unattended auto-approve path
+
+Every worker is isolated — no `Agent` tool, no MCP messaging tools, only file access in its own worktree.
+
+---
+
+## Configuration & Extensibility
+
+- Swarm shape lives in `kiln/framework/profiles.json` — role, backend, worktree, mode, model, all data-driven
+- Per-role **model selection**, including decoupling wrapper and worker models (e.g. Haiku wrapper, Sonnet worker)
+- **Flexible layouts** — tabs, grids, split panes, or focus arrangements, mixed per profile
+- `kiln.ps1 -Init` / `kiln.sh init` scaffolds a new project — constitution, roles, git, and MCP config in one step
+- Built-in health check: `/kiln-ping` sends a trail through the real handoff chain and back
+
+---
+
+## Status & Known Limits
+
+- **Windows**: live-validated — 8+ full cycles, 50+ tests, zero stalls or message loss
+- **Claude**: fully validated, including wrapper/worker delegation
+- **Copilot**: worker delegation confirmed, not yet run through a full multi-cycle swarm
+- **Codex**: config/generation validated, live multi-cycle spawn not yet exercised
+- **Unix (`kiln.sh`)**: no loop/runtime template injection yet for Claude/Copilot — Windows-only for now
+- Full permissions by default (`bypassPermissions` / `--allow-all` / bypass-sandbox) — keep Kiln projects isolated, no secrets in-repo
