@@ -201,14 +201,50 @@ Functionally verified end-to-end on Windows (fresh scaffold, `-Target` alias, `-
 
 ---
 
+## 10. New example projects: LibraryHub (Java/Spring) and Battlezone
+
+**Goal:** Add two new reference examples under `examples/`, following the same pattern as
+`examples/library-hub/README.md` — each needs a full project brief plus a matching
+`kiln/project/` starter set (`constitution/project.md`, `constitution/engineering.md`, and any
+other project-specific role/constitution tweaks), not just a spec document.
+
+### 10.1 LibraryHub — Java/Spring variant
+
+- [ ] New example dir (e.g. `examples/library-hub-java/`) — same domain/user stories as the
+  existing Python LibraryHub, ported to Java/Spring Boot tech stack
+- [ ] `README.md` brief: architecture, bounded contexts, user stories, layering rules, tech stack,
+  quality gates, testing strategy (mirror the structure of the existing Python brief)
+- [ ] `project.md` / `engineering.md` starter content — Java/Spring build tool (Maven/Gradle),
+  test framework (JUnit5), quality tools (JaCoCo, PIT, Checkstyle/SonarQube — see
+  `skill-orchestration.md`'s existing Java/Kotlin tool mapping row), mutation/CRAP thresholds
+- [ ] Decide: reuse the existing Python LibraryHub's domain 1:1, or let the Java port diverge
+  where idiomatic (package layout, DI conventions)
+
+### 10.2 Battlezone (1980 Atari) — something totally different
+
+- [ ] New example dir (e.g. `examples/battlezone/`) — a from-scratch game implementation, not a
+  CRUD service; pick and document target stack/platform first (language, rendering approach,
+  vector-graphics feel vs modern equivalent)
+- [ ] `README.md` brief: game mechanics/rules, scope (MVP feature set vs full arcade fidelity),
+  architecture (game loop, rendering, input, collision), out-of-scope list
+- [ ] `project.md` / `engineering.md` starter content — matching tech stack, test strategy for a
+  game (what "TDD" and "coverage" even mean here — likely simulation/logic layer tested,
+  rendering excluded), quality gates adapted from the CRUD-service defaults
+- [ ] Sanity-check the existing role files/constitution assume a typical layered
+  service — flag anything that needs a game-specific tweak (e.g. `workflow.md` handoff cadence,
+  `engineering.md` tool mapping) rather than silently forcing the CRUD shape onto it
+
+---
+
 ## Suggested order
 
-1. **§4** Slide deck refresh (docs-only, unblocks presentations)
+1. ~~**§4** Slide deck refresh (docs-only, unblocks presentations)~~ — done
 2. **§1.1–1.2** Codex live validation + mixed-agent confidence
 3. **§6** Unix parity (or pair with §7 if choosing Python)
 4. **§3** Skills hardening (quality of autonomous runs)
-5. ~~**§5 / §8** Layout + CLI ergonomics~~ — done
-6. **§2** Documentation MCP (net-new capability)
-7. **§7** Full Python port only if dual-shell cost stays high after smaller extractions
-8. **§9** Local traffic proxy (measure first, then optimize tokens)
-9. **§1.3** Grok when unblocked
+5. **§10** New example projects (LibraryHub Java/Spring, Battlezone)
+6. ~~**§5 / §8** Layout + CLI ergonomics~~ — done
+7. **§2** Documentation MCP (net-new capability)
+8. **§7** Full Python port only if dual-shell cost stays high after smaller extractions
+9. **§9** Local traffic proxy (measure first, then optimize tokens)
+10. **§1.3** Grok when unblocked
