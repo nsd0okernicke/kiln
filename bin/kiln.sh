@@ -605,10 +605,10 @@ EOF
 # Generates the per-role worker subagent definition consumed by Claude Code's Agent/Task
 # tool (.claude/agents/<role>-worker.md). Mirrors Write-GeneratedWorkerAgent in kiln.ps1:
 # role.md + project/engineering constitution, no workflow.md (handoff/messaging stays the
-# shell's concern) and no Agent/MCP tools (no recursive spawning, no messaging).
+# wrapper's concern) and no Agent/MCP tools (no recursive spawning, no messaging).
 #
 # Generated in the main project's .claude/agents/ directory (not the worktree's),
-# so Claude Code's agent discovery finds it when the shell agent (running in the
+# so Claude Code's agent discovery finds it when the wrapper agent (running in the
 # worktree) spawns the subagent via the Agent tool.
 write_worker_agent_file() {
   local role="$1"
@@ -622,7 +622,7 @@ write_worker_agent_file() {
   {
     echo "---"
     echo "name: ${role}-worker"
-    echo "description: Performs the ${role} role's implementation work for one handoff cycle. Dispatched by the persistent ${role} shell agent's message loop; not for direct/standalone use."
+    echo "description: Performs the ${role} role's implementation work for one handoff cycle. Dispatched by the persistent ${role} wrapper agent's message loop; not for direct/standalone use."
     echo "tools: Read, Write, Edit, Glob, Grep, Bash, Skill, NotebookEdit, TodoWrite"
     echo "---"
     echo
@@ -708,8 +708,12 @@ complete until the handoff is sent (step 8).**
    to the custom agent named \`${role}-worker\` using your multi-agent spawn tools. Give it
    the full content of the received message, your current branch/worktree, and an explicit
    request for a final report of what was implemented/verified and which files were
-   touched. For system-communication-test messages: skip delegation entirely — forward the
-   message as-is to the routing target from workflow.md and skip steps 5-8.
+   touched. For \`Kiln-Ping: true\` messages: skip delegation and step 5 entirely — this is a
+   health-check ping, not real work. Extract the \`Trail:\` list from the message and append
+   one line for yourself: \`- ${role} ($current_branch)\`. Determine your target the same way
+   you would for a normal handoff — the routing table in workflow.md, including any
+   role-specific override your own role file instructs (never hardcode a static target).
+   Continue to steps 6-8 to log, squash, and send the updated ping onward.
 5. **Handle a failed or blocked report** — if the worker's report says it could not finish,
    delegate to it again once more, in this same turn, including its failure report as
    feedback. If it fails a second time, proceed to step 6 with a handoff that reports the
@@ -752,7 +756,7 @@ write_codex_worker_agent_file() {
     echo "# DO NOT EDIT MANUALLY"
     echo
     echo "name = \"${role}-worker\""
-    echo "description = \"Performs the ${role} role's implementation work for one handoff cycle. Dispatched by the persistent ${role} shell agent's message loop; not for direct/standalone use.\""
+    echo "description = \"Performs the ${role} role's implementation work for one handoff cycle. Dispatched by the persistent ${role} wrapper agent's message loop; not for direct/standalone use.\""
     echo "mcp_servers = {}"
     echo "developer_instructions = '''"
     cat "$KILN_PROJECT_DIR/roles/${role}.md"

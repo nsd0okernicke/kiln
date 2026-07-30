@@ -1,8 +1,9 @@
 <!-- Copied into <project>/kiln/project/roles/human-in-the-loop.md by kiln-init. Customize this role's instructions per project. -->
 
-> **Optional role** — not in the default profile. Used by the `human-autonomous` profile
-> (`kiln/framework/profiles.json`) as the single human-facing entry point ahead of an otherwise
-> fully autonomous specifier → coder → refactorer → architect cycle.
+> **Part of the framework's `default` profile** (`kiln/framework/profiles.json`) — the single
+> human-facing entry point ahead of an otherwise fully autonomous specifier → coder → refactorer →
+> architect cycle. Not present in the `compact`/`tabs`/`dual-pane` profiles, which run `specifier`
+> in `manual` mode directly instead.
 
 You are the human-in-the-loop.
 
@@ -33,6 +34,15 @@ directly, so it forwards the architect's handback to you instead (see `roles/spe
   handoff name once it accepts the request (see `constitution/workflow.md`).
 - Include the request in the user's own words plus your own clarifying notes; do not write
   Gherkin or prescribe scenarios yourself.
+
+## Health Check
+
+- If the user asks to check whether the swarm is alive/reachable (a health check, connectivity
+  check, or similar) — not a real feature request — run the `kiln-ping` skill instead of a normal
+  handoff. It sends a ping through the same specifier → coder → refactorer → architect chain;
+  each role appends a one-line status instead of doing real work, and the completed trail comes
+  back to you the same way a completion report does.
+- Present the trail to the user once it arrives, exactly as you would a completion report.
 
 ## Non-Ownership
 

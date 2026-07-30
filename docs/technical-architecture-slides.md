@@ -22,7 +22,7 @@ paginate: true
   - `kiln-channel` MCP server — blocking `wait_for_message()` with message lifecycle tracking
   - `kiln-db` MCP server — SQL read/write for handoff messages
   - SQLite message queue (`.kiln/messages.db`) with state tracking: queued → delivered → processing → processed
-  - Agent clients: Claude (thin shells + worker subagents), Copilot, future Codex/Grok
+  - Agent clients: Claude (thin wrappers + worker subagents), Copilot, future Codex/Grok
   - Git branches/worktrees for isolated agent work
   - Profiles, launch scripts, and terminal layout orchestrator
 - Value: deterministic agent handoff, message recovery on timeout, clean agent-specific branches, and auditable merge points.
@@ -75,12 +75,12 @@ paginate: true
 
 ---
 
-## Slide 6: Shell + Worker-Subagent Delegation (Phase 6)
+## Slide 6: Wrapper + Worker-Subagent Delegation (Phase 6)
 
-- **Thin persistent shell** never accumulates context; the **disposable worker subagent** gets full role/engineering/project context and can invoke project Skills (`/tdd-red`, `/tdd-green`, ...).
-- Result: shell CLAUDE.md stays ~140 lines through unlimited cycles. Validated 8+ cycles on LibraryHub, 50+ tests, zero stalls.
+- **Thin persistent wrapper** never accumulates context; the **disposable worker subagent** gets full role/engineering/project context and can invoke project Skills (`/tdd-red`, `/tdd-green`, ...).
+- Result: wrapper CLAUDE.md stays ~140 lines through unlimited cycles. Validated 8+ cycles on LibraryHub, 50+ tests, zero stalls.
 
-![w:1050](images/diagram-shell-worker.svg)
+![w:1050](images/diagram-wrapper-worker.svg)
 
 ---
 
@@ -106,7 +106,7 @@ paginate: true
 - Future-proofing:
   - Add Codex/Grok agent support
   - Support push notifications and hybrid MCP delivery
-  - Bring `kiln.sh` (Unix) to parity with Phase 6 shell/worker pattern
+  - Bring `kiln.sh` (Unix) to parity with Phase 6 wrapper/worker pattern
 
 > Visual hint: checklist with icons for consistency, auditability, extensibility, and monitoring.
 
@@ -118,7 +118,7 @@ paginate: true
 - Prioritize diagrams (in order of importance):
   1. Message state lifecycle (Slide 5) — the foundation of reliability
   2. Agent cycle with roles (Slide 3) — what agents do
-  3. Shell + worker pattern (Slide 6) — how agents stay efficient
+  3. Wrapper + worker pattern (Slide 6) — how agents stay efficient
   4. Worktree/branch strategy (Slide 4) — isolation and merge discipline
 - Keep wording concise and technical; let visuals carry the workflow
 - Add a final appendix showing: team roles, file locations, key config files, and how to inspect message queue health
@@ -129,7 +129,7 @@ paginate: true
 
 ## Key Takeaways
 
-- **Phase 6 is live**: Shell + worker-subagent delegation validated through 8+ cycles with 50+ tests
+- **Phase 6 is live**: Wrapper + worker-subagent delegation validated through 8+ cycles with 50+ tests
 - **Message lifecycle ensures reliability**: Full state tracking + recovery on timeout
-- **Shell context stays small**: ~140 lines through unlimited cycles (Phase 6 achievement)
+- **Wrapper context stays small**: ~140 lines through unlimited cycles (Phase 6 achievement)
 - **Ready for production**: Multi-agent swarms can now run indefinitely without stalls or message loss

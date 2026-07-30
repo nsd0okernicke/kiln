@@ -1,0 +1,45 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "Segoe UI, system-ui, sans-serif",
+    "fontSize": "17px",
+    "primaryColor": "#2a78d6",
+    "primaryTextColor": "#0b0b0b",
+    "primaryBorderColor": "#184f95",
+    "lineColor": "#52514e",
+    "textColor": "#0b0b0b",
+    "edgeLabelBackground": "#fcfcfb"
+  }
+}}%%
+flowchart LR
+    H("<b>Human-in-the-Loop</b><br/>manual · @current<br/>gathers &amp; confirms request")
+
+    subgraph LOOP[" "]
+        direction LR
+        S("<b>Specifier</b><br/>writes Gherkin<br/>acceptance tests")
+        C("<b>Coder</b><br/>TDD implementation")
+        R("<b>Refactorer</b><br/>coverage · CRAP ·<br/>mutation testing")
+        A("<b>Architect</b><br/>design review")
+
+        S -->|"handoff"| C
+        C -->|"handoff"| R
+        R -->|"handoff"| A
+        A -.->|"completed cycle report"| S
+    end
+
+    H ==>|"new request"| S
+    S ==>|"forward completion"| H
+
+    classDef human fill:#8a5cd6,color:#ffffff,stroke:#5a339c,stroke-width:2px
+    classDef specifier fill:#2a78d6,color:#ffffff,stroke:#184f95,stroke-width:2px
+    classDef coder fill:#eb6834,color:#ffffff,stroke:#a8431e,stroke-width:2px
+    classDef refactorer fill:#1baf7a,color:#ffffff,stroke:#0f7a52,stroke-width:2px
+    classDef architect fill:#eda100,color:#1a1a19,stroke:#a86e00,stroke-width:2px
+
+    class H human
+    class S specifier
+    class C coder
+    class R refactorer
+    class A architect
+
+    style LOOP fill:transparent,stroke:#9a9a95,stroke-width:1px,stroke-dasharray: 4 3

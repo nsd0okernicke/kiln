@@ -135,7 +135,19 @@
       "Bash(echo \"exit: $?\")",
       "Bash(python -c \"import json; json.load\\(open\\('kiln/.claude/settings.json'\\)\\); print\\('valid JSON'\\)\")",
       "Bash(git check-ignore *)",
-      "Bash(xxd .git/hooks/pre-push)"
+      "Bash(xxd .git/hooks/pre-push)",
+      "Bash(xargs grep -l \"mmdc\\\\|mermaid\")",
+      "Bash(npx --yes @mermaid-js/mermaid-cli -i docs/diagrams/default-profile-topology.mmd -o docs/images/diagram-default-profile-topology.svg -b transparent)",
+      "Bash(npm -v)",
+      "Bash(where mmdc *)",
+      "Bash(npx --yes @mermaid-js/mermaid-cli -i docs/diagrams/coder-internal-cycle.mmd -o docs/images/diagram-coder-internal-cycle.svg -b transparent)",
+      "Bash(npx --yes @mermaid-js/mermaid-cli -i docs/diagrams/wrapper-worker.mmd -o docs/images/diagram-wrapper-worker.svg -b transparent)",
+      "Bash(npx --yes @mermaid-js/mermaid-cli -i docs/diagrams/coder-internal-cycle.mmd -o docs/images/diagram-coder-internal-cycle.png -b white -s 2)",
+      "Bash(npx --yes @mermaid-js/mermaid-cli -i docs/diagrams/wrapper-worker.mmd -o docs/images/diagram-wrapper-worker.png -b white -s 2)",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('kiln/framework/profiles.json','utf8'\\)\\); console.log\\('valid JSON'\\)\")",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('kiln/framework/profiles.json','utf8'\\)\\); console.log\\('profiles.json OK'\\)\")",
+      "Bash(echo \"exit:$?\")",
+      "Bash(echo \"exit:$? \\(1 = not ignored, good\\)\")"
     ],
     "additionalDirectories": [
       "C:\\projekte\\agentic-coding\\library-hub-testrun3\\.worktrees\\architect"

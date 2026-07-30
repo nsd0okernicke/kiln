@@ -35,8 +35,12 @@ until the handoff is sent (step 8).**
    `{{ROLE}}-worker` agent already has your role's work process, quality gates, and standards baked
    into its own definition — do not repeat them in the prompt, and do not do this work yourself.
 
-   For system-communication-test messages: skip delegation entirely — forward the message as-is to
-   `{{HANDOFF_TARGET}}` and skip steps 5–8.
+   For `Kiln-Ping: true` messages: skip delegation and step 5 entirely — this is a health-check
+   ping, not real work. Extract the `Trail:` list from the message and append one line for
+   yourself: `- {{ROLE}} ({{BRANCH}})`. Determine your target the same way you would for a normal
+   handoff — your entry in the Handoff Routing table (Workflow Rules), including any
+   role-specific override your own role file instructs (never hardcode a static target). Continue
+   to steps 6–8 to log, squash, and send the updated ping onward.
 
 5. **Handle a failed or blocked report** — if the worker's report says it could not finish (blocked,
    failing tests, unclear task), delegate to it again once more, in this same turn, including its
@@ -53,7 +57,8 @@ until the handoff is sent (step 8).**
    git commit -m "[{{ROLE}}] <short outcome-focused summary>"
    ```
 
-8. **Send handoff** — call `python .kiln/tools/set-status.py {{ROLE}} handoff --mode={{MODE}}` first. Then call `write_query` to INSERT into `messages` with `target='{{HANDOFF_TARGET}}'`,
+8. **Send handoff** — call `python .kiln/tools/set-status.py {{ROLE}} handoff --mode={{MODE}}` first. Then call `write_query` to INSERT into `messages` with `target='{{HANDOFF_TARGET}}'`
+   (for a `Kiln-Ping` message, use the target you determined in step 4 instead — never `{{HANDOFF_TARGET}}` if it differs),
    `branch='{{BRANCH}}'`, `created_at=datetime('now','localtime')`, and `content` formatted per Handoff Message Format in Workflow Rules.
    Verify: `SELECT id FROM messages WHERE sender='{{ROLE}}' AND branch='{{BRANCH}}' ORDER BY created_at DESC LIMIT 1`
    If no row is found, INSERT again before returning to step 1.

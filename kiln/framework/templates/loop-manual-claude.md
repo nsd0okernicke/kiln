@@ -18,8 +18,6 @@ Repeat this sequence indefinitely on subsequent cycles:
    Note: `/kiln-receive` will upgrade status to "receiving" once a message arrives.
 
 2. **Work** — call `python .kiln/tools/set-status.py {{ROLE}} working --mode={{MODE}}` first. Then apply your role rules. The Role section above defines your work process.
-   For `system-communication-test` messages: forward as-is to `{{HANDOFF_TARGET}}`
-   using `/kiln-handoff` immediately — skip normal work and approval.
 
 3. **Get approval** — call `python .kiln/tools/set-status.py {{ROLE}} approval --mode={{MODE}}` first. Then present your result to the user and ask for explicit approval.
    Do not continue to Step 4 without approval.

@@ -1,347 +1,191 @@
 # Kiln Development Plan
 
-## Notes
+---
 
-- Message queue: SQLite at `.kiln/messages.db`, accessed via two MCP servers — `kiln-db` (generic `mcp-sqlite`, read/write) and `kiln-channel` (`kiln/framework/mcp-server/channel.py`, blocking `wait_for_message()` for Claude agents; Copilot has no channel, only `kiln-db` polling)
-- Receive/handoff mechanics live in the `/kiln-receive` and `/kiln-handoff` skills (`kiln/project/skills/kiln-receive`, `kiln/project/skills/kiln-handoff`), not inline in role files or the loop templates
-- Testing: use the `selftest` profile (`kiln/framework/profiles.json`) — see README "Communication System Health Check"
-- Diagnostics: `bin/kiln-db.ps1` (`list-messages`/`show-message`/`stats`/`retry-message`/`clear-old`), `.kiln/logs/channel-<role>.log`, `.kiln/logs/claude-debug-<role>.log` (`--debug-file`)
+## 1. Agent Backend Completion (Codex, Grok)
+
+**Goal:** Finish multi-backend support so profiles can mix Claude, Copilot, and Codex reliably; keep Grok deferred until a viable CLI exists.
+
+### Status
+
+| Backend | Launch + MCP config | Worker delegation | Skills wiring | Full multi-cycle swarm |
+|---|---|---|---|---|
+| Claude | done | done (live-validated) | done | done |
+| Copilot | done | done (CLI-confirmed) | done | not fully multi-cycle |
+| Codex | done (generation validated) | implemented, not live-spawn tested | not wired | not done |
+| Grok | blocked | — | — | — |
+
+**Grok blocker (2026-07-28):** the `grok` CLI on PATH is third-party (`grok-cli-hurry-mode`), not official xAI. Persistent session has no unattended auto-approve path; only one-shot `-p` auto-approves (incompatible with Kiln's persistent wait loop without a poll-and-relaunch redesign). Revisit if an official CLI appears or poll-and-relaunch becomes worth building.
+
+### 1.1 Codex — remaining work
+
+- [ ] **Live multi-cycle validation** — full swarm run (WezTerm/WT on Windows; tmux on Unix once parity exists). Confirm `spawn_agent` / `assign_agent_task` / `wait_agent` / `close_agent` sequence in a real logged-in session; generation-only checks are already done.
+- [ ] **Skills wiring** — investigate Codex project-level skills discovery (`~/.codex/skills/` exists; project path/format unverified). Wire into `Prepare-Skills` / `prepare_skills` if feasible; document if not.
+- [ ] **Profile** — keep/use `codex-test` (or equivalent) for isolated validation.
+
+### 1.2 Mixed-agent testing
+
+- [ ] Profile: Claude + Copilot + Codex (and document any agents that cannot coexist)
+- [ ] Cross-backend handoffs (message routing, branch context, delivery timing)
+- [ ] README: setup notes, mixed-agent example profiles, agent-specific limitations
+
+### 1.3 Grok (deferred)
+
+- [ ] Re-evaluate when an official / unattended-capable Grok CLI exists
+- [ ] Or design a generic one-shot poll-and-relaunch backend (would also cover other non-persistent CLIs)
 
 ---
 
-## 1. Extend to Other Agent Types (Codex, Grok)
+## 2. Documentation MCP Server
 
-**Goal:** Enable MCP and full swarm integration for Codex and Grok backends
+**Goal:** MCP server that indexes and serves project/external docs so agents can search them at runtime (specifier, architect, and others).
 
-### 1.1 Codex Agent Implementation — done
+**Sources (target):** local PDFs, URLs, Markdown (local/git), OpenAPI/GraphQL schemas; Confluence/Notion exports if available.
 
-Implemented on both `kiln.ps1` and `kiln.sh`, including worker-subagent delegation.
-Verified directly against a live local `codex.exe` install (v0.145.0) plus official docs
-(`developers.openai.com/codex/subagents`): `CODEX_HOME` env var relocation confirmed
-working, the `[mcp_servers.*]` config.toml format confirmed via `codex mcp add` +
-`codex mcp list`, `--dangerously-bypass-approvals-and-sandbox` confirmed as the
-permission-bypass flag, `AGENTS.md` confirmed as the project-instructions filename (found
-in the binary's own string table), and — corrected after an initial research gap, see
-below — Codex's `multi_agent` feature (`spawn_agent`/`assign_agent_task`/`wait_agent`/
-`close_agent`) confirmed **stable and enabled by default** (`codex features list`), giving
-it real worker delegation shaped like Claude's `Agent` tool or Copilot's custom agents.
-Worker definitions are project-scoped TOML files (`.codex/agents/<role>-worker.toml`;
-required fields `name`/`description`/`developer_instructions`, `mcp_servers = {}` for
-isolation — same no-messaging-access isolation as the Claude/Copilot workers), generated
-by `Write-GeneratedWorkerAgent`/`write_codex_worker_agent_file` and validated as real TOML
-via Python's `tomllib`. Codex roles default to `auto` mode like Claude/Copilot (`manual`
-is still available, e.g. for a human-supervised role). A `codex-test` profile was added to
-`kiln/framework/profiles.json`.
+### Work
 
-**Research correction (2026-07-28):** the first implementation pass concluded Codex had no
-worker-delegation mechanism, based only on `codex --help`'s top-level subcommand list. The
-user pushed back ("check the doc") — the `multi_agent` tool family is exposed as in-session
-tools to the model, not a CLI subcommand, so it was invisible to `--help`. Found by grepping
-the installed binary's string table (`spawn_agent`, `sub_agent_activity`, etc.) and then
-`codex features list`, then confirmed against official docs. Lesson: `--help` alone doesn't
-enumerate a coding agent's in-session tool surface — check feature flags and docs too.
-
-- [x] Research Codex MCP & permission support (see above)
-- [x] Implement Codex MCP configuration — `Prepare-CodexConfigs`/`prepare_codex_configs`
-      write a per-role isolated `CODEX_HOME` (`.kiln/codex-home/<role>/config.toml`)
-      rather than overwriting the user's real `~/.codex/config.toml` the way Copilot's
-      single shared global file does
-- [x] Add Codex case to `Build-WezTermAgentCommand`/`Get-WindowsTerminalAgentCommand`
-      (`kiln.ps1`) and `launch_role`'s command switch (`kiln.sh`)
-- [x] Implement worker-subagent delegation — `.codex/agents/<role>-worker.toml` generation,
-      copied into each worktree the same way `.claude/agents/*-worker.md` and
-      `.github/agents/*-worker.agent.md` are
-- [ ] **Validate Codex integration live** — a full multi-cycle swarm run (WezTerm/Windows
-      Terminal pane launch, and separately a tmux launch on Unix) has not been done; only
-      the generation functions (MCP config, `AGENTS.md`, worker `.toml`, command strings)
-      were validated directly, the same verification approach used for Copilot's worker
-      delegation earlier. In particular, the exact `spawn_agent`/`assign_agent_task`/
-      `wait_agent`/`close_agent` call sequence the wrapper prompt asks the model to use
-      hasn't been observed live (requires `codex login` first) — the wrapper prompt
-      deliberately doesn't hard-code exact tool-call syntax (same level of abstraction as
-      the Copilot wrapper prompt), trusting Codex's own tool-use knowledge, but this should
-      be confirmed against a real session. `kiln.sh`'s codex path additionally can't be
-      live-tested at all in the current dev environment (no zsh/tmux on Windows), same
-      pre-existing constraint noted in section 3's Unix testing gaps.
-- [ ] **Codex skills wiring** — Codex CLI has its own `~/.codex/skills/` mechanism
-      (confirmed present in a local install) but its project-level discovery
-      path/format wasn't verified, so `Prepare-Skills`/`prepare_skills` deliberately
-      excludes `codex` for now (same as Copilot/Claude-only today). Investigate before
-      wiring it up.
-
-### 1.2 Grok Agent Implementation — blocked, not implemented
-
-**Blocker found 2026-07-28**: the `grok` CLI actually resolvable on PATH in this
-environment is a third-party open-source project, `grok-cli-hurry-mode` (npm, one
-maintainer, not an official xAI tool). Reading its bundled source directly (not just its
-README) found that its persistent/interactive session has **no CLI flag, env var, or
-settings.json field** to auto-approve tool calls without a human present — the only
-in-session toggle is a `Shift+Tab` keypress, and a `skipConfirmationThisSession` field
-exists in the code but is never wired to anything. Its only genuine no-prompt mode is
-`-p "<prompt>"` (headless), which auto-approves but runs **one prompt and exits** — not a
-persistent session, incompatible with Kiln's `wait_for_message()`-loop model without a
-fundamentally different poll-and-relaunch design (re-invoke `grok -p` per incoming
-message, losing in-session memory continuity).
-
-Decision (user, 2026-07-28): implement Codex now, defer Grok. Revisit if either (a) a
-different/official Grok CLI with real unattended-session support appears, or (b) the
-poll-and-relaunch pattern becomes worth building for its own sake (would also generalize
-to any other one-shot-only backend).
-
-- [x] Research Grok MCP & permission support (see blocker above)
-- [ ] Implement Grok MCP configuration — deferred
-- [ ] Validate Grok integration — deferred
-
-### 1.3 Multi-Agent Mixed Testing
-
-- [ ] **Create Mixed-Agent Test Profiles**
-  - Profile with claude + copilot + codex
-  - Profile with claude + copilot + grok
-  - Profile with all four agents if feasible
-  - Document any agents that can't coexist
-
-- [ ] **Test Cross-Agent Communication**
-  - Verify messages route correctly between different agent types
-  - Test handoff chain: claude → copilot → codex → grok
-  - Check message delivery times per agent type
-  - Document any performance differences
-
-- [ ] **Documentation Updates**
-  - Update README with Codex/Grok setup instructions and "Platform Support" entries
-  - Add example profiles showing mixed-agent setups
-  - Document any agent-specific limitations or workarounds
+- [ ] **Schema** — tools: `search_documentation(query, source?, max_results?)`, `get_document(id)`, `list_sources()`; resource types for pdf/url/markdown/schema; metadata (title, author, date, version, tags)
+- [ ] **Indexer** — PDF extract, URL fetch + cache, Markdown hierarchy, schema → readable docs; optional semantic search (embeddings)
+- [ ] **Server** — `kiln/framework/mcp-server/doc-server.py`; register with existing MCP setup; cache in `.kiln/docs.db`
+- [ ] **Config** — optional `documentation` list on profiles (path/url + type)
+- [ ] **Role integration** — expose to specifier/architect (and document in constitution/workflow)
+- [ ] **CLI** — `kiln doc-index` / `doc-search` / `doc-sources` (or PowerShell/sh equivalents)
+- [ ] **Tests** — mixed PDF layouts, rate-limited URLs, relevance, large collections
 
 ---
 
-## 2. Message Routing & Role Communication
+## 3. Skills Hardening (remaining from audit)
 
-- [ ] Verify message routing respects branch context under mixed-agent swarms specifically (single-backend swarms are already validated live)
-- [ ] Test agent-to-agent handoff with different agent types once Codex/Grok land
-- [ ] Validate specifier → coder → architect flow across mixed backends
+**Goal:** Close gaps left after the 2026-07-29 skills audit. Orchestration doc is done; `acceptance-test-writer` removed.
 
----
+### Open items
 
-## 3. Handoff Reliability Hardening
-
-**Context:** Kiln runs persistent, always-on Claude agents communicating via the SQLite message queue. Historically ~10% of cycles failed — an agent would complete its work but never send (or never resume waiting for) the next handoff. Live multi-cycle testing against the LibraryHub example this session found and fixed one confirmed root cause: the loop templates' "not end-of-turn" guardrail only covered through the handoff-sent step, not the return to `/kiln-receive` — so a verified handoff looked like a valid stopping point. That's fixed (`kiln/framework/templates/loop-*-claude.md`), along with the `/kiln-handoff` skill's own verify-and-retry on the INSERT.
-
-The tracks below are further hardening layers — useful if stalls recur with a different root cause, or to make enforcement deterministic (code) rather than relying on prompt wording:
-
-### Track A — Prompt Hardening (remaining piece)
-
-- [ ] **Cycle-tracking summary**: at the top of each cycle (after `/kiln-receive`), have the agent emit a one-line internal status — `Cycle N: received from <sender>, handoff-name=<name>, commit=<hash>` — not a logbook write, just reasoning output that keeps "I must complete this full cycle" salient in context. (Self-verification after the handoff INSERT is already done — see `/kiln-handoff` Step 5.)
-
-### Track B — Claude Code Hooks (deterministic enforcement, not yet implemented)
-
-Hooks run shell code at fixed lifecycle points regardless of what the LLM decides — the highest-leverage option if prompt hardening alone isn't enough for a given stall pattern.
-
-- [ ] **`Stop` hook** (`kiln/hooks/enforce-handoff.ps1`) — fires at end of every turn; checks whether a handoff was sent since the last `wait_for_message()` (e.g. query `messages` for a row from this role/branch in the last ~2 minutes). If missing *and* the agent did visible work this turn (git activity), return `{"decision": "block", "reason": "..."}` to force the agent to keep going. Needs the "did work happen" check to avoid blocking on legitimate idle waits.
-- [ ] **`PostToolUse` hook** (`kiln/hooks/verify-write.ps1`) — after every `write_query` call, flag zero-row inserts so a failed INSERT surfaces immediately instead of silently.
-- [ ] **Wire both into the generated `.claude/settings.json`** — `kiln/.claude/settings.json` template gets copied to every worktree; hook commands need absolute paths, resolved from `KILN_DIR`/`STATE_DIR` at generation time (same pattern as `.mcp.json`'s absolute DB path).
-
-### Track C — Watcher/Orchestrator Process (near-100% reliability, high effort)
-
-- [ ] Add a `workflow_state` table (`agent`, `branch`, `state`, `last_updated`; states `WAITING | EXECUTING | COMMITTED | HANDOFF_SENT`)
-- [ ] `kiln/framework/mcp-server/watcher.py` — polls `workflow_state` every ~10s; if an agent is stuck in `EXECUTING` past a timeout (default 15 min), INSERTs a corrective message into that agent's own inbox ("handoff not sent, complete it now")
-- [ ] Infer state transitions from existing DB/git activity (delivered message → `EXECUTING`; new outgoing message → `HANDOFF_SENT`; next `wait_for_message()` → `WAITING`) rather than adding new tools agents must remember to call
-- [ ] New optional `-Watcher` switch on `kiln.ps1`; extend `-Stop` to also kill `watcher.py` processes (same pattern as the existing `channel.py` kill list)
-- [ ] **Escalation path if the watcher's nudge-based approach isn't enough**: a fuller orchestrator that owns *all* state transitions — agent only executes the task and signals completion; the orchestrator (deterministic code) does the squash/handoff/state-update itself. Bigger redesign (agents become "smart task executors" rather than full workflow owners); only worth it if Track C's lighter nudge approach proves insufficient in practice.
-
-### Track D — Non-Claude Agent Messaging Compatibility
-
-Distinct from Section 1 (launching Codex/Grok at all) — this is about letting *non-blocking* agents (Copilot and Codex today, Grok later if unblocked) participate in the same message queue without a blocking channel.
-
-- [ ] **Convert `/kiln-receive` and `/kiln-handoff` to MCP tools** — Currently these exist as skill documentation files (procedural guides), deployable to `.claude/skills` and `.github/skills` but not executable by non-Claude agents. Convert them into actual Python MCP tools in `kiln/framework/mcp-server/channel.py` so all agent types (Claude, Copilot, Codex) can call them uniformly. Benefits: (1) eliminates loop template duplication (all agents use same 5-7 step loop), (2) makes Copilot/Codex stable and skill-based instead of polling, (3) provides single proven implementation shared across backends. Implementation: extract procedural steps from SKILL.md files into MCP tool functions; add to `channel.py` tool registry; update all loop templates to call MCP tools instead of skills or manual polling.
-- [ ] **`poll_for_message()` in `channel.py`** — non-blocking variant of the existing `_fetch_and_deliver()` used by `wait_for_message()`; single check, returns `{"received": false}` immediately if nothing's queued, so a non-Claude agent can call it in its own retry loop
-- [ ] **Agent-type-aware receive instructions** — `runtime-copilot.md` / `loop-*-copilot.md` should reference `poll_for_message()` (once it exists) instead of raw `read_query`, if `kiln-channel` becomes available to Copilot (next bullet)
-- [ ] **Per-role `kiln-channel` config for Copilot** — `Prepare-AgentConfigs` currently writes one global `~/.copilot/mcp-config.json` with only `kiln-db`; extend to include `kiln-channel` with per-role env vars, which requires Copilot to support per-worktree (not just global) MCP config — confirm this is possible before committing to the approach
+- [ ] **Tool preconditions** — role startup checks for external tools (coverage, radon, PIT, gherkin-mutator, etc.); clear “missing tool” failures / graceful skip
+- [ ] **`zoom-out`** — document real invocation path, or remove if obsolete (`disable-model-invocation: true` today)
+- [ ] **Mutation-testing ownership** — architect owns acceptance mutation; shared manifest format; handoff protocol between refactorer and architect
+- [ ] **Tool version pins** — minimum versions in `constitution/engineering.md` (radon, coverage.py, PIT, gherkin-mutator, …)
+- [ ] **`property-test-generator` entry point** — when/why in refactorer quality-gate sequence
+- [ ] **Error paths** — exercise “tool unavailable” branches in refactorer/architect workflows
 
 ---
 
-## 4. Documentation MCP Server
+## 4. Update technical slide deck
 
-**Goal:** Create an MCP server that indexes and serves documentation from multiple sources, enabling agents to reference external docs in real-time.
+**Goal:** Refresh `docs/technical-architecture-slides.md` so it matches the product as described in **README.md** and the current diagram set under `docs/diagrams/` + `docs/images/`.
 
-**Value Proposition:**
-- **Specifier role**: Access API specs, requirements docs, design patterns without manual copy-paste
-- **Architect role**: Query architecture patterns, design principles, tech decisions from centralized docs
-- **All roles**: Consistent reference material without context switching
+Slim update only — no new architecture research.
 
-**Supported Sources:** PDF files (local), URLs, Markdown files (local/git), OpenAPI/GraphQL schemas, Confluence/Notion exports (if available)
+### Sources of truth
 
-**Implementation:**
+- **README.md** — default profile (human-in-the-loop + autonomous cycle), wrapper/worker model, backends, message lifecycle, worktrees, terminal layouts
+- **Diagrams** — `docs/diagrams/*.mmd` and rendered `docs/images/` (e.g. coder-internal-cycle, wrapper-worker, topology, kiln1–4). Drop references to deleted assets (old agent-cycle/message-lifecycle/worktree/wezterm/wt screenshots where removed).
 
-- [ ] **Design MCP server schema**
-  - Resource types: `documentation/pdf`, `documentation/url`, `documentation/markdown`, `documentation/schema`
-  - Tool interface: `search_documentation(query, source?, max_results?)`, `get_document(id)`, `list_sources()`
-  - Metadata: title, author, date, version, tags for filtering
+### Work
 
-- [ ] **Build documentation indexer**
-  - PDF extraction: `PyPDF2`/`pdfplumber`, preserving structure
-  - URL fetcher: HTTP client with caching, robots.txt respect
-  - Markdown parser: extract headers, code blocks, maintain hierarchy
-  - Schema parser: OpenAPI/GraphQL → readable docs
-  - Semantic search: embeddings (Claude API or local)
-
-- [ ] **Implement MCP server**
-  - `kiln/framework/mcp-server/doc-server.py`
-  - Register alongside existing `kiln-db` server
-  - Expose `search_documentation`, `get_document`, `list_sources` tools
-  - Cache documents in SQLite (`.kiln/docs.db`)
-
-- [ ] **Configuration in `kiln/framework/profiles.json`**
-  - Add optional `documentation` field per profile:
-
-    ```json
-    "documentation": [
-      {"type": "pdf", "path": "./docs/api-reference.pdf"},
-      {"type": "url", "url": "https://example.com/api"},
-      {"type": "markdown", "path": "./docs/architecture/"}
-    ]
-    ```
-
-- [ ] **Integration with agent roles**
-  - Inject documentation server config into `CLAUDE.md` for specifier, architect
-  - Document usage in `kiln/project/constitution/workflow.md`
-  - Add to selftest: verify agents can query documentation
-
-- [ ] **CLI utilities**
-  - `kiln doc-index` — index docs without launching agents
-  - `kiln doc-search <query>` — test search functionality
-  - `kiln doc-sources` — list configured documentation sources
-
-- [ ] **Testing & validation**
-  - Various PDF formats (scanned, native, complex layouts)
-  - URL fetching with rate limiting
-  - Semantic search relevance
-  - Performance with large doc collections (100+ pages)
+- [ ] Align slide list and wording with README (default topology, `/kiln-receive` → work → `/kiln-handoff`, Codex status, Known Limitations)
+- [ ] Point slides at current images/diagrams; fix broken image links
+- [ ] Trim obsolete Phase labels / outdated backend claims
+- [ ] Keep bullets short and presentation-ready
 
 ---
 
-## 5. Human-Entry 5-Agent Profile
+## 5. Project layout — `.mcp.json` placement
 
-**Goal:** Create a new profile combining human-guided story/requirements gathering with autonomous execution.
+**Question:** Root `.mcp.json` exists for `@current` roles; worktrees get their own copy. Is root the right place long-term?
 
-**Pattern:** Two-tab layout — Tab 1 single manual agent for human interaction (stories, grill-me skills, etc.); Tab 2 compact 2×2 grid with specifier, coder, refactorer, architect. Specifier switches to auto mode (delegating to `specifier-worker`).
+### Investigate / decide
 
-**Entry point:** Human tab handoff → specifier's inbox; specifier then enters its normal auto-delegation cycle. No new loop mechanics needed — specifier's auto loop already expects to *receive* a message from the queue before delegating, so the human tab's handoff just becomes its first inbound message.
-
-**Requirements:**
-- [x] ~~Create `specifier-worker.md` subagent definition~~ — not needed: `Write-GeneratedWorkerAgent`
-      in `kiln.ps1` already generates `<role>-worker.md` generically for any role with `mode: auto`,
-      driven purely by the profile's role list. Setting `specifier`'s `mode` to `auto` in the new
-      profile is sufficient; the framework generates `specifier-worker.md` automatically.
-- [x] Add `human-in-the-loop` manual role — `kiln/project/roles/human-in-the-loop.md`. Also required an
-      addition to `specifier.md` ("Auto-Mode Worker Entry Point") since specifier had never run in
-      `auto` mode before (README previously documented it as manual-only): it skips the interactive
-      approval question (no live user in worker context — approval already happened upstream via
-      human-in-the-loop) and, on receiving the architect's completion handback, forwards it to
-      `human-in-the-loop` instead of running the Gherkin workflow again. Routing documented in
-      `constitution/workflow.md`.
-- [x] Add new profile to `kiln/framework/profiles.json` — `"human-autonomous"`
-- [ ] **Test end-to-end: human tab → handoff → specifier auto-delegates → full cycle** — not done
-      yet; requires actually launching the profile (real terminals, real agent processes) rather
-      than a file/config change. Do this before relying on the profile for real work.
+- [ ] Document current generation rules (root vs per-worktree, Claude vs other backends)
+- [ ] Decide target layout (e.g. keep root for `@current` only; never commit generated files; or move template under `kiln/framework/`)
+- [ ] Align `.gitignore`, cleanup scripts, and README project-structure section
+- [ ] Implement if the decision moves files or generation paths
 
 ---
 
-## 6. Skills Audit & Improvement (2026-07-29)
+## 6. Unix / `kiln.sh` parity
 
-**Summary:** Inventory of 27 skills (now 26 — `acceptance-test-writer` removed 2026-07-29); 15 actively used, 5 infrastructure, 7 unused/exploratory. Multiple gaps identified in orchestration, preconditions, and error handling.
+**Goal:** Bring the Unix launcher to feature parity with `kiln.ps1` so the receive → delegate → handoff loop and template injection work on macOS/Linux.
 
-### Inventory & Usage Classification
+### Context (from README Known Limitations)
 
-**Critical (3)** — Core loop infrastructure, no workaround:
-- `kiln-handoff` — full send sequence (handoff messaging framework)
-- `kiln-receive` — full receive sequence (handoff messaging framework)
-- `gherkin-spec-workflow` — specifier's feature-writing workflow with mutation testing
+- `kiln.sh` does not inject loop/runtime templates for Claude/Copilot the way Windows does
+- No full `auto`/`manual` mode parity for those backends on Unix
+- Codex path on `kiln.sh` was built closer to parity (hand-assembled wrapper/worker), but still needs live validation
 
-**Important (11)** — Called by core roles or quality verification:
-- TDD triad: `tdd-red`, `tdd-green`, `tdd-refactor`, `tdd-coordinator` (coder workflow)
-- Quality gates: `final-verification`, `mutation-testing`, `coverage-check`, `crap-analyzer`, `property-test-generator`, `run-mutation` (refactorer/architect)
-- Pre-work: `concept-generator` (pre-specification ideation)
+### Work
 
-**Optional (13)** — Helper/exploratory skills, user-invoked:
-- Manual reviews: `architectural-reviewer`, `code-review-tdd`, `review`
-- Documentation: `documentation-updater`
-- Exploration: `grill-me`, `grill-with-docs`, `kickoff`, `zoom-out`, `caveman`
-- Language-specific: `crap-run` (Python), `aps-setup` (APS tools)
-- ~~Deprecated: `acceptance-test-writer`~~ — removed 2026-07-29, use `gherkin-spec-workflow` instead
-
-### Gaps & Improvement Opportunities
-
-1. **Missing: Skill Orchestration Documentation**
-   - Roles mention multiple skills but don't document dependencies or optimal sequencing
-   - Action: Create `SKILL_ORCHESTRATION.md` showing execution order for refactorer quality gates (coverage → CRAP → mutation → property-test)
-
-2. ~~**Deprecated: acceptance-test-writer**~~ — resolved 2026-07-29: skill removed entirely
-   (nothing in `roles/`, `templates/`, or `profiles.json` referenced it; `gherkin-spec-workflow`
-   is the specifier's only acceptance-test skill).
-
-3. **Missing: Skill Preconditions & Tool Availability**
-   - Many skills (coverage-check, crap-analyzer, mutation-testing) require external tools (coverage.py, radon, PIT, gherkin-mutator)
-   - No centralized tool availability checking before invocation
-   - Action: Create precondition checklist per role; add tool-check step to role startup
-
-4. **Broken: zoom-out Skill**
-   - Marked `disable-model-invocation: true`; cannot be called via `/zoom-out`
-   - Action: Document invocation path or remove if deprecated
-
-5. **Missing: Error Recovery Workflows**
-   - Many skills document "If tools unavailable", but roles don't show fallback paths
-   - Action: Add error branches in refactorer/architect when external tools fail
-
-6. **Unclear Ownership: mutation-testing Coordination**
-   - Used by both architect (final-verification) and refactorer (quality gates)
-   - No coordination on who runs first or how manifests are shared
-   - Action: Designate single owner (recommend architect) for mutation manifests; document handoff protocol
-
-7. **Missing: Tool Version Pins**
-   - No declared minimum versions for radon, coverage.py, PIT, gherkin-mutator
-   - Action: Add tool versions to constitution/engineering.md
-
-8. **Knowledge Gap: property-test-generator Placement**
-   - Only mentioned in refactorer; no explicit entry point or invocation context in roles
-   - Action: Document when/why to invoke in refactorer quality-gate sequence
-
-### Known Limitations (Per Skill)
-
-| Skill | Limitation | Workaround |
-|---|---|---|
-| aps-setup | Requires Go toolchain; 5-15min setup | Build once, cache binaries |
-| crap-run | Python-specific (radon-based) | Use generic crap-analyzer for other languages |
-| crap-analyzer | JVM threshold=30, Python threshold≤6 | Document per-project threshold in constitution |
-| coverage-check | Requires language-specific tool; variable thresholds | Document thresholds per project (e.g., LINE≥80%, BRANCH≥75%) |
-| gherkin-spec-workflow | User approval gate (Step 4) blocks automation | Expect manual cycle; no auto-merge path |
-| mutation-testing | 15-45min runtime; modules >100 sites slow significantly | Split large modules; use differential mode |
-| property-test-generator | Requires library (Kotest/Hypothesis/fast-check) | Check build file; recommend adding if missing |
-| run-mutation | Silent timeouts on slow test suites | Use `--verbose --progress`; add timeout wrapper |
-| zoom-out | disable-model-invocation: true; no skill invocation path | Direct instruction only; require explicit user question |
-| acceptance-test-writer | ⚠️ Deprecated; use gherkin-spec-workflow instead | Redirect all specifier usage to gherkin-spec |
-
-### Recommended Action Items
-
-- [x] Create `kiln/project/constitution/skill-orchestration.md` documenting dependency chains and execution order
-- [x] ~~Mark `acceptance-test-writer` as deprecated~~ — removed the skill entirely instead (nothing referenced it)
-- [ ] Add tool precondition checks to role startup; fail gracefully with clear "missing tool" messages
-- [ ] Document `zoom-out` invocation path or remove if truly obsolete
-- [ ] Define mutation-testing ownership protocol — architect owns acceptance mutation, shared manifest format
-- [ ] Pin external tool versions in `constitution/engineering.md` (radon, coverage.py, PIT, gherkin-mutator)
-- [ ] Add property-test-generator entry point and trigger conditions in refactorer role rules
-- [ ] Test all "tool unavailable" error paths in refactorer/architect workflows
+- [ ] Inventory gaps vs `kiln.ps1` (templates, skills, MCP configs, worker generation, status bar, cleanup)
+- [ ] Port loop/runtime template injection and mode handling
+- [ ] Live multi-cycle test on Unix (tmux + WezTerm/Terminal.app)
+- [ ] Document any remaining platform differences in README
 
 ---
 
-## 7. Technical Slide Deck
+## 7. Launcher language — keep dual shell vs Python
 
-**Goal:** Prepare a slide deck outline visualizing Kiln's architecture and workflow.
+**Idea:** Replace (or wrap) PowerShell + zsh with a single Python CLI for maintainability and parity.
 
-- [ ] Draft textual slide descriptions for:
-  - Agent cycle and role handoff (now: `/kiln-receive` → work → `/kiln-handoff` → immediate return)
-  - Worktree and merge strategy
-  - Merged `CLAUDE.md` / `copilot-instructions.md` decision flow
-  - Terminal layouts and launch workflows
-  - Other architecture/highlight summary points
-- [ ] Capture visual guidance per slide so it can be turned into graphics later
-- [ ] Keep descriptions concise, technical, suitable for diagrams
-- [ ] Note any non-obvious highlights worth calling out in a presentation
+### Decide first
+
+- [ ] Spike: map `kiln.ps1` / `kiln.sh` / `kiln-init.*` surface area and shared vs divergent logic
+- [ ] Choose approach:
+  - **A.** Stay dual-shell; extract shared logic aggressively
+  - **B.** Python core CLI (`kiln` entrypoint) calling thin terminal adapters
+  - **C.** Hybrid — Python for init/generate/MCP helpers; shells only for terminal launch
+- [ ] If B/C: minimal vertical slice (e.g. `kiln init` + profile load + dry-run generate) before full port
+- [ ] Compatibility: keep `bin/kiln.ps1` / `kiln.sh` as shims during migration
+
+---
+
+## 8. Unify `kiln-init` into main CLI
+
+**Goal:** One entrypoint for users — `kiln init` / `.\kiln.ps1 init` instead of separate `kiln-init.ps1` / `kiln-init.sh`.
+
+### Work
+
+- [ ] Design subcommand surface: `init`, (future) `stop`, `doc-*`, cleanup helpers
+- [ ] Fold scaffold logic from `kiln-init.*` into main scripts (or into Python CLI if §7 lands first)
+- [ ] Preserve flags (`-Target` / path, `-Example` / `--example`)
+- [ ] Deprecate standalone init scripts with a thin wrapper or clear migration note in README
+- [ ] Update Quick Start docs
+
+---
+
+## 9. Local proxy for agent traffic (token optimization)
+
+**Goal:** Run a local proxy that agents' API traffic flows through, so we can monitor request/response sizes and patterns and use that data to optimize token usage (prompt bloat, redundant context, skill/payload size, cycle cost per role).
+
+**Reference:** [@mattpocockuk](https://x.com/mattpocockuk) on proxying Claude Code to inspect what actually hits the model, then strip system-prompt bloat (down to ~13K tokens startup) — [tweet, 2026-07-07](https://x.com/mattpocockuk/status/2074464823232888987). Same idea: measure via proxy first, then cut.
+
+### Why
+
+- Multi-agent cycles multiply cost; today we lack a per-role, per-cycle view of tokens
+- Wrapper/worker, skills, constitution merge, and handoff payloads are all candidate hotspots — need measurement before cutting
+
+### Work
+
+- [ ] **Spike proxy approach** — MITM-style local proxy vs vendor-specific hooks (Claude/Copilot/Codex env vars for base URL / HTTP proxy); pick what each backend actually supports
+- [ ] **Stand up local proxy** — capture request/response metadata (model, role, timestamps, input/output token estimates or byte sizes); persist under `.kiln/` (e.g. traffic log / SQLite)
+- [ ] **Wire agent launch** — point generated agent configs/env at the proxy when enabled (profile flag or `kiln.ps1`/`kiln.sh` switch); document TLS/cert trust if needed
+- [ ] **Dashboards / reports** — per-role and per-cycle summaries: tokens in/out, largest prompts, skill/tool call volume; enough to find optimization targets
+- [ ] **Optimization loop (follow-on)** — use measured data to slim templates, skills, constitution injection, and handoff payloads; re-measure after changes
+- [ ] **Privacy / safety** — redaction options (no full prompt bodies by default if sensitive); local-only by default; never log secrets
+
+### Notes
+
+- Observability first; cutting tokens is a second phase driven by proxy data
+- May interact with §7 (Python CLI) if the proxy ships as a small local service started by the launcher
+
+---
+
+## Suggested order
+
+1. **§4** Slide deck refresh (docs-only, unblocks presentations)
+2. **§1.1–1.2** Codex live validation + mixed-agent confidence
+3. **§6** Unix parity (or pair with §7 if choosing Python)
+4. **§3** Skills hardening (quality of autonomous runs)
+5. **§5 / §8** Layout + CLI ergonomics
+6. **§2** Documentation MCP (net-new capability)
+7. **§7** Full Python port only if dual-shell cost stays high after smaller extractions
+8. **§9** Local traffic proxy (measure first, then optimize tokens)
+9. **§1.3** Grok when unblocked

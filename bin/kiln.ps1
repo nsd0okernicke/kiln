@@ -797,7 +797,7 @@ function Write-GeneratedCLAUDEmd {
     # Render each block, join with horizontal rules.
     # For 'auto' mode roles with worker delegation (Claude or Copilot), exclude the role block
     # since that's now in the worker agent. Also exclude project/engineering (they're in the
-    # worker file and duplicated here; the shell never does implementation work). For 'manual'
+    # worker file and duplicated here; the wrapper never does implementation work). For 'manual'
     # mode (e.g., specifier), include the role block and full constitution.
     if ($Mode -eq "auto" -and $hasWorkerDelegation) {
         $blocks = @($wrapperPromptBlock, $loopBlock, $runtimeBlock, $workflow) | Where-Object { $_ }
@@ -821,9 +821,9 @@ function Write-GeneratedWorkerAgent {
     )
 
     # The worker agent does the role's actual implementation work for one cycle,
-    # dispatched by the persistent shell agent's loop template. It gets the
+    # dispatched by the persistent wrapper agent's loop template. It gets the
     # role + engineering/project constitution, but not workflow.md (handoff/messaging
-    # protocol stays the shell's concern) and no MCP/recursive-delegation tools (no
+    # protocol stays the wrapper's concern) and no MCP/recursive-delegation tools (no
     # messaging, no spawning further subagents).
     $roleBlock   = Get-KilnRole $Role
     $engineering = Get-KilnConstitution "engineering"
@@ -838,7 +838,7 @@ function Write-GeneratedWorkerAgent {
     $body   = ($blocks | ForEach-Object { Apply-Substitutions $_ $subs }) -join "`n`n---`n`n"
 
     $timestamp   = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-    $description = "Performs the $Role role's implementation work for one handoff cycle. Dispatched by the persistent $Role shell agent's message loop; not for direct/standalone use."
+    $description = "Performs the $Role role's implementation work for one handoff cycle. Dispatched by the persistent $Role wrapper agent's message loop; not for direct/standalone use."
 
     if ($Agent -eq "copilot") {
         # Generated in the main project's .github/agents/ (Copilot custom-agent
@@ -893,7 +893,7 @@ function Write-GeneratedWorkerAgent {
         return
     } else {
         # Generated in the main project's .claude/agents/ directory (not the worktree's),
-        # so Claude Code's agent discovery finds it when the shell agent (running in the
+        # so Claude Code's agent discovery finds it when the wrapper agent (running in the
         # worktree) spawns the subagent via the Agent tool.
         $agentsDir = Join-Path -Path $WorkingDir -ChildPath (Join-Path -Path ".claude" -ChildPath "agents")
         New-Item -ItemType Directory -Force -Path $agentsDir | Out-Null
@@ -1266,7 +1266,6 @@ $CommitFormats = @{
     "coder"      = "[Coder] <feature name> - TDD implementation of <what>"
     "refactorer" = "[Refactorer] <feature name> - <quality gate results>"
     "architect"  = "[Architect] <feature name> - <structural changes made>"
-    "selftest"   = "[Selftest] <what was tested>"
 }
 $WORKTREES_DIR = Join-Path $WorkingDir ".worktrees"
 

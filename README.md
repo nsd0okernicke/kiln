@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/logo.png" alt="Kiln logo" width="120" />
+</p>
+
 # Kiln
 
 **An orchestration platform that turns swarms of AI agents into reliable, professional software engineers.**
@@ -62,7 +66,7 @@ See **"Running Kiln"** below for more options and customization.
 
 Kiln is a lightweight orchestration layer that:
 
-- Launches a **config-driven swarm** — specify each agent's role, AI tool/backend (claude/copilot/codex/grok), and workspace (main directory or isolated worktree)
+- Launches a **config-driven swarm** — specify each agent's role, AI tool/backend (claude/copilot/codex, `grok` configurable but not yet functional — see Known Limitations), and workspace (main directory or isolated worktree)
   - Uses framework defaults from `kiln/framework/profiles.json`
   - Projects can override by creating `kiln.profiles.json` at the root
   - Flexible terminal layouts: tabs, split panes, grids, or custom hierarchical arrangements
@@ -77,6 +81,10 @@ Kiln is a lightweight orchestration layer that:
   - **`kiln-channel`** — blocking `wait_for_message()` tool that each agent calls to receive its next handoff; the channel polls the database and returns as soon as a message arrives, already marked `delivered`. Also provides `mark_processing()` and `mark_processed()` to transition messages through their full lifecycle
   - **Message lifecycle**: `queued` (created) → `delivered` (retrieved by agent) → `processing` (work started) → `processed` (handoff sent)
 - Keeps all swarm state in `.kiln/` (logs, sessions, message database) — gitignored and ephemeral
+
+![Kiln running the default profile: a Human-in-the-Loop tab alongside an Autonomous Cycle tab showing specifier, coder, refactorer, and architect in a 2×2 grid, each with a live status badge](docs/images/kiln1.png)
+
+*The default profile in WezTerm — one tab for the human-facing intake role, one tab with the autonomous four-role cycle running as a grid.*
 
 ### Project Structure Created by `kiln-init`
 
@@ -249,7 +257,6 @@ kiln/
       refactorer.md            # Refactorer role (quality gates, refactoring)
       specifier.md             # Specifier role (Gherkin acceptance tests)
       reviewer.md              # Reviewer role (batch review alternative to refactorer)
-      selftest.md              # Selftest role (communication chain validation)
       human-in-the-loop.md    # Human-in-the-loop role (human-facing intake and approval checkpoint)
     constitution/
       workflow.md              # Handoff protocol, branch discipline, queue format
@@ -295,25 +302,33 @@ By default, **all projects use the framework's `kiln/framework/profiles.json`**,
 
 This ensures every agent operates with full constitutional context plus its specific role directives.
 
-**Worker Subagent Assembly (`auto`-mode roles):** each of these agents is a thin, persistent **shell** — it only listens, merges, commits, and hands off. The actual role work is delegated each cycle to a disposable **worker**, built from the role file (`roles/<role>.md`) plus the `engineering.md` and `project.md` constitution — **not** `workflow.md`, since handoff/messaging protocol stays the shell's concern, not the worker's. The dispatch mechanism differs per backend:
+**Worker Subagent Assembly (`auto`-mode roles):** each of these agents is a thin, persistent **wrapper** — it only listens, merges, commits, and hands off. The actual role work is delegated each cycle to a disposable **worker**, built from the role file (`roles/<role>.md`) plus the `engineering.md` and `project.md` constitution — **not** `workflow.md`, since handoff/messaging protocol stays the wrapper's concern, not the worker's.
 
-- **Claude**: worker defined in a generated `.claude/agents/<role>-worker.md`, dispatched via Claude Code's `Agent` tool (blocking, deterministic — the shell explicitly invokes `subagent_type: "<role>-worker"`). No access to the `Agent` tool itself (no recursive subagent spawning) and no MCP messaging tools — it can only read/write/edit/test in its worktree. Its full working transcript never enters the shell's own context — only its final report does, which is what keeps the shell's context small and repetitive cycle over cycle, rather than filling up with the noise of the actual implementation work.
-- **Copilot**: worker defined in a generated `.github/agents/<role>-worker.agent.md` (GitHub Copilot CLI's custom-agent format), dispatched by prose instruction — the shell's loop template tells it to delegate to the named custom agent, and Copilot CLI's own harness resolves that to a subagent call with its own isolated context window. `tools:` is scoped to `read, write, shell` — no MCP server names listed, so it has no messaging access, mirroring the Claude worker's isolation. Unlike Claude's `Agent` tool, this delegation is the model's own judgment call rather than a guaranteed deterministic invocation — GitHub has tuned Copilot CLI to be more selective about delegating on its own, so the wrapper prompt explicitly instructs it to always delegate even when it judges it could finish faster itself.
+Concretely, here's what that looks like for the coder — the wrapper receives and merges the handoff, delegates to a fresh `coder-worker` subagent that runs the actual red → green → refactor TDD cycle, then hands the result onward:
+
+![Coder wrapper internal cycle: receive and merge, delegate to coder-worker, retry once on failure, then handoff — with the worker's TDD red/green/refactor loop shown alongside](docs/images/diagram-coder-internal-cycle.svg)
+
+*The wrapper half (right) is identical for every role; only the worker's inner loop (left) changes — a refactorer-worker would run coverage → CRAP → mutation gates instead of TDD.*
+
+The dispatch mechanism differs per backend:
+
+- **Claude**: worker defined in a generated `.claude/agents/<role>-worker.md`, dispatched via Claude Code's `Agent` tool (blocking, deterministic — the wrapper explicitly invokes `subagent_type: "<role>-worker"`). No access to the `Agent` tool itself (no recursive subagent spawning) and no MCP messaging tools — it can only read/write/edit/test in its worktree. Its full working transcript never enters the wrapper's own context — only its final report does, which is what keeps the wrapper's context small and repetitive cycle over cycle, rather than filling up with the noise of the actual implementation work.
+- **Copilot**: worker defined in a generated `.github/agents/<role>-worker.agent.md` (GitHub Copilot CLI's custom-agent format), dispatched by prose instruction — the wrapper's loop template tells it to delegate to the named custom agent, and Copilot CLI's own harness resolves that to a subagent call with its own isolated context window. `tools:` is scoped to `read, write, shell` — no MCP server names listed, so it has no messaging access, mirroring the Claude worker's isolation. Unlike Claude's `Agent` tool, this delegation is the model's own judgment call rather than a guaranteed deterministic invocation — GitHub has tuned Copilot CLI to be more selective about delegating on its own, so the wrapper prompt explicitly instructs it to always delegate even when it judges it could finish faster itself.
 - **Codex**: worker defined in a generated `.codex/agents/<role>-worker.toml` (Codex CLI's own project-scoped custom-agent format — required fields `name`, `description`, `developer_instructions`; confirmed against official docs at `developers.openai.com/codex/subagents`), dispatched via Codex's built-in multi-agent spawn tools (`spawn_agent`/`assign_agent_task`/`wait_agent`/`close_agent` — the `multi_agent` feature, stable and enabled by default, confirmed directly against a live `codex.exe` install). `mcp_servers = {}` in the worker's TOML excludes messaging access, mirroring the Claude/Copilot worker's isolation.
 
 ### Default Workflow
 
-The default four-agent workflow runs in a continuous loop. Each Claude shell agent's generated `CLAUDE.md` combines a role file with a **loop template** that drives the cycle through two skills — `/kiln-receive` and `/kiln-handoff` (`kiln/project/skills/kiln-receive`, `kiln/project/skills/kiln-handoff`) — plus a delegated dispatch to that role's worker subagent in between:
+The default four-agent workflow runs in a continuous loop. Each Claude wrapper agent's generated `CLAUDE.md` combines a role file with a **loop template** that drives the cycle through two skills — `/kiln-receive` and `/kiln-handoff` (`kiln/project/skills/kiln-receive`, `kiln/project/skills/kiln-handoff`) — plus a delegated dispatch to that role's worker subagent in between:
 
 1. **`/kiln-receive`** — calls `wait_for_message()` via the `kiln-channel` MCP server (blocks until a handoff arrives), persists the message to `tmp/handoff-in.md` (survives auto-compact), merges the sender's commit (`git merge <commit>`), and logs a `[RECEIVED]` entry to `logbook.md`
-2. **Delegate the work** — the shell does not implement anything itself. It invokes the `Agent` tool (`subagent_type: "<role>-worker"`, blocking) with the handoff content and current branch/worktree; the worker subagent does the actual role-specific task (see below) and reports back what it did. `specifier` still additionally requires explicit user approval before continuing — it runs in `manual` mode and is not yet part of this delegation pattern (see Known Limitations).
-3. **Retry or escalate on failure** — if the worker reports it couldn't finish, the shell re-dispatches it once more with the failure as feedback; a second failure escalates to a handoff that reports the blocker instead of silently stalling.
+2. **Delegate the work** — the wrapper does not implement anything itself. It invokes the `Agent` tool (`subagent_type: "<role>-worker"`, blocking) with the handoff content and current branch/worktree; the worker subagent does the actual role-specific task (see below) and reports back what it did. `specifier` still additionally requires explicit user approval before continuing — it runs in `manual` mode and is not yet part of this delegation pattern (see Known Limitations).
+3. **Retry or escalate on failure** — if the worker reports it couldn't finish, the wrapper re-dispatches it once more with the failure as feedback; a second failure escalates to a handoff that reports the blocker instead of silently stalling.
 4. **`/kiln-handoff`** — logs a `[SENT]` entry, squashes work commits into one, `INSERT`s the handoff into `.kiln/messages.db` via `write_query`, then reads it back to verify the row landed — retrying the INSERT if it didn't
 5. **Immediately return to step 1, in the same turn** — a sent and verified handoff is not the end of the cycle; the loop template is explicit that the turn isn't over until `/kiln-receive` has run again (this closes a stall we found in live testing, where an agent would finish a verified handoff and simply stop instead of waiting for the next message)
 
 **Copilot follows the same shape** (receive → delegate → retry-once-on-failure → handoff → loop again in the same turn) but via its own inline polling loop (`loop-auto-copilot.md`) rather than the `/kiln-receive`/`/kiln-handoff` skills — it polls `messages` directly via SQL (`read_query`/`write_query`), since Copilot has no blocking `kiln-channel` MCP tool, and squashes/logs the same way inline rather than through a shared skill file.
 
-**Codex follows the same shape too** (`loop-auto-codex.md`) — poll via SQL (same as Copilot, no blocking channel), delegate to the `<role>-worker` custom agent via Codex's built-in multi-agent spawn tools (`spawn_agent`/`assign_agent_task`/`wait_agent`/`close_agent`), retry once on failure, then squash/log/handoff inline, same as Copilot. `manual` mode is also available for Codex (e.g. for a human-supervised role like `specifier`) using `loop-manual-codex.md`, same as any other backend.
+**Codex follows the same shape too** (`loop-auto-codex.md`) — but unlike Copilot, it uses the same `/kiln-receive`/`/kiln-handoff` skills as Claude (Codex CLI supports skill-style slash commands), just delegating to the `<role>-worker` custom agent via Codex's built-in multi-agent spawn tools (`spawn_agent`/`assign_agent_task`/`wait_agent`/`close_agent`) instead of Claude Code's `Agent` tool, and retrying once on failure the same way. `manual` mode is also available for Codex (e.g. for a human-supervised role like `specifier`) using `loop-manual-codex.md`, same as any other backend.
 
 The cycle flows: **specifier → coder → refactorer → architect → specifier**
 
@@ -386,7 +401,7 @@ Kiln will create a git repository if one doesn't exist, initialize worktrees, an
 4. **Startup creates**:
    - Git worktrees under `.worktrees/` (one per non-@current role)
    - Generated `CLAUDE.md` (Claude agents) or `.github/copilot-instructions.md` (Copilot agents) in each worktree with embedded constitution + project + role content
-   - Generated worker agent definitions for `auto`-mode roles — `.claude/agents/<role>-worker.md` (Claude) or `.github/agents/<role>-worker.agent.md` (Copilot) — the worker definition the shell delegates its actual work to each cycle
+   - Generated worker agent definitions for `auto`-mode roles — `.claude/agents/<role>-worker.md` (Claude) or `.github/agents/<role>-worker.agent.md` (Copilot) — the worker definition the wrapper delegates its actual work to each cycle
    - Per-worktree `.mcp.json` with both `kiln-db` and `kiln-channel` configured (correct role and branch env vars injected)
    - Channel log files at `.kiln/logs/channel-<role>.log` for debugging
    - Claude Code debug log files at `.kiln/logs/claude-debug-<role>.log` (`--debug-file`) for diagnosing stalls after the fact
@@ -438,7 +453,11 @@ Kiln uses JSON profiles to define swarm topology. The default profile is `defaul
 
 ### Framework Default Profile
 
-The framework's `default` profile pairs a human-facing intake role with a fully autonomous specifier → coder → refactorer → architect cycle: `human-in-the-loop` runs `manual` in the main directory (`@current`) to gather and confirm the request with you, then the other four roles run `auto` in their own worktrees with no human input needed. Each `auto` role is a Haiku shell that delegates the actual work to a Sonnet worker subagent each cycle (see "Decoupling shell and worker models" below):
+The framework's `default` profile pairs a human-facing intake role with a fully autonomous specifier → coder → refactorer → architect cycle: `human-in-the-loop` runs `manual` in the main directory (`@current`) to gather and confirm the request with you, then the other four roles run `auto` in their own worktrees with no human input needed. Each `auto` role's wrapper and worker both run on Sonnet by default — see "Decoupling wrapper and worker models" below if you want to split a role's wrapper onto a cheaper/faster model than its worker:
+
+![Default profile topology: human-in-the-loop gathers and confirms a request, hands it to an autonomous specifier → coder → refactorer → architect cycle, which reports completion back](docs/images/agentic_coding_topology_human_left_v3.svg)
+
+*What the JSON below configures: one manual, human-facing role feeding a fully autonomous 4-role cycle.*
 
 ```json
 {
@@ -458,32 +477,28 @@ The framework's `default` profile pairs a human-facing intake role with a fully 
           "agent": "claude",
           "worktree": "specifier",
           "mode": "auto",
-          "model": "claude-haiku-4-5-20251001",
-          "workerModel": "claude-sonnet-5"
+          "model": "claude-sonnet-5"
         },
         {
           "role": "coder",
           "agent": "claude",
           "worktree": "coder",
           "mode": "auto",
-          "model": "claude-haiku-4-5-20251001",
-          "workerModel": "claude-sonnet-5"
+          "model": "claude-sonnet-5"
         },
         {
           "role": "refactorer",
           "agent": "claude",
           "worktree": "refactorer",
           "mode": "auto",
-          "model": "claude-haiku-4-5-20251001",
-          "workerModel": "claude-sonnet-5"
+          "model": "claude-sonnet-5"
         },
         {
           "role": "architect",
           "agent": "claude",
           "worktree": "architect",
           "mode": "auto",
-          "model": "claude-haiku-4-5-20251001",
-          "workerModel": "claude-sonnet-5"
+          "model": "claude-sonnet-5"
         }
       ],
       "layout": {
@@ -523,14 +538,14 @@ Switch to any of these with `-ProfileName <name>` (Windows) or `--profile <name>
 **Terminal fields:**
 
 - **role** — maps to `kiln/project/roles/<role>.md` (must exist)
-- **agent** — which AI tool to use: `claude`, `copilot`, `codex`, or `grok`
+- **agent** — which AI tool to use: `claude`, `copilot`, `codex`, or `grok` (accepted but not yet functional — see Known Limitations)
 - **worktree** — `@current` to work in the main directory, or any name (creates `.worktrees/<name>/`)
   - Use `@current` for coordinator/review roles that work on the current branch
   - Use separate worktree names for roles that need isolation (e.g., each agent on its own branch)
-- **model** — (Claude agents only) which Claude model to use, e.g., `claude-haiku-4-5-20251001`, `claude-sonnet-5`, `claude-opus-4-8`
-- **workerModel** — (Claude agents only, `mode: "auto"` roles only, optional) pins the `<role>-worker` subagent this shell dispatches each cycle to a different model than the shell itself. If omitted, the worker subagent inherits the shell's model (Claude Code's default behavior for subagents with no `model` frontmatter).
+- **model** — (Claude agents only) which Claude model to use, e.g., `claude-haiku-4-5-20251001`, `claude-sonnet-5`, `claude-opus-5`
+- **workerModel** — (Claude agents only, `mode: "auto"` roles only, optional) pins the `<role>-worker` subagent this wrapper dispatches each cycle to a different model than the wrapper itself. If omitted, the worker subagent inherits the wrapper's model (Claude Code's default behavior for subagents with no `model` frontmatter).
 
-**Decoupling shell and worker models:** In Phase 6 (Shell + Worker-Subagent Delegation), the persistent wrapper shell only does `LISTEN → DELEGATE → SEND` — it never reasons about the actual task, that's entirely the worker subagent's job. This means the shell can run on a cheap/fast model (e.g. Haiku) while the worker that does the real TDD/implementation work runs on a stronger model (e.g. Sonnet):
+**Decoupling wrapper and worker models:** In Phase 6 (Wrapper + Worker-Subagent Delegation), the persistent wrapper only does `LISTEN → DELEGATE → SEND` — it never reasons about the actual task, that's entirely the worker subagent's job. This means the wrapper can run on a cheap/fast model (e.g. Haiku) while the worker that does the real TDD/implementation work runs on a stronger model (e.g. Sonnet):
 
 ```json
 {
@@ -543,7 +558,7 @@ Switch to any of these with `-ProfileName <name>` (Windows) or `--profile <name>
 }
 ```
 
-This is wired via Claude Code's subagent `model:` frontmatter field: `Write-GeneratedWorkerAgent` in `bin/kiln.ps1` writes `model: <workerModel>` into the generated `.claude/agents/<role>-worker.md` file when `workerModel` is set. Claude Code resolves a dispatched subagent's model from its own frontmatter, independent of the parent session's model — so the Haiku shell's worker subagent genuinely runs as Sonnet, not Haiku. The framework's `default` profile (`kiln/framework/profiles.json`) demonstrates this: `specifier`/`coder`/`refactorer`/`architect` shells run on Haiku, their workers run on Sonnet.
+This is wired via Claude Code's subagent `model:` frontmatter field: `Write-GeneratedWorkerAgent` in `bin/kiln.ps1` writes `model: <workerModel>` into the generated `.claude/agents/<role>-worker.md` file when `workerModel` is set. Claude Code resolves a dispatched subagent's model from its own frontmatter, independent of the parent session's model — so a Haiku-pinned wrapper genuinely dispatches a Sonnet worker, not Haiku. The framework's `default` profile (`kiln/framework/profiles.json`) currently runs both wrapper and worker on Sonnet for every role (`workerModel` omitted, so the worker just inherits the wrapper's model) — set `workerModel` explicitly per role if you want this cheaper/faster split instead.
 
 ### Layout Configurations
 
@@ -643,7 +658,7 @@ You can mix different agents in a single swarm:
           "role": "coder",
           "agent": "claude",
           "worktree": "coder",
-          "model": "claude-sonnet-4-6"
+          "model": "claude-sonnet-5"
         },
         {
           "role": "refactorer",
@@ -666,7 +681,7 @@ You can mix different agents in a single swarm:
 }
 ```
 
-Each agent backend requires the corresponding CLI tool to be installed and available in `PATH`.
+Each agent backend requires the corresponding CLI tool to be installed and available in `PATH`. (The `architect: grok` line above illustrates the config shape only — `grok` isn't a working backend yet; see Known Limitations.)
 
 ### Running a Different Profile
 
@@ -791,6 +806,10 @@ Each `auto`-mode role's wrapper cycles through four states — **waiting** (idle
 
 On WezTerm, Kiln's generated Lua config polls the status JSON files directly (not the contested pane title) roughly once a second and renders a live, color-coded status bar in the top-right of the window — one badge per role, background colored by state (green = waiting, blue = receiving, red = delegating, violet = handoff), visible regardless of which tab or pane is focused. This is what makes state visible even in grid/pane layouts like `compact`, where multiple roles share a single tab and would otherwise have no per-pane title of their own.
 
+![Live status bar in the top-right of a WezTerm window, showing human-in-the-loop as "handoff" and specifier as "delegating: specifier-worker" while coder, refactorer, and architect show "waiting"](docs/images/kiln4.png)
+
+*The specifier's badge mid-cycle: `delegating: specifier-worker` — the wrapper has dispatched its worker subagent and is blocked waiting on the result.*
+
 On Windows Terminal, there's no equivalent scripting hook for a composite status bar — you can still read the JSON files directly (e.g. `Get-Content .kiln/status/coder.json`) to see live state.
 
 ### tmux Behavior (Unix Only)
@@ -900,141 +919,80 @@ This creates a complete, ready-to-run project with the LibraryHub brief included
 
 ---
 
-## Communication System Health Check (Self-Test)
+## Communication Health Check (`/kiln-ping`)
 
-After launching Kiln, you can verify that inter-agent communication is working by running the built-in self-test.
+Once the swarm is running, you can verify inter-agent communication is working without any special
+profile or role — just ask `human-in-the-loop` for a health check.
 
-### Setup
+### Running it
 
-Create a `selftest` profile in `kiln/framework/profiles.json` with the `selftest` role as the **first entry**:
-
-```json
-{
-  "profiles": {
-    "selftest": {
-      "description": "Communication chain test with selftest agent",
-      "terminals": [
-        {"role": "selftest", "agent": "claude", "worktree": "@current"},
-        {"role": "coder", "agent": "claude", "worktree": "coder"},
-        {"role": "refactorer", "agent": "claude", "worktree": "refactorer"},
-        {"role": "architect", "agent": "claude", "worktree": "architect"}
-      ],
-      "layout": {
-        "type": "tabs",
-        "roles": ["selftest", "coder", "refactorer", "architect"]
-      }
-    }
-  }
-}
-```
-
-Then launch with:
-
-```sh
-./kiln.sh --profile selftest
-```
-
-The selftest must be first because it acts as the test initiator and receiver for the communication chain.
-
-### Running the Test
-
-Once all agents are launched:
-
-1. **Agents block on `wait_for_message()`**: Each agent calls the `kiln-channel` MCP server at startup and blocks until a message arrives. No manual prompting needed.
-
-2. **In the selftest window**, paste this prompt to initiate the chain:
-   ```
-   I am running the selftest prompt. Begin the communication chain test now.
-   ```
-
-3. **The chain executes automatically**:
-   - Selftest sends a test message to coder via `write_query` SQL INSERT
-   - Each agent's `wait_for_message()` call returns when the message arrives (already marked delivered)
-   - Agents detect the "system-communication-test" marker and forward as-is (test pass-through, no actual work)
-   - The final agent (architect) sends completion back to selftest
-   - Selftest receives completion and reports success
-
-4. **Monitor channel logs** at `.kiln/logs/channel-<role>.log` to see polling activity per agent.
-
-### Expected Output
+In the `human-in-the-loop` tab, ask something like:
 
 ```
-══════════════════════════════════════════════════════════════
-✓ Kiln COMMUNICATION TEST: PASSED
-══════════════════════════════════════════════════════════════
-
-Role:              selftest
-Configuration:     4 agents configured
-Chain:             selftest → coder → refactorer → architect → selftest
-Test-ID:           selftest-20260608-143022
-Duration:          45 seconds
-
-✓ All messages queued correctly in SQLite database
-✓ All agents processed messages and updated logbook.md
-✓ MCP SQLite messaging operational
-✓ All worktrees accessible
-✓ MCP tools available on each agent
-
-Review logbook.md for complete chain trace.
-
-══════════════════════════════════════════════════════════════
+Run a health check.
 ```
 
-### What It Tests
+This invokes the `kiln-ping` skill, which sends a ping through the normal
+specifier → coder → refactorer → architect chain — the exact same handoff path a real request
+takes. Every role along the way skips its normal work, appends a one-line status to a running
+trail, and forwards to its usual next hop. The trail comes back to `human-in-the-loop` the same
+way a real completion report does, and gets presented directly:
 
-- **Agent discovery**: Each agent can locate its role and configuration
-- **Message delivery**: Messages are correctly queued in SQLite database (`.kiln/messages.db`)
-- **Message status lifecycle**: Messages progress through queued → delivered → processed states
-- **Priority ordering**: High-priority messages are delivered before normal messages
-- **Logbook tracking**: Each agent writes handoff entries to `logbook.md`
-- **Cross-platform**: Works on Windows (PowerShell) and Unix/macOS (bash/zsh)
+```
+Kiln-Ping: true
+Trail:
+- human-in-the-loop (main)
+- specifier (main-specifier)
+- coder (main-coder)
+- refactorer (main-refactorer)
+- architect (main-architect)
+```
+
+Because it rides the real chain, this exercises the same message lifecycle
+(`queued` → `delivered` → `processing` → `processed`), the same git-merge-per-hop mechanics, and
+the same routing rules real work uses — not a separate, parallel test path.
+
+### Requirements
+
+Any profile with a `manual`, `@current` role at the front of the chain works — the framework's
+`default` profile already qualifies, so there's nothing to configure.
 
 ### Inspection
 
-After the test completes, `bin/kiln-db.ps1` (Windows) wraps the common queries so you don't have to hand-write SQL:
+`bin/kiln-db.ps1` (Windows) wraps the common queries so you don't have to hand-write SQL:
 
 ```powershell
 .\bin\kiln-db.ps1 stats                     # message counts by status (queued/delivered/processed)
-.\bin\kiln-db.ps1 list-messages selftest    # all messages for a role, optionally -Status <status>
+.\bin\kiln-db.ps1 list-messages specifier   # all messages for a role, optionally -Status <status>
 .\bin\kiln-db.ps1 show-message <id>         # full content of one message
-.\bin\kiln-db.ps1 retry-message <id>        # move a message back to 'queued' from delivered/processed
-.\bin\kiln-db.ps1 clear-old -Before "-7 days"  # dry-run + delete old processed messages
 ```
 
 Or query directly (any platform):
 
 ```bash
-# View message database stats (shows queued/delivered/processed counts)
 sqlite3 .kiln/messages.db "SELECT status, COUNT(*) as count FROM messages GROUP BY status;"
-
-# View logbook trace of the entire chain
-git log -p logbook.md | grep -A5 SELFTEST
-
-# Verify all messages had unique test IDs
-grep "selftest-" logbook.md
-
-# Inspect a specific message in the database
-sqlite3 .kiln/messages.db "SELECT id, sender, target, priority, status, content FROM messages WHERE sender = 'selftest' LIMIT 1;"
+grep "kiln-ping" logbook.md
 ```
 
 ### Troubleshooting
 
-If the test hangs or fails:
+If the ping never comes back:
 
-1. **Check agent status**: Make sure all configured agents are running
-2. **Verify database exists**: `ls .kiln/messages.db` — should be created at startup
-3. **Check MCP configuration**: Verify `.mcp.json` is present in the project Kiln directory
-4. **Review agent console**: Each agent window shows what it received and did
-5. **Check logbook.md**: Look for error messages or incomplete entries
-6. **Query database directly**: `.\bin\kiln-db.ps1 stats` (or `sqlite3 .kiln/messages.db "SELECT COUNT(*) FROM messages;"`) to verify messages were inserted
-7. **Check agent permissions**: Ensure agents have MCP tool permissions in `.claude/settings.json`
-8. **Check the agent's own reasoning**: `.kiln/logs/claude-debug-<role>.log` captures what the agent was actually doing/deciding, if it stalled without an obvious cause in the message queue or channel log
+1. **Check agent status**: Make sure all configured agents are running (or check
+   `.kiln/status/<role>.json` for each role's live state).
+2. **Check MCP configuration**: Verify `.mcp.json` is present in the project Kiln directory.
+3. **Review agent console**: Each agent window shows what it received and did.
+4. **Check logbook.md**: Look for the `[SENT]`/`[RECEIVED]` trail of `kiln-ping` entries to see
+   where it stalled.
+5. **Check the agent's own reasoning**: `.kiln/logs/claude-debug-<role>.log` captures what the
+   agent was actually doing/deciding, if it stalled without an obvious cause in the message queue
+   or channel log.
 
 ---
 
 ## Project Maturity & Status
 
-**Kiln v0.2 — PHASE 6: SHELL + WORKER-SUBAGENT DELEGATION ✅ LIVE-VALIDATED**
+### Kiln v0.2 — Phase 6: Wrapper + Worker-Subagent Delegation ✅ Live-Validated
 
 ### ✓ Completed Features
 
@@ -1053,7 +1011,7 @@ If the test hangs or fails:
   - ✓ `.gitignore` is now committed before any worktree is created, even in a pre-existing repo, so new worktrees actually inherit it
   - ✓ Per-agent Claude Code debug logs (`--debug-file`) at `.kiln/logs/claude-debug-<role>.log`
   - ✓ `kiln-db.ps1` CLI (`list-messages`, `show-message`, `stats`, `retry-message`, `clear-old`) for inspecting the message queue without hand-writing SQL
-- **Phase 6: Shell + Worker-Subagent Delegation** — Makes Claude, `auto`-mode role agents thin shells that delegate their actual work to a disposable worker subagent each cycle, keeping the shell's context small and repetitive instead of accumulating the full working transcript
+- **Phase 6: Wrapper + Worker-Subagent Delegation** — Makes Claude, `auto`-mode role agents thin wrappers that delegate their actual work to a disposable worker subagent each cycle, keeping the wrapper's context small and repetitive instead of accumulating the full working transcript
   - ✓ `Write-GeneratedWorkerAgent` (`kiln.ps1`) generates `.claude/agents/<role>-worker.md` — role file + `engineering.md` + `project.md`, no `workflow.md`, no `Agent`/MCP tools
   - ✓ `loop-auto-claude.md` implements 7-step receive→mark→delegate→handle-failure→handoff→mark-processed→loop cycle with explicit message state transitions
   - ✓ **Live-validated** through 8+ cycles of LibraryHub multi-agent workflow with 50 tests, clean commits, zero stalls or message loss
@@ -1075,9 +1033,9 @@ If the test hangs or fails:
 - ✓ Cross-platform terminal support (Windows Terminal, WezTerm, tmux)
 - ✓ Flexible terminal layouts (tabs, split panes, grids, focus layouts)
 - ✓ Per-agent model configuration for Claude agents
-- ✓ Built-in communication health check (selftest agent)
+- ✓ Built-in communication health check (`/kiln-ping` skill, on request from `human-in-the-loop`)
 - ✓ Logbook tracking of all handoffs and agent actions
-- ✓ Shell + worker-subagent delegation for Claude `auto`-mode roles — persistent thin shells dispatch work to disposable worker subagents, keeping shell context at ~140 lines through unlimited cycles
+- ✓ Wrapper + worker-subagent delegation for Claude `auto`-mode roles — persistent thin wrappers dispatch work to disposable worker subagents, keeping wrapper context at ~140 lines through unlimited cycles
 - ✓ Codex agent support, including worker-subagent delegation via Codex's own multi-agent spawn tools — generated `AGENTS.md` + `.codex/agents/<role>-worker.toml`, isolated per-role `CODEX_HOME` MCP config, `--dangerously-bypass-approvals-and-sandbox` launch flag
 
 ### ⚠️ Security Considerations
@@ -1104,7 +1062,7 @@ This means agents can read/write/execute any file in their worktree without prom
 - **Real feature workflows are continuously validated** — multi-cycle specifier → coder → refactorer → architect chains run successfully against the LibraryHub example; 8+ cycle test runs show stable state flow with 34+ processed messages and zero stalls or message loss
 - **Error handling** — Minimal error recovery in agent workflows; graceful degradation not yet implemented
 - **Scaling** — Tested with 4 agents over 8+ cycles with stable performance; behavior with 10+ agents unknown
-- **Multi-agent backend validation** — Framework supports `claude` (validated, including Phase 6 shell+worker delegation live-tested through 8+ cycles), `copilot` (worker delegation implemented and confirmed against a live CLI session, but not yet exercised through a full multi-cycle swarm run the way Claude has been), and `codex` (worker delegation via Codex's own multi-agent spawn tools — MCP config, `AGENTS.md`/worker-`.toml` generation, and TOML validity verified directly against a live `codex.exe` install and official docs, but not yet exercised through a full multi-cycle swarm run or live spawn_agent call, since that requires `codex login` first). `grok` is not implemented: the actual installed `grok` CLI in this environment turned out to be a third-party project (`grok-cli-hurry-mode`, not an official xAI tool) whose persistent/interactive session has no non-interactive auto-approve path in its current build (confirmed by reading its bundled source) — only its one-shot `-p` headless mode auto-approves, which can't sustain Kiln's persistent per-role session model without a fundamentally different poll-and-relaunch design.
+- **Multi-agent backend validation** — Framework supports `claude` (validated, including Phase 6 wrapper+worker delegation live-tested through 8+ cycles), `copilot` (worker delegation implemented and confirmed against a live CLI session, but not yet exercised through a full multi-cycle swarm run the way Claude has been), and `codex` (worker delegation via Codex's own multi-agent spawn tools — MCP config, `AGENTS.md`/worker-`.toml` generation, and TOML validity verified directly against a live `codex.exe` install and official docs, but not yet exercised through a full multi-cycle swarm run or live spawn_agent call, since that requires `codex login` first). `grok` is not implemented: the actual installed `grok` CLI in this environment turned out to be a third-party project (`grok-cli-hurry-mode`, not an official xAI tool) whose persistent/interactive session has no non-interactive auto-approve path in its current build (confirmed by reading its bundled source) — only its one-shot `-p` headless mode auto-approves, which can't sustain Kiln's persistent per-role session model without a fundamentally different poll-and-relaunch design.
 - **`kiln.sh` has no loop/runtime template injection for Claude/Copilot** — Unix agents are launched from a much thinner instruction file than Windows' generated `CLAUDE.md`, with no `auto`/`manual` mode concept; the receive→delegate→handoff loop and Phase 6's delegation pattern may not be active there until this pre-existing gap is closed. (Codex's `kiln.sh` path was built to full parity with `kiln.ps1` regardless — its wrapper prompt and `.codex/agents/<role>-worker.toml` are hand-assembled rather than routed through the template mechanism, since `kiln.sh` has no `Get-KilnTemplate`-style loader at all, but the content and delegation pattern match.)
 
 ### Recommended Next Steps
@@ -1113,7 +1071,7 @@ This means agents can read/write/execute any file in their worktree without prom
 2. **Add error handling** — Implement graceful failure modes when agents can't process messages
 3. **Multi-language projects** — Test with Python, Kotlin, JavaScript projects beyond the LibraryHub FastAPI example
 4. **CI/CD integration** — Determine how to integrate Kiln agents into GitHub Actions / GitLab CI workflows
-5. **Validate Phase 6 against `selftest`, then LibraryHub** — confirm worker-subagent dispatch and Skill invocation work as designed before rolling the pattern out further
+5. **Validate Phase 6 against `/kiln-ping`, then LibraryHub** — confirm worker-subagent dispatch and Skill invocation work as designed before rolling the pattern out further
 6. **Bring `kiln.sh` up to parity** — port the loop/runtime template injection Windows already has, so Phase 6 (and future loop changes) apply equally on Unix
 
 ---

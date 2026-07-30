@@ -1,0 +1,59 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "Segoe UI, system-ui, sans-serif",
+    "fontSize": "16px",
+    "primaryColor": "#2a78d6",
+    "primaryTextColor": "#0b0b0b",
+    "primaryBorderColor": "#184f95",
+    "lineColor": "#52514e",
+    "textColor": "#0b0b0b",
+    "edgeLabelBackground": "#fcfcfb"
+  },
+  "flowchart": {
+    "wrappingWidth": 320
+  }
+}}%%
+flowchart LR
+    Q("<b>MCP Queue</b>")
+
+    subgraph WRAP["Coder Wrapper — persistent"]
+        direction TB
+        WAIT["wait for message"]
+        MERGE["receive &amp; merge<br/> sender's commit"]
+        DELEG["delegate to worker"]
+        CHECK{"worker ok?"}
+        RETRY["retry once"]
+        HAND["handoff<br/> squash + send"]
+
+        WAIT --> MERGE --> DELEG --> CHECK
+        CHECK -- no --> RETRY --> DELEG
+        CHECK -- yes --> HAND
+    end
+
+    subgraph WORKER["Coder-Worker — disposable"]
+        direction TB
+        TDD["TDD cycle<br/> red → green → refactor"]
+        VERIFY["verify"]
+        REPORT["report back"]
+
+        TDD --> VERIFY --> REPORT
+    end
+
+    Q --> WAIT
+    DELEG ==> TDD
+    REPORT ==> CHECK
+    HAND -.->|"loop"| Q
+
+    classDef queue fill:#c3c2b7,color:#0b0b0b,stroke:#898781,stroke-width:2px
+    classDef wrapper fill:#2a78d6,color:#ffffff,stroke:#184f95,stroke-width:2px
+    classDef worker fill:#eb6834,color:#ffffff,stroke:#a8431e,stroke-width:2px
+    classDef decision fill:#fcfcfb,color:#0b0b0b,stroke:#52514e,stroke-width:1.5px
+
+    class Q queue
+    class WAIT,MERGE,DELEG,RETRY,HAND wrapper
+    class TDD,VERIFY,REPORT worker
+    class CHECK decision
+
+    style WRAP fill:transparent,stroke:#184f95,stroke-width:1.5px,stroke-dasharray: 4 3
+    style WORKER fill:transparent,stroke:#a8431e,stroke-width:1.5px,stroke-dasharray: 4 3

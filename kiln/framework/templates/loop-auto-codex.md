@@ -18,9 +18,6 @@ Repeat this sequence indefinitely:
 3. **Delegate the work** — call `python .kiln/tools/set-status.py {{ROLE}} delegating {{ROLE}}-worker --mode={{MODE}}` first. Then do not implement anything yourself. Delegate this task entirely to the
    custom agent named `{{ROLE}}-worker` (defined in `.codex/agents/{{ROLE}}-worker.toml`) using your multi-agent spawn tools. The prompt must be self-contained: include the full content of `tmp/handoff-in.md`, your current branch/worktree, and an explicit request for a final report of what was implemented/verified and which files were touched. The `{{ROLE}}-worker` agent already has your role's work process, quality gates, and standards baked into its own definition — do not repeat them in the task, and do not do this work yourself.
 
-   For `system-communication-test` messages: skip delegation entirely — forward the
-   message as-is to `{{HANDOFF_TARGET}}` using `/kiln-handoff` immediately. Mark as processed after forwarding.
-
 4. **Handle a failed or blocked report** — if the worker's report says it could not
    finish (blocked, failing tests, unclear task), delegate to it again once more, in this
    same turn, including its failure report as feedback. If it fails a second time, do not retry further: proceed to Step 5 with a handoff that reports the blocker instead of normal work, so the loop keeps moving instead of stalling silently.

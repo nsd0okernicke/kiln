@@ -13,7 +13,7 @@
 }}%%
 flowchart LR
     Q("<b>MCP Queue</b><br/>kiln-db / kiln-channel")
-    S("<b>Shell</b><br/>persistent, thin CLAUDE.md")
+    S("<b>Wrapper</b><br/>persistent, thin CLAUDE.md")
     W("<b>Worker Subagent</b><br/>disposable, full context")
 
     Q -->|"wait_for_message()<br/>mark_processing()"| S
@@ -23,9 +23,9 @@ flowchart LR
     Q -.->|"loop: every cycle, same response"| Q
 
     classDef queue fill:#c3c2b7,color:#0b0b0b,stroke:#898781,stroke-width:2px
-    classDef shell fill:#2a78d6,color:#ffffff,stroke:#184f95,stroke-width:2px
+    classDef wrapper fill:#2a78d6,color:#ffffff,stroke:#184f95,stroke-width:2px
     classDef worker fill:#eb6834,color:#ffffff,stroke:#a8431e,stroke-width:2px
 
     class Q queue
-    class S shell
+    class S wrapper
     class W worker

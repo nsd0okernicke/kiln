@@ -24,9 +24,6 @@ Repeat this sequence indefinitely:
    process, quality gates, and standards baked into its own definition — do not repeat
    them in the prompt, and do not do this work yourself.
 
-   For `system-communication-test` messages: skip delegation entirely — forward the
-   message as-is to `{{HANDOFF_TARGET}}` using `/kiln-handoff` immediately. Mark as processed after forwarding.
-
 4. **Handle a failed or blocked report** — if the subagent's report says it could not
    finish (blocked, failing tests, unclear task), invoke it again once more, in this
    same turn, including its failure report as feedback in the new prompt. If it fails a

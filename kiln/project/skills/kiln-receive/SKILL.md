@@ -27,11 +27,22 @@ If auto-compact fires after `wait_for_message()` and the tool result is gone fro
 - Re-read `tmp/handoff-in.md` to restore the message.
 - Continue from Step 3 using that content.
 
-### Step 3 — Detect system-communication-test
+### Step 3 — Detect kiln-ping
 
-If the message contains `system-communication-test`:
-- This is a diagnostic forwarding message — do not run your normal work.
-- After logging (Step 5), forward the message as-is using `/kiln-handoff` and return to Step 1.
+If the message contains `Kiln-Ping: true`:
+- This is a health-check ping, not real work — do not run your normal role process.
+- Extract the `Trail:` list from the message and append one line for yourself:
+  `- <your role> (<your branch>)` (role and branch are already in your Runtime Configuration —
+  no extra tool calls needed).
+- **If you are running in `manual` mode**: after logging (Step 5), present the full trail to the
+  user as the completed health-check result, then return to Step 1. Do not hand off, do not wait
+  for approval.
+- **If you are running in `auto` mode**: after logging (Step 5), hand off the updated trail via
+  `/kiln-handoff` exactly as you would for real work — use your normal handoff target from the
+  Handoff Routing table, **including any role-specific override your own role file instructs**
+  (for example, specifier forwards to `human-in-the-loop` instead of `coder` when the inbound
+  `Sender:` is `architect` — the same override applies here). Never hardcode a target. Then
+  return to Step 1.
 
 ### Step 4 — Merge the sender's commit
 
