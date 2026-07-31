@@ -18,7 +18,7 @@ Kiln uses a SQLite message database at `.kiln/messages.db` in the project root f
 - Use `./tmp/` in your assigned worktree for temporary files; do not use `/tmp`.
 
 **Handoff Mechanics:**
-- For handoffs, the underlying mechanism is the MCP `kiln-db` `write_query` tool: Claude agents send it via `/kiln-handoff` (which calls `write_query` internally); Copilot agents call `write_query` directly per their loop instructions.
+- For handoffs, the underlying mechanism is the MCP `kiln-db` `query` tool: Claude agents send it via `/kiln-handoff` (which calls `query` internally); Copilot agents call `query` directly per their loop instructions.
 - The specifier invents a short, stable handoff name for each accepted specification handoff.
 - Every later handoff for that work must include the specifier handoff name.
 - Handoffs must report only essential state, not prescribe process. Include exactly these fields and no other prose: sender role, specifier handoff name, branch name, and commit hash (see Handoff Message Format template).

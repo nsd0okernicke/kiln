@@ -50,16 +50,6 @@ Messages move through one lifecycle: `queued` → `delivered` → `processing` �
 
 ---
 
-## Wrapper + Worker Delegation
-
-The persistent **wrapper** never does the work itself — it only listens, delegates, and hands off. The disposable **worker** gets full context and does the actual task.
-
-![w:950](images/diagram-wrapper-worker.png)
-
-Result: wrapper context stays flat and small no matter how many cycles run — the worker's transcript never enters it, only its final report does.
-
----
-
 ## One Role, Concretely: the Coder
 
 ![w:1050](images/diagram-coder-internal-cycle.svg)

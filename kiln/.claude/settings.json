@@ -113,7 +113,19 @@
       "PowerShell(| Sort-Object *)",
       "PowerShell(| Select-Object *)",
       "PowerShell(| *)",
-      "PowerShell(.*)"
+      "PowerShell(.*)",
+      "mcp__kiln-db__db_info",
+      "mcp__kiln-db__list_tables",
+      "mcp__kiln-db__get_table_schema",
+      "mcp__kiln-db__read_records",
+      "mcp__kiln-db__create_record",
+      "mcp__kiln-db__update_records",
+      "mcp__kiln-db__delete_records",
+      "mcp__kiln-db__query",
+      "mcp__kiln-channel__wait_for_message",
+      "mcp__kiln-channel__mark_processing",
+      "mcp__kiln-channel__mark_processed",
+      "mcp__kiln-channel__get_channel_status"
     ]
   },
   "hooks": {

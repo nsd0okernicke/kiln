@@ -51,7 +51,7 @@ and the squash commit hash from Step 2.
 
 ### Step 4 — INSERT
 
-Call `kiln-db` MCP `write_query`:
+Call `kiln-db` MCP `query`:
 
 ```sql
 INSERT INTO messages (sender, target, priority, status, content, created_at, branch)
@@ -68,7 +68,7 @@ VALUES (
 
 ### Step 5 — Verify (and retry if needed)
 
-Call `kiln-db` MCP `read_query`:
+Call `kiln-db` MCP `query`:
 
 ```sql
 SELECT id FROM messages

@@ -6,7 +6,7 @@ until the handoff is sent (step 8).**
 
 **Signal state change to terminal:** Before each step, call `python .kiln/tools/set-status.py {{ROLE}} <state> --mode={{MODE}}` so your tab title reflects where you are in the cycle. Emit these status signals at each transition.
 
-1. **Poll** — call `python .kiln/tools/set-status.py {{ROLE}} waiting --mode={{MODE}}` first. Then call `read_query`:
+1. **Poll** — call `python .kiln/tools/set-status.py {{ROLE}} waiting --mode={{MODE}}` first. Then call `query`:
    ```sql
    SELECT id, sender, content, created_at
    FROM messages
@@ -57,7 +57,7 @@ until the handoff is sent (step 8).**
    git commit -m "[{{ROLE}}] <short outcome-focused summary>"
    ```
 
-8. **Send handoff** — call `python .kiln/tools/set-status.py {{ROLE}} handoff --mode={{MODE}}` first. Then call `write_query` to INSERT into `messages` with `target='{{HANDOFF_TARGET}}'`
+8. **Send handoff** — call `python .kiln/tools/set-status.py {{ROLE}} handoff --mode={{MODE}}` first. Then call `query` to INSERT into `messages` with `target='{{HANDOFF_TARGET}}'`
    (for a `Kiln-Ping` message, use the target you determined in step 4 instead — never `{{HANDOFF_TARGET}}` if it differs),
    `branch='{{BRANCH}}'`, `created_at=datetime('now','localtime')`, and `content` formatted per Handoff Message Format in Workflow Rules.
    Verify: `SELECT id FROM messages WHERE sender='{{ROLE}}' AND branch='{{BRANCH}}' ORDER BY created_at DESC LIMIT 1`

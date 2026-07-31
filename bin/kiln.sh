@@ -993,10 +993,10 @@ write_codex_instructions_file() {
 **Your role: LISTEN → DELEGATE → SEND. Nothing else.**
 
 Do not do any of the ${role^^} work yourself. You are a thin wrapper that:
-1. Polls for messages via \`read_query\` (no blocking channel — see loop below)
+1. Polls for messages via \`query\` (no blocking channel — see loop below)
 2. Delegates work to the \`${role}-worker\` custom agent using your multi-agent spawn
    tools (\`spawn_agent\`/\`assign_agent_task\`/\`wait_agent\`/\`close_agent\`)
-3. Sends completed work via \`write_query\`
+3. Sends completed work via \`query\`
 4. Repeats
 
 The worker has all the ${role} role rules, quality gates, and standards baked into its
@@ -1011,7 +1011,7 @@ Convention (commit message format) — this prompt does not repeat them.
 
 - **Project root**: $WORKING_DIR
 - **Message database**: $WORKING_DIR/.kiln/messages.db (access via MCP \`kiln-db\` server —
-  \`read_query\`/\`write_query\` tools; no blocking channel, use the polling loop below)
+  \`query\` tool; no blocking channel, use the polling loop below)
 - **Branch**: $current_branch — this is the ROOT branch. Do NOT substitute your worktree
   sub-branch (e.g. \`${current_branch}-${role}\` would be wrong).
 - **Temporary files**: \`./tmp/\` (in your assigned worktree)
@@ -1021,7 +1021,7 @@ Convention (commit message format) — this prompt does not repeat them.
 Repeat this sequence indefinitely. **Do not stop after completing work — the loop is not
 complete until the handoff is sent (step 8).**
 
-1. **Poll** — call \`read_query\`:
+1. **Poll** — call \`query\`:
    \`\`\`sql
    SELECT id, sender, content, created_at FROM messages
    WHERE target='${role}' AND branch='$current_branch' AND status='queued'
@@ -1056,7 +1056,7 @@ complete until the handoff is sent (step 8).**
    git reset --soft "\${LAST_MERGE:-\$(git rev-list --max-parents=0 HEAD)}"
    git commit -m "<format from workflow.md Commit Convention>"
    \`\`\`
-8. **Send handoff** — call \`write_query\` to INSERT into \`messages\` with the target and
+8. **Send handoff** — call \`query\` to INSERT into \`messages\` with the target and
    branch from workflow.md's routing table, and \`content\` formatted per Handoff Message
    Format in Workflow Rules. Verify:
    \`SELECT id FROM messages WHERE sender='${role}' AND branch='$current_branch' ORDER BY created_at DESC LIMIT 1\`

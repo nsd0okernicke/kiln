@@ -54,7 +54,7 @@ Trail:
 
 ### Step 4 — INSERT
 
-Call `kiln-db` MCP `write_query`, targeting your normal handoff target (Handoff Routing table in
+Call `kiln-db` MCP `query`, targeting your normal handoff target (Handoff Routing table in
 Workflow Rules) — same INSERT shape as `/kiln-handoff` Step 4.
 
 ### Step 5 — Verify (and retry if needed)
