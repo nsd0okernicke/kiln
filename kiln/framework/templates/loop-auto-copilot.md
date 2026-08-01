@@ -50,12 +50,14 @@ until the handoff is sent (step 8).**
 
 6. **Log sent** — append a logbook.md entry: timestamp, brief summary. Commit as part of the squash in step 7.
 
-7. **Squash** — squash all your commits since the merge commit into one concise, agent-prefixed commit:
-   ```sh
-   LAST_MERGE=$(git log --merges -1 --format="%H")
-   git reset --soft "${LAST_MERGE:-$(git rev-list --max-parents=0 HEAD)}"
-   git commit -m "[{{ROLE}}] <short outcome-focused summary>"
-   ```
+7. **Squash** — squash all your commits since the merge commit into one concise, agent-prefixed
+   commit. Run each command separately, with the literal hash pasted in — do not combine them
+   with `$(...)` shell substitution, which forces a manual approval even though each command
+   here is individually pre-approved:
+   1. `git log --merges -1 --format="%H"` — if empty, run `git rev-list --max-parents=0 HEAD`
+      instead and use that hash.
+   2. `git reset --soft <merge-hash>` — substitute the literal hash from the previous command.
+   3. `git commit -m "[{{ROLE}}] <short outcome-focused summary>"`
 
 8. **Send handoff** — call `python .kiln/tools/set-status.py {{ROLE}} handoff --mode={{MODE}}` first. Then call `query` to INSERT into `messages` with `target='{{HANDOFF_TARGET}}'`
    (for a `Kiln-Ping` message, use the target you determined in step 4 instead — never `{{HANDOFF_TARGET}}` if it differs),

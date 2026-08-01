@@ -864,16 +864,27 @@ EOF
 # settings the way Copilot's single-global-file approach would. kiln-db only (no
 # kiln-channel): Codex has no confirmed support for a long-blocking MCP tool call, so codex
 # roles poll instead — same limitation as Copilot today (see TODO.md Track D).
+#
+# `--dangerously-bypass-approvals-and-sandbox` alone is not enough to silence prompts: Codex
+# gates that flag behind per-project trust (the same "do you trust this folder" onboarding a
+# normal interactive session would ask once, persisted to config.toml as
+# `[projects.'<path>'] trust_level = "trusted"`). A fresh, isolated CODEX_HOME has no such
+# entry for the role's worktree, so it still prompts for MCP calls and edits despite the
+# bypass flag. Pre-seed that trust entry here so it behaves like an already-trusted folder.
 prepare_codex_configs() {
-  local i role codex_home db_path
+  local i role codex_home db_path worktree_path
   db_path="$STATE_DIR/messages.db"
 
   for (( i = 1; i <= ${#AGENTS[@]}; i++ )); do
     [[ "${AGENTS[$i]}" == "codex" ]] || continue
     role="${ROLES[$i]}"
+    worktree_path="${WORKTREE_PATHS[$i]}"
     codex_home="$STATE_DIR/codex-home/$role"
     mkdir -p "$codex_home"
     cat > "$codex_home/config.toml" << EOF
+[projects.'$worktree_path']
+trust_level = "trusted"
+
 [mcp_servers.kiln-db]
 command = "npx"
 args = ["mcp-sqlite", "$db_path"]
@@ -1050,12 +1061,13 @@ complete until the handoff is sent (step 8).**
    blocker instead of normal work.
 6. **Log sent** — append a logbook.md entry: timestamp, brief summary. Commit as part of
    the squash in step 7.
-7. **Squash** — squash all your commits since the merge commit:
-   \`\`\`sh
-   LAST_MERGE=\$(git log --merges -1 --format="%H")
-   git reset --soft "\${LAST_MERGE:-\$(git rev-list --max-parents=0 HEAD)}"
-   git commit -m "<format from workflow.md Commit Convention>"
-   \`\`\`
+7. **Squash** — squash all your commits since the merge commit. Run each command separately,
+   with the literal hash pasted in — do not combine them with \`\$(...)\` shell substitution,
+   which forces a manual approval even though each command here is individually pre-approved:
+   1. \`git log --merges -1 --format="%H"\` — if empty, run \`git rev-list --max-parents=0 HEAD\`
+      instead and use that hash.
+   2. \`git reset --soft <merge-hash>\` — substitute the literal hash from the previous command.
+   3. \`git commit -m "<format from workflow.md Commit Convention>"\`
 8. **Send handoff** — call \`query\` to INSERT into \`messages\` with the target and
    branch from workflow.md's routing table, and \`content\` formatted per Handoff Message
    Format in Workflow Rules. Verify:

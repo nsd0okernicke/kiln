@@ -3,6 +3,7 @@
     "allow": [
       "Read",
       "Write",
+      "Edit",
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(git status)",
@@ -11,6 +12,7 @@
       "Bash(git worktree *)",
       "Bash(git merge *)",
       "Bash(git rev-parse *)",
+      "Bash(git rev-list *)",
       "Bash(git diff *)",
       "Bash(git reset *)",
       "Bash(git checkout *)",

@@ -33,13 +33,17 @@ Do not commit yet — this gets folded into the squash.
 
 ### Step 2 — Squash
 
-Squash all your commits since the last merge commit into one concise, agent-prefixed commit:
+Squash all your commits since the last merge commit into one concise, agent-prefixed commit.
+Run each command below **separately, with the literal hash pasted in** — do not combine them
+with `$(...)` shell substitution. A substitution makes the whole line unrecognizable to the
+permission allowlist and forces a manual approval even though every command here is
+individually pre-approved.
 
-```sh
-LAST_MERGE=$(git log --merges -1 --format="%H")
-git reset --soft "${LAST_MERGE:-$(git rev-list --max-parents=0 HEAD)}"
-git commit -m "[<your role>] <short outcome-focused summary>"
-```
+1. `git log --merges -1 --format="%H"` — if this prints a hash, that's your `<merge-hash>`.
+   If it prints nothing (no merges yet), run `git rev-list --max-parents=0 HEAD` instead and
+   use that hash as `<merge-hash>`.
+2. `git reset --soft <merge-hash>` — substitute the literal hash from step 1.
+3. `git commit -m "[<your role>] <short outcome-focused summary>"`
 
 Note the resulting commit hash — you need it in Step 3.
 

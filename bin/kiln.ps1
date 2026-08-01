@@ -716,17 +716,28 @@ function Prepare-CodexConfigs {
     # single-global-file approach would. kiln-db only (no kiln-channel): Codex has no
     # confirmed support for a long-blocking MCP tool call, so codex roles poll instead —
     # same limitation as Copilot today (see TODO.md Track D).
+    #
+    # `--dangerously-bypass-approvals-and-sandbox` alone is not enough to silence prompts:
+    # Codex gates that flag behind per-project trust (the same "do you trust this folder"
+    # onboarding a normal interactive session would ask once, persisted to config.toml as
+    # `[projects.'<path>'] trust_level = "trusted"`). A fresh, isolated CODEX_HOME has no such
+    # entry for the role's worktree, so it still prompts for MCP calls and edits despite the
+    # bypass flag. Pre-seed that trust entry here so it behaves like an already-trusted folder.
     $dbPath = Join-Path $STATE_DIR "messages.db"
     $dbPathEscaped = $dbPath -replace '\\', '\\'
 
     for ($i = 0; $i -lt $global:AGENTS.Count; $i++) {
         if ($global:AGENTS[$i] -ne "codex") { continue }
         $role = $global:ROLES[$i]
+        $worktreePath = $global:WORKTREE_PATHS[$i]
 
         $codexHome = Join-Path $STATE_DIR "codex-home/$role"
         New-Item -ItemType Directory -Force -Path $codexHome | Out-Null
 
         $configToml = @"
+[projects.'$worktreePath']
+trust_level = "trusted"
+
 [mcp_servers.kiln-db]
 command = "npx"
 args = ["mcp-sqlite", "$dbPathEscaped"]

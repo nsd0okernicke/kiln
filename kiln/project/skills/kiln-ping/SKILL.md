@@ -31,13 +31,13 @@ Do not commit yet — this gets folded into the squash.
 
 ### Step 2 — Squash
 
-Same mechanics as `/kiln-handoff` Step 2:
+Same mechanics as `/kiln-handoff` Step 2 — run each command separately, with the literal hash
+pasted in (no `$(...)` substitution):
 
-```sh
-LAST_MERGE=$(git log --merges -1 --format="%H")
-git reset --soft "${LAST_MERGE:-$(git rev-list --max-parents=0 HEAD)}"
-git commit -m "[<your role>] kiln-ping health check"
-```
+1. `git log --merges -1 --format="%H"` — if empty, run `git rev-list --max-parents=0 HEAD`
+   instead and use that hash.
+2. `git reset --soft <merge-hash>` — substitute the literal hash from step 1.
+3. `git commit -m "[<your role>] kiln-ping health check"`
 
 ### Step 3 — Format the ping message
 

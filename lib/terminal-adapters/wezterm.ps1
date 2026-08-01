@@ -92,6 +92,11 @@ function Get-LuaConfigTemplate {
 local wezterm = require 'wezterm'
 local config = wezterm.config_builder()
 
+-- Agent commands are generated as PowerShell syntax (e.g. `$env:VAR = '...'; ...`);
+-- without this, panes fall back to the OS default shell (cmd.exe on some Windows
+-- setups), which cannot parse that syntax and fails with a cryptic path/filename error.
+config.default_prog = { 'pwsh.exe', '-NoLogo' }
+
 -- Layout and appearance
 config.color_scheme        = "GitHub Dark"
 config.enable_tab_bar      = true
