@@ -148,6 +148,7 @@ function Ensure-InitialGitignore {
         $needsWorktrees = $content -notmatch '^\s*\.worktrees/\s*$'
         $needsGithub = $content -notmatch '^\s*\.github/\s*$'
         $needsClaudeSkills = $content -notmatch '^\s*\.claude/skills\s*$'
+        $needsAgentsSkills = $content -notmatch '^\s*\.agents/skills\s*$'
         # CLAUDE.md, .mcp.json, and tmp/ are regenerated per-worktree/per-role with different
         # content each time (Write-GeneratedCLAUDEmd, Prepare-Worktrees). If tracked, every
         # role's copy differs, so every /kiln-receive merge hits an add/add conflict on all
@@ -168,6 +169,7 @@ function Ensure-InitialGitignore {
         if ($needsWorktrees) { Add-GitignoreEntry -Path $gitignorePath -Entry ".worktrees/" }
         if ($needsGithub) { Add-GitignoreEntry -Path $gitignorePath -Entry ".github/" }
         if ($needsClaudeSkills) { Add-GitignoreEntry -Path $gitignorePath -Entry ".claude/skills" }
+        if ($needsAgentsSkills) { Add-GitignoreEntry -Path $gitignorePath -Entry ".agents/skills" }
         if ($needsClaudeMd) { Add-GitignoreEntry -Path $gitignorePath -Entry "CLAUDE.md" }
         if ($needsAgentsMd) { Add-GitignoreEntry -Path $gitignorePath -Entry "AGENTS.md" }
         if ($needsMcpJson) { Add-GitignoreEntry -Path $gitignorePath -Entry ".mcp.json" }
@@ -201,6 +203,7 @@ venv/
 .worktrees/
 .github/
 .claude/skills
+.agents/skills
 .claude/agents/*-worker.md
 .codex/agents/*-worker.toml
 CLAUDE.md
@@ -630,11 +633,11 @@ function Prepare-Skills {
 
     Write-Host "  [skills] Found $($skillDirs.Count) skill(s) in $skillsSource" -ForegroundColor Cyan
 
-    # Prepare skills for all agents (Claude and Copilot)
+    # Prepare skills for all agents (Claude, Copilot, and Codex)
     $pathsToProcess = @()
     for ($i = 0; $i -lt $global:ROLES.Count; $i++) {
         $agent = $global:AGENTS[$i]
-        if ($agent -eq "claude" -or $agent -eq "copilot") {
+        if ($agent -eq "claude" -or $agent -eq "copilot" -or $agent -eq "codex") {
             $pathsToProcess += @{ Role = $global:ROLES[$i]; Agent = $agent; Path = $global:WORKTREE_PATHS[$i] }
         }
     }
@@ -649,9 +652,13 @@ function Prepare-Skills {
         $agent = $item.Agent
         $worktreePath = $item.Path
 
-        # Determine skills directory based on agent type
+        # Determine skills directory based on agent type. Codex uses `.agents/skills`
+        # (confirmed against official docs: developers.openai.com/codex/skills) — a
+        # cross-agent-standard location it scans automatically, no config.toml flag needed.
         $skillsDir = if ($agent -eq "copilot") {
             Join-Path $worktreePath ".github/skills"
+        } elseif ($agent -eq "codex") {
+            Join-Path $worktreePath ".agents/skills"
         } else {
             Join-Path $worktreePath ".claude/skills"
         }

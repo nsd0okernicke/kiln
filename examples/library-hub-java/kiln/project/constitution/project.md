@@ -155,7 +155,9 @@ To start each service locally for manual testing or development:
 
 ## Quality Gates
 
-Run before every handoff:
+Coverage, style, and layering are gated on every handoff, including the coder's. Mutation
+testing (PIT) and CRAP are the architect's/refactorer's responsibility, not the coder's (see
+`constitution/roles/coder.md` and `refactorer.md` → Non-Ownership):
 
 - Mutation score ≥ 80% on `domain/` and `application/`: `./mvnw org.pitest:pitest-maven:mutationCoverage`
 - Coverage ≥ 90%: `./mvnw jacoco:report jacoco:check`

@@ -120,7 +120,10 @@ uvicorn loans.infrastructure.api.main:app --reload --port 8001
 
 ## Quality Gates
 
-Run before every handoff:
+Coverage, type checking, and lint are gated on every handoff, including the coder's. Mutation
+testing is the architect's responsibility (full run, once per cycle); the refactorer only scans
+mutation site counts, never runs the full suite (see `constitution/roles/coder.md` and
+`refactorer.md` → Non-Ownership):
 
 - Mutation score ≥ 80% on `domain/` and `application/`: `mutmut run --paths-to-mutate catalog/domain,catalog/application,loans/domain,loans/application`
 - Coverage ≥ 90%: `pytest --cov=catalog --cov=loans --cov-report=term-missing`

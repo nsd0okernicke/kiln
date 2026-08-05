@@ -134,7 +134,10 @@ there is no automated way to verify rendering/input behavior; see Quality Gates 
 
 ## Quality Gates
 
-Run before every handoff — scoped to `domain/` and `application/` only:
+Coverage, type checking, and lint are gated on every handoff, including the coder's. Mutation
+testing is the architect's responsibility (full run, once per cycle); the refactorer only scans
+mutation site counts, never runs the full suite (see `constitution/roles/coder.md` and
+`refactorer.md` → Non-Ownership). Scoped to `domain/` and `application/` only:
 
 - Mutation score ≥ 80%: `mutmut run --paths-to-mutate battlezone/domain,battlezone/application`
 - Coverage ≥ 90%: `coverage run -m pytest tests/unit tests/property && coverage report`

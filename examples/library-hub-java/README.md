@@ -246,7 +246,10 @@ All services use the same tech stack. No divergence.
 
 ## Quality Gates
 
-All gates are checked before handoff. Do not send a handoff if any gate fails.
+Coverage, style, and layering are checked before every handoff, including the coder's. Mutation
+testing (PIT) and CRAP are the architect's/refactorer's responsibility, not the coder's (see
+`constitution/roles/coder.md` and `refactorer.md` → Non-Ownership). Do not send a handoff if a
+gate you own fails.
 
 - **Mutation Testing**: `domain/` and `application/` must achieve mutation score ≥ 80% — `./mvnw org.pitest:pitest-maven:mutationCoverage`
 - **Test Coverage**: All code must achieve > 90% — `./mvnw jacoco:report jacoco:check`

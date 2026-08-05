@@ -394,6 +394,7 @@ ensure_initial_gitignore() {
 .mcp.json
 .claude/agents/*-worker.md
 .codex/agents/*-worker.toml
+.agents/skills
 EOF
     return
   fi
@@ -428,6 +429,10 @@ EOF
 
   if ! grep -qxF '.codex/agents/*-worker.toml' "$gitignore_file"; then
     echo '.codex/agents/*-worker.toml' >> "$gitignore_file"
+  fi
+
+  if ! grep -qxF '.agents/skills' "$gitignore_file"; then
+    echo '.agents/skills' >> "$gitignore_file"
   fi
 }
 
@@ -717,11 +722,13 @@ EOF
 
 # Mirrors Prepare-Skills in kiln.ps1: symlinks (the Unix equivalent of Windows' NTFS
 # junction) every skill directory from the project's own kiln/project/skills/ into each
-# claude/copilot role's .claude/skills/ or .github/skills/, so agents can actually invoke
-# them. Recreated every run so removed skills don't linger. Unlike kiln.ps1, no separate
-# synthetic "root" entry is needed here — WORKTREE_PATHS[$i] already resolves to
-# $WORKING_DIR for @current/none/master roles (see the worktree_path_for_name call site),
-# so looping over all roles already covers them.
+# claude/copilot/codex role's .claude/skills/, .github/skills/, or .agents/skills/, so
+# agents can actually invoke them. Codex's `.agents/skills` is confirmed against official
+# docs (developers.openai.com/codex/skills) as a cross-agent-standard location it scans
+# automatically, no config.toml flag needed. Recreated every run so removed skills don't
+# linger. Unlike kiln.ps1, no separate synthetic "root" entry is needed here —
+# WORKTREE_PATHS[$i] already resolves to $WORKING_DIR for @current/none/master roles (see
+# the worktree_path_for_name call site), so looping over all roles already covers them.
 prepare_skills() {
   local skills_source="$KILN_PROJECT_DIR/skills"
   if [[ ! -d "$skills_source" ]]; then
@@ -741,11 +748,13 @@ prepare_skills() {
   for (( i = 1; i <= ${#ROLES[@]}; i++ )); do
     role="${ROLES[$i]}"
     agent="${AGENTS[$i]}"
-    [[ "$agent" == "claude" || "$agent" == "copilot" ]] || continue
+    [[ "$agent" == "claude" || "$agent" == "copilot" || "$agent" == "codex" ]] || continue
     worktree_path="${WORKTREE_PATHS[$i]}"
 
     if [[ "$agent" == "copilot" ]]; then
       skills_dir="$worktree_path/.github/skills"
+    elif [[ "$agent" == "codex" ]]; then
+      skills_dir="$worktree_path/.agents/skills"
     else
       skills_dir="$worktree_path/.claude/skills"
     fi

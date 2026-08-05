@@ -12,7 +12,7 @@
 |---|---|---|---|---|
 | Claude | done | done (live-validated) | done | done |
 | Copilot | done | done (CLI-confirmed) | done | not fully multi-cycle |
-| Codex | done (generation validated) | implemented, not live-spawn tested | not wired | not done |
+| Codex | done (generation validated) | implemented, not live-spawn tested | done (`.agents/skills`, 2026-08-03) | not done |
 | Grok | blocked | — | — | — |
 
 **Grok blocker (2026-07-28):** the `grok` CLI on PATH is third-party (`grok-cli-hurry-mode`), not official xAI. Persistent session has no unattended auto-approve path; only one-shot `-p` auto-approves (incompatible with Kiln's persistent wait loop without a poll-and-relaunch redesign). Revisit if an official CLI appears or poll-and-relaunch becomes worth building.
@@ -20,7 +20,8 @@
 ### 1.1 Codex — remaining work
 
 - [ ] **Live multi-cycle validation** — full swarm run (WezTerm/WT on Windows; tmux on Unix once parity exists). Confirm `spawn_agent` / `assign_agent_task` / `wait_agent` / `close_agent` sequence in a real logged-in session; generation-only checks are already done.
-- [ ] **Skills wiring** — investigate Codex project-level skills discovery (`~/.codex/skills/` exists; project path/format unverified). Wire into `Prepare-Skills` / `prepare_skills` if feasible; document if not.
+- [x] **Skills wiring** (2026-08-03) — confirmed against official docs (developers.openai.com/codex/skills): Codex scans `.agents/skills/` (project-level, cross-agent-standard, no config.toml flag needed) in addition to `~/.codex/skills/` (personal). Wired into `Prepare-Skills`/`prepare_skills` the same way as `.claude/skills`/`.github/skills`. Not yet live-spawn validated — folds into the "Live multi-cycle validation" item above.
+- [x] **`loop-auto-codex.md`/`loop-manual-codex.md` fixed** (2026-08-03) — both instructed running `/kiln-receive` and calling `wait_for_message()`/`mark_processing()`/`mark_processed()`, all `kiln-channel` MCP tools, but Codex's generated `config.toml` only ever configures `kiln-db` (deliberately — see Launch + MCP config column). Live-observed: agents fell back to improvising raw `kiln-db.query` polls instead of failing outright. Rewrote both to poll `kiln-db` directly, mirroring the already-correct `loop-auto-copilot.md`/`loop-manual-copilot.md`. `loop-manual-copilot.md` had the identical latent bug (not currently exercised by any profile) and got the same fix for consistency.
 - [ ] **Profile** — keep/use `codex-test` (or equivalent) for isolated validation.
 
 ### 1.2 Mixed-agent testing
