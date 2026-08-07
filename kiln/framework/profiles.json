@@ -269,6 +269,163 @@
       "env": {
         "DEBUG": "false"
       }
+    },
+    "scheduler-coder": {
+      "description": "Same cycle as default, but the coder runs on the deterministic Python scheduler (opt-in validation profile for the scheduler rollout)",
+      "terminals": [
+        {
+          "role": "human-in-the-loop",
+          "agent": "claude",
+          "worktree": "@current",
+          "title": "Kiln Human-in-the-Loop",
+          "mode": "manual",
+          "model": "claude-sonnet-5"
+        },
+        {
+          "role": "specifier",
+          "agent": "claude",
+          "worktree": "specifier",
+          "title": "Kiln Specifier",
+          "mode": "auto",
+          "model": "claude-sonnet-5"
+        },
+        {
+          "role": "coder",
+          "agent": "claude",
+          "worktree": "coder",
+          "title": "Kiln Coder",
+          "mode": "auto",
+          "model": "claude-sonnet-5",
+          "scheduler": "python"
+        },
+        {
+          "role": "refactorer",
+          "agent": "claude",
+          "worktree": "refactorer",
+          "title": "Kiln Refactorer",
+          "mode": "auto",
+          "model": "claude-sonnet-5"
+        },
+        {
+          "role": "architect",
+          "agent": "claude",
+          "worktree": "architect",
+          "title": "Kiln Architect",
+          "mode": "auto",
+          "model": "claude-sonnet-5"
+        }
+      ],
+      "layout": {
+        "tabs": [
+          {
+            "title": "Human-in-the-Loop",
+            "panes": [
+              {
+                "role": "human-in-the-loop"
+              }
+            ]
+          },
+          {
+            "title": "Autonomous Cycle",
+            "gridRows": 2,
+            "gridCols": 2,
+            "panes": [
+              {
+                "role": "specifier"
+              },
+              {
+                "role": "coder"
+              },
+              {
+                "role": "refactorer"
+              },
+              {
+                "role": "architect"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "scheduler-all": {
+      "description": "Every auto-mode role runs on the deterministic Python scheduler; only human-in-the-loop stays an interactive session",
+      "terminals": [
+        {
+          "role": "human-in-the-loop",
+          "agent": "claude",
+          "worktree": "@current",
+          "title": "Kiln Human-in-the-Loop",
+          "mode": "manual",
+          "model": "claude-sonnet-5"
+        },
+        {
+          "role": "specifier",
+          "agent": "claude",
+          "worktree": "specifier",
+          "title": "Kiln Specifier",
+          "mode": "auto",
+          "model": "claude-sonnet-5",
+          "scheduler": "python"
+        },
+        {
+          "role": "coder",
+          "agent": "claude",
+          "worktree": "coder",
+          "title": "Kiln Coder",
+          "mode": "auto",
+          "model": "claude-sonnet-5",
+          "scheduler": "python"
+        },
+        {
+          "role": "refactorer",
+          "agent": "claude",
+          "worktree": "refactorer",
+          "title": "Kiln Refactorer",
+          "mode": "auto",
+          "model": "claude-sonnet-5",
+          "scheduler": "python"
+        },
+        {
+          "role": "architect",
+          "agent": "claude",
+          "worktree": "architect",
+          "title": "Kiln Architect",
+          "mode": "auto",
+          "model": "claude-sonnet-5",
+          "scheduler": "python"
+        }
+      ],
+      "layout": {
+        "tabs": [
+          {
+            "title": "Human-in-the-Loop",
+            "panes": [
+              {
+                "role": "human-in-the-loop"
+              }
+            ]
+          },
+          {
+            "title": "Autonomous Cycle",
+            "gridRows": 2,
+            "gridCols": 2,
+            "panes": [
+              {
+                "role": "specifier"
+              },
+              {
+                "role": "coder"
+              },
+              {
+                "role": "refactorer"
+              },
+              {
+                "role": "architect"
+              }
+            ]
+          }
+        ]
+      }
     }
   }
 }

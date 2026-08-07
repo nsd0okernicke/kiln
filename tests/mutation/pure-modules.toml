@@ -15,8 +15,17 @@
 [cosmic-ray]
 module-path = "kiln/framework/scheduler"
 timeout = 60.0
-excluded-modules = ["**/db.py", "**/__init__.py"]
-test-command = ".venv/Scripts/python.exe -m pytest -x -q tests/test_routing.py tests/test_status_contract.py"
+# The I/O-bound modules are excluded here: their tests drive real git and SQLite, so a
+# whole-module mutation run costs hours rather than minutes. They are covered by
+# db-module.toml and (for the scheduler) tracked separately.
+excluded-modules = [
+    "**/db.py",
+    "**/git_ops.py",
+    "**/role_scheduler.py",
+    "**/adapters/*.py",
+    "**/__init__.py",
+]
+test-command = ".venv/Scripts/python.exe -m pytest -x -q tests/test_routing.py tests/test_status_contract.py tests/test_handoff.py tests/test_worker_prompt.py"
 
 [cosmic-ray.distributor]
 name = "local"

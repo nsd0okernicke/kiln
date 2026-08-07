@@ -151,6 +151,79 @@ Tooling notes for whoever picks this up:
 - **`mutmut` cannot run on native Windows** (it requires WSL, and the only installed distro here is `docker-desktop`). Mutation testing uses **`cosmic-ray`** instead — Windows-native, configured in `tests/mutation/*.toml`. `constitution/engineering.md`'s tool table still names mutmut for *downstream projects*, which is unaffected; this is Kiln's own toolchain choice.
 - Dev tooling lives in a project-local `.venv/` per `engineering.md`'s "prefer project-local paths"; config is in the new root `pyproject.toml`.
 
+## Status: launcher fully ported to Python
+
+`bin/kiln.ps1` (1826 lines) and `bin/kiln.sh` (1377 lines) are now ~40-line shims that set `PYTHONPATH` and forward to `python -m launcher.cli`. All logic lives in `kiln/framework/launcher/`.
+
+| Module | Replaces |
+| --- | --- |
+| `paths.py` | ~20 inline `Join-Path` chains |
+| `config.py` | `lib/profile-loader.ps1` + `Load-ConfigFromProfile` |
+| `commands.py` | `Build-WezTermAgentCommand` + `Get-WindowsTerminalAgentCommand` + `kiln.sh`'s tmux copy |
+| `templates.py` / `generate.py` | `Get-Kiln*`, `Write-GeneratedCLAUDEmd`, `Write-GeneratedWorkerAgent`, `Write-ClaudeConfig` |
+| `workspace.py` | `Initialize-GitRepo`, `Install-GitHooks`, `Prepare-*` (8 functions) |
+| `terminals/{wezterm,windows_terminal,tmux}.py` | `lib/terminal-adapters/*` + `kiln.sh`'s tmux path |
+| `scaffold.py` | `Invoke-KilnInit` + 9 `*-KilnInit*` helpers |
+| `stop.py` / `cli.py` | `-Stop` (WMI) + the main flow |
+
+**468 tests passing, ruff clean.** Verified end-to-end on a real project: `kiln init --example library-hub` → scaffold → launch, both directly and through the PowerShell shim, with the `scheduler-coder` profile correctly switching the coder pane to `python -m scheduler.role_scheduler`.
+
+Design notes:
+
+- **Commands are built once as structured data** (`AgentCommand`: argv + env + banner) and rendered per host shell (`render_powershell` / `render_posix`). The three copies that had to agree on both flags and quoting are now one.
+- **The scheduler is launched as `python -m scheduler.role_scheduler`, not a bare script path** — the package uses relative imports, so a script path fails with "attempted relative import with no known parent package". `PYTHONPATH` points at `kiln/framework`.
+- **The launcher and scheduler import only the standard library**, so they run on bare system `python` with no install step. (`channel.py` still needs `mcp`.)
+- **Unix parity is now structural** rather than maintained: tmux is one more `terminals/` module over the same core, which closes the substance of the "kiln.sh parity" issue.
+
+### Not yet done
+
+- **A real WezTerm GUI launch.** The generated Lua is confirmed to *parse and load* (`wezterm --config-file … show-keys` succeeds), but `gui-startup` — the pane/split creation — only runs on an actual GUI start and has not been exercised.
+- **Dead shell code is left in place**, not deleted: `lib/profile-loader.{ps1,sh}`, `lib/terminal-adapter.sh`, `lib/terminal-adapters/*`. `lib/kiln-window-watchdog.sh` is separate functionality that was never ported, and README still references these paths — worth a deliberate cleanup pass rather than folding deletions into this diff.
+- **Pester/bats coverage of the shims** is no longer needed for logic (there is none left), but the two shims themselves are untested.
+
+## Bugs found while porting the launcher
+
+1. **The live status bar has never worked.** The WezTerm Lua reads `Kiln_PROJECT_DIR` (`wezterm.ps1:123`), but no PowerShell code ever set it — only `Kiln_ROLES_JSON` and `Kiln_LAYOUT_JSON`. With it empty, the `update-status` handler returns on its first line, so the per-role status badges shown in the README screenshot never render. The Python launcher exports it.
+2. **A stale `CLAUDE.md` leaks into scheduler workers.** Skipping the write for scheduler roles is not enough — a role switched over from the wrapper keeps the previous run's file, and the Claude spike proved a stray `CLAUDE.md` *is* read by one-shot workers. `write_instructions` now deletes it.
+3. **`.Kiln` vs `.kiln` casing** in the Lua's pane-ids path — harmless on case-insensitive Windows, would create a stray directory on Unix.
+
+Also worth knowing, not a bug: **symlink creation fails on this machine** (`WinError 1314` — needs Developer Mode or an elevated shell), so worktrees fall back to *copying* `.kiln` rather than sharing it. The fallback keeps the swarm working, but shared state is not actually shared; enabling Developer Mode would fix it.
+
+## Status: PR #2 Python layer delivered
+
+The scheduler and Claude adapter are implemented and verified. What remains of PR #2 is the shell-side wiring (`kiln.ps1`/`kiln.sh` launch branch, `profiles.json` opt-in flag) — deliberately left as its own slice since it is PowerShell/bash and outside the pytest gate.
+
+| Artifact | Purpose |
+| --- | --- |
+| `scheduler/handoff.py` | Parse/format workflow.md's message format, incl. ping trails and the escalation field |
+| `scheduler/worker_prompt.py` | Reads the *existing* generated worker agent file; builds the `--agents` payload and task prompt |
+| `scheduler/git_ops.py` | Merge, squash-to-anchor, local-exclude management |
+| `scheduler/adapters/claude_adapter.py` | One-shot invocation; every spike finding encoded as a pinned test |
+| `scheduler/role_scheduler.py` | `run_once(ctx, state)` — one full cycle, no loop, no sleep; `main()` is the only loop |
+
+| Check | Result |
+| --- | --- |
+| Tests | **279 passing** (was 117 after PR #1) |
+| Line coverage | **100%** across all 10 scheduler modules (683 statements) |
+| Mutation (pure modules) | **385 mutants, 0 survivors** — routing, status_contract, handoff, worker_prompt |
+| Lint / complexity | `ruff` clean; radon average A (2.96), nothing worse than B |
+
+Deferred: mutation testing for `role_scheduler.py`/`git_ops.py`/`claude_adapter.py`. Their tests drive real git and SQLite (~25s per suite run), so a full mutation pass costs hours rather than minutes. Needs either parallel distribution or a scoped subset before it is practical.
+
+### Design points worth knowing
+
+- `run_once(ctx, state)` takes every outside-world dependency (worker invocation, clock, status writer) through `SchedulerContext`, so the whole cycle is driven in tests by a **fake worker** — every branch (retry, escalation, circuit breaker, merge conflict, ping) is exercised with zero LLM cost and no flakiness.
+- `should_retry(...)` is a pure function over a sequence of attempts, testable with no DB, git or worker at all.
+- A worker that **changes nothing** still hands off successfully (an architect can validate and find nothing to change) — it simply reuses the merge commit as its handoff commit.
+- Escalation, circuit-breaker and no-route paths all still `mark_processed` the inbound message, so nothing can wedge in `processing`.
+
+## Bugs found while implementing PR #2
+
+Both were caught by tests before ever running live, and **both also affect the legacy prose path**, not just the scheduler:
+
+1. **Fast-forward merges destroy history.** `git merge <commit>` fast-forwards when the receiving branch has not diverged, producing **no merge commit**. `squash_anchor` then finds none and falls back to the repository's **root commit** — and the next `git reset --soft <root>` collapses the entire project history into a single commit. Fixed by forcing `--no-ff` so every cycle has a well-defined anchor. Note that `kiln-handoff/SKILL.md` step 2 specifies the same root-commit fallback, so a wrapper-driven role is exposed to this too whenever a cycle happens to fast-forward.
+2. **The scheduler deadlocked itself on its own debug file.** `tmp/handoff-in.md` is written every cycle for parity with `/kiln-receive`. Because `squash_since` stages with `git add -A`, that file was committed, and the *next* cycle's merge then aborted with "untracked working tree files would be overwritten by merge". Fixed via `git_ops.ensure_ignored("tmp/")`, which writes to `.git/info/exclude` (local-only, never modifies the user's `.gitignore`, and resolves correctly inside linked worktrees). Kiln's own project template happens to ignore `tmp/`, which is why this has not bitten the wrapper path — but nothing enforced it.
+
 ## Findings surfaced while implementing PR #1
 
 Both were pre-existing and are **not** caused by this change:
@@ -194,11 +267,52 @@ Opt in per role/profile via the `"scheduler": "python"` flag — no big-bang cut
 3. Codex last (also closes out the "stops polling" bug for whichever roles migrate).
 4. Only widen the default after all three backends are validated on at least one role each — and even then, flip role-by-role/profile-by-profile.
 
+## Spike results: Claude (resolved 2026-08-07, ~$0.80 of live calls)
+
+Run against Claude Code **2.1.224** in a scratch repo seeded with a decoy `CLAUDE.md`, a decoy `.mcp.json`, and a decoy project skill, so isolation claims were *observed* rather than inferred from `--help`.
+
+### Verified adapter invocation
+
+```text
+claude -p
+  --output-format json                       # structured result envelope
+  --model <model>                            # MUST be explicit — see cost finding
+  --agents '<json>' --agent <role>-worker    # feeds the worker definition
+  --strict-mcp-config                        # verified: zero MCP tools reachable
+  --setting-sources project                  # verified: drops user-global plugin skills
+  --permission-mode bypassPermissions
+  <prompt>
+```
+
+with **`stdin` redirected from devnull** and **stdout/stderr captured separately**.
+
+| Spike question | Answer |
+| --- | --- |
+| One-shot flag | `-p`, confirmed. `--output-format json` returns an envelope with `result`, `is_error`, `total_cost_usd`, `num_turns`, `usage`, `permission_denials`, `terminal_reason` |
+| Feed the worker definition | `--agents '<json>'` + `--agent <name>` works — the agent's prompt demonstrably governs the response. Cleaner than `--system-prompt`, and it is the same shape `Write-GeneratedWorkerAgent` already produces |
+| Guarantee no `kiln-db`/`kiln-channel` | **Yes** — `--strict-mcp-config` with no `--mcp-config` yields zero MCP tools, verified against a `.mcp.json` that declared one |
+| Skills in non-interactive mode | **Yes**, they resolve. But *user-global* plugin skills leak in too; `--setting-sources project` keeps project skills and drops the user's globals |
+
+### Findings that change the design
+
+1. **`--bare` is unusable.** It blocks `CLAUDE.md` as advertised, but its auth is "strictly `ANTHROPIC_API_KEY` … OAuth and keychain are never read" — the live call failed with `Not logged in`. Any subscription/OAuth user cannot use it. Rules out the flag the plan originally leaned toward.
+2. **Nothing except `--safe-mode`/`--bare` suppresses `CLAUDE.md`.** Verified with a control: `--system-prompt`, `--agents`/`--agent`, and `--setting-sources project` all still load it (one run explicitly called the decoy out as a prompt-injection attempt). `--safe-mode` does block it *and* keeps OAuth working — **but it also disables all skills**, which workers need.
+   **Recommendation:** do **not** use `--safe-mode`. Rely on the plan's existing decision to skip `Write-GeneratedCLAUDEmd` for scheduler roles, so there is no generated `CLAUDE.md` to leak; treat a project's own committed `CLAUDE.md` as legitimate context. Revisit only if leakage causes real trouble.
+3. **The default model is Opus.** A trivial one-shot cost **$0.19** on the default vs **$0.02–0.09** on `--model sonnet` — a 5–10× difference on an otherwise identical call. The adapter must always pass `--model` explicitly; never inherit the default. `--max-budget-usd` also exists and is a natural per-invocation safety rail.
+4. **`claude -p` blocks ~3s waiting on stdin** when stdin is not redirected, and emits a warning to stderr. `run_worker` must pass `stdin=DEVNULL`, and must capture stdout/stderr **separately** — merging them corrupts the JSON envelope.
+5. **Parse the sentinel from the JSON `result` field, not raw stdout.** This refines the plan's `run_worker(...) -> str` contract: the adapter should return the `result` string (plus ideally the cost/error metadata) rather than raw process output.
+
+### End-to-end confirmation
+
+A full worker-shaped invocation was parsed by the real `scheduler/status_contract.py`, yielding `status=done`, `sentinel_found=True`, and a correct summary. Notably the worker's *narrative* also discussed the sentinel format, and the last-line-wins scan rule correctly ignored it and took the real verdict — the leniency rule earning its keep on the first live test.
+
+Still unverified for Claude: worker **timeout** behaviour under a real hang, and whether `is_error: true` reliably distinguishes a crash from a model-level refusal. Both are cheap to cover once `run_worker` exists.
+
 ## Required spike before implementation (biggest open risk)
 
 None of the three one-shot invocations are verified — this must be spiked live before committing to the adapter interface. The spike is a standalone, throwaway investigation (scratch scripts, not committed code) done *before* PR #2 is written, not folded into PR #2 itself — the open questions below (e.g. whether Copilot has a one-shot flag at all) could invalidate the adapter interface shape entirely, and that's cheaper to discover outside a PR:
 
-- **Claude**: exact one-shot flag (`-p`/`--print`), how to feed it the generated worker-agent content as its whole context without also picking up the wrapper's own `CLAUDE.md`, whether omitting `--mcp-config` entirely guarantees no `kiln-db`/`kiln-channel` access, whether `.claude/skills` discovery still works non-interactively.
+- ~~**Claude**~~ — **RESOLVED, see "Spike results: Claude" below.** PR #2 is unblocked.
 - **Copilot**: does a one-shot flag exist at all, output-capture semantics, whether the `.github/agents/<role>-worker.agent.md` tool-allowlist mechanism (works for interactive delegation) applies in one-shot mode too.
 - **Codex**: whether `codex exec "<prompt>"` can consume the `.codex/agents/<role>-worker.toml` definition at all, or whether the scheduler must instead read the TOML's `developer_instructions` field and inline it as the literal prompt; how `mcp_servers = {}` isolation translates to `codex exec`'s own config; whether `trust_level = "trusted"` seeding still suffices to avoid approval prompts blocking a headless process with nobody watching.
 
@@ -213,6 +327,7 @@ Also unresolved until spiked: how a worker whose output gets truncated before em
 - **Token/cost comparison**: measure old wrapper's steady-state per-cycle tokens (full `CLAUDE.md`/`AGENTS.md` content + every tool-call round trip) against the new steady-state (zero wrapper-LLM tokens; only the worker's own one-shot cost) to substantiate the expected savings with a real number.
 
 ### Critical files
+
 - `kiln/framework/mcp-server/channel.py`
 - `bin/kiln.ps1` — `Write-GeneratedWorkerAgent`, `Write-GeneratedCLAUDEmd`, `Read-HandoffRoutingTable`, `Get-WindowsTerminalAgentCommand`, `Build-WezTermAgentCommand`, `Load-ConfigFromProfile`
 - `bin/kiln.sh` — `write_worker_agent_file`, `write_agent_instruction_file`, `launch_role`, `load_config_from_profile`

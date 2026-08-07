@@ -1,0 +1,279 @@
+"""
+One-shot Claude Code worker invocation.
+
+Every flag here was verified live against Claude Code 2.1.224 (see "Spike results: Claude"
+in full-python-plan.md). The non-obvious ones:
+
+- `--strict-mcp-config` with no `--mcp-config`: verified to yield zero MCP tools, which is
+  what keeps a worker from reaching kiln-db/kiln-channel and sending its own handoffs.
+- `--setting-sources project`: project skills stay available, the operator's *user-global*
+  plugin skills do not leak into the worker's context.
+- `--agents` + `--agent`: feeds the generated worker definition; its prompt demonstrably
+  governs the response.
+- `--model` is always passed explicitly. The CLI default is Opus, which measured 5-10x the
+  cost of Sonnet on an identical trivial call.
+- `--bare` is deliberately NOT used: it would suppress CLAUDE.md, but its auth is strictly
+  ANTHROPIC_API_KEY and it fails outright for OAuth/subscription users.
+- stdin is redirected from devnull: without it the CLI blocks ~3s waiting for input.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import subprocess
+import threading
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+
+from ..status_contract import STATUS_BLOCKED, WorkerResult, parse_worker_report
+from ..worker_prompt import WorkerDefinition, build_agents_payload
+
+log = logging.getLogger(__name__)
+
+DEFAULT_TIMEOUT_SEC = 900  # 15 minutes; a hang is indistinguishable from a blocked worker
+DEFAULT_PERMISSION_MODE = "bypassPermissions"
+
+# Glyphs for the streamed worker output. Rendering them needs UTF-8 stdout, which
+# role_scheduler.enable_unicode_output() guarantees.
+ICON_SESSION = "\N{HIGH VOLTAGE SIGN}"
+ICON_TOOL = "\N{HAMMER AND WRENCH}"
+ICON_FINISHED = "\N{CHEQUERED FLAG}"
+ICON_FAILED = "\N{CROSS MARK}"
+
+
+@dataclass(frozen=True)
+class WorkerInvocation:
+    """Outcome of one worker process, including why it failed when it did."""
+
+    result: WorkerResult
+    raw_output: str
+    cost_usd: float = 0.0
+    is_error: bool = False
+    timed_out: bool = False
+    detail: str = ""
+
+    @property
+    def is_done(self) -> bool:
+        return self.result.is_done
+
+
+def build_command(
+    *,
+    agents_json: str,
+    agent_name: str,
+    prompt: str,
+    model: str,
+    permission_mode: str = DEFAULT_PERMISSION_MODE,
+    max_budget_usd: float | None = None,
+) -> list[str]:
+    """
+    Construct the one-shot argv. Pure — spawns nothing.
+
+    `stream-json` rather than a single `json` blob so the worker's progress can be shown in
+    the pane as it happens. With plain `json` the CLI emits nothing until it finishes, which
+    left the scheduler's pane looking hung for minutes at a time — the same
+    "worker output isn't visible" problem that motivated replacing the wrapper.
+    `--verbose` is required for streaming in print mode.
+    """
+    command = [
+        "claude",
+        "-p",
+        "--output-format", "stream-json",
+        "--verbose",
+        "--model", model,
+        "--agents", agents_json,
+        "--agent", agent_name,
+        "--strict-mcp-config",
+        "--setting-sources", "project",
+        "--permission-mode", permission_mode,
+    ]
+    if max_budget_usd is not None:
+        command += ["--max-budget-usd", str(max_budget_usd)]
+    command.append(prompt)
+    return command
+
+
+def render_event(event: dict) -> list[str]:
+    """
+    Turn one stream event into human-readable pane lines.
+
+    Only the parts an operator watching the pane cares about: what the worker said, and
+    which tools it reached for. Everything else is bookkeeping.
+    """
+    kind = event.get("type")
+
+    if kind == "system" and event.get("subtype") == "init":
+        return [f"{ICON_SESSION} worker session started"]
+
+    if kind == "assistant":
+        lines: list[str] = []
+        for block in event.get("message", {}).get("content", []):
+            block_type = block.get("type")
+            if block_type == "text":
+                text = str(block.get("text", "")).strip()
+                if text:
+                    # Plain indent, no glyph: prose is the bulk of the output and a marker
+                    # on every line would be noise rather than signal.
+                    lines.extend(f"    {line}" for line in text.splitlines())
+            elif block_type == "tool_use":
+                lines.append(f"  {ICON_TOOL} {block.get('name', 'tool')}")
+        return lines
+
+    if kind == "result":
+        cost = event.get("total_cost_usd") or 0.0
+        icon = ICON_FAILED if event.get("is_error") else ICON_FINISHED
+        return [f"{icon} worker finished (cost ${float(cost):.4f})"]
+
+    return []
+
+
+def parse_cli_output(stdout: str) -> dict:
+    """
+    Pull the final `result` event out of a captured stream.
+
+    Scans for JSON objects line by line rather than parsing the whole stream, because the
+    CLI can emit an unstructured notice ahead of the events. The last `result` event wins;
+    if none is present, the last parseable object is used so a caller still gets something
+    to report.
+    """
+    result: dict | None = None
+    fallback: dict | None = None
+
+    for line in stdout.splitlines():
+        candidate = line.strip()
+        if not candidate.startswith("{"):
+            continue
+        try:
+            event = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        fallback = event
+        if event.get("type") == "result":
+            result = event
+
+    if result is not None:
+        return result
+    if fallback is not None:
+        return fallback
+    raise ValueError("no JSON envelope found in claude output")
+
+
+def _blocked(summary: str, raw: str, **kwargs) -> WorkerInvocation:
+    return WorkerInvocation(
+        result=WorkerResult(status=STATUS_BLOCKED, summary=summary, sentinel_found=False),
+        raw_output=raw,
+        detail=summary,
+        **kwargs,
+    )
+
+
+def _default_emit(line: str) -> None:
+    """Worker output goes straight to the pane, unbuffered, so progress is visible live."""
+    print(line, flush=True)
+
+
+def run_worker(
+    *,
+    definition: WorkerDefinition,
+    prompt: str,
+    cwd: str | Path,
+    model: str,
+    timeout: int = DEFAULT_TIMEOUT_SEC,
+    permission_mode: str = DEFAULT_PERMISSION_MODE,
+    max_budget_usd: float | None = None,
+    on_output: Callable[[str], None] | None = None,
+) -> WorkerInvocation:
+    """
+    Run one worker to completion, streaming its progress, and parse its verdict.
+
+    Never raises for a worker-level failure: a timeout, a crash, a malformed stream and an
+    explicit `KILN-STATUS: blocked` all converge on a blocked WorkerInvocation, because the
+    scheduler's retry/escalation policy handles them identically.
+
+    `on_output` receives each rendered line (defaults to printing to the pane), so tests can
+    assert on what an operator would see without capturing stdout.
+    """
+    command = build_command(
+        agents_json=build_agents_payload(definition),
+        agent_name=definition.name,
+        prompt=prompt,
+        model=model,
+        permission_mode=permission_mode,
+        max_budget_usd=max_budget_usd,
+    )
+
+    emit = on_output or _default_emit
+    timed_out = threading.Event()
+
+    try:
+        process = subprocess.Popen(
+            command,
+            cwd=str(cwd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,  # kept separate: merging would corrupt the event stream
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            stdin=subprocess.DEVNULL,
+            bufsize=1,  # line buffered, so the pane updates as the worker works
+        )
+    except OSError as exc:
+        log.error("could not launch worker %s: %s", definition.name, exc)
+        return _blocked(f"could not launch claude: {exc}", "", is_error=True)
+
+    def _abort() -> None:
+        timed_out.set()
+        process.kill()
+
+    # A watchdog rather than a per-line deadline: a worker that hangs producing no output at
+    # all would otherwise block on readline forever.
+    watchdog = threading.Timer(timeout, _abort)
+    watchdog.daemon = True
+    watchdog.start()
+
+    captured: list[str] = []
+    try:
+        for line in process.stdout:  # type: ignore[union-attr]
+            captured.append(line)
+            stripped = line.strip()
+            if not stripped.startswith("{"):
+                continue
+            try:
+                event = json.loads(stripped)
+            except json.JSONDecodeError:
+                continue
+            for rendered in render_event(event):
+                emit(rendered)
+        process.wait()
+    finally:
+        watchdog.cancel()
+
+    stdout = "".join(captured)
+
+    if timed_out.is_set():
+        log.error("worker %s exceeded %ss", definition.name, timeout)
+        return _blocked(f"worker timed out after {timeout}s", stdout, timed_out=True)
+
+    stderr = (process.stderr.read() if process.stderr else "") or ""
+    try:
+        envelope = parse_cli_output(stdout)
+    except ValueError:
+        detail = stderr.strip() or "claude produced no parseable output"
+        log.error("worker %s produced no result event: %s", definition.name, detail)
+        return _blocked(detail, stdout, is_error=True)
+
+    text = str(envelope.get("result", ""))
+    cost = float(envelope.get("total_cost_usd") or 0.0)
+
+    if envelope.get("is_error"):
+        log.error("worker %s reported an error: %s", definition.name, text)
+        return _blocked(text or "claude reported is_error", text, cost_usd=cost, is_error=True)
+
+    result = parse_worker_report(text)
+    log.info(
+        "worker %s finished: status=%s sentinel=%s cost=$%.4f",
+        definition.name, result.status, result.sentinel_found, cost,
+    )
+    return WorkerInvocation(result=result, raw_output=text, cost_usd=cost)

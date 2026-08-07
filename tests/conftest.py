@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import uuid
 from contextlib import closing
 
@@ -52,6 +53,41 @@ def add_message(db_path):
         return message_id
 
     return _add
+
+
+def _git(repo, *args):
+    subprocess.run(
+        ["git", *args],
+        cwd=str(repo),
+        check=True,
+        capture_output=True,
+        stdin=subprocess.DEVNULL,
+    )
+
+
+@pytest.fixture
+def git_repo(tmp_path):
+    """
+    A real git repository with one commit.
+
+    Real git rather than a fake runner: conflicts, empty squashes and detached anchors are
+    exactly the cases a fake would model wrongly, and they are the ones that break.
+    """
+    repo = tmp_path / "worktree"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "scheduler@kiln.test")
+    _git(repo, "config", "user.name", "Kiln Scheduler Test")
+    (repo / "README.md").write_text("base\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "initial")
+    return repo
+
+
+@pytest.fixture
+def git_cmd():
+    """Run a git command against a test repo, failing loudly on error."""
+    return _git
 
 
 @pytest.fixture
