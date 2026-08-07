@@ -121,6 +121,15 @@ This skill is referenced by:
 
 ## Troubleshooting
 
+**Codex: mutation run times out around 600 seconds ("partial cache... not trustworthy")**
+- This is Codex's own shell tool, not `mutmut`: each shell call defaults to `timeout_ms: 600000`
+  (10 minutes) unless the command explicitly requests more. A whole-project mutation run
+  easily exceeds that as a single call.
+- Preferred fix: follow the **Sequential Per-File Mutation** protocol above so each individual
+  run comfortably fits under the default — this also gives better progress visibility.
+- If a single call genuinely needs more time anyway, set `timeout_ms` explicitly on that shell
+  call (e.g. `1800000` for 30 minutes) rather than relying on the default.
+
 **Mutation run is slow (> 1 hour per file)**
 - Verify `--max-workers` is set to your core count: `nproc` (Linux/macOS) or Task Manager (Windows)
 - Check if the test suite itself is slow: `time <test-runner> <test-file>` — if tests take > 1min each, mutation will be slow

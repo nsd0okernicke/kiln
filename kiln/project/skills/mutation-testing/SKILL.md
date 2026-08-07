@@ -83,6 +83,9 @@ You are an expert at interpreting mutation testing and code duplication feedback
 
 - **Tool not installed**: report which tool (e.g., "mutmut") and install command (e.g., `pip install mutmut`).
 - **Report file missing**: capture build error output; do not parse non-existent files.
-- **Mutation run times out**: reduce scope or increase timeout; note in the report.
+- **Mutation run times out**: reduce scope (see `run-mutation`'s Sequential Per-File Mutation
+  protocol), or — on Codex, whose shell tool defaults to a 600s (`timeout_ms: 600000`) per-call
+  limit — explicitly set a higher `timeout_ms` on the shell call running the mutation tool;
+  note whichever you did in the report.
 - **In all error cases**: emit JSON with `"status": "error"` and an `"error"` field.
 

@@ -240,7 +240,10 @@ All services use the same tech stack. No divergence.
 
 ## Quality Gates
 
-All gates are checked before handoff. Do not send a handoff if any gate fails.
+Coverage, type checking, and lint are checked before every handoff, including the coder's.
+Mutation testing is the architect's responsibility (full run, once per cycle) — the coder never
+runs it, and the refactorer only scans mutation site counts (see `constitution/roles/coder.md`
+and `refactorer.md` → Non-Ownership). Do not send a handoff if a gate you own fails.
 
 - **Mutation Testing**: `domain/` and `application/` must achieve mutation score ≥ 80% — `mutmut run --paths domain,application`
 - **Test Coverage**: All code must achieve > 90% — `coverage run -m pytest && coverage report`

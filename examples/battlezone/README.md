@@ -292,7 +292,10 @@ All quality tools apply to `domain/` and `application/` only — see Quality Gat
 
 ## Quality Gates
 
-All gates are checked before handoff. Do not send a handoff if any gate fails. **Scoped to
+Coverage, type checking, and lint are checked before every handoff, including the coder's.
+Mutation testing is the architect's responsibility (full run, once per cycle) — the coder never
+runs it, and the refactorer only scans mutation site counts (see `constitution/roles/coder.md`
+and `refactorer.md` → Non-Ownership). Do not send a handoff if a gate you own fails. **Scoped to
 `domain/` and `application/` only** — `infrastructure/` (pygame rendering, input polling, the
 main loop) is the environmentally-unsuitable boundary that `constitution/engineering.md`'s
 general rule already excludes from automated test/coverage/mutation tooling, since it opens a
