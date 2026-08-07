@@ -1,0 +1,25 @@
+# Mutation testing for the decision-heavy pure modules (routing + status contract).
+#
+# Kept separate from db.py's config because these carry the higher bar: a wrong routing or
+# sentinel decision misroutes a whole swarm cycle, so they target >=80% killed rather than
+# the >=70% baseline.
+#
+# Run from the repo root:
+#   .venv/Scripts/cosmic-ray.exe init tests/mutation/pure-modules.toml .kiln-mutation/pure.sqlite
+#   .venv/Scripts/cosmic-ray.exe exec tests/mutation/pure-modules.toml .kiln-mutation/pure.sqlite
+#   .venv/Scripts/cr-report.exe .kiln-mutation/pure.sqlite
+#
+# cosmic-ray is used instead of the mutmut named in constitution/engineering.md because
+# mutmut refuses to run on native Windows (it requires WSL); cosmic-ray is Windows-native.
+
+[cosmic-ray]
+module-path = "kiln/framework/scheduler"
+timeout = 60.0
+excluded-modules = ["**/db.py", "**/__init__.py"]
+test-command = ".venv/Scripts/python.exe -m pytest -x -q tests/test_routing.py tests/test_status_contract.py"
+
+[cosmic-ray.distributor]
+name = "local"
+
+[cosmic-ray.distributor.local]
+worker-type = "subprocess"

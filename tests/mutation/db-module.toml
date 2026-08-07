@@ -1,0 +1,20 @@
+# Mutation testing for db.py — the >=70% baseline tier.
+#
+# Separate from pure-modules.toml because db.py's tests hit real SQLite and are therefore
+# slower, and because its bar is the standard baseline rather than the raised one.
+#
+#   .venv/Scripts/cosmic-ray.exe init tests/mutation/db-module.toml .kiln-mutation/db.sqlite
+#   .venv/Scripts/cosmic-ray.exe exec tests/mutation/db-module.toml .kiln-mutation/db.sqlite
+#   .venv/Scripts/cr-report.exe .kiln-mutation/db.sqlite
+
+[cosmic-ray]
+module-path = "kiln/framework/scheduler/db.py"
+timeout = 60.0
+excluded-modules = []
+test-command = ".venv/Scripts/python.exe -m pytest -x -q tests/test_db.py tests/test_channel_server.py"
+
+[cosmic-ray.distributor]
+name = "local"
+
+[cosmic-ray.distributor.local]
+worker-type = "subprocess"

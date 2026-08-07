@@ -4,6 +4,9 @@ Kiln Channel MCP server — role-scoped message receiver.
 Exposes two tools to Claude:
   wait_for_message  – blocks until a queued message arrives for this role (or times out)
   get_channel_status – reports queue depth for debugging
+
+All SQL lives in scheduler/db.py so this server and the scheduler cannot drift apart on
+queue semantics; this module is the MCP transport and response shaping around it.
 """
 
 import asyncio
@@ -11,9 +14,16 @@ import logging
 import os
 import sqlite3
 import sys
-import time
+from pathlib import Path
+
+# scheduler/ is a sibling package under kiln/framework. This file is always launched by
+# absolute path (see the generated .mcp.json), never copied, so the framework root is a
+# stable place to import from — but it is not on sys.path by default when running a
+# script, hence the explicit insert.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from mcp.server.fastmcp import FastMCP
+from scheduler import db
 
 MY_ROLE = os.getenv("KILN_ROLE", "")
 DB_PATH = os.getenv("KILN_DB_PATH", "")
@@ -56,43 +66,6 @@ logging.getLogger("mcp").setLevel(logging.WARNING)
 mcp = FastMCP("kiln-channel")
 
 
-def _fetch_and_deliver() -> dict | None:
-    """Return the next queued or delivered message and atomically mark it delivered, or None."""
-    log.debug("polling DB for queued/delivered messages (role=%s branch=%s)", MY_ROLE, BRANCH)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    try:
-        cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT id, sender, priority, content, created_at
-            FROM messages
-            WHERE target = ? AND branch = ? AND status IN ('queued', 'delivered')
-            ORDER BY priority ASC, created_at ASC
-            LIMIT 1
-            """,
-            (MY_ROLE, BRANCH),
-        )
-        row = cur.fetchone()
-        if not row:
-            log.debug("no queued/delivered messages found")
-            return None
-        log.info(
-            "message found: id=%s sender=%s priority=%s created_at=%s",
-            row["id"], row["sender"], row["priority"], row["created_at"],
-        )
-        log.debug("content preview: %s", row["content"][:120].replace("\n", " "))
-        cur.execute(
-            "UPDATE messages SET status='delivered', delivered_at=strftime('%Y-%m-%dT%H:%M:%SZ', 'now', 'utc') WHERE id=?",
-            (row["id"],),
-        )
-        conn.commit()
-        log.info("marked id=%s as delivered", row["id"])
-        return dict(row)
-    finally:
-        conn.close()
-
-
 @mcp.tool()
 async def wait_for_message() -> dict:
     """
@@ -107,7 +80,7 @@ async def wait_for_message() -> dict:
     poll_count = 0
     while True:
         try:
-            msg = _fetch_and_deliver()
+            msg = db.fetch_and_deliver(DB_PATH, MY_ROLE, BRANCH)
             if msg:
                 log.info(
                     "returning message to caller: id=%s sender=%s priority=%s",
@@ -126,14 +99,7 @@ def get_channel_status() -> dict:
     """Return Channel configuration and the number of queued messages for this role."""
     log.debug("get_channel_status called")
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT COUNT(*) FROM messages WHERE target=? AND branch=? AND status='queued'",
-            (MY_ROLE, BRANCH),
-        )
-        queued = cur.fetchone()[0]
-        conn.close()
+        queued = db.count_queued(DB_PATH, MY_ROLE, BRANCH)
         log.debug("queued=%d", queued)
         return {
             "role": MY_ROLE,
@@ -153,21 +119,9 @@ def mark_processing(message_id: str) -> dict:
     """Mark a message as being actively processed by the agent."""
     log.debug("mark_processing called for id=%s", message_id)
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cur = conn.cursor()
-        cur.execute(
-            "UPDATE messages SET status='processing' WHERE id=?",
-            (message_id,),
-        )
-        conn.commit()
-        rows_affected = cur.rowcount
-        conn.close()
-        if rows_affected > 0:
-            log.info("marked id=%s as processing", message_id)
+        if db.mark_processing(DB_PATH, message_id):
             return {"success": True, "message_id": message_id, "status": "processing"}
-        else:
-            log.warning("no message found with id=%s", message_id)
-            return {"success": False, "error": f"message id {message_id} not found"}
+        return {"success": False, "error": f"message id {message_id} not found"}
     except Exception as exc:
         log.error("mark_processing failed: %s", exc)
         return {"success": False, "error": str(exc)}
@@ -178,21 +132,9 @@ def mark_processed(message_id: str) -> dict:
     """Mark a message as fully processed by the agent."""
     log.debug("mark_processed called for id=%s", message_id)
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cur = conn.cursor()
-        cur.execute(
-            "UPDATE messages SET status='processed', processed_at=strftime('%Y-%m-%dT%H:%M:%SZ', 'now', 'utc') WHERE id=?",
-            (message_id,),
-        )
-        conn.commit()
-        rows_affected = cur.rowcount
-        conn.close()
-        if rows_affected > 0:
-            log.info("marked id=%s as processed", message_id)
+        if db.mark_processed(DB_PATH, message_id):
             return {"success": True, "message_id": message_id, "status": "processed"}
-        else:
-            log.warning("no message found with id=%s", message_id)
-            return {"success": False, "error": f"message id {message_id} not found"}
+        return {"success": False, "error": f"message id {message_id} not found"}
     except Exception as exc:
         log.error("mark_processed failed: %s", exc)
         return {"success": False, "error": str(exc)}
