@@ -224,6 +224,73 @@ Both were caught by tests before ever running live, and **both also affect the l
 1. **Fast-forward merges destroy history.** `git merge <commit>` fast-forwards when the receiving branch has not diverged, producing **no merge commit**. `squash_anchor` then finds none and falls back to the repository's **root commit** — and the next `git reset --soft <root>` collapses the entire project history into a single commit. Fixed by forcing `--no-ff` so every cycle has a well-defined anchor. Note that `kiln-handoff/SKILL.md` step 2 specifies the same root-commit fallback, so a wrapper-driven role is exposed to this too whenever a cycle happens to fast-forward.
 2. **The scheduler deadlocked itself on its own debug file.** `tmp/handoff-in.md` is written every cycle for parity with `/kiln-receive`. Because `squash_since` stages with `git add -A`, that file was committed, and the *next* cycle's merge then aborted with "untracked working tree files would be overwritten by merge". Fixed via `git_ops.ensure_ignored("tmp/")`, which writes to `.git/info/exclude` (local-only, never modifies the user's `.gitignore`, and resolves correctly inside linked worktrees). Kiln's own project template happens to ignore `tmp/`, which is why this has not bitten the wrapper path — but nothing enforced it.
 
+## Status: first live end-to-end cycle (2026-08-08)
+
+`scheduler-all` on a clean `library-hub-testrun3`. A human handoff reached the specifier, which merged, ran a one-shot worker (14 tool calls, $0.61, `KILN-STATUS: done`), squashed and queued a handoff to the coder — **the full cycle worked on its first live run.** The coder then failed to merge it, which exposed one real bug and two presentation problems.
+
+### Bug: the squash sweeps up Kiln's own scaffolding (same class as the `tmp/` deadlock)
+
+`.claude/settings.json` is copied, untracked, into every worktree by the launcher, and was **not** in `REQUIRED_GITIGNORE_ENTRIES`. `squash_since`'s `git add -A` committed the specifier's copy; the coder's next merge aborted with "untracked working tree files would be overwritten" and escalated to `human-in-the-loop`. One handoff in, the swarm stopped.
+
+This is bug #2 from PR #2 recurring with a different file, which means the per-file fix was the wrong shape. Now addressed at three levels:
+
+1. **Prevention** — `git_ops.GENERATED_WORKTREE_PATHS` names the whole launcher footprint (`tmp/`, `.claude/settings.json`, `.mcp.json`, `CLAUDE.md`, `AGENTS.md`), and `ensure_generated_ignored` force-ignores all of it at scheduler startup and on every inbound handoff.
+2. **Contract** — `.claude/settings.json` added to `launcher.workspace.REQUIRED_GITIGNORE_ENTRIES`, so newly scaffolded projects ignore it in their own committed `.gitignore`.
+3. **Recovery** — `merge_commit` now parses the "untracked working tree files" error and retries once after deleting the blockers, but **only when every listed path is Kiln-generated**. One unrecognised path and the merge fails loudly instead, because deleting a worker's real output would be far worse than a stalled cycle. This matters because prevention cannot help a repo whose history already carries the file.
+
+Verified against the actual poisoned commit from the live run, in a throwaway clone: the old code reproduces the abort exactly, the new code recovers and merges.
+
+### Presentation fixes
+
+- **The pane opened on the echoed command line.** WezTerm's `send_text` and tmux's `send-keys` type into a live prompt, which echoes; `wt.exe` passes `-Command` and does not. The renderers take a `clear` flag, set only for the two echoing backends, and the scheduler now prints a **config banner** — role, branch, resolved worker/model, resolved routing, worktree, workflow, queue, timeouts, log path. Routing is on it deliberately: it is the most surprising piece of config, and this makes a misroute diagnosable before it happens.
+- **Tool calls showed only a name.** A pane of bare `🛠 Bash` lines says nothing. `summarise_tool_use` adds the one input field that matters per tool (command, file path, pattern, url…), collapsed to one line and truncated at 140 chars, with a fallback for tools the CLI adds later. Failing tool results now also get a line — a failed tool is usually *why* a worker ends up blocked, and it was previously invisible.
+
+Suite after this round: **545 passing**, ruff clean.
+
+### Per-pane status bar (`scheduler/pane_status.py`)
+
+A colored status line pinned to the **bottom** row of each scheduler pane, showing role, state, cycle count, accumulated cost, handoff target and the last summary. Implemented with DECSTBM (the VT scrolling region), so the pane stays an ordinary terminal — selection, copy/paste and scrollback all keep working, and only the last row is reserved.
+
+Bottom rather than top is a technical constraint, not a preference: **a terminal only pushes scrolled-off lines into scrollback when the scrolling region starts at row 1.** A top bar needs a region starting at row 2, and terminals then discard those lines instead of retaining them — the pane would scroll but keep no history. The alternative that gets a genuine top bar is a second, dedicated pane per role, at the cost of doubling the pane and process count and only working on WezTerm.
+
+Design points:
+
+- `format_bar` / `style_for` are pure and tested directly; `StatusBar` is the only thing that emits escape sequences. It disables itself when the stream is not a TTY, so piped output and the test suite's own capture stay clean.
+- The bar repaints only when the rendered text or the terminal size actually changes — a bar rewriting itself every 2s poll would flicker and fight text selection.
+- `attach_status_bar` **wraps** the existing `ctx.set_status`, which already feeds `.kiln/status/<role>.json` for the WezTerm tab-bar badges. Every state change reaches both surfaces from the single existing call site.
+- `main()` releases the region in a `finally`, including on a crash. A region that outlives the process leaves the pane's shell prompt behaving strangely long afterwards.
+- Also fixed: the WezTerm Lua's `STATE_COLORS` had `handoff`, but the scheduler reports `handing-off`, so that badge always fell through to the default grey. Both spellings are now listed, since manual roles still run the wrapper.
+
+100% line coverage on the module. Suite: **585 passing**.
+
+### Bug: the shipped cycle could never terminate
+
+The constitution's routing table routed **every** specifier handoff to `coder`. The one exception — an architect's completed-cycle report goes back to the human rather than around again — lived only as a prose note *underneath* the table, pointing at `roles/specifier.md`.
+
+That was survivable while a wrapper LLM did the routing, because it could read the note. The scheduler reads the table. So a finished cycle fed straight back in:
+
+```text
+architect -> specifier -> coder -> refactorer -> architect -> ...
+```
+
+forever, and the human was never told the work was done. This is precisely the gap decision #3 of this plan called out — `routing.py` shipped with three-column support in PR #1, but no constitution was ever migrated to use it, so the capability sat unused.
+
+The shipped table now carries the condition as data:
+
+```text
+| Role      | Sends to          | When Sender |
+| specifier | coder             |             |
+| specifier | human-in-the-loop | architect   |
+```
+
+`roles/specifier.md` still governs *what* the specifier does with such a message (forward as-is, do not re-run the Gherkin workflow); only the routing decision moved into the table.
+
+Guarded by `TestShippedRoutingTable`, which walks the graph the way the scheduler does and asserts it returns to `human-in-the-loop` within a bounded number of hops. Verified to fail against the old two-column table.
+
+Suite: **589 passing**.
+
+Unrelated leftover spotted while grepping and now removed: `temp/claude/*.md` and `temp/copilot/*.md` were auto-generated wrapper instruction files from 2026-06-24, committed by accident and referenced by nothing. They still carried the old two-column routing table, so anyone grepping for it found four stale copies alongside the real one. Their generator no longer exists — `launcher/generate.py:write_instructions` writes into each worktree instead. Deleted (8 files), along with the now-dead `"temp"` entry in `pyproject.toml`'s ruff `extend-exclude`.
+
 ## Findings surfaced while implementing PR #1
 
 Both were pre-existing and are **not** caused by this change:

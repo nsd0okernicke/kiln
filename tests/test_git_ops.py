@@ -91,6 +91,100 @@ class TestMerge:
         assert git_ops.merge_commit("0" * 40, git_repo).ok is False
 
 
+class TestGeneratedScaffoldingBlockingAMerge:
+    """
+    Regression: the coder deadlocked on `.claude/settings.json`.
+
+    The launcher drops that file, untracked, into every worktree. The specifier's
+    `squash_since` ran `git add -A`, committed it, and the coder's next merge aborted with
+    "untracked working tree files would be overwritten" — the swarm stopped dead one handoff
+    in, and no retry could ever clear it.
+    """
+
+    def _sender_commits_scaffolding(self, git_repo, git_cmd, relative=".claude/settings.json"):
+        git_cmd(git_repo, "checkout", "-q", "-b", "sender")
+        target = git_repo / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("{}", encoding="utf-8")
+        git_cmd(git_repo, "add", "-A")
+        git_cmd(git_repo, "commit", "-q", "-m", "swept in scaffolding")
+        commit = git_ops.head_commit(git_repo)
+        git_cmd(git_repo, "checkout", "-q", "main")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("{}", encoding="utf-8")  # this worktree's untracked copy
+        return commit
+
+    def test_merge_recovers_instead_of_deadlocking(self, git_repo, git_cmd):
+        commit = self._sender_commits_scaffolding(git_repo, git_cmd)
+        assert git_ops.merge_commit(commit, git_repo).ok
+
+    def test_real_untracked_work_is_never_deleted(self, git_repo, git_cmd):
+        # All-or-nothing: one unrecognised path and the merge must fail loudly instead.
+        commit = self._sender_commits_scaffolding(git_repo, git_cmd, "src/app.py")
+        result = git_ops.merge_commit(commit, git_repo)
+
+        assert result.ok is False
+        assert (git_repo / "src" / "app.py").exists()
+
+    def test_a_conflict_is_still_reported_as_a_failure(self, git_repo, git_cmd):
+        # The recovery path must not swallow ordinary merge conflicts.
+        _write_commit(git_repo, git_cmd, "shared.txt", "main", "main edit")
+        git_cmd(git_repo, "checkout", "-q", "-b", "sender", "HEAD~1")
+        conflicting = _write_commit(git_repo, git_cmd, "shared.txt", "sender", "sender")
+        git_cmd(git_repo, "checkout", "-q", "main")
+
+        assert git_ops.merge_commit(conflicting, git_repo).ok is False
+
+    def test_the_squash_can_no_longer_sweep_scaffolding_in(self, git_repo):
+        # The fix that matters: prevention, so no repo reaches the state above.
+        (git_repo / ".claude").mkdir()
+        (git_repo / ".claude" / "settings.json").write_text("{}", encoding="utf-8")
+
+        git_ops.ensure_generated_ignored(git_repo)
+
+        assert git_ops.has_pending_changes(git_repo) is False
+
+
+class TestGeneratedPathClassification:
+    @pytest.mark.parametrize(
+        "path", [".claude/settings.json", "tmp/", "tmp/handoff-in.md", "CLAUDE.md", ".mcp.json"]
+    )
+    def test_launcher_artefacts_are_recognised(self, path):
+        assert git_ops.is_generated_path(path) is True
+
+    @pytest.mark.parametrize(
+        "path", ["src/app.py", "features/catalog/create_book.feature", "settings.json", "README.md"]
+    )
+    def test_project_content_is_not(self, path):
+        assert git_ops.is_generated_path(path) is False
+
+    def test_windows_separators_are_handled(self):
+        # git reports forward slashes, but a caller passing an OS path must not be misread.
+        assert git_ops.is_generated_path(".claude\\settings.json") is True
+
+
+class TestBlockingUntrackedParsing:
+    MESSAGE = (
+        "error: The following untracked working tree files would be overwritten by merge:\n"
+        "        .claude/settings.json\n"
+        "        tmp/handoff-in.md\n"
+        "Please move or remove them before you merge.\n"
+        "Aborting\n"
+    )
+
+    def test_extracts_every_listed_path(self):
+        assert git_ops.blocking_untracked(self.MESSAGE) == [
+            ".claude/settings.json",
+            "tmp/handoff-in.md",
+        ]
+
+    def test_stops_at_the_trailing_advice(self):
+        assert "Please" not in " ".join(git_ops.blocking_untracked(self.MESSAGE))
+
+    def test_other_failures_yield_nothing(self):
+        assert git_ops.blocking_untracked("CONFLICT (content): Merge conflict in a.txt") == []
+
+
 class TestSquashAnchor:
     def test_falls_back_to_root_commit_when_nothing_merged(self, git_repo, git_cmd):
         root = git_ops.head_commit(git_repo)

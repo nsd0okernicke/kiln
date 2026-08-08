@@ -41,6 +41,32 @@ ICON_SESSION = "\N{HIGH VOLTAGE SIGN}"
 ICON_TOOL = "\N{HAMMER AND WRENCH}"
 ICON_FINISHED = "\N{CHEQUERED FLAG}"
 ICON_FAILED = "\N{CROSS MARK}"
+ICON_TOOL_ERROR = "\N{WARNING SIGN}"
+
+#: The one input field worth showing per tool. `[ICON_TOOL] Bash` alone tells an operator
+#: nothing — which command, which file, which pattern is the whole point of watching.
+TOOL_DETAIL_FIELD = {
+    "Bash": "command",
+    "BashOutput": "bash_id",
+    "Read": "file_path",
+    "Write": "file_path",
+    "Edit": "file_path",
+    "NotebookEdit": "notebook_path",
+    "Glob": "pattern",
+    "Grep": "pattern",
+    "Skill": "skill",
+    "Task": "description",
+    "Agent": "description",
+    "WebFetch": "url",
+    "WebSearch": "query",
+    "TodoWrite": None,  # a JSON todo array is noise in a pane
+}
+
+#: Fallback order for tools not listed above, including any the CLI adds later.
+_FALLBACK_FIELDS = ("command", "file_path", "path", "pattern", "query", "url", "description")
+
+#: Long enough for a real command, short enough not to wrap a normal pane.
+MAX_DETAIL_CHARS = 140
 
 
 @dataclass(frozen=True)
@@ -95,12 +121,33 @@ def build_command(
     return command
 
 
+def _condense(value: object) -> str:
+    """One line, bounded length — a heredoc in a Bash command must not flood the pane."""
+    text = " ".join(str(value).split())
+    if len(text) > MAX_DETAIL_CHARS:
+        return text[: MAX_DETAIL_CHARS - 1] + "\N{HORIZONTAL ELLIPSIS}"
+    return text
+
+
+def summarise_tool_use(name: str, payload: dict) -> str:
+    """`Bash` + {'command': 'pytest -q'} -> 'Bash  pytest -q'."""
+    if name in TOOL_DETAIL_FIELD:
+        field = TOOL_DETAIL_FIELD[name]
+        detail = payload.get(field) if field else None
+    else:
+        detail = next(
+            (payload[key] for key in _FALLBACK_FIELDS if payload.get(key)), None
+        )
+    return f"{name}  {_condense(detail)}" if detail else name
+
+
 def render_event(event: dict) -> list[str]:
     """
     Turn one stream event into human-readable pane lines.
 
-    Only the parts an operator watching the pane cares about: what the worker said, and
-    which tools it reached for. Everything else is bookkeeping.
+    Only the parts an operator watching the pane cares about: what the worker said, which
+    tools it reached for and with what, and which of those failed. Everything else is
+    bookkeeping.
     """
     kind = event.get("type")
 
@@ -118,7 +165,18 @@ def render_event(event: dict) -> list[str]:
                     # on every line would be noise rather than signal.
                     lines.extend(f"    {line}" for line in text.splitlines())
             elif block_type == "tool_use":
-                lines.append(f"  {ICON_TOOL} {block.get('name', 'tool')}")
+                name = str(block.get("name", "tool"))
+                lines.append(f"  {ICON_TOOL} {summarise_tool_use(name, block.get('input') or {})}")
+        return lines
+
+    if kind == "user":
+        # Tool results are far too voluminous to show wholesale, but a *failing* tool is
+        # exactly what an operator needs to see: it is usually why the worker ends up
+        # blocked, and without this the pane shows a silent retry loop.
+        lines = []
+        for block in event.get("message", {}).get("content", []):
+            if block.get("type") == "tool_result" and block.get("is_error"):
+                lines.append(f"  {ICON_TOOL_ERROR} {_condense(_result_text(block))}")
         return lines
 
     if kind == "result":
@@ -127,6 +185,16 @@ def render_event(event: dict) -> list[str]:
         return [f"{icon} worker finished (cost ${float(cost):.4f})"]
 
     return []
+
+
+def _result_text(block: dict) -> str:
+    """Tool result content is either a plain string or a list of typed blocks."""
+    content = block.get("content")
+    if isinstance(content, list):
+        return " ".join(
+            str(part.get("text", "")) for part in content if isinstance(part, dict)
+        )
+    return str(content or "tool failed")
 
 
 def parse_cli_output(stdout: str) -> dict:

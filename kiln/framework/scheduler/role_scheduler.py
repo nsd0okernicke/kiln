@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from . import db, git_ops, handoff
+from . import db, git_ops, handoff, pane_status
 from .adapters.claude_adapter import WorkerInvocation
 from .routing import RoutingTable, load_routing_table
 from .worker_prompt import WorkerDefinition, build_task_prompt, load_worker_definition
@@ -208,11 +208,12 @@ def _persist_inbound(ctx: SchedulerContext, content: str) -> None:
     """
     Write tmp/handoff-in.md verbatim, for parity with /kiln-receive and debuggability.
 
-    `tmp/` is force-ignored first: otherwise this very file gets swept into the squash
-    commit and blocks the next cycle's merge.
+    Kiln's own generated files are force-ignored first: otherwise this very file — and the
+    launcher's `.claude/settings.json` alongside it — gets swept into the squash commit and
+    blocks the next role's merge.
     """
     try:
-        git_ops.ensure_ignored("tmp/", ctx.worktree)
+        git_ops.ensure_generated_ignored(ctx.worktree)
         tmp_dir = Path(ctx.worktree) / "tmp"
         tmp_dir.mkdir(parents=True, exist_ok=True)
         (tmp_dir / "handoff-in.md").write_text(content, encoding="utf-8")
@@ -426,12 +427,53 @@ def make_status_writer(role: str, script: Path | None) -> Callable[[str], None]:
     return _write
 
 
+def resolve_model(args: argparse.Namespace, definition: WorkerDefinition) -> str:
+    """CLI flag wins, then the worker definition's own frontmatter, then the cheap default."""
+    return args.model or definition.model or "sonnet"
+
+
+def format_banner(ctx: SchedulerContext, args: argparse.Namespace) -> list[str]:
+    """
+    The pane header: what this scheduler was actually configured to do.
+
+    A pane otherwise opens on the echoed `python -m scheduler.role_scheduler --role ...`
+    command line — complete, and unreadable. Same facts, laid out for a human, including
+    the resolved routing so a misrouted handoff is diagnosable before it happens.
+    """
+    routes = [
+        f"{rule.target} (when sender is {rule.when_sender})" if rule.when_sender else rule.target
+        for rule in ctx.routing.rules
+        if rule.role == ctx.role
+    ]
+    fields = [
+        ("role", ctx.role),
+        ("branch", ctx.branch),
+        ("worker", f"{ctx.definition.name} ({args.agent} {resolve_model(args, ctx.definition)})"),
+        ("hands off to", ", ".join(routes) or "(no route - handoffs will escalate)"),
+        ("worktree", str(ctx.worktree)),
+        ("workflow", str(args.workflow)),
+        ("queue", str(ctx.db_path)),
+        ("poll / worker timeout", f"{args.poll_interval:g}s / {args.worker_timeout}s"),
+    ]
+    if args.log_file:
+        fields.append(("log", str(args.log_file)))
+
+    width = max(len(name) for name, _ in fields)
+    rule = "\N{BOX DRAWINGS LIGHT HORIZONTAL}" * (width + 4 + 40)
+    return [
+        f"{ICON_START} Kiln scheduler",
+        rule,
+        *(f"  {name:<{width}}  {value}" for name, value in fields),
+        rule,
+    ]
+
+
 def build_context(args: argparse.Namespace) -> SchedulerContext:
     """Assemble a context from CLI arguments."""
     from .adapters import claude_adapter
 
     definition = load_worker_definition(args.worker_agent)
-    model = args.model or definition.model or "sonnet"
+    model = resolve_model(args, definition)
 
     def run_worker(*, prompt: str) -> WorkerInvocation:
         return claude_adapter.run_worker(
@@ -472,12 +514,57 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--poll-interval", type=float, default=DEFAULT_POLL_INTERVAL_SEC)
     parser.add_argument("--worker-timeout", type=int, default=900)
     parser.add_argument("--once", action="store_true", help="run a single cycle and exit")
+    parser.add_argument(
+        "--no-status-bar", action="store_true",
+        help="do not reserve the pane's bottom row for the live status bar",
+    )
     return parser.parse_args(argv)
 
 
 #: Consecutive crashed cycles before giving up. A transient fault (locked DB, git hiccup)
 #: must not end the role, but an unfixable one should not spin forever either.
 MAX_CONSECUTIVE_ERRORS = 5
+
+#: The bar has one row; a full sentence would push out the fields that matter.
+MAX_BAR_DETAIL_CHARS = 60
+
+
+def attach_status_bar(ctx: SchedulerContext, args: argparse.Namespace) -> pane_status.StatusBar:
+    """
+    Build the pane's status bar and chain it onto the role's existing status writer.
+
+    `ctx.set_status` already feeds `.kiln/status/<role>.json`, which drives the WezTerm
+    tab-bar badges. Wrapping it means every state change reaches both surfaces from the
+    single existing call site, rather than each transition having to remember two.
+    """
+    bar = pane_status.StatusBar(
+        pane_status.PaneStatus(role=ctx.role, target=ctx.routing.resolve(ctx.role) or ""),
+        enabled=False if args.no_status_bar else None,
+    )
+
+    write_status = ctx.set_status
+
+    def set_status(state: str) -> None:
+        write_status(state)
+        bar.update(state=state)
+
+    ctx.set_status = set_status
+    return bar
+
+
+def _record_cycle(bar: pane_status.StatusBar, result: CycleResult) -> None:
+    """Fold one cycle's outcome into the bar. Idle polls are not cycles."""
+    if result.outcome == IDLE:
+        return
+    detail = " ".join(result.detail.split())
+    if len(detail) > MAX_BAR_DETAIL_CHARS:
+        detail = detail[: MAX_BAR_DETAIL_CHARS - 1] + "\N{HORIZONTAL ELLIPSIS}"
+    bar.update(
+        cycles=bar.status.cycles + 1,
+        cost_usd=bar.status.cost_usd + result.cost_usd,
+        target=result.target or bar.status.target,
+        detail=detail,
+    )
 
 
 def configure_logging(log_file: str | Path | None = None) -> None:
@@ -512,13 +599,48 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     ctx = build_context(args)
     state = SchedulerState()
-    log.info(f"{ICON_START} scheduler started for role=%s branch=%s", ctx.role, ctx.branch)
+    bar = attach_status_bar(ctx, args)
 
+    # The banner is written by the bar rather than logged: it is a layout, and every line
+    # would otherwise carry a timestamp/level prefix that defeats the alignment. The log
+    # file gets the same facts as one structured line below, so a post-mortem still knows
+    # the configuration.
+    bar.start(format_banner(ctx, args))
+    log.info(
+        "scheduler started role=%s branch=%s worker=%s model=%s worktree=%s",
+        ctx.role, ctx.branch, ctx.definition.name,
+        resolve_model(args, ctx.definition), ctx.worktree,
+    )
+
+    # The launcher normally covers this, but a scheduler started by hand — or in a project
+    # scaffolded before these entries existed — would otherwise commit its own scaffolding.
+    git_ops.ensure_generated_ignored(ctx.worktree)
+
+    # The bar owns the pane's scrolling region, so it must be released on every exit path
+    # — including a crash. A region that outlives the process leaves the shell prompt
+    # underneath it behaving strangely, long after the scheduler is gone.
+    try:
+        return _run_loop(ctx, state, args, bar)
+    finally:
+        bar.close()
+
+
+def _run_loop(
+    ctx: SchedulerContext,
+    state: SchedulerState,
+    args: argparse.Namespace,
+    bar: pane_status.StatusBar,
+) -> int:
     consecutive_errors = 0
     while True:
         try:
             result = run_once(ctx, state)
             consecutive_errors = 0
+        except KeyboardInterrupt:
+            # Ctrl+C in the pane is a deliberate stop, not a crash. Exiting quietly beats
+            # dumping a traceback that looks like the scheduler fell over.
+            log.info("interrupted; shutting down")
+            return 130
         except Exception:
             # One bad cycle must not end the role. The wrapper this replaces would have
             # kept going, and an unattended swarm that dies silently is worse than one
@@ -528,21 +650,31 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"{ICON_BLOCKED} cycle failed (%d/%d consecutive)",
                 consecutive_errors, MAX_CONSECUTIVE_ERRORS,
             )
+            bar.update(state="blocked", detail=f"cycle failed ({consecutive_errors})")
             if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
                 log.error(f"{ICON_HALT} too many consecutive failures; exiting")
+                bar.update(state="halted")
                 return 1
             time.sleep(min(args.poll_interval * consecutive_errors, 30))
             continue
 
+        _record_cycle(bar, result)
         if result.outcome != IDLE:
             log.info("cycle -> %s %s", result.outcome, result.detail)
         if state.halted:
             log.error(f"{ICON_HALT} scheduler halted; exiting")
+            bar.update(state="halted")
             return 1
         if args.once:
             return 0
         if result.outcome == IDLE:
-            time.sleep(args.poll_interval)
+            try:
+                time.sleep(args.poll_interval)
+            except KeyboardInterrupt:
+                # The poll sleep is where an idle scheduler spends nearly all its time, so
+                # it is almost always where Ctrl+C lands.
+                log.info("interrupted; shutting down")
+                return 130
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

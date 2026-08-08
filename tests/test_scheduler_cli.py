@@ -9,6 +9,7 @@ to exercise them, and therefore the parts most likely to break unnoticed.
 
 from __future__ import annotations
 
+import io
 import subprocess
 from datetime import datetime
 
@@ -174,6 +175,77 @@ class TestCli:
         role_scheduler.build_context(args).run_worker(prompt="p")
         assert captured["model"] == "opus"
 
+
+class TestStartupBanner:
+    """
+    What the pane shows on launch.
+
+    Previously the first thing an operator saw was the echoed `python -m
+    scheduler.role_scheduler --role ... --db-path ...` line: every fact present, none of
+    them readable.
+    """
+
+    def _banner(self, tmp_path, workflow_text="| coder | refactorer |\n", **overrides):
+        worker_file = tmp_path / "coder-worker.md"
+        worker_file.write_text(WORKER_FILE, encoding="utf-8")
+        workflow = tmp_path / "workflow.md"
+        workflow.write_text(workflow_text, encoding="utf-8")
+        argv = [
+            "--role", "coder",
+            "--branch", "feature-x",
+            "--db-path", str(tmp_path / "messages.db"),
+            "--worktree", str(tmp_path),
+            "--workflow", str(workflow),
+            "--worker-agent", str(worker_file),
+        ]
+        for key, value in overrides.items():
+            argv += [f"--{key}", str(value)]
+        args = role_scheduler.parse_args(argv)
+        return "\n".join(role_scheduler.format_banner(role_scheduler.build_context(args), args))
+
+    def test_shows_the_role_and_branch(self, tmp_path):
+        banner = self._banner(tmp_path)
+        assert "role" in banner
+        assert "feature-x" in banner
+
+    def test_shows_the_resolved_worker_and_model(self, tmp_path):
+        # The model is resolved from three sources; the pane must show which one won.
+        assert "coder-worker" in self._banner(tmp_path)
+        assert "claude-sonnet-5" in self._banner(tmp_path)
+
+    def test_an_explicit_model_is_what_gets_shown(self, tmp_path):
+        assert "opus" in self._banner(tmp_path, model="opus")
+
+    def test_shows_where_handoffs_will_go(self, tmp_path):
+        # Routing is the single most surprising piece of config; showing it makes a
+        # misrouted handoff diagnosable before it happens rather than after.
+        assert "refactorer" in self._banner(tmp_path)
+
+    def test_conditional_routes_name_their_condition(self, tmp_path):
+        banner = self._banner(
+            tmp_path,
+            workflow_text="| coder | refactorer |\n| coder | human-in-the-loop | architect |\n",
+        )
+        assert "human-in-the-loop" in banner
+        assert "architect" in banner
+
+    def test_a_role_with_no_route_says_so(self, tmp_path):
+        # Silence here would look identical to a working config until the first handoff.
+        assert "no route" in self._banner(tmp_path, workflow_text="| specifier | coder |\n")
+
+    def test_omits_the_log_line_when_no_log_file_is_configured(self, tmp_path):
+        assert "log " not in self._banner(tmp_path)
+
+    def test_shows_the_log_file_when_configured(self, tmp_path):
+        assert "run.log" in self._banner(tmp_path, **{"log-file": tmp_path / "run.log"})
+
+    def test_does_not_leak_the_raw_command_line(self, tmp_path):
+        assert "--db-path" not in self._banner(tmp_path)
+
+
+class TestCliLoop:
+    _args = TestCli._args
+
     def test_once_mode_runs_a_single_cycle_and_exits(self, tmp_path, monkeypatch):
         db.ensure_schema(tmp_path / "messages.db")
         cycles = {"count": 0}
@@ -215,6 +287,109 @@ class TestCli:
 
         role_scheduler.main(self._args(tmp_path, **{"poll-interval": 0.01}))
         assert sleeps == [0.01], "must not sleep after a productive cycle"
+
+
+class TestStatusBarWiring:
+    """The bar must reflect the cycle without any transition having to remember it."""
+
+    _args = TestCli._args
+
+    def _bar(self, tmp_path, **overrides):
+        args = role_scheduler.parse_args(self._args(tmp_path, **overrides))
+        return role_scheduler.attach_status_bar(_dummy_ctx(tmp_path), args), args
+
+    def test_set_status_still_reaches_the_original_writer(self, tmp_path):
+        # The JSON file drives the WezTerm tab-bar badges; the pane bar is additive.
+        written = []
+        ctx = _dummy_ctx(tmp_path)
+        ctx.set_status = written.append
+        args = role_scheduler.parse_args(self._args(tmp_path))
+
+        bar = role_scheduler.attach_status_bar(ctx, args)
+        ctx.set_status("working")
+
+        assert written == ["working"]
+        assert bar.status.state == "working"
+
+    def test_the_handoff_target_is_shown_before_the_first_cycle(self, tmp_path):
+        bar, _ = self._bar(tmp_path)
+        assert bar.status.target == "refactorer"
+
+    def test_can_be_turned_off(self, tmp_path):
+        args = role_scheduler.parse_args([*self._args(tmp_path), "--no-status-bar"])
+        bar = role_scheduler.attach_status_bar(_dummy_ctx(tmp_path), args)
+        assert bar.enabled is False
+
+    def test_idle_polls_are_not_counted_as_cycles(self, tmp_path):
+        # An idle scheduler would otherwise show a cycle count climbing every two seconds.
+        bar, _ = self._bar(tmp_path)
+        role_scheduler._record_cycle(bar, role_scheduler.CycleResult(role_scheduler.IDLE))
+        assert bar.status.cycles == 0
+
+    def test_productive_cycles_accumulate(self, tmp_path):
+        bar, _ = self._bar(tmp_path)
+        for _ in range(2):
+            role_scheduler._record_cycle(
+                bar,
+                role_scheduler.CycleResult(
+                    role_scheduler.HANDED_OFF, target="coder", detail="done", cost_usd=0.5
+                ),
+            )
+        assert bar.status.cycles == 2
+        assert bar.status.cost_usd == pytest.approx(1.0)
+        assert bar.status.target == "coder"
+
+    def test_a_long_summary_is_cut_down_to_bar_size(self, tmp_path):
+        # Worker summaries run to several sentences; unclipped they would push out the
+        # state and counters, which are the fields that matter.
+        bar, _ = self._bar(tmp_path)
+        role_scheduler._record_cycle(
+            bar, role_scheduler.CycleResult(role_scheduler.HANDED_OFF, detail="word " * 200)
+        )
+        assert len(bar.status.detail) <= role_scheduler.MAX_BAR_DETAIL_CHARS
+
+    def test_the_scrolling_region_is_released_when_the_loop_ends(self, tmp_path, monkeypatch):
+        # A region that outlives the process leaves the pane's shell behaving strangely.
+        from scheduler import pane_status
+
+        class FakeTty(io.StringIO):
+            def isatty(self):
+                return True
+
+        stream = FakeTty()
+        bar = pane_status.StatusBar(pane_status.PaneStatus(role="coder"), stream=stream)
+
+        def halting_cycle(ctx, state):
+            state.halted = True
+            return role_scheduler.CycleResult(role_scheduler.ESCALATED)
+
+        monkeypatch.setattr(role_scheduler, "run_once", halting_cycle)
+        monkeypatch.setattr(role_scheduler, "build_context", lambda args: _dummy_ctx(tmp_path))
+        monkeypatch.setattr(role_scheduler, "attach_status_bar", lambda ctx, args: bar)
+
+        assert role_scheduler.main(self._args(tmp_path)) == 1
+        assert pane_status.RESET_REGION in stream.getvalue()
+
+    def test_the_region_is_released_even_when_the_loop_raises(self, tmp_path, monkeypatch):
+        from scheduler import pane_status
+
+        class FakeTty(io.StringIO):
+            def isatty(self):
+                return True
+
+        stream = FakeTty()
+        bar = pane_status.StatusBar(pane_status.PaneStatus(role="coder"), stream=stream)
+
+        monkeypatch.setattr(
+            role_scheduler, "_run_loop",
+            lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+        monkeypatch.setattr(role_scheduler, "build_context", lambda args: _dummy_ctx(tmp_path))
+        monkeypatch.setattr(role_scheduler, "attach_status_bar", lambda ctx, args: bar)
+
+        with pytest.raises(RuntimeError):
+            role_scheduler.main(self._args(tmp_path))
+        assert pane_status.RESET_REGION in stream.getvalue()
 
 
 def _dummy_ctx(tmp_path):

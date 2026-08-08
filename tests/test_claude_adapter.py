@@ -144,6 +144,111 @@ class TestEventRendering:
         }
         assert claude_adapter.render_event(event) == [f"  {claude_adapter.ICON_TOOL} Edit"]
 
+    def test_tool_calls_show_what_they_operate_on(self):
+        # A pane full of bare '[icon] Bash' lines tells an operator nothing about what the
+        # worker is doing — the whole reason for watching a scheduler pane.
+        event = {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "tool_use", "name": "Bash", "input": {"command": "pytest -q"}}
+                ]
+            },
+        }
+        assert claude_adapter.render_event(event) == [
+            f"  {claude_adapter.ICON_TOOL} Bash  pytest -q"
+        ]
+
+
+class TestToolSummaries:
+    @pytest.mark.parametrize(
+        ("name", "payload", "expected"),
+        [
+            ("Bash", {"command": "ls -la"}, "Bash  ls -la"),
+            ("Read", {"file_path": "/p/spec.md"}, "Read  /p/spec.md"),
+            ("Write", {"file_path": "/p/out.md", "content": "x" * 500}, "Write  /p/out.md"),
+            ("Grep", {"pattern": "TODO", "path": "/p"}, "Grep  TODO"),
+            ("Skill", {"skill": "kiln-handoff"}, "Skill  kiln-handoff"),
+            ("WebFetch", {"url": "https://example.com"}, "WebFetch  https://example.com"),
+        ],
+    )
+    def test_each_tool_shows_its_most_useful_field(self, name, payload, expected):
+        assert claude_adapter.summarise_tool_use(name, payload) == expected
+
+    def test_todo_writes_stay_bare(self):
+        # A serialised todo array is pure noise in a pane.
+        assert claude_adapter.summarise_tool_use("TodoWrite", {"todos": [1, 2]}) == "TodoWrite"
+
+    def test_unknown_tools_fall_back_to_a_recognisable_field(self):
+        # The CLI adds tools over time; a new one must not silently lose its detail.
+        summary = claude_adapter.summarise_tool_use("BrandNewTool", {"file_path": "/p/x"})
+        assert summary == "BrandNewTool  /p/x"
+
+    def test_a_tool_with_nothing_useful_renders_its_name_alone(self):
+        assert claude_adapter.summarise_tool_use("Mystery", {"opaque": 1}) == "Mystery"
+
+    def test_multiline_input_is_collapsed_to_one_line(self):
+        # A heredoc would otherwise break the pane's one-line-per-event layout.
+        summary = claude_adapter.summarise_tool_use("Bash", {"command": "cat <<EOF\na\nb\nEOF"})
+        assert "\n" not in summary
+        assert summary == "Bash  cat <<EOF a b EOF"
+
+    def test_long_input_is_truncated(self):
+        summary = claude_adapter.summarise_tool_use("Bash", {"command": "x" * 5000})
+        assert len(summary) <= claude_adapter.MAX_DETAIL_CHARS + len("Bash  ")
+        assert summary.endswith("\N{HORIZONTAL ELLIPSIS}")
+
+
+class TestToolFailures:
+    """A failing tool is usually *why* a worker ends up blocked; it must be visible."""
+
+    def test_tool_errors_are_shown(self):
+        event = {
+            "type": "user",
+            "message": {
+                "content": [
+                    {"type": "tool_result", "is_error": True, "content": "command not found"}
+                ]
+            },
+        }
+        assert claude_adapter.render_event(event) == [
+            f"  {claude_adapter.ICON_TOOL_ERROR} command not found"
+        ]
+
+    def test_successful_tool_results_stay_hidden(self):
+        # Full results would bury the pane; only failures earn a line.
+        event = {
+            "type": "user",
+            "message": {"content": [{"type": "tool_result", "content": "ok" * 5000}]},
+        }
+        assert claude_adapter.render_event(event) == []
+
+    def test_structured_error_content_is_flattened(self):
+        event = {
+            "type": "user",
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "is_error": True,
+                        "content": [{"type": "text", "text": "file not found"}],
+                    }
+                ]
+            },
+        }
+        assert claude_adapter.render_event(event) == [
+            f"  {claude_adapter.ICON_TOOL_ERROR} file not found"
+        ]
+
+    def test_an_error_with_no_content_still_reports_something(self):
+        event = {
+            "type": "user",
+            "message": {"content": [{"type": "tool_result", "is_error": True}]},
+        }
+        assert claude_adapter.render_event(event) == [
+            f"  {claude_adapter.ICON_TOOL_ERROR} tool failed"
+        ]
+
     def test_result_event_reports_cost(self):
         rendered = claude_adapter.render_event({"type": "result", "total_cost_usd": 0.05})
         assert rendered == [f"{claude_adapter.ICON_FINISHED} worker finished (cost $0.0500)"]

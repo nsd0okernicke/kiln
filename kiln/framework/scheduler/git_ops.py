@@ -15,12 +15,36 @@ from __future__ import annotations
 import logging
 import subprocess
 from dataclasses import dataclass
+from fnmatch import fnmatch
 from pathlib import Path
 
 log = logging.getLogger(__name__)
 
 #: Guards against a hung git invocation wedging a headless scheduler with nobody watching.
 DEFAULT_TIMEOUT_SEC = 120
+
+#: Files the launcher writes, untracked, into every worktree.
+#:
+#: These are the scheduler's own footprint, and they are radioactive: `squash_since` runs
+#: `git add -A` to capture whatever the worker produced, which also sweeps up any of these
+#: that git does not ignore. The commit then carries a file that every *other* worktree
+#: still holds as untracked, and that role's next merge aborts with "untracked working tree
+#: files would be overwritten" — a deadlock needing manual git surgery to clear.
+#:
+#: Observed live: `.claude/settings.json` was committed by the specifier's squash and
+#: instantly wedged the coder. `tmp/` was the same bug found earlier.
+#:
+#: Mirrors launcher.workspace.REQUIRED_GITIGNORE_ENTRIES, duplicated on purpose so the
+#: scheduler stays runnable without the launcher package on the path.
+GENERATED_WORKTREE_PATHS = (
+    "tmp/",
+    ".claude/settings.json",
+    ".mcp.json",
+    "CLAUDE.md",
+    "AGENTS.md",
+)
+
+_UNTRACKED_BLOCKER = "untracked working tree files would be overwritten"
 
 
 @dataclass(frozen=True)
@@ -91,11 +115,86 @@ def merge_commit(commit: str, cwd: str | Path) -> GitResult:
     commit. Forcing a merge commit guarantees every cycle has a well-defined anchor.
     """
     result = run_git(["merge", "--no-ff", "--no-edit", commit], cwd)
-    if not result.ok:
-        log.error("merge of %s failed: %s", commit, result.output)
-        # Leave no half-merged tree behind for the next cycle to trip over.
-        run_git(["merge", "--abort"], cwd)
+    if result.ok:
+        return result
+
+    # A merge blocked *only* by Kiln's own scaffolding is recoverable: the incoming commit
+    # carries the same generated content, and the launcher rewrites these files on the next
+    # launch anyway. Retry once after clearing them rather than escalating a deadlock that
+    # a human could only fix with the same `rm`.
+    if _clear_generated_blockers(result.output, cwd):
+        result = run_git(["merge", "--no-ff", "--no-edit", commit], cwd)
+        if result.ok:
+            return result
+
+    log.error("merge of %s failed: %s", commit, result.output)
+    # Leave no half-merged tree behind for the next cycle to trip over.
+    run_git(["merge", "--abort"], cwd)
     return result
+
+
+def is_generated_path(path: str, patterns: tuple[str, ...] = GENERATED_WORKTREE_PATHS) -> bool:
+    """True when `path` is a launcher artefact rather than project content."""
+    candidate = path.replace("\\", "/").removeprefix("./")
+    for pattern in patterns:
+        if pattern.endswith("/"):
+            if candidate == pattern.rstrip("/") or candidate.startswith(pattern):
+                return True
+        elif fnmatch(candidate, pattern):
+            return True
+    return False
+
+
+def blocking_untracked(output: str) -> list[str]:
+    """
+    Paths git named as untracked files standing in the way of a merge.
+
+    git prints them indented under the error line and ends the list with an unindented
+    "Please move or remove them..."; anything else means this is a different failure.
+    """
+    if _UNTRACKED_BLOCKER not in output:
+        return []
+
+    paths: list[str] = []
+    collecting = False
+    for line in output.splitlines():
+        if _UNTRACKED_BLOCKER in line:
+            collecting = True
+            continue
+        if not collecting:
+            continue
+        if not line[:1].isspace() or not line.strip():
+            break
+        paths.append(line.strip())
+    return paths
+
+
+def _clear_generated_blockers(output: str, cwd: str | Path) -> list[str]:
+    """
+    Delete merge-blocking untracked files, but only when every one is Kiln-generated.
+
+    All-or-nothing on purpose: one unrecognised path means the worker (or the user) left
+    something real there, and silently deleting it would be far worse than a failed merge.
+    """
+    blockers = blocking_untracked(output)
+    if not blockers or not all(is_generated_path(path) for path in blockers):
+        return []
+
+    removed: list[str] = []
+    for relative in blockers:
+        target = Path(cwd) / relative
+        try:
+            if target.is_file():
+                target.unlink()
+                removed.append(relative)
+        except OSError as exc:
+            log.warning("could not remove %s: %s", relative, exc)
+
+    if removed:
+        log.warning(
+            "cleared launcher-generated file(s) blocking the merge: %s", ", ".join(removed)
+        )
+    return removed
 
 
 def is_ignored(pattern: str, cwd: str | Path) -> bool:
@@ -111,6 +210,8 @@ def ensure_ignored(pattern: str, cwd: str | Path) -> None:
     does not ignore `tmp/`, that file is swept into the squash commit by `git add -A`, and
     then the NEXT cycle's merge aborts with "untracked working tree files would be
     overwritten" — the scheduler deadlocking itself on its own debug artefact.
+
+    See `ensure_generated_ignored` for the full set this protects.
 
     `.git/info/exclude` is used rather than `.gitignore` because it is local-only and never
     commits a change to the user's project. `--git-path` resolves correctly inside linked
@@ -138,6 +239,18 @@ def ensure_ignored(pattern: str, cwd: str | Path) -> None:
             log.info("added %r to %s", pattern, exclude_path)
     except OSError as exc:
         log.warning("could not update %s: %s", exclude_path, exc)
+
+
+def ensure_generated_ignored(cwd: str | Path) -> None:
+    """
+    Force-ignore every launcher artefact before the first `git add -A` can reach it.
+
+    Cheap when the project's own `.gitignore` already covers them — `is_ignored` short-
+    circuits — but it is the only thing protecting a project scaffolded by an older Kiln,
+    whose committed `.gitignore` predates entries added since.
+    """
+    for pattern in GENERATED_WORKTREE_PATHS:
+        ensure_ignored(pattern, cwd)
 
 
 def squash_anchor(cwd: str | Path) -> str:

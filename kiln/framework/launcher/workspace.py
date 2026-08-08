@@ -32,10 +32,15 @@ log = logging.getLogger(__name__)
 #: CLAUDE.md / AGENTS.md / .mcp.json / tmp/ are regenerated per role with different content,
 #: so tracking them makes every role's copy differ and turns each merge into an add/add
 #: conflict.
+#:
+#: `.claude/settings.json` is copied into every worktree from the same template. Left
+#: trackable, the scheduler's `git add -A` commits one role's copy and every other role's
+#: next merge aborts on it. Observed live; see git_ops.GENERATED_WORKTREE_PATHS.
 REQUIRED_GITIGNORE_ENTRIES = (
     ".kiln",
     ".worktrees/",
     ".github/",
+    ".claude/settings.json",
     ".claude/skills",
     ".agents/skills",
     ".claude/agents/*-worker.md",

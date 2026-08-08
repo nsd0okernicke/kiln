@@ -54,15 +54,24 @@ Next role: <next-role-name>
 
 ## Handoff Routing
 
-| Role | Sends to |
-| ---- | -------- |
-| human-in-the-loop | specifier |
-| specifier | coder |
-| coder | refactorer |
-| refactorer | architect |
-| architect | specifier |
+| Role | Sends to | When Sender |
+| ---- | -------- | ----------- |
+| human-in-the-loop | specifier | |
+| specifier | coder | |
+| specifier | human-in-the-loop | architect |
+| coder | refactorer | |
+| refactorer | architect | |
+| architect | specifier | |
 
-**Note (`default` profile only):** `specifier` overrides this default for one case —
-when it receives a handoff from `architect` (a completed-cycle report) instead of `human-in-the-loop`
-(a new request), it forwards to `human-in-the-loop` instead of `coder`. See `roles/specifier.md` →
-"Auto-Mode Worker Entry Point".
+The optional third column makes routing depend on who sent the inbound handoff. A row whose
+`When Sender` matches wins; the row with a blank `When Sender` is the role's default.
+
+This is what closes the cycle. Without the `specifier | human-in-the-loop | architect` row,
+an architect's completed-cycle report reaches the specifier and is routed straight back to
+`coder` — the swarm loops forever instead of returning to the human. The condition used to
+live only as prose in `roles/specifier.md`, which meant only an LLM could act on it; as a
+table row it is data that the scheduler follows too.
+
+`roles/specifier.md` → "Auto-Mode Worker Entry Point" still governs *what the specifier does*
+with such a message (forward it as-is, do not re-run the Gherkin workflow). Only the routing
+decision moved here.

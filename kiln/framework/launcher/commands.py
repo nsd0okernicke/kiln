@@ -148,13 +148,18 @@ def _quote_powershell(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
-def render_powershell(command: AgentCommand) -> str:
+def render_powershell(command: AgentCommand, clear: bool = False) -> str:
     """
     Render for a `pwsh` pane (WezTerm send_text, or `wt.exe ... pwsh -NoExit -Command`).
 
     The executable is invoked through `&` so a quoted path with spaces still runs.
+
+    `clear` is for hosts that *type* this command into a live prompt — WezTerm's
+    `send_text` and tmux's `send-keys`. The shell echoes what it was given, so the pane
+    opens on a wall of quoted flags before anything useful appears. Clearing as the first
+    statement wipes that echo, leaving the agent's own banner at the top.
     """
-    parts: list[str] = []
+    parts: list[str] = ["Clear-Host"] if clear else []
     for name, value in command.env.items():
         parts.append(f"$env:{name} = {_quote_powershell(value)}")
     if command.banner:
@@ -167,9 +172,9 @@ def render_powershell(command: AgentCommand) -> str:
     return "; ".join(parts)
 
 
-def render_posix(command: AgentCommand) -> str:
-    """Render for an sh/zsh pane (tmux send-keys)."""
-    parts: list[str] = []
+def render_posix(command: AgentCommand, clear: bool = False) -> str:
+    """Render for an sh/zsh pane (tmux send-keys). See `render_powershell` on `clear`."""
+    parts: list[str] = ["clear"] if clear else []
     for name, value in command.env.items():
         parts.append(f"export {name}={shlex.quote(value)}")
     if command.banner:

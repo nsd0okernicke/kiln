@@ -103,6 +103,19 @@ class TestWezTermLua:
         for state in ("retrying", "blocked", "idle"):
             assert f"{state} " in wezterm.LUA_CONFIG or f"{state}=" in wezterm.LUA_CONFIG
 
+    def test_ctrl_c_copies_when_text_is_selected(self):
+        # Without this, selecting scheduler output and pressing Ctrl+C sends SIGINT and
+        # kills the scheduler instead of copying.
+        assert "get_selection_text_for_pane" in wezterm.LUA_CONFIG
+        assert "CopyTo" in wezterm.LUA_CONFIG
+
+    def test_ctrl_c_still_interrupts_with_no_selection(self):
+        # Stopping a runaway agent must keep working.
+        assert "SendKey { key = 'c', mods = 'CTRL' }" in wezterm.LUA_CONFIG
+
+    def test_ctrl_v_pastes(self):
+        assert "key = 'v'" in wezterm.LUA_CONFIG
+
     def test_only_forces_pwsh_on_windows(self):
         # A hardcoded pwsh.exe default_prog would break the Unix path.
         assert "wezterm.target_triple:find('windows')" in wezterm.LUA_CONFIG

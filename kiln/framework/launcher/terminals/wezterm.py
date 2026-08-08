@@ -60,6 +60,31 @@ config.mouse_bindings = {
   },
 }
 
+-- Familiar Windows copy/paste. Ctrl+C only copies when there is a selection; with none it
+-- falls through to a normal interrupt, so stopping a running agent still works. Without
+-- this, selecting scheduler output and pressing Ctrl+C kills the scheduler instead of
+-- copying it.
+config.keys = {
+  {
+    key = 'c',
+    mods = 'CTRL',
+    action = wezterm.action_callback(function(window, pane)
+      local selection = window:get_selection_text_for_pane(pane)
+      if selection and #selection > 0 then
+        window:perform_action(wezterm.action.CopyTo 'ClipboardAndPrimarySelection', pane)
+        window:perform_action(wezterm.action.ClearSelection, pane)
+      else
+        window:perform_action(wezterm.action.SendKey { key = 'c', mods = 'CTRL' }, pane)
+      end
+    end),
+  },
+  {
+    key = 'v',
+    mods = 'CTRL',
+    action = wezterm.action.PasteFrom 'Clipboard',
+  },
+}
+
 local role_map    = {}
 local roles_json  = os.getenv('Kiln_ROLES_JSON') or '[]'
 local roles       = wezterm.json_parse(roles_json)
@@ -72,8 +97,13 @@ local STATE_COLORS = {
   approval   = '#ffdd6a',
   delegating = '#ff7a5a',
   handoff    = '#ac9aff',
+  -- The scheduler reports 'handing-off'; the wrapper reported 'handoff'. Both are listed
+  -- rather than renaming one, because manual roles still run the wrapper.
+  ['handing-off'] = '#ac9aff',
   retrying   = '#ffdd6a',
   blocked    = '#ff5a5a',
+  escalated  = '#ff5a5a',
+  halted     = '#ff5a5a',
   idle       = '#5ab363',
 }
 local STATE_COLOR_DEFAULT = '#8a8a88'

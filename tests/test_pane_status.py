@@ -1,0 +1,295 @@
+"""
+The pinned status line at the bottom of a scheduler pane.
+
+Nothing here drives a real terminal. `StatusBar` writes to an injected stream, so the exact
+escape sequences are asserted directly — which is the only way to catch the failure that
+matters: a scrolling region installed wrongly corrupts the pane, and a region never
+released outlives the process and leaves the shell behaving strangely.
+"""
+
+from __future__ import annotations
+
+import io
+
+import pytest
+from scheduler import pane_status
+from scheduler.pane_status import PaneStatus, StatusBar, format_bar, paint
+
+
+class FakeTty(io.StringIO):
+    """A stream that claims to be a terminal, so the bar enables itself."""
+
+    def isatty(self) -> bool:
+        return True
+
+
+@pytest.fixture
+def tty(monkeypatch):
+    # A fixed size keeps the escape-sequence assertions exact.
+    monkeypatch.setattr(
+        pane_status.shutil, "get_terminal_size", lambda fallback=None: _Size(24, 40)
+    )
+    return FakeTty()
+
+
+class _Size:
+    def __init__(self, lines, columns):
+        self.lines, self.columns = lines, columns
+
+
+class TestBarText:
+    def test_shows_the_role_and_state(self):
+        rendered = format_bar(PaneStatus(role="specifier", state="working"), 60)
+        assert "SPECIFIER" in rendered
+        assert "working" in rendered
+
+    def test_is_padded_to_exactly_the_pane_width(self):
+        # The background colour is painted across the whole string; a short line would
+        # leave the rest of the row unstyled and look broken.
+        assert len(format_bar(PaneStatus(role="coder"), 72)) == 72
+
+    def test_is_truncated_to_exactly_the_pane_width(self):
+        # A line longer than the pane would wrap into the scrolling region and corrupt it.
+        status = PaneStatus(role="coder", detail="x" * 500)
+        assert len(format_bar(status, 40)) == 40
+
+    def test_truncation_is_marked(self):
+        status = PaneStatus(role="coder", detail="y" * 500)
+        assert format_bar(status, 40).endswith("\N{HORIZONTAL ELLIPSIS}")
+
+    def test_counters_appear_once_there_is_something_to_count(self):
+        status = PaneStatus(role="coder", cycles=3, cost_usd=1.239, target="refactorer")
+        rendered = format_bar(status, 90)
+        assert "cycle 3" in rendered
+        assert "$1.24" in rendered
+        assert "refactorer" in rendered
+
+    def test_a_fresh_scheduler_shows_no_empty_counters(self):
+        # 'cycle 0  $0.00' is noise before anything has happened.
+        rendered = format_bar(PaneStatus(role="coder"), 60)
+        assert "cycle" not in rendered
+        assert "$" not in rendered
+
+    def test_zero_width_does_not_raise(self):
+        assert format_bar(PaneStatus(role="coder"), 0) == ""
+
+
+class TestColours:
+    def test_each_reported_state_has_its_own_colour(self):
+        # Every state role_scheduler passes to set_status must be distinguishable.
+        for state in ("waiting", "receiving", "working", "retrying", "handing-off",
+                      "blocked", "idle"):
+            assert state in pane_status.STATE_STYLE, f"{state} would render as unknown"
+
+    def test_failure_states_are_visually_distinct_from_working_ones(self):
+        assert pane_status.style_for("blocked") != pane_status.style_for("working")
+        assert pane_status.style_for("halted") != pane_status.style_for("idle")
+
+    def test_an_unknown_state_still_renders(self):
+        assert pane_status.style_for("something-new") == pane_status.DEFAULT_STYLE
+
+    def test_paint_wraps_the_text_and_resets(self):
+        rendered = paint(PaneStatus(role="coder", state="working"), 30)
+        assert rendered.startswith("\x1b[48;5;")
+        assert rendered.endswith(pane_status.RESET_STYLE), "an unreset colour bleeds"
+
+
+class TestInstallation:
+    def test_reserves_the_last_row_only(self, tty):
+        StatusBar(PaneStatus(role="coder"), stream=tty).start()
+        # 24 rows, so the scrolling region must be 1..23.
+        assert "\x1b[1;23r" in tty.getvalue()
+
+    def test_region_starts_at_row_one_so_scrollback_survives(self, tty):
+        # The whole reason the bar is at the bottom: a region starting below row 1 makes
+        # the terminal discard scrolled-off lines instead of keeping them.
+        StatusBar(PaneStatus(role="coder"), stream=tty).start()
+        assert "\x1b[2;" not in tty.getvalue().split("r")[0]
+        assert "\x1b[1;23r" in tty.getvalue()
+
+    def test_header_is_written_inside_the_scrolling_region(self, tty):
+        output = tty
+        StatusBar(PaneStatus(role="coder"), stream=output).start(["line one", "line two"])
+        text = output.getvalue()
+        assert "line one" in text
+        # The region must be installed before the header, because DECSTBM homes the cursor
+        # and would otherwise overwrite what was just printed.
+        assert text.index("\x1b[1;23r") < text.index("line one")
+
+    def test_paints_the_bar_on_the_reserved_row(self, tty):
+        StatusBar(PaneStatus(role="coder"), stream=tty).start()
+        assert "\x1b[24;1H" in tty.getvalue()
+
+    def test_cursor_is_saved_and_restored_around_every_paint(self, tty):
+        # Without this the bar would yank the cursor out of the scrolling region and the
+        # next line of output would land on the bar itself.
+        bar = StatusBar(PaneStatus(role="coder"), stream=tty)
+        bar.start()
+        tty.truncate(0), tty.seek(0)
+        bar.update(state="working")
+        painted = tty.getvalue()
+        assert painted.startswith(pane_status.SAVE_CURSOR)
+        assert painted.endswith(pane_status.RESTORE_CURSOR)
+
+    def test_a_tiny_pane_is_left_alone(self, monkeypatch):
+        # Reserving a row out of four would be worse than having no bar.
+        monkeypatch.setattr(
+            pane_status.shutil, "get_terminal_size", lambda fallback=None: _Size(4, 40)
+        )
+        stream = FakeTty()
+        StatusBar(PaneStatus(role="coder"), stream=stream).start(["header"])
+        assert "\x1b[" not in stream.getvalue()
+        assert "header" in stream.getvalue(), "the header must survive without the bar"
+
+
+class TestDisabled:
+    def test_a_non_tty_gets_no_escape_sequences(self):
+        # Piped or captured output must stay readable; this is also what keeps the test
+        # suite's own captured output clean.
+        stream = io.StringIO()
+        bar = StatusBar(PaneStatus(role="coder"), stream=stream)
+        bar.start(["header"])
+        bar.update(state="working")
+        bar.close()
+        assert "\x1b" not in stream.getvalue()
+
+    def test_the_header_is_still_shown_without_a_bar(self):
+        stream = io.StringIO()
+        StatusBar(PaneStatus(role="coder"), stream=stream).start(["role: coder"])
+        assert "role: coder" in stream.getvalue()
+
+    def test_can_be_disabled_explicitly(self, tty):
+        bar = StatusBar(PaneStatus(role="coder"), stream=tty, enabled=False)
+        bar.start(["header"])
+        assert "\x1b" not in tty.getvalue()
+
+    def test_a_closed_stream_disables_the_bar_instead_of_crashing(self, tty):
+        # A pane can go away while the scheduler is still running; decoration must never
+        # be the thing that kills it.
+        bar = StatusBar(PaneStatus(role="coder"), stream=tty)
+        bar.start()
+        tty.close()
+        bar.update(state="working")  # must not raise
+        assert bar.enabled is False
+
+
+class TestRepainting:
+    def test_unchanged_state_is_not_repainted(self, tty):
+        # A bar that rewrote itself every poll would flicker and fight text selection.
+        bar = StatusBar(PaneStatus(role="coder"), stream=tty)
+        bar.start()
+        bar.update(state="starting")
+        tty.truncate(0), tty.seek(0)
+        bar.refresh()
+        assert tty.getvalue() == ""
+
+    def test_a_changed_field_repaints(self, tty):
+        bar = StatusBar(PaneStatus(role="coder"), stream=tty)
+        bar.start()
+        tty.truncate(0), tty.seek(0)
+        bar.update(cycles=1)
+        assert "cycle 1" in tty.getvalue()
+
+    def test_shrinking_below_the_usable_minimum_stops_repainting(self, tty, monkeypatch):
+        # Squashed to four rows, reserving one for the bar would leave almost nothing.
+        bar = StatusBar(PaneStatus(role="coder"), stream=tty)
+        bar.start()
+        monkeypatch.setattr(
+            pane_status.shutil, "get_terminal_size", lambda fallback=None: _Size(3, 40)
+        )
+        tty.truncate(0), tty.seek(0)
+        bar.update(state="working")
+        assert tty.getvalue() == ""
+
+    def test_a_resize_reinstalls_the_region(self, tty, monkeypatch):
+        # The reserved row moves with the pane; a stale region would put the bar in the
+        # middle of the output.
+        bar = StatusBar(PaneStatus(role="coder"), stream=tty)
+        bar.start()
+        monkeypatch.setattr(
+            pane_status.shutil, "get_terminal_size", lambda fallback=None: _Size(40, 100)
+        )
+        tty.truncate(0), tty.seek(0)
+        bar.refresh()
+        assert "\x1b[1;39r" in tty.getvalue()
+        assert "\x1b[40;1H" in tty.getvalue()
+
+
+class TestWindowsVtShim:
+    """
+    Insurance for a plain conhost.exe. WezTerm and Windows Terminal host the shell through
+    ConPTY, which has VT enabled already, so this path is not the normal one — but it must
+    never be the thing that kills a scheduler.
+    """
+
+    @pytest.mark.skipif(pane_status.os.name != "nt", reason="Windows console API")
+    def test_skipped_off_windows(self, monkeypatch):
+        # `ctypes.windll` does not exist on Unix at all; the guard must come first.
+        import ctypes
+
+        monkeypatch.setattr(pane_status.os, "name", "posix")
+        monkeypatch.setattr(
+            ctypes.windll.kernel32, "GetStdHandle",
+            lambda _h: pytest.fail("must not touch the Windows console API"),
+        )
+        pane_status._enable_windows_vt(io.StringIO())
+
+    @pytest.mark.skipif(pane_status.os.name != "nt", reason="Windows console API")
+    def test_sets_the_vt_processing_flag(self, monkeypatch):
+        import ctypes
+
+        applied = {}
+        monkeypatch.setattr(ctypes.windll.kernel32, "GetStdHandle", lambda _h: 7)
+        monkeypatch.setattr(
+            ctypes.windll.kernel32, "GetConsoleMode",
+            lambda _handle, mode: applied.setdefault("read", True) or 1,
+        )
+        monkeypatch.setattr(
+            ctypes.windll.kernel32, "SetConsoleMode",
+            lambda handle, mode: applied.update(handle=handle, mode=mode) or 1,
+        )
+
+        pane_status._enable_windows_vt(io.StringIO())
+
+        assert applied["handle"] == 7
+        assert applied["mode"] & 0x0004, "ENABLE_VIRTUAL_TERMINAL_PROCESSING must be set"
+
+    @pytest.mark.skipif(pane_status.os.name != "nt", reason="Windows console API")
+    def test_a_failing_console_api_is_swallowed(self, monkeypatch):
+        import ctypes
+
+        def explode(_handle):
+            raise OSError("no console")
+
+        monkeypatch.setattr(ctypes.windll.kernel32, "GetStdHandle", explode)
+        pane_status._enable_windows_vt(io.StringIO())  # must not raise
+
+
+class TestClose:
+    def test_releases_the_scrolling_region(self, tty):
+        # Left installed, it outlives the process and the shell prompt underneath behaves
+        # strangely long after the scheduler is gone.
+        bar = StatusBar(PaneStatus(role="coder"), stream=tty)
+        bar.start()
+        tty.truncate(0), tty.seek(0)
+        bar.close()
+        assert pane_status.RESET_REGION in tty.getvalue()
+
+    def test_clears_the_bar_row(self, tty):
+        bar = StatusBar(PaneStatus(role="coder"), stream=tty)
+        bar.start()
+        tty.truncate(0), tty.seek(0)
+        bar.close()
+        assert pane_status.CLEAR_LINE in tty.getvalue()
+
+    def test_closing_twice_is_harmless(self, tty):
+        bar = StatusBar(PaneStatus(role="coder"), stream=tty)
+        bar.start()
+        bar.close()
+        tty.truncate(0), tty.seek(0)
+        bar.close()
+        assert tty.getvalue() == ""
+
+    def test_closing_a_bar_that_never_started_is_harmless(self, tty):
+        StatusBar(PaneStatus(role="coder"), stream=tty).close()
+        assert tty.getvalue() == ""

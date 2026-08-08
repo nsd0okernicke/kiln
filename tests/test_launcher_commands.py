@@ -168,6 +168,17 @@ class TestPowerShellRendering:
     def test_includes_the_banner(self, paths):
         assert "Write-Host 'Coder'" in render_powershell(build(paths, agent="copilot"))
 
+    def test_no_clearing_by_default(self, paths):
+        # Windows Terminal passes the command as -Command; there is no echo to wipe, and
+        # clearing would erase the shell's own startup output for nothing.
+        assert "Clear-Host" not in render_powershell(build(paths))
+
+    def test_clears_the_echoed_command_when_asked(self, paths):
+        # WezTerm types the command into a live prompt, so the pane would otherwise open on
+        # a wall of quoted flags instead of the agent's banner.
+        rendered = render_powershell(build(paths), clear=True)
+        assert rendered.startswith("Clear-Host; ")
+
 
 class TestPosixRendering:
     def test_renders_a_runnable_command(self, paths):
@@ -185,6 +196,10 @@ class TestPosixRendering:
         rendered = render_posix(AgentCommand(argv=["echo", "a; rm -rf /"]))
         # The dangerous text must be one quoted argument, not a second command.
         assert rendered == "echo 'a; rm -rf /'"
+
+    def test_clears_the_echoed_command_when_asked(self):
+        # tmux send-keys types into a live prompt, same as WezTerm.
+        assert render_posix(AgentCommand(argv=["echo", "hi"]), clear=True) == "clear; echo hi"
 
     def test_scheduler_command_renders_for_tmux(self, paths):
         rendered = render_posix(

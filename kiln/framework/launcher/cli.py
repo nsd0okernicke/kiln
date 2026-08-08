@@ -46,8 +46,12 @@ def build_panes(profile: Profile, paths: KilnPaths, branch: str, backend: str) -
 
     The command is rendered for the shell that will host it: pwsh for the Windows backends,
     sh/zsh for tmux. The command *content* is identical either way — only quoting differs.
+
+    WezTerm and tmux type the command into a live prompt, which echoes it; Windows Terminal
+    passes it as `-Command` and does not. Only the former two need the clearing prefix.
     """
     render = render_posix if backend == TMUX else render_powershell
+    clear = backend in (WEZTERM, TMUX)
     panes: list[PaneSpec] = []
     for role in profile.roles:
         worktree = workspace.worktree_for(role, paths)
@@ -57,7 +61,7 @@ def build_panes(profile: Profile, paths: KilnPaths, branch: str, backend: str) -
                 role=role.role,
                 name=role.title or role.display_name,
                 path=str(worktree),
-                cmd=render(command),
+                cmd=render(command, clear=clear),
                 mode=role.mode,
                 agent=role.agent,
             )

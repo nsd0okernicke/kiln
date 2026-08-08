@@ -189,6 +189,57 @@ class TestUntrackedKilnWarning:
         assert workspace.warn_if_kiln_untracked(paths) is False
 
 
+class TestShippedRoutingTable:
+    """
+    The framework's own constitution must describe a cycle that can *terminate*.
+
+    Found live: the shipped table routed every specifier handoff to `coder`, and the one
+    exception — an architect's completed-cycle report goes back to the human, not around
+    again — lived only as a prose note underneath the table. The wrapper LLM could read
+    that note; the scheduler reads the table. So a finished cycle fed straight back into
+    coder -> refactorer -> architect -> specifier -> coder, forever, and the human was
+    never told the work was done.
+    """
+
+    @pytest.fixture
+    def table(self):
+        from pathlib import Path
+
+        from scheduler.routing import load_routing_table
+
+        repo = Path(__file__).resolve().parents[1]
+        return load_routing_table(repo / "kiln" / "project" / "constitution" / "workflow.md")
+
+    def test_an_architect_report_returns_to_the_human(self, table):
+        assert table.resolve("specifier", "architect") == "human-in-the-loop"
+
+    def test_a_new_request_still_reaches_the_coder(self, table):
+        # The conditional row must not shadow the specifier's default route.
+        assert table.resolve("specifier", "human-in-the-loop") == "coder"
+
+    def test_every_role_has_a_route(self, table):
+        for role in ("human-in-the-loop", "specifier", "coder", "refactorer", "architect"):
+            assert table.resolve(role) is not None, f"{role} would escalate every handoff"
+
+    def test_the_cycle_comes_back_to_the_human(self, table):
+        """Walk the graph the way the scheduler does. Not reaching the human is the bug."""
+        role, sender = "human-in-the-loop", None
+        visited = []
+        for _ in range(12):
+            target = table.resolve(role, sender)
+            assert target, f"{role} has no route"
+            visited.append(target)
+            if target == "human-in-the-loop":
+                break
+            role, sender = target, role
+        else:
+            pytest.fail(f"the cycle never returns to the human: {' -> '.join(visited)}")
+
+        assert visited == [
+            "specifier", "coder", "refactorer", "architect", "specifier", "human-in-the-loop"
+        ]
+
+
 def test_default_profile_still_parses():
     """The scheduler-all profile must stay valid as roles change."""
     import json
