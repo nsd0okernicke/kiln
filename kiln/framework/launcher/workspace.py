@@ -254,6 +254,38 @@ def _link_or_copy(link: Path, target: Path, label: str) -> None:
         (link / "logs").mkdir(parents=True, exist_ok=True)
 
 
+def warn_if_worktree_conflicts(paths: KilnPaths, role_branch: str, branch: str) -> bool:
+    """
+    Warn when an existing worktree's branch would conflict with the current branch tip.
+
+    Uses `git merge-tree --write-tree` as a non-destructive dry run -- it touches no working
+    tree or branch, so it's safe to run before any pane opens. Exit code 1 means Git found
+    real content conflicts, not just "these branches have diverged" (which is normal: a role's
+    branch is expected to be behind until it processes its next handoff). A conflict here means
+    the two histories independently created overlapping content, which is the signature of a
+    stale worktree from an abandoned run rather than one that's simply behind on this run's
+    handoffs. Returns True when a warning was issued.
+    """
+    result = run_git(["merge-tree", "--write-tree", role_branch, branch], paths.project_root)
+    if result.returncode != 1:
+        return False
+
+    conflicts = [line.strip() for line in result.stdout.splitlines() if line.startswith("CONFLICT")]
+    log.warning(
+        "worktree branch %r would conflict with the current %r branch tip -- this looks like "
+        "a worktree left over from an earlier, unrelated run rather than one that's just behind "
+        "on this run's handoffs:",
+        role_branch, branch,
+    )
+    for conflict in conflicts:
+        log.warning("   %s", conflict)
+    log.warning(
+        "   If so, stop the swarm and remove the stale worktree directory before relaunching "
+        "so it gets recreated fresh from the current branch tip."
+    )
+    return True
+
+
 def prepare_worktrees(profile: Profile, paths: KilnPaths, branch: str) -> list[Path]:
     """Create one git worktree per non-@current role and wire its per-role config."""
     run_git(["worktree", "prune"], paths.project_root)
@@ -278,6 +310,15 @@ def prepare_worktrees(profile: Profile, paths: KilnPaths, branch: str) -> list[P
                 raise WorkspaceError(
                     f"could not create worktree for role {role.role!r}: {result.stderr.strip()}"
                 )
+        else:
+            # `.worktrees/` is gitignored (see REQUIRED_GITIGNORE_ENTRIES) and so survives a
+            # `branch` reset/reinit untouched, while the branch above is only (re)created when
+            # the worktree directory is absent -- an existing worktree left over from an
+            # earlier, unrelated run silently carries its old branch straight into this one.
+            # A dry-run merge against the current branch tip surfaces that here, before any
+            # pane opens, instead of failing later as a real conflicted `git merge` inside
+            # kiln-receive (observed live: an add/add conflict on logbook.md).
+            warn_if_worktree_conflicts(paths, role_branch, branch)
         created.append(worktree)
 
         _link_or_copy(worktree / ".kiln", paths.state_dir, role.role)

@@ -14,7 +14,7 @@ import subprocess
 from datetime import datetime
 
 import pytest
-from scheduler import db, git_ops, handoff, role_scheduler
+from scheduler import db, git_ops, handoff, pane_status, role_scheduler
 from scheduler.role_scheduler import SchedulerContext, SchedulerState
 from scheduler.routing import parse_routing_table
 from scheduler.worker_prompt import WorkerDefinition
@@ -175,6 +175,30 @@ class TestCli:
         role_scheduler.build_context(args).run_worker(prompt="p")
         assert captured["model"] == "opus"
 
+    def test_worker_output_is_wired_to_an_emitter(self, tmp_path, monkeypatch):
+        # So the pane can tell "the worker talking" apart from the scheduler's own log
+        # lines -- see pane_status.tint_worker_output.
+        captured = {}
+        monkeypatch.setattr(
+            "scheduler.adapters.claude_adapter.run_worker",
+            lambda **kwargs: captured.update(kwargs) or worker(),
+        )
+        args = role_scheduler.parse_args(self._args(tmp_path))
+        role_scheduler.build_context(args).run_worker(prompt="p")
+        assert callable(captured["on_output"])
+
+
+class TestWorkerOutputEmitter:
+    def test_tints_lines_when_the_pane_is_a_terminal(self, monkeypatch, capsys):
+        monkeypatch.setattr(role_scheduler.sys.stdout, "isatty", lambda: True)
+        role_scheduler._make_worker_output_emitter()("hello")
+        assert capsys.readouterr().out == pane_status.tint_worker_output("hello") + "\n"
+
+    def test_stays_plain_when_output_is_piped(self, monkeypatch, capsys):
+        monkeypatch.setattr(role_scheduler.sys.stdout, "isatty", lambda: False)
+        role_scheduler._make_worker_output_emitter()("hello")
+        assert capsys.readouterr().out == "hello\n"
+
 
 class TestStartupBanner:
     """
@@ -270,6 +294,44 @@ class TestCliLoop:
 
         # A halted role must surface a non-zero exit so the pane shows it stopped.
         assert role_scheduler.main(self._args(tmp_path)) == 1
+
+    def test_halted_scheduler_reports_through_ctx_set_status(self, tmp_path, monkeypatch):
+        # Regression: `_run_loop` used to call `bar.update(state="halted")` directly,
+        # which only ever reached this pane's own bottom row. `.kiln/status/<role>.json` --
+        # the file that drives the WezTerm tab-bar badge -- is written by `ctx.set_status`,
+        # not by the bar, so a direct `bar.update` left the badge silently stuck on
+        # whatever state was last written successfully.
+        seen = []
+        ctx = _dummy_ctx(tmp_path)
+        ctx.set_status = seen.append
+
+        def halting_cycle(ctx, state):
+            state.halted = True
+            return role_scheduler.CycleResult(role_scheduler.ESCALATED, detail="boom")
+
+        monkeypatch.setattr(role_scheduler, "run_once", halting_cycle)
+        monkeypatch.setattr(role_scheduler, "build_context", lambda args: ctx)
+
+        assert role_scheduler.main(self._args(tmp_path)) == 1
+        assert seen[-1] == "halted"
+
+    def test_repeated_cycle_failures_report_blocked_then_halted(self, tmp_path, monkeypatch):
+        # Same regression as above, for the other bypass site: the exception handler's
+        # "blocked" during retries, then "halted" once MAX_CONSECUTIVE_ERRORS is reached.
+        seen = []
+        ctx = _dummy_ctx(tmp_path)
+        ctx.set_status = seen.append
+
+        def always_fails(ctx, state):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(role_scheduler, "run_once", always_fails)
+        monkeypatch.setattr(role_scheduler, "build_context", lambda args: ctx)
+        monkeypatch.setattr(role_scheduler.time, "sleep", lambda _seconds: None)
+
+        assert role_scheduler.main(self._args(tmp_path)) == 1
+        assert seen.count("blocked") == role_scheduler.MAX_CONSECUTIVE_ERRORS
+        assert seen[-1] == "halted"
 
     def test_sleeps_only_when_idle(self, tmp_path, monkeypatch):
         outcomes = [role_scheduler.IDLE, role_scheduler.HANDED_OFF]

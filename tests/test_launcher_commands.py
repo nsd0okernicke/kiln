@@ -144,6 +144,107 @@ class TestScheduler:
         assert build(paths).argv[0] == "claude"
 
 
+class TestInboxPane:
+    """
+    A notification pane, not an agent.
+
+    It exists because the wrapper `human-in-the-loop` role could not both listen for
+    handoffs and stay available to its human — see scheduler/inbox.py.
+    """
+
+    def _command(self, paths, **overrides):
+        from launcher.commands import build_agent_command
+        from launcher.config import RoleConfig
+
+        role = RoleConfig(
+            role="inbox", worktree="@current", mode="manual",
+            scheduler="inbox", watches="human-in-the-loop", **overrides
+        )
+        return build_agent_command(role, paths, "main")
+
+    def test_runs_the_inbox_module(self, paths):
+        argv = self._command(paths).argv
+        assert argv[:3] == ["python", "-m", "scheduler.inbox"]
+
+    def test_watches_the_role_it_was_told_to(self, paths):
+        # Not its own name: the pane is 'inbox', the queue belongs to 'human-in-the-loop'.
+        argv = self._command(paths).argv
+        assert argv[argv.index("--role") + 1] == "human-in-the-loop"
+
+    def test_falls_back_to_its_own_name_without_watches(self, paths):
+        from launcher.commands import build_agent_command
+        from launcher.config import RoleConfig
+
+        role = RoleConfig(role="human-in-the-loop", scheduler="inbox", mode="manual")
+        argv = build_agent_command(role, paths, "main").argv
+        assert argv[argv.index("--role") + 1] == "human-in-the-loop"
+
+    def test_is_scoped_to_the_launch_branch(self, paths):
+        # Messages are branch-scoped; the wrong branch looks like an empty inbox.
+        argv = self._command(paths).argv
+        assert argv[argv.index("--branch") + 1] == "main"
+
+    def test_forces_utf8_so_the_glyphs_cannot_crash_it(self, paths):
+        assert self._command(paths).env["PYTHONIOENCODING"] == "utf-8"
+
+    def test_runs_no_agent_cli(self, paths):
+        argv = self._command(paths).argv
+        assert "claude" not in argv
+        assert "--permission-mode" not in argv
+
+    def test_writes_a_log_file(self, paths):
+        argv = self._command(paths).argv
+        assert argv[argv.index("--log-file") + 1].endswith("scheduler-inbox.log")
+
+
+class TestInboxIsNotAnAgent:
+    """Every per-role generation step must skip it, or it gets an agent's paperwork."""
+
+    def _role(self):
+        from launcher.config import RoleConfig
+
+        return RoleConfig(
+            role="inbox", worktree="@current", mode="manual",
+            scheduler="inbox", watches="human-in-the-loop",
+        )
+
+    def test_no_worker_definition_is_written(self, paths):
+        from launcher.generate import write_worker_file
+
+        assert write_worker_file(self._role(), paths) is None
+
+    def test_no_instruction_file_is_written(self, tmp_path, paths):
+        from launcher.generate import write_instructions
+
+        assert write_instructions(self._role(), paths, "main", tmp_path) is None
+
+    def test_it_never_deletes_the_file_at_its_own_computed_path(self, tmp_path, paths):
+        # An inbox always uses "@current" -- the same directory as the real role it
+        # watches, by design (a dedicated worktree for a notification-only pane makes no
+        # sense). That means instruction_file_for() for an inbox role's config resolves to
+        # the SAME path as the watched role's own CLAUDE.md, not a file the inbox ever
+        # owned. Regression: this used to unconditionally delete "a stale file for this
+        # role" here, which meant an inbox processed after the role it watches (as
+        # scheduler-all's terminals order does) silently erased that role's real,
+        # just-written CLAUDE.md -- see TestInstructionFiles.
+        # test_an_inbox_pane_does_not_delete_the_role_it_watches_claude_md in
+        # test_launcher_generate.py for the end-to-end version of this.
+        from launcher.generate import instruction_file_for, write_instructions
+
+        role = self._role()
+        existing = instruction_file_for(role, tmp_path)
+        existing.parent.mkdir(parents=True, exist_ok=True)
+        existing.write_text("belongs to human-in-the-loop, not the inbox", encoding="utf-8")
+
+        write_instructions(role, paths, "main", tmp_path)
+        assert existing.exists()
+
+    def test_it_is_not_treated_as_a_scheduler_role(self, paths):
+        # uses_scheduler drives MCP config and worktree branching; an inbox is neither.
+        assert self._role().uses_scheduler is False
+        assert self._role().is_inbox is True
+
+
 class TestPowerShellRendering:
     def test_renders_a_runnable_command(self, paths):
         rendered = render_powershell(build(paths, model="sonnet"))

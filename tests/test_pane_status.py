@@ -10,6 +10,8 @@ released outlives the process and leaves the shell behaving strangely.
 from __future__ import annotations
 
 import io
+import json
+from pathlib import Path
 
 import pytest
 from scheduler import pane_status
@@ -79,19 +81,53 @@ class TestColours:
         # Every state role_scheduler passes to set_status must be distinguishable.
         for state in ("waiting", "receiving", "working", "retrying", "handing-off",
                       "blocked", "idle"):
-            assert state in pane_status.STATE_STYLE, f"{state} would render as unknown"
+            assert state in pane_status.STATE_COLORS_HEX, f"{state} would render as unknown"
 
     def test_failure_states_are_visually_distinct_from_working_ones(self):
         assert pane_status.style_for("blocked") != pane_status.style_for("working")
         assert pane_status.style_for("halted") != pane_status.style_for("idle")
 
+    def test_failure_states_escalate_rather_than_repeat(self):
+        # blocked -> escalated -> halted should read as increasing severity, not one flat
+        # "something's wrong" red.
+        severities = [pane_status.style_for(s) for s in ("blocked", "escalated", "halted")]
+        assert len(set(severities)) == 3
+
     def test_an_unknown_state_still_renders(self):
-        assert pane_status.style_for("something-new") == pane_status.DEFAULT_STYLE
+        expected = pane_status._hex_to_rgb(pane_status.DEFAULT_COLOR_HEX)
+        assert pane_status.style_for("something-new") == expected
 
     def test_paint_wraps_the_text_and_resets(self):
         rendered = paint(PaneStatus(role="coder", state="working"), 30)
-        assert rendered.startswith("\x1b[48;5;")
+        assert rendered.startswith(pane_status.BOLD)
+        assert "\x1b[48;2;47;191;159m" in rendered  # #2fbf9f, working's colour
+        assert "\x1b[38;2;0;0;0m" in rendered, "text must stay black on every background"
         assert rendered.endswith(pane_status.RESET_STYLE), "an unreset colour bleeds"
+
+    def test_matches_the_wezterm_tab_bar_palette(self):
+        # The whole point of one shared table: read it back the way wezterm.py's Lua does
+        # (JSON-exported via build_environment) and confirm nothing was lost in translation.
+        from launcher.terminals import wezterm
+
+        exported = json.loads(wezterm.build_environment([], {}, Path("/proj"))[wezterm.ENV_STATE_COLORS])
+        assert exported == pane_status.STATE_COLORS_HEX
+
+
+class TestWorkerOutputTint:
+    def test_wraps_the_line_in_its_background_and_resets(self):
+        rendered = pane_status.tint_worker_output("  \N{HAMMER AND WRENCH} Bash  pytest -q")
+        r, g, b = pane_status._hex_to_rgb(pane_status.WORKER_OUTPUT_BG_HEX)
+        assert rendered == f"\x1b[48;2;{r};{g};{b}m  \N{HAMMER AND WRENCH} Bash  pytest -q{pane_status.RESET_STYLE}"
+
+    def test_does_not_override_foreground(self):
+        # A wash behind existing text colour, not a competing highlight -- the worker's own
+        # tool-call icons and text colouring must survive untouched.
+        assert "38;2;" not in pane_status.tint_worker_output("some line")
+
+    def test_distinct_from_every_state_colour(self):
+        # If it happened to match a state colour, worker output could be mistaken for the
+        # bar reporting that state.
+        assert pane_status.WORKER_OUTPUT_BG_HEX not in pane_status.STATE_COLORS_HEX.values()
 
 
 class TestInstallation:
@@ -213,6 +249,38 @@ class TestRepainting:
         bar.refresh()
         assert "\x1b[1;39r" in tty.getvalue()
         assert "\x1b[40;1H" in tty.getvalue()
+
+    def test_a_resize_does_a_full_repaint(self, tty, monkeypatch):
+        # WezTerm's grid layout can resize an early-created pane multiple times in quick
+        # succession (once per later pane split off it) before anything running inside gets
+        # to observe an intermediate size. Clearing only the immediately-preceding bar row
+        # assumed one clean transition and left stale header/bar text behind whenever more
+        # than one resize landed between two `refresh()` calls (observed live: a duplicated
+        # banner rule and two status bars in one pane). A full clear-and-redraw on every
+        # detected size change is correct regardless of how many resizes actually happened.
+        bar = StatusBar(PaneStatus(role="coder"), stream=tty)
+        bar.start(["Kiln scheduler", "role: coder"])
+        monkeypatch.setattr(
+            pane_status.shutil, "get_terminal_size", lambda fallback=None: _Size(40, 100)
+        )
+        tty.truncate(0), tty.seek(0)
+        bar.refresh()
+        output = tty.getvalue()
+        assert pane_status.CLEAR_SCREEN in output
+        assert "role: coder" in output  # the header is redrawn, not just the bar row
+
+    def test_a_resize_redraws_the_header_exactly_once_per_refresh(self, tty, monkeypatch):
+        # A full repaint must not turn into its own source of duplication if refresh() is
+        # called again with no further size change.
+        bar = StatusBar(PaneStatus(role="coder"), stream=tty)
+        bar.start(["Kiln scheduler", "role: coder"])
+        monkeypatch.setattr(
+            pane_status.shutil, "get_terminal_size", lambda fallback=None: _Size(40, 100)
+        )
+        bar.refresh()
+        tty.truncate(0), tty.seek(0)
+        bar.refresh()
+        assert tty.getvalue() == ""
 
 
 class TestWindowsVtShim:

@@ -83,10 +83,22 @@ class TestWezTermEnvironment:
     def test_dry_run_spawns_nothing(self):
         assert wezterm.launch(PANES, {}, Path("C:/p"), dry_run=True) == ["wezterm", "start"]
 
+    def test_state_colours_come_from_the_shared_scheduler_table(self):
+        # Not a hand-copied second palette -- scheduler.pane_status.STATE_COLORS_HEX is the
+        # only place these values are written, so the pane's own status bar and this badge
+        # cannot disagree on what a given state looks like.
+        from scheduler.pane_status import STATE_COLORS_HEX
+
+        env = wezterm.build_environment(PANES, {}, Path("C:/proj"))
+        assert json.loads(env[wezterm.ENV_STATE_COLORS]) == STATE_COLORS_HEX
+
 
 class TestWezTermLua:
     def test_reads_the_environment_variables_the_launcher_sets(self):
-        for name in (wezterm.ENV_ROLES, wezterm.ENV_LAYOUT, wezterm.ENV_PROJECT_DIR):
+        for name in (
+            wezterm.ENV_ROLES, wezterm.ENV_LAYOUT, wezterm.ENV_PROJECT_DIR,
+            wezterm.ENV_STATE_COLORS,
+        ):
             assert f"os.getenv('{name}')" in wezterm.LUA_CONFIG
 
     def test_uses_lowercase_kiln_for_pane_ids(self):
@@ -99,9 +111,15 @@ class TestWezTermLua:
         assert "/.kiln/status/" in wezterm.LUA_CONFIG
 
     def test_defines_colours_for_scheduler_states(self):
-        # The scheduler reports states the old wrapper never did.
+        # The scheduler reports states the old wrapper never did. Colours now live in
+        # scheduler.pane_status.STATE_COLORS_HEX (see test_state_colours_come_from_the_
+        # shared_scheduler_table), not as Lua literals -- this just confirms the Lua reads
+        # them via the env var rather than falling back to STATE_COLOR_DEFAULT for every role.
+        from scheduler.pane_status import STATE_COLORS_HEX
+
         for state in ("retrying", "blocked", "idle"):
-            assert f"{state} " in wezterm.LUA_CONFIG or f"{state}=" in wezterm.LUA_CONFIG
+            assert state in STATE_COLORS_HEX
+        assert "STATE_COLORS = wezterm.json_parse" in wezterm.LUA_CONFIG
 
     def test_ctrl_c_copies_when_text_is_selected(self):
         # Without this, selecting scheduler output and pressing Ctrl+C sends SIGINT and
@@ -115,6 +133,42 @@ class TestWezTermLua:
 
     def test_ctrl_v_pastes(self):
         assert "key = 'v'" in wezterm.LUA_CONFIG
+
+    def test_the_grid_branch_is_only_taken_when_a_grid_was_asked_for(self):
+        """
+        Regression: the inbox pane came up on the right instead of the bottom.
+
+        `grid_cols` defaulted to `#tab_def.panes`, so the `grid_cols > 1` test was true for
+        *any* two-pane tab. Such a tab fell into the grid branch, whose split direction is
+        hardcoded to 'Right', silently overriding the per-pane `direction` honoured in the
+        simple branch. The condition must test what the tab declared, not how many panes it
+        happens to have.
+        """
+        assert "if tab_def.gridRows or tab_def.gridCols then" in wezterm.LUA_CONFIG
+        assert "if grid_rows > 1 or grid_cols > 1 then" not in wezterm.LUA_CONFIG
+
+    def test_per_pane_direction_and_size_are_honoured(self):
+        # Without these the inbox cannot be a bottom strip.
+        assert "pane_def.direction or 'Right'" in wezterm.LUA_CONFIG
+        assert "pane_def.size or" in wezterm.LUA_CONFIG
+
+    def test_layout_extras_survive_serialisation_to_the_lua(self):
+        # The Lua can only honour keys that actually reach it in Kiln_LAYOUT_JSON.
+        layout = {
+            "tabs": [
+                {
+                    "title": "Human",
+                    "panes": [
+                        {"role": "specifier"},
+                        {"role": "coder", "direction": "Bottom", "size": 0.22},
+                    ],
+                }
+            ]
+        }
+        env = wezterm.build_environment(PANES, layout, Path("C:/p"))
+        pane = json.loads(env[wezterm.ENV_LAYOUT])["tabs"][0]["panes"][1]
+        assert pane["direction"] == "Bottom"
+        assert pane["size"] == 0.22
 
     def test_only_forces_pwsh_on_windows(self):
         # A hardcoded pwsh.exe default_prog would break the Unix path.

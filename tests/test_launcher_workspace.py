@@ -199,6 +199,40 @@ class TestWorktrees:
         assert (repo.worktrees_dir / "coder").is_dir()
 
 
+class TestWarnIfWorktreeConflicts:
+    def test_no_warning_when_branch_is_just_behind(self, repo, caplog):
+        # role_branch hasn't caught up to main yet -- normal mid-run state, not a stale worktree
+        workspace.run_git(["branch", "role"], repo.project_root)
+        (repo.project_root / "README.md").write_text("y\n", encoding="utf-8")
+        workspace.run_git(["add", "-A"], repo.project_root)
+        workspace.run_git(["commit", "-qm", "advance main"], repo.project_root)
+
+        with caplog.at_level("WARNING"):
+            warned = workspace.warn_if_worktree_conflicts(repo, "role", "main")
+
+        assert warned is False
+        assert not caplog.records
+
+    def test_warns_on_a_genuine_content_conflict(self, repo, caplog):
+        # both branches independently add the same file with different content -- the
+        # signature of a worktree left over from an earlier, unrelated run (see logbook.md
+        # add/add conflict observed live in library-hub-testrun4)
+        workspace.run_git(["checkout", "-b", "role"], repo.project_root)
+        (repo.project_root / "logbook.md").write_text("role side\n", encoding="utf-8")
+        workspace.run_git(["add", "-A"], repo.project_root)
+        workspace.run_git(["commit", "-qm", "role logbook"], repo.project_root)
+        workspace.run_git(["checkout", "main"], repo.project_root)
+        (repo.project_root / "logbook.md").write_text("main side\n", encoding="utf-8")
+        workspace.run_git(["add", "-A"], repo.project_root)
+        workspace.run_git(["commit", "-qm", "main logbook"], repo.project_root)
+
+        with caplog.at_level("WARNING"):
+            warned = workspace.warn_if_worktree_conflicts(repo, "role", "main")
+
+        assert warned is True
+        assert any("CONFLICT" in record.message for record in caplog.records)
+
+
 class TestSkills:
     def _add_skill(self, paths, name="mutation-testing"):
         skill = paths.skills_dir / name

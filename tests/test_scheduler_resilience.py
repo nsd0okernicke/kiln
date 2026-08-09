@@ -240,15 +240,42 @@ class TestShippedRoutingTable:
         ]
 
 
-def test_default_profile_still_parses():
-    """The scheduler-all profile must stay valid as roles change."""
+def _shipped_profile(name: str = "scheduler-all"):
     import json
     from pathlib import Path
 
     repo = Path(__file__).resolve().parents[1]
     config = json.loads((repo / "kiln" / "framework" / "profiles.json").read_text("utf-8"))
-    profile = parse_profile(config, "scheduler-all")
+    return parse_profile(config, name)
+
+
+def test_default_profile_still_parses():
+    """The scheduler-all profile must stay valid as roles change."""
+    profile = _shipped_profile()
     scheduled = [r.role for r in profile.roles if r.uses_scheduler]
-    interactive = [r.role for r in profile.roles if not r.uses_scheduler]
+    inboxes = [r.role for r in profile.roles if r.is_inbox]
+    interactive = [r.role for r in profile.roles if not r.uses_scheduler and not r.is_inbox]
     assert scheduled == ["specifier", "coder", "refactorer", "architect"]
     assert interactive == ["human-in-the-loop"], "the human role must stay interactive"
+    assert inboxes == ["inbox"], "escalations need somewhere visible to land"
+
+
+class TestShippedInboxPane:
+    def test_it_watches_the_human_queue_not_its_own(self):
+        # An inbox watching 'inbox' would show an empty queue forever, which looks exactly
+        # like a working one.
+        assert _shipped_profile().role("inbox").watched_role == "human-in-the-loop"
+
+    def test_it_shares_the_first_tab_with_the_human(self):
+        # The whole point of the change: no second terminal to open by hand.
+        tab = _shipped_profile().layout["tabs"][0]
+        assert [pane["role"] for pane in tab["panes"]] == ["human-in-the-loop", "inbox"]
+
+    def test_it_is_a_small_strip_beneath_the_session(self):
+        pane = _shipped_profile().layout["tabs"][0]["panes"][1]
+        assert pane["direction"] == "Bottom"
+        assert 0 < pane["size"] < 0.5, "the human's session must keep most of the tab"
+
+    def test_the_human_role_still_owns_the_root_mcp_config(self):
+        # Both live in the project root; the inbox must not win current_dir_role.
+        assert _shipped_profile().current_dir_role.role == "human-in-the-loop"

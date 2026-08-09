@@ -116,7 +116,6 @@
       "PowerShell(.*)",
       "Bash(ls -la ~/.kiln/ 2>/dev/null; cat ~/.kiln/profiles.json 2>/dev/null; echo \"---\"; ls -la /c/ProgramData/kiln/ 2>/dev/null)",
       "Read(//c/ProgramData/**)",
-      "Bash(pwsh -NoProfile -Command '. .\\\\lib\\\\profile-loader.ps1; Get-KilnDefaultProfileName -ProjectRoot \"C:\\\\projekte\\\\agentic-coding\\\\library-hub-testrun3\" -FrameworkRoot \\(Resolve-Path .\\).Path')",
       "Bash(timeout 15 pwsh -NoProfile -File \"./bin/kiln.ps1\" -WorkingDir \"C:\\\\projekte\\\\agentic-coding\\\\library-hub-testrun3\")",
       "Bash(tasklist //FI \"IMAGENAME eq wezterm-gui.exe\")",
       "Bash(tasklist //FI \"IMAGENAME eq wezterm.exe\")",

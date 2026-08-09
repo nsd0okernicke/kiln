@@ -115,6 +115,33 @@ def _scheduler_command(role: RoleConfig, paths: KilnPaths, branch: str) -> Agent
     )
 
 
+def _inbox_command(role: RoleConfig, paths: KilnPaths, branch: str) -> AgentCommand:
+    """
+    Launch the human's notification pane.
+
+    Watches another role's queue rather than its own: the pane is called `inbox`, but the
+    messages it shows are addressed to `human-in-the-loop`.
+    """
+    argv = [
+        "python", "-m", "scheduler.inbox",
+        "--role", role.watched_role,
+        "--branch", branch,
+        "--db-path", str(paths.db_path),
+        # The human is a real role in the graph, not just a notification target: an inbound
+        # handoff must be merged into their tree or the work they are asked to review is not
+        # actually there. This is /kiln-receive steps 1 and 4, done deterministically.
+        "--worktree", str(_worktree_for(role, paths)),
+        "--log-file", str(paths.scheduler_log(role.role)),
+    ]
+    return AgentCommand(
+        argv=argv,
+        env={
+            "PYTHONPATH": str(paths.python_package_root),
+            "PYTHONIOENCODING": "utf-8",
+        },
+    )
+
+
 def _worktree_for(role: RoleConfig, paths: KilnPaths) -> Path:
     return paths.project_root if role.uses_current_dir else paths.worktree_path(role.worktree)
 
@@ -126,6 +153,9 @@ def build_agent_command(role: RoleConfig, paths: KilnPaths, branch: str) -> Agen
     Scheduler-enabled roles bypass the agent CLI entirely — the scheduler invokes the worker
     itself, one shot per handoff.
     """
+    if role.is_inbox:
+        return _inbox_command(role, paths, branch)
+
     if role.uses_scheduler:
         return _scheduler_command(role, paths, branch)
 

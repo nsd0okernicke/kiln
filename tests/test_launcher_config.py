@@ -6,6 +6,7 @@ routed to the wrong agent is far more expensive to diagnose once panes are runni
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 from launcher.config import (
@@ -192,6 +193,25 @@ class TestProfileQueries:
         assert profile.has_agent("copilot") is True
         assert profile.has_agent("codex") is False
 
+    def test_inbox_watches(self):
+        config = {
+            "profiles": {
+                "p": {
+                    "terminals": [
+                        {"role": "human-in-the-loop", "mode": "manual"},
+                        {"role": "inbox", "scheduler": "inbox", "watches": "human-in-the-loop"},
+                        {"role": "coder", "worktree": "coder"},
+                    ]
+                }
+            }
+        }
+        profile = parse_profile(config, "p")
+        assert profile.inbox_watches("human-in-the-loop") is True
+        assert profile.inbox_watches("coder") is False
+
+    def test_inbox_watches_is_false_with_no_inbox_pane(self):
+        assert parse_profile(CONFIG, "compact").inbox_watches("specifier") is False
+
 
 class TestFileLoading:
     def test_finds_the_project_config(self, project):
@@ -212,6 +232,48 @@ class TestFileLoading:
     def test_missing_config_lists_where_it_looked(self, tmp_path):
         with pytest.raises(ProfileError, match="Searched:"):
             find_profiles_config(tmp_path / "nothing-here")
+
+
+class TestSearchPaths:
+    """
+    The cascade the README documents, in order.
+
+    The two shell originals disagreed about the system-wide location — PowerShell used
+    ProgramData, the shell script /etc — and the first Python port kept only the Windows
+    one, so `/etc/kiln/profiles.json` silently stopped working on Unix.
+    """
+
+    def _paths(self, tmp_path):
+        from launcher.config import _search_paths
+
+        return [str(p).replace("\\", "/") for p in _search_paths(tmp_path, tmp_path / "fw")]
+
+    def test_every_documented_location_is_searched(self, tmp_path):
+        found = self._paths(tmp_path)
+        for expected in (
+            "kiln.profiles.json",
+            "kiln/profiles.json",
+            ".kiln/profiles.json",
+            "kiln/framework/profiles.json",
+            ".kiln/profiles.json",
+        ):
+            assert any(path.endswith(expected) for path in found), f"{expected} not searched"
+
+    def test_project_override_is_searched_before_the_framework(self, tmp_path):
+        found = self._paths(tmp_path)
+        override = next(i for i, p in enumerate(found) if p.endswith("kiln.profiles.json"))
+        framework = next(i for i, p in enumerate(found) if "kiln/framework/" in p)
+        assert override < framework
+
+    def test_the_system_path_matches_the_platform(self, tmp_path):
+        from launcher.config import SYSTEM_PROFILES_PATH
+
+        expected = (
+            "C:/ProgramData/kiln/profiles.json" if os.name == "nt"
+            else "/etc/kiln/profiles.json"
+        )
+        assert str(SYSTEM_PROFILES_PATH).replace("\\", "/") == expected
+        assert self._paths(tmp_path)[-1] == expected, "system-wide config must be last resort"
 
     def test_load_uses_the_declared_default(self, project):
         assert load_profile(project).name == "compact"

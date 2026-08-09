@@ -37,6 +37,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from scheduler.routing import load_routing_table
 from scheduler.status_contract import WORKER_STATUS_INSTRUCTION
 
+#: The interpreter `.mcp.json` names for kiln-channel. Deliberately the bare command rather
+#: than sys.executable: the agent CLI resolves it from PATH at spawn time, which may not be
+#: the interpreter running the launcher. `cli.warn_if_channel_unavailable` probes this exact
+#: command so the preflight check tests what will actually run.
+MCP_PYTHON = "python"
+
+#: What channel.py imports, mirroring its mcp 1.x/2.x compatibility fallback.
+CHANNEL_IMPORT_PROBE = (
+    "try:\n"
+    "    from mcp.server.fastmcp import FastMCP\n"
+    "except ImportError:\n"
+    "    from mcp.server.mcpserver import MCPServer\n"
+)
+
 #: Backends with real in-session worker delegation, so their wrapper gets the delegating
 #: prompt rather than the role's own work rules.
 DELEGATING_AGENTS = ("claude", "copilot", "codex")
@@ -81,16 +95,35 @@ def build_substitutions(
     }
 
 
-def render_instructions(role: RoleConfig, paths: KilnPaths, branch: str, worktree: Path) -> str:
+def render_instructions(
+    role: RoleConfig, paths: KilnPaths, branch: str, worktree: Path, profile: Profile | None = None
+) -> str:
     """
     Assemble a wrapper role's instruction file.
 
     Auto-mode delegating roles get the wrapper prompt + loop + runtime + workflow only: the
     role's own work rules and the engineering/project constitution live in the worker
     definition instead, because the wrapper never does implementation work itself.
+
+    `profile` is optional (defaults to "no inbox") only so callers that do not care about
+    inbox-aware loops -- most tests -- do not have to construct one; the real launcher
+    always passes it.
     """
     delegates = role.agent in DELEGATING_AGENTS
-    loop = read_template(paths, f"loop-{role.mode}-{role.agent}")
+    has_inbox = bool(profile and profile.inbox_watches(role.role))
+    loop_name = f"loop-{role.mode}-{role.agent}"
+    if has_inbox:
+        # A companion `inbox` pane already receives and merges for this role (see
+        # roles/human-in-the-loop.md -> "Receiving Messages"). The plain loop template's
+        # Step 1/5 "receive" cycle assumes this role does its own polling and merging --
+        # if used here anyway, either the session blocks forever racing the inbox for the
+        # same message, or (observed live) it silently skips its own receive step and,
+        # with it, the `set-status.py waiting` call that step starts with, leaving the tab
+        # title stuck on whatever state it last reported (e.g. "handoff") forever. The
+        # `-with-inbox` variant replaces that whole cycle with an explicit, mandatory
+        # "waiting" status reset right after sending a handoff.
+        loop_name += "-with-inbox"
+    loop = read_template(paths, loop_name)
     runtime = read_template(paths, f"runtime-{role.agent}")
     workflow = read_constitution(paths, "workflow", required=True)
 
@@ -117,7 +150,7 @@ def render_instructions(role: RoleConfig, paths: KilnPaths, branch: str, worktre
 
 
 def write_instructions(
-    role: RoleConfig, paths: KilnPaths, branch: str, worktree: Path
+    role: RoleConfig, paths: KilnPaths, branch: str, worktree: Path, profile: Profile | None = None
 ) -> Path | None:
     """
     Write a role's instruction file, or remove it for scheduler roles.
@@ -129,6 +162,18 @@ def write_instructions(
 
     Returns the path written, or None when the role is scheduler-driven.
     """
+    if role.is_inbox:
+        # An inbox has no worktree and no generated files of its own (RoleConfig.is_inbox) --
+        # it shares its worktree (@current) with the real role it watches, e.g.
+        # human-in-the-loop in the scheduler-all profile. instruction_file_for() would
+        # resolve to *that* role's CLAUDE.md, so deleting "a stale file for this role" here
+        # deletes a real, just-written file instead: human-in-the-loop is processed first in
+        # profile.roles and writes CLAUDE.md correctly, then inbox is processed right after
+        # and (observed live) silently deletes the same path, leaving human-in-the-loop's
+        # session with no instructions at all -- it never learns to call set-status.py, so
+        # its tab-bar badge sticks on whatever state it last managed to report.
+        return None
+
     if role.uses_scheduler:
         stale = instruction_file_for(role, worktree)
         if stale.is_file():
@@ -137,7 +182,9 @@ def write_instructions(
 
     target = instruction_file_for(role, worktree)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(render_instructions(role, paths, branch, worktree), encoding="utf-8")
+    target.write_text(
+        render_instructions(role, paths, branch, worktree, profile), encoding="utf-8"
+    )
     return target
 
 
@@ -214,7 +261,10 @@ def render_worker_file(role: RoleConfig, paths: KilnPaths) -> WorkerFile:
     return WorkerFile(path=path, content=content)
 
 
-def write_worker_file(role: RoleConfig, paths: KilnPaths) -> Path:
+def write_worker_file(role: RoleConfig, paths: KilnPaths) -> Path | None:
+    """Write the role's worker definition. None for an inbox, which delegates to nothing."""
+    if role.is_inbox:
+        return None
     rendered = render_worker_file(role, paths)
     rendered.path.parent.mkdir(parents=True, exist_ok=True)
     rendered.path.write_text(rendered.content, encoding="utf-8")
@@ -242,7 +292,7 @@ def build_mcp_config(
     }
     if include_channel and role:
         config["mcpServers"]["kiln-channel"] = {
-            "command": "python",
+            "command": MCP_PYTHON,
             "args": [str(paths.channel_script)],
             "env": {
                 "KILN_ROLE": role,

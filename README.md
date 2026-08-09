@@ -6,7 +6,9 @@
 
 **An orchestration platform that turns swarms of AI agents into reliable, professional software engineers.**
 
-Kiln launches a config-driven multi-agent swarm, each agent working in its own git worktree with role-specific instructions and cross-agent communication. Works on Windows (PowerShell + WezTerm / Windows Terminal), macOS/Linux (zsh + tmux), and is Git-aware: sub-branches are created per worktree, all state lives in `.kiln/`, and handoffs are tracked in `logbook.md`.
+Kiln launches a config-driven multi-agent swarm, each agent working in its own git worktree with role-specific instructions and cross-agent communication. It is Git-aware: sub-branches are created per worktree, all state lives in `.kiln/`, and handoffs are tracked in `logbook.md`.
+
+**Kiln is a Python application.** `bin/kiln.ps1` and `bin/kiln.sh` are thin shims that put `kiln/framework/` on `PYTHONPATH` and hand off to `python -m launcher.cli`; every platform runs the same code. Terminals are backend-specific (WezTerm, Windows Terminal, tmux), but nothing else is.
 
 ---
 
@@ -78,8 +80,10 @@ Kiln is a lightweight orchestration layer that:
   - Projects can override by creating `kiln.profiles.json` at the root
   - Flexible terminal layouts: tabs, split panes, grids, or custom hierarchical arrangements
 - Creates one **terminal window/tab per role** — observe all agents in real time
-  - Windows: WezTerm or Windows Terminal tabs/panes (WezTerm preferred)
-  - Unix/macOS: tmux sessions + Terminal.app or WezTerm
+  - WezTerm (recommended, every platform) — full feature set: live tab-bar status badges,
+    split-pane/grid layouts, the inbox-pane strip
+  - Windows Terminal or tmux — basic fallback: launches the same swarm, but with no live
+    status badge and no split-pane/grid layout support
 - Reads role behavior from `kiln/project/roles/<role>.md` files and a layered `kiln/project/constitution/` (workflow, engineering, project)
 - Creates one **git worktree per agent** (except those using `@current`) under `.worktrees/` so agents don't collide — agents using `@current` work in the project root on the current branch
 - Supports per-role **agent backends**: `claude`, `copilot`, `codex`, or `grok` — configure via `agent` field in profiles
@@ -93,7 +97,7 @@ Kiln is a lightweight orchestration layer that:
 
 *The default profile in WezTerm — one tab for the human-facing intake role, one tab with the autonomous four-role cycle running as a grid.*
 
-### Project Structure Created by `kiln.ps1 -Init` / `kiln.sh init`
+### Project Structure Created by `bin/kiln.ps1 -Init` / `bin/kiln.sh init`
 
 When you run init, it scaffolds a new Kiln project with:
 
@@ -140,43 +144,44 @@ my-project/
 
 ## Platform Support
 
-### Windows (Native PowerShell)
+One Python implementation runs on every platform. The shell scripts are shims — they locate
+the framework, set `PYTHONPATH`, and forward their arguments to `python -m launcher.cli`
+unchanged. There is no second implementation to fall behind.
 
-Kiln has full native Windows support using PowerShell 7+ and WezTerm (or Windows Terminal).
+**Shared requirements (all platforms):**
+
+- Python 3.11+ — the launcher, the scheduler and the MCP servers are all Python
+- Git
+- One or more agent CLIs (Claude Code, GitHub Copilot, Codex) depending on configured agents
+- `pip install -r kiln/framework/mcp-server/requirements.txt` if you use wrapper-mode roles
+  (the `kiln-db` / `kiln-channel` MCP servers). Scheduler-mode roles need no MCP server.
+
+### Windows
 
 ```powershell
-.\kiln.ps1 -WorkingDir "C:\path\to\project"
+.\bin\kiln.ps1 -WorkingDir "C:\path\to\project"
 ```
 
-**Requirements:**
-- PowerShell 7+ (included with Windows 11)
-- WezTerm (recommended) or Windows Terminal (Microsoft Store)
-- One or more agent CLIs (Claude Code, GitHub Copilot, Codex, or Grok) depending on configured agents
+- PowerShell 7+ (included with Windows 11) — only to run the shim
+- WezTerm (recommended, full feature set) or Windows Terminal (basic fallback — see
+  "Terminal Behavior" below for exactly what it's missing)
 
-**Optional parameters:**
-- `-Terminal wt` — use Windows Terminal instead of WezTerm
-- `-Terminal wezterm` — explicitly use WezTerm (default when available)
-
-### Unix/Linux/macOS (zsh + tmux)
-
-Kiln on Unix uses zsh scripts and tmux for session management.
+### Unix/Linux/macOS
 
 ```sh
-./kiln.sh <working-directory>
+./bin/kiln.sh /path/to/project
 ```
 
-**Requirements:**
+- Any POSIX shell — the shim is `#!/usr/bin/env bash`; zsh is no longer required
+- WezTerm (recommended, full feature set — WezTerm is cross-platform, so Linux/macOS get the
+  exact same tab-bar badges and layout support Windows does) or tmux (basic fallback — one
+  detached session per role, no split-pane/grid layouts, no live status badge)
 
-- zsh shell
-- tmux for session management
-- Python 3 with PyYAML module (used for YAML profile parsing)
-
-  ```bash
-  pip install pyyaml
-  ```
-
-- One or more agent CLIs (Claude Code, GitHub Copilot, Codex, or Grok) depending on configured agents
-- Optional: WezTerm or Terminal.app (auto-detected)
+**Terminal selection (both platforms):** `--terminal wezterm | wt | tmux | none`, or set
+`KILN_TERMINAL`. Omit it and Kiln auto-detects, preferring WezTerm over the platform's
+built-in fallback (Windows Terminal on Windows, tmux on Unix/Linux/macOS) whenever `wezterm`
+is on `PATH` — see "Terminal Behavior" below. `none` prints the commands without launching
+anything, which pairs well with `--dry-run`.
 
 ---
 
@@ -186,55 +191,66 @@ The Kiln repository is organized for clarity and maintainability:
 
 ```text
 kiln/
-├── bin/                          # User-facing scripts
-│   ├── kiln.sh             # Main launcher (Unix/macOS) + project scaffolding (init)
-│   ├── kiln.ps1            # Main launcher (Windows) + project scaffolding (-Init)
-│   ├── kiln-cleanup.sh          # Manual cleanup (Unix/macOS)
-│   ├── kiln-cleanup.ps1         # Manual cleanup (Windows)
-│   ├── clear-messages.sh         # Clear message queue (testing utility)
-│   ├── clear-messages.ps1        # Clear message queue (testing utility)
-│   └── kiln-db.ps1               # Inspect/manage messages.db (Windows only, no Unix equivalent yet)
+├── bin/                          # Entry points
+│   ├── kiln.ps1                  # Windows shim -> python -m launcher.cli
+│   ├── kiln.sh                   # Unix shim -> python -m launcher.cli
+│   ├── kiln-cleanup.ps1          # Full project reset (Windows only — see Cleanup)
+│   ├── clear-messages.ps1 / .sh  # Empty the message queue (testing utility)
+│   └── kiln-db.ps1               # Inspect/manage messages.db (Windows only)
 │
-├── lib/                          # Framework internals
-│   ├── profile-loader.sh         # JSON profile parsing (Unix)
-│   ├── profile-loader.ps1        # JSON profile parsing (PowerShell)
-│   ├── terminal-adapter.sh       # Terminal backend loader (Unix)
-│   ├── terminal-adapters/        # Terminal backend implementations
-│   │   ├── wezterm.ps1           # WezTerm adapter (Windows)
-│   │   ├── wezterm.sh            # WezTerm adapter (Unix)
-│   │   ├── windows-terminal.sh   # Windows Terminal (WSL)
-│   │   ├── terminal-app.sh       # macOS Terminal.app
-│   │   ├── ghostty.sh            # Ghostty terminal
-│   │   └── none.sh               # Fallback (current shell)
-│   └── kiln-window-watchdog.sh   # Window tracking (Unix tmux)
-│
-├── kiln/                   # Master framework templates & default profiles
+├── kiln/
 │   ├── project/                  # Copied into every new project's kiln/project/ — customize freely
 │   │   ├── constitution.md
 │   │   ├── constitution/         # Shared constitution rules
-│   │   │   ├── workflow.md           # Handoff protocol
+│   │   │   ├── workflow.md           # Handoff protocol + the Handoff Routing table
 │   │   │   ├── engineering.md        # Engineering practices & quality standards
-│   │   │   └── project.md            # Project rules starter template (fill in language, constraints)
+│   │   │   └── project.md            # Project rules starter template
 │   │   ├── roles/                    # Role prompts
 │   │   └── skills/                   # Agent skills (optional)
+│   │
 │   └── framework/                # Never copied — read directly from this install
-│       ├── profiles.json             # Default configuration profiles (framework defaults only)
-│       ├── templates/                # Loop/runtime templates injected into generated CLAUDE.md/copilot-instructions.md/AGENTS.md
-│       ├── mcp-server/               # Python MCP servers bundled with the framework
-│       │   ├── channel.py            # kiln-channel: blocking wait_for_message() receiver
-│       │   └── requirements.txt      # mcp>=1.0.0
-│       └── tools/                    # set-status.py — re-seeded into .kiln/tools/ on every launch
+│       ├── launcher/                 # The launcher. Everything bin/ used to do.
+│       │   ├── cli.py                    # Argument parsing and the launch sequence
+│       │   ├── config.py                 # Profile loading, inheritance, validation
+│       │   ├── paths.py                  # Every path Kiln touches, in one place
+│       │   ├── commands.py               # The command injected into each pane
+│       │   ├── generate.py               # CLAUDE.md / AGENTS.md / .mcp.json / worker files
+│       │   ├── workspace.py              # gitignore, hooks, worktrees, skills
+│       │   ├── scaffold.py               # `init` project scaffolding
+│       │   ├── stop.py                   # `--stop` process teardown
+│       │   └── terminals/                # One module per backend
+│       │       ├── wezterm.py                # Generates the Lua config; WezTerm builds the panes
+│       │       ├── windows_terminal.py       # Builds `wt.exe` argument lists
+│       │       └── tmux.py                   # new-session / send-keys
+│       │
+│       ├── scheduler/                # The deterministic role loop (see "Scheduler Mode")
+│       │   ├── role_scheduler.py         # One cycle = run_once(); main() is the only loop
+│       │   ├── db.py                     # Every message-queue SQL statement
+│       │   ├── routing.py                # Parses the Handoff Routing table
+│       │   ├── handoff.py                # Handoff message format
+│       │   ├── status_contract.py        # The KILN-STATUS: done|blocked contract
+│       │   ├── worker_prompt.py          # Builds the one-shot worker invocation
+│       │   ├── git_ops.py                # Merge, squash-to-anchor, local excludes
+│       │   ├── pane_status.py            # The pinned status bar in each pane
+│       │   ├── inbox.py                  # The human's notification pane (`kiln inbox`)
+│       │   ├── send.py                   # Queue a handoff from the CLI (`kiln send`)
+│       │   └── adapters/claude_adapter.py  # One-shot `claude -p` invocation
+│       │
+│       ├── profiles.json             # Default configuration profiles
+│       ├── templates/                # Loop/runtime templates for wrapper-mode roles
+│       ├── mcp-server/               # kiln-channel: blocking wait_for_message() receiver
+│       └── tools/                    # set-status.py — re-seeded into .kiln/tools/ every launch
 │
 ├── examples/                     # Example project briefs
-│   ├── library-hub/               # LibraryHub reference example (Python/FastAPI)
-│   ├── library-hub-java/          # LibraryHub reference example (Java/Spring Boot)
-│   └── battlezone/                # BattleZone reference example (Python/pygame game, not a CRUD service)
-│
-├── tests/                        # Framework tests
+├── tests/                        # pytest suite for launcher/ and scheduler/
 └── docs/                         # Documentation & assets
 ```
 
-**User Scripts** (`bin/`) are the entry points for Kiln operations. **Framework Internals** (`lib/`) are implementation details — developers shouldn't need to modify them. **`kiln/project/`** is copied to new projects during scaffolding and is meant to be customized. **`kiln/framework/`** is never copied — it's read directly from this install at generation/launch time, so edits there affect every project using this install.
+**`bin/`** holds entry points. The two `kiln` scripts are shims with no logic in them; the rest are standalone utilities that were never part of the launcher. **`kiln/framework/launcher/` and `kiln/framework/scheduler/`** are the actual implementation. **`kiln/project/`** is copied to new projects during scaffolding and is meant to be customized. **`kiln/framework/`** is never copied — it's read directly from this install at launch time, so edits there affect every project using this install.
+
+> The pre-port implementation lived in `lib/` as parallel PowerShell and shell trees
+> (`profile-loader.{ps1,sh}`, `terminal-adapter.sh`, `terminal-adapters/*`). Those are deleted;
+> they are in git history if you need to compare behaviour.
 
 ---
 
@@ -246,8 +262,110 @@ kiln/
 - **Project-Local Constitution** — Customize architecture, tech stack, and quality gates via `kiln/project/constitution/project.md`.
 - **Layered Rules** — `kiln/project/constitution/` contains `workflow.md` (handoffs), `engineering.md` (tools/practices), and `project.md` (arch/quality) — all applied to every agent.
 - **Backend Selection Per Role** — Each role can launch `claude`, `copilot`, `codex`, or `grok` via the `agent` field in profiles.
-- **Observable Swarm** — Watch all agents in one window (tabs or panes on Windows, tmux panes on Unix). On WezTerm, a live color-coded status bar shows each `auto`-mode role's current state (waiting/receiving/delegating/handoff) regardless of which tab or pane is focused.
-- **Cross-Platform** — Works on Windows, macOS, and Linux with zero duplication.
+- **Two Execution Modes Per Role** — a role's cycle is driven either by an LLM following prose (**wrapper mode**) or by a Python state machine (**scheduler mode**). See below.
+- **Observable Swarm** — Watch all agents in one window. Each scheduler pane carries a colour-coded status bar pinned to its bottom row, and on WezTerm a live status badge per role appears in the tab bar regardless of which tab or pane is focused.
+- **Cross-Platform** — One Python implementation on Windows, macOS and Linux. Only terminal backends differ.
+
+---
+
+## Execution Modes: Wrapper vs Scheduler
+
+Every `auto`-mode role runs a receive → merge → work → squash → hand-off cycle. Kiln can drive
+that cycle two ways, chosen per role with the `scheduler` field in a profile.
+
+### Wrapper mode (default)
+
+A persistent LLM session sits in the pane and follows the loop written in
+`kiln/framework/templates/loop-auto-<agent>.md`. It reaches the message queue through two MCP
+servers (`kiln-db` for SQL, `kiln-channel` for a blocking `wait_for_message()`), decides when a
+turn is finished, and delegates the actual work to a disposable worker subagent.
+
+Works with `claude`, `copilot` and `codex`. The mechanics are prose, so the model can
+misread them — a turn that ends early, a merge step that gets skipped.
+
+### Scheduler mode (`"scheduler": "python"`)
+
+A Python process owns the pane instead. It polls SQLite directly, merges, invokes the agent CLI
+**once per handoff** as a subprocess, reads the result, squashes and inserts the next handoff —
+then loops. The LLM only does the work; it makes none of the control-flow decisions.
+
+```jsonc
+{ "role": "coder", "agent": "claude", "worktree": "coder",
+  "mode": "auto", "model": "claude-sonnet-5",
+  "scheduler": "python" }        // <- this line is the whole opt-in
+```
+
+What changes when a role is scheduled:
+
+| | Wrapper mode | Scheduler mode |
+| --- | --- | --- |
+| Pane runs | a persistent LLM session | `python -m scheduler.role_scheduler` |
+| Loop control | prose in a loop template | `role_scheduler.run_once()` |
+| Queue access | `kiln-db` + `kiln-channel` MCP | direct SQLite |
+| Turn is done when | the model decides | the worker prints `KILN-STATUS: done` |
+| Routing target | model reads the routing table | `routing.py` resolves it |
+| Retry / escalation | model judgement | one retry, then escalate to `human-in-the-loop` |
+| MCP servers needed | yes | **no** |
+| Generated `CLAUDE.md` | yes | **no** — deleted if a role switches over |
+
+The contract between them is a sentinel. A worker's last line must be:
+
+```text
+KILN-STATUS: done <one-line summary>
+KILN-STATUS: blocked <what stopped it>
+```
+
+Anything missing or malformed counts as `blocked`, so a confused worker escalates rather than
+silently reporting success.
+
+**Trade-offs.** The scheduler cannot get bored, skip a merge, or forget to hand off, and its
+whole cycle is unit-testable without an LLM. But each invocation is one-shot: the worker starts
+fresh every handoff with no memory of the last one, so anything it must remember has to be in
+the handoff, the repo, or the constitution. Currently `claude` only — `copilot` and `codex`
+adapters are not written yet, and those roles stay in wrapper mode.
+
+### Inbox mode (`"scheduler": "inbox"`)
+
+A third kind of pane, and the human's half of the same idea. It runs `scheduler.inbox`: it
+watches another role's queue, prints each arriving message, marks it processed and rings the
+terminal bell. No agent, no worktree, no generated instructions, no MCP.
+
+```jsonc
+{ "role": "inbox", "worktree": "@current", "title": "Kiln Inbox",
+  "mode": "manual", "scheduler": "inbox",
+  "watches": "human-in-the-loop" }    // whose queue to show
+```
+
+It exists because a single LLM session cannot be both a listener and an entry point. The
+wrapper `human-in-the-loop` role blocks in `wait_for_message()`, which polls `while True:` with
+**no timeout** — so a session that is listening is not available to type into, and a session
+talking to you is not listening. Escalations landed in neither state and simply sat in the
+queue. Splitting the two jobs is what fixes it: the inbox listens, your Claude session talks.
+
+The outbound half is the `send` command, which inserts a handoff directly with no MCP and no
+LLM in the path — so you can start or unblock a cycle even when the agents are what is broken:
+
+```powershell
+.\bin\kiln.ps1 send --to specifier "Add CAT-4: search the catalog by author."
+.\bin\kiln.ps1 inbox        # or run the watcher yourself, outside a swarm
+```
+
+Both resolve the queue path and current branch from the project. Branch matters more than it
+looks — messages are branch-scoped, so an inbox on the wrong branch is indistinguishable from
+an empty one.
+
+**Try it:** the shipped `scheduler-all` profile runs all four `auto` roles on the scheduler,
+keeps `human-in-the-loop` as an interactive session, and puts an inbox strip beneath it in the
+same tab. `scheduler-coder` schedules only the coder.
+
+```powershell
+.\bin\kiln.ps1 -WorkingDir . -Profile scheduler-all
+```
+
+Each scheduled pane opens with a configuration banner (role, branch, resolved worker and model,
+**resolved routing**, worktree, queue, timeouts, log path), then narrates every cycle. Per-role
+logs are written to `.kiln/logs/scheduler-<role>.log` so a crashed scheduler still leaves
+evidence after its pane is gone.
 
 ---
 
@@ -276,20 +394,30 @@ kiln.profiles.json           # Project-specific profiles (optional, at root)
 
 **Note:** Configuration profiles are inherited from the framework default (`kiln/framework/profiles.json`). Projects can optionally override by creating `kiln.profiles.json` at the project root if they need custom profile definitions.
 
-### Profile Loading & Inheritance
+### Profile Loading
 
-Configuration profiles define which agents run, which roles they take, and where they work. Kiln uses a cascading search to find profiles:
+Configuration profiles define which agents run, which roles they take, and where they work. Kiln searches these locations in order and uses the **first file that exists**:
 
 1. **Project root** (`kiln.profiles.json`) — Project-level overrides
-2. **Project config** (`kiln/profiles.json`) — Not used (projects don't copy profiles here; not to be confused with `kiln/project/`, the customizable constitution/roles/skills bucket)
-3. **Project state** (`.kiln/profiles.json`) — Not used
+2. **Project config** (`kiln/profiles.json`) — Searched, but scaffolding never creates it. Not to be confused with `kiln/project/`, the customizable constitution/roles/skills bucket
+3. **Project state** (`.kiln/profiles.json`) — Searched, but scaffolding never creates it
 4. **Framework** (`kiln/framework/profiles.json`) — Default profiles for all projects
 5. **User home** (`~/.kiln/profiles.json`) — User-level defaults (optional)
-6. **System** (`/etc/kiln/profiles.json`) — System-wide defaults (optional)
+6. **System** — `/etc/kiln/profiles.json` on Unix, `C:\ProgramData\kiln\profiles.json` on Windows (optional)
+
+The first file that exists wins outright; profiles are **not** merged across locations.
+Locations 2 and 3 were previously documented as "Not used" — they are genuinely searched, so a
+file dropped there *will* override the framework defaults.
 
 By default, **all projects use the framework's `kiln/framework/profiles.json`**, which defines the standard 4-agent workflow (specifier, coder, refactorer, architect). This means new projects work immediately without configuration.
 
-**To customize profiles for a specific project**, create `kiln.profiles.json` at the project root. Kiln will use your custom profiles instead of the framework defaults.
+**To customize profiles for a specific project**, create `kiln.profiles.json` at the project root.
+
+> ⚠️ That file **replaces** the framework's profile set rather than extending it. There is no
+> `extends` mechanism: once `kiln.profiles.json` exists, `default`, `compact`, `scheduler-all`
+> and the rest are no longer available unless you copy the ones you want into it. Start by
+> copying `kiln/framework/profiles.json` and editing, rather than writing a file with a single
+> profile in it.
 
 ### Layered Constitution
 
@@ -354,12 +482,32 @@ The cycle flows: **specifier → coder → refactorer → architect → specifie
 
 ### Quick Reference
 
-| Platform | Command | Options |
+| Platform | Command |
+|---|---|
+| **Windows** | `.\bin\kiln.ps1 -WorkingDir .` |
+| **Unix/macOS** | `./bin/kiln.sh .` |
+
+Both shims forward every argument to the same Python CLI, so **all flags work on both
+platforms in either spelling** — `-ProfileName compact`, `-Profile compact` and
+`--profile compact` are the same flag.
+
+| Flag | Aliases | Effect |
 |---|---|---|
-| **Windows** | `.\kiln.ps1 -WorkingDir .` | `-ProfileName <profile>` for different profiles; `-Terminal wt` to use Windows Terminal; `-Debug` for verbose output |
-| **Unix/macOS** | `./kiln.sh .` | `--profile <profile>` for different profiles; Terminal auto-detected: WezTerm > Terminal.app > tmux |
+| `--working-dir <path>` | `-WorkingDir`, `-Target`, `--target` | Project directory (default: `.`) |
+| `--profile <name>` | `-Profile`, `-ProfileName` | Which profile to launch |
+| `--terminal <backend>` | `-Terminal` | `wezterm`, `wt`, `tmux` or `none` (default: auto-detect) |
+| `--stop` | `-Stop` | Stop a running swarm |
+| `--list-profiles` | `-ListProfiles` | List available profiles and exit |
+| `--init` | `-Init` | Scaffold a new project instead of launching (or the `init` subcommand) |
+| `--example <name>` | `-Example` | Seed the scaffold from `examples/<name>` |
+| `--no-git` | `-NoGit` | Skip git initialisation when scaffolding |
+| `--dry-run` | | Print what would launch, start nothing |
+| `--verbose` | `-Debug` | Verbose output |
 
 Kiln will create a git repository if one doesn't exist, initialize worktrees, and launch agents.
+
+`--dry-run` is the fastest way to see exactly what a profile will do — it prints the resolved
+command line and working directory for every role without spawning a terminal.
 
 ### Windows (PowerShell)
 
@@ -454,7 +602,7 @@ Kiln will create a git repository if one doesn't exist, initialize worktrees, an
 
 ## Configuration Profiles
 
-Kiln uses JSON profiles to define swarm topology. The default profile is `default`, whose name is set by the top-level `"default"` key in `kiln/framework/profiles.json` (`Get-KilnDefaultProfileName` in `lib/profile-loader.ps1` resolves it at launch if `-ProfileName` isn't given). All projects inherit the framework's default profiles from `kiln/framework/profiles.json` automatically.
+Kiln uses JSON profiles to define swarm topology. The default profile is `default`, whose name is set by the top-level `"default"` key in `kiln/framework/profiles.json` (`load_profile()` in `kiln/framework/launcher/config.py` resolves it at launch if no `--profile` is given). All projects inherit the framework's default profiles from `kiln/framework/profiles.json` automatically.
 
 **To customize profiles for a specific project**, create `kiln.profiles.json` at your project root. Kiln will use your custom profiles instead of the framework defaults.
 
@@ -565,7 +713,7 @@ Switch to any of these with `-ProfileName <name>` (Windows) or `--profile <name>
 }
 ```
 
-This is wired via Claude Code's subagent `model:` frontmatter field: `Write-GeneratedWorkerAgent` in `bin/kiln.ps1` writes `model: <workerModel>` into the generated `.claude/agents/<role>-worker.md` file when `workerModel` is set. Claude Code resolves a dispatched subagent's model from its own frontmatter, independent of the parent session's model — so a Haiku-pinned wrapper genuinely dispatches a Sonnet worker, not Haiku. The framework's `default` profile (`kiln/framework/profiles.json`) currently runs both wrapper and worker on Sonnet for every role (`workerModel` omitted, so the worker just inherits the wrapper's model) — set `workerModel` explicitly per role if you want this cheaper/faster split instead.
+This is wired via Claude Code's subagent `model:` frontmatter field: `write_worker_file()` in `kiln/framework/launcher/generate.py` writes `model: <workerModel>` into the generated `.claude/agents/<role>-worker.md` file when `workerModel` is set. In scheduler mode the same field is read back by `worker_prompt.py` to pick the one-shot worker's model. Claude Code resolves a dispatched subagent's model from its own frontmatter, independent of the parent session's model — so a Haiku-pinned wrapper genuinely dispatches a Sonnet worker, not Haiku. The framework's `default` profile (`kiln/framework/profiles.json`) currently runs both wrapper and worker on Sonnet for every role (`workerModel` omitted, so the worker just inherits the wrapper's model) — set `workerModel` explicitly per role if you want this cheaper/faster split instead.
 
 ### Layout Configurations
 
@@ -720,19 +868,20 @@ Sub-branches are **local-only and cannot be pushed** — Kiln enforces this via 
 
 Kiln opens terminal windows or tabs through a small terminal backend adapter.
 
-### Auto-Detection (Unix)
+### Auto-Detection (both platforms)
 
-1. If `$WEZTERM_PANE` is set and `wezterm` is in PATH → WezTerm
-2. If AppleScript is available → macOS Terminal.app
-3. If `wt.exe` is available → Windows Terminal (from WSL)
-4. Otherwise → attach the cleanup tmux session in the current shell
+One rule, `detect_backend()` in `launcher/terminals/__init__.py`, no per-OS branching until
+the very end:
 
-### Auto-Detection (Windows)
-
-1. If `$env:WEZTERM_PANE` is set and `wezterm` is in PATH → WezTerm
-2. If `wezterm` is available → WezTerm
-3. If `wt.exe` is available → Windows Terminal
-4. Otherwise → error
+1. `--terminal <backend>` was passed explicitly → use it
+2. `KILN_TERMINAL` is set → use it
+3. `WEZTERM_PANE` is set and `wezterm` is on `PATH` (i.e. you're already inside a WezTerm
+   pane) → WezTerm
+4. `wezterm` is on `PATH` at all → WezTerm, on any OS — this is what makes WezTerm-on-Linux
+   or -macOS work with zero extra configuration
+5. Otherwise, the platform's built-in fallback: Windows Terminal (`wt.exe`) on Windows, tmux
+   (if installed) on Unix/Linux/macOS
+6. Nothing found → `none` (prints commands without launching anything)
 
 ### Override the Default
 
@@ -786,11 +935,17 @@ Kiln supports flexible layout configurations that can be defined in your profile
 - E.g., specifier at top, coder/refactorer/architect split at bottom
 - Use when: you want to focus on one agent while monitoring others
 
-All layouts work on **WezTerm**, **Windows Terminal**, and **Unix/macOS tmux**.
+All layouts work on **WezTerm**, on any platform — grid/split/focus arrangements are driven
+by the profile's `layout` config, which WezTerm's generated Lua reads directly. **Windows
+Terminal** approximates tabs and simple splits with `wt.exe split-pane`, but does not read
+per-pane `direction`/`size` layout hints, so grid/focus layouts render as its own generic
+alternating split rather than the arrangement you configured. **tmux ignores the `layout`
+config entirely** — every role becomes its own independent detached session
+(`kiln-<role>`), regardless of what layout the profile specifies; see "tmux Behavior" below.
 
 ### WezTerm Config Behavior
 
-Kiln dynamically generates a WezTerm configuration file at runtime to set up the multi-agent layout (when WezTerm is used, which is the default on Windows). **Important:**
+Kiln dynamically generates a WezTerm configuration file at runtime to set up the multi-agent layout (when WezTerm is used, which is the default whenever it's on `PATH`, on any platform). **Important:**
 
 - When you run `kiln.ps1`, Kiln writes a generated `~/.wezterm.lua` file to your home directory
 - This config is tailored to your specific agents and layout (tabs or panes)
@@ -817,81 +972,103 @@ On WezTerm, Kiln's generated Lua config polls the status JSON files directly (no
 
 *The specifier's badge mid-cycle: `delegating: specifier-worker` — the wrapper has dispatched its worker subagent and is blocked waiting on the result.*
 
-On Windows Terminal, there's no equivalent scripting hook for a composite status bar — you can still read the JSON files directly (e.g. `Get-Content .kiln/status/coder.json`) to see live state.
+Neither Windows Terminal nor tmux has an equivalent scripting hook for a composite status bar — you can still read the JSON files directly (e.g. `Get-Content .kiln/status/coder.json`, or `cat .kiln/status/coder.json` on Unix) to see live state. This is one of the two concrete things you lose by not using WezTerm; the other is layout fidelity (see "Layout Examples" above).
+
+**Scheduler roles report a wider set of states** — `waiting`, `receiving`, `working`,
+`retrying`, `handing-off`, `blocked`, `idle` — through the same `set-status.py` call, so the
+WezTerm badges work identically for them.
+
+### Pane Status Bar (scheduler roles, every backend)
+
+A scheduler pane also pins its own colour-coded status line to its **bottom** row, showing
+role, state, cycle count, accumulated cost, handoff target and the last summary:
+
+```text
+ SPECIFIER   ● working   cycle 3   $1.24   → coder   wrote features/catalog/create_book.feature
+```
+
+Unlike the WezTerm badges, this needs no terminal scripting hook and works anywhere. It is
+drawn with a VT scrolling region, so the pane remains an ordinary terminal — selection,
+copy/paste and scrollback all keep working, and only the last row is reserved. Disable it with
+`--no-status-bar`; it disables itself automatically when output is piped rather than shown in a
+terminal, and in panes shorter than six rows.
+
+> The bar is at the bottom for a technical reason. Terminals push scrolled-off lines into
+> scrollback only when the scrolling region starts at row 1 — a top bar would need a region
+> starting at row 2, and the pane would then scroll but retain no history.
+
+The cost figure is the sum of `total_cost_usd` as reported by the agent CLI for every worker
+invocation this pane has made, including retries. It is per-pane, resets when the process
+restarts, and is priced at API list rates — read it as a relative signal, not a bill.
 
 ### tmux Behavior (Unix Only)
 
-Kiln uses a project-specific tmux socket (recorded in `.kiln/tmux-socket`), so each project's swarm is isolated from other tmux sessions. It honors tmux `base-index` and `pane-base-index` settings when launching agents, so configurations that number windows from `1` work without requiring users to change their tmux preferences.
+Each role gets its own detached session named `kiln-<role>`, created in that role's worktree,
+with the agent command sent via `send-keys`. Attach to one with `tmux attach -t kiln-coder`;
+`--stop` kills them all. The profile's `layout` config (grid/split/focus) is not read at all —
+every role is always its own independent session, one `tmux new-session` per role, regardless
+of what the profile specifies. If you want roles visually grouped together the way the
+`layout` config describes (e.g. the `human-in-the-loop` + `inbox` pane pairing in
+`scheduler-all`), install WezTerm instead — it runs natively on Linux/macOS and reads the
+same `layout` config Windows does; there is no Unix-specific limitation on that path, only on
+this one.
 
-When Kiln opens trackable terminal windows or tabs, it starts a small watchdog:
-
-- Closing a non-cleanup terminal surface reopens that surface attached to the same tmux session.
-- Closing the cleanup terminal surface shuts down all configured tmux sessions and closes the remaining tracked surfaces.
+> Earlier versions used a project-specific socket, honoured `base-index`/`pane-base-index`, and
+> ran a window watchdog that reopened closed surfaces. **None of that survived the Python port** —
+> `terminals/tmux.py` is deliberately minimal. If you relied on the watchdog, it is in git
+> history under `lib/kiln-window-watchdog.sh`.
 
 ### Adding A Terminal Backend
 
-Terminal backends live in `lib/terminal-adapters/`. To add a new backend, create one file named after the backend:
+Backends live in `kiln/framework/launcher/terminals/`, one module per backend. A backend
+receives a resolved list of panes and is responsible only for getting each command running in
+its own surface:
 
-```text
-lib/terminal-adapters/wezterm.sh
+```python
+# kiln/framework/launcher/terminals/mybackend.py
+from . import PaneSpec
+
+def launch(panes: list[PaneSpec], layout: dict | None, dry_run: bool = False) -> list[str]:
+    """Start every pane. Returns the command(s) that were (or would be) run."""
 ```
 
-or
+A `PaneSpec` carries `role`, `name`, `path` (the worktree), `cmd` (already rendered for the
+host shell), `mode` and `agent`. Register the module in `terminals/__init__.py` by adding a
+constant to `VALID_BACKENDS` and a branch in `launch()`.
 
-```text
-lib/terminal-adapters/wezterm.ps1
-```
+Two conventions worth following, both learned the hard way:
 
-The file must define this contract (Unix shell example):
-
-```sh
-terminal_backend_label() {
-  echo "WezTerm"
-}
-
-terminal_backend_can_open_sessions() {
-  return 0
-}
-
-terminal_backend_tracks_windows() {
-  return 0
-}
-
-terminal_open_session() {
-  local session="$1"
-  local title="$2"
-  local sibling_id="${3:-}"
-  # Open a terminal surface and print its stable id
-}
-
-terminal_window_exists() {
-  local window_id="$1"
-  # Return 0 if still exists, nonzero otherwise
-}
-
-terminal_close_window() {
-  local window_id="$1"
-  # Close the window
-}
-```
+- **Honour `dry_run`** by returning the command without spawning anything. Every backend is
+  tested through this path, so no test ever opens a real terminal.
+- **If your backend types the command into a live shell** (as WezTerm's `send_text` and tmux's
+  `send-keys` do, unlike `wt.exe`), pass `clear=True` when rendering, so the pane does not open
+  on the echoed command line. See `build_panes()` in `launcher/cli.py`.
 
 ---
 
 ## Cleanup
 
-After a Kiln session completes, you can optionally clean up swarm artifacts from your project:
+There are two levels, and they are very different in consequence.
 
-**Windows:**
+### Stopping a swarm (both platforms)
+
+```powershell
+.\bin\kiln.ps1 -Stop          # Windows
+./bin/kiln.sh --stop          # Unix/macOS
+```
+
+Kills the processes this swarm started — schedulers, MCP servers, tmux sessions — identified by
+their command lines. **It does not touch your files, worktrees or branches**, and it does not
+close the terminal window itself; close that yourself, or its panes will sit at dead prompts.
+
+### Full project reset (Windows only)
+
 ```powershell
 .\bin\kiln-cleanup.ps1 -ProjectDir <path-to-project>
 ```
 
-**Unix/macOS:**
-```bash
-./bin/kiln-cleanup.sh <path-to-project>
-```
+Destructive. Removes:
 
-The cleanup script removes:
 - Git worktrees (`.worktrees/`) and associated branches
 - Swarm state (`.kiln/`)
 - Generated instruction files (`CLAUDE.md`, `.github/copilot-instructions.md`)
@@ -901,6 +1078,12 @@ The cleanup script removes:
 - Terminal window/tab records
 
 **Note:** Cleanup is **optional and manual** — it only runs when you explicitly call it. This gives you full control and the ability to inspect or debug your project state before cleaning up.
+
+> **Known gap:** there is no Unix equivalent of the full reset. `bin/kiln-cleanup.sh` existed but
+> had been broken since before the Python port — it sourced `bin/terminal-adapter.sh`, a path
+> that never existed (the file was in `lib/`), so it aborted immediately under `set -euo
+> pipefail`. It has been removed rather than left looking like a working feature. Porting
+> `kiln-cleanup.ps1` to Python would close the gap for both platforms at once.
 
 ---
 
@@ -1032,7 +1215,29 @@ If the ping never comes back:
 
 ## Project Maturity & Status
 
-### Kiln v0.2 — Phase 6: Wrapper + Worker-Subagent Delegation ✅ Live-Validated
+### Kiln v0.3 — Phase 7: Python Core + Deterministic Scheduler
+
+Phase 7 replaced the dual PowerShell/shell launcher with a single Python implementation and
+added the deterministic scheduler as an opt-in execution mode. Phases 1-6 below describe the
+wrapper architecture, which is still the default and still supported.
+
+- ✓ **Python launcher** (`kiln/framework/launcher/`) — ~3,200 lines of parallel PowerShell and
+  shell collapsed into one implementation plus ~95 lines of shim. Profile loading, scaffolding,
+  worktrees, generation, terminal backends and process teardown are all shared across platforms.
+- ✓ **Deterministic scheduler** (`kiln/framework/scheduler/`) — see **Execution Modes** above.
+  Opt in per role with `"scheduler": "python"`; the `scheduler-all` profile enables it for every
+  `auto` role. Claude only so far.
+- ✓ **Conditional handoff routing** — `workflow.md`'s routing table gained an optional
+  `When Sender` column, so sender-dependent routing is data both the wrapper and the scheduler
+  can follow rather than prose only an LLM could interpret.
+- ✓ **Per-pane status bar** and a configuration banner for scheduler roles.
+- ✓ **Test suite** — pytest over `launcher/` and `scheduler/`, with mutation testing on the
+  pure modules. `pip install -e .` then `pytest`.
+
+**Live validation status:** a full specifier cycle (receive → merge → one-shot worker → sentinel
+→ squash → handoff) has been validated end to end. The complete four-role loop returning to
+`human-in-the-loop` has **not** yet been observed in one run. Concurrent access to the SQLite
+queue by four schedulers is untested.
 
 ### ✓ Completed Features
 
@@ -1052,7 +1257,7 @@ If the ping never comes back:
   - ✓ Per-agent Claude Code debug logs (`--debug-file`) at `.kiln/logs/claude-debug-<role>.log`
   - ✓ `kiln-db.ps1` CLI (`list-messages`, `show-message`, `stats`, `retry-message`, `clear-old`) for inspecting the message queue without hand-writing SQL
 - **Phase 6: Wrapper + Worker-Subagent Delegation** — Makes Claude, `auto`-mode role agents thin wrappers that delegate their actual work to a disposable worker subagent each cycle, keeping the wrapper's context small and repetitive instead of accumulating the full working transcript
-  - ✓ `Write-GeneratedWorkerAgent` (`kiln.ps1`) generates `.claude/agents/<role>-worker.md` — role file + `engineering.md` + `project.md`, no `workflow.md`, no `Agent`/MCP tools
+  - ✓ Worker-agent generation (then `Write-GeneratedWorkerAgent` in `kiln.ps1`, now `write_worker_file()` in `launcher/generate.py`) produces `.claude/agents/<role>-worker.md` — role file + `engineering.md` + `project.md`, no `workflow.md`, no `Agent`/MCP tools
   - ✓ `loop-auto-claude.md` implements 7-step receive→mark→delegate→handle-failure→handoff→mark-processed→loop cycle with explicit message state transitions
   - ✓ **Live-validated** through 8+ cycles of LibraryHub multi-agent workflow with 50 tests, clean commits, zero stalls or message loss
 - **Phase 6a: Message Lifecycle Tracking** — Full visibility into agent work and recovery from interruptions
@@ -1103,16 +1308,19 @@ This means agents can read/write/execute any file in their worktree without prom
 - **Error handling** — Minimal error recovery in agent workflows; graceful degradation not yet implemented
 - **Scaling** — Tested with 4 agents over 8+ cycles with stable performance; behavior with 10+ agents unknown
 - **Multi-agent backend validation** — Framework supports `claude` (validated, including Phase 6 wrapper+worker delegation live-tested through 8+ cycles), `copilot` (worker delegation implemented and confirmed against a live CLI session, but not yet exercised through a full multi-cycle swarm run the way Claude has been), and `codex` (worker delegation via Codex's own multi-agent spawn tools — MCP config, `AGENTS.md`/worker-`.toml` generation, and TOML validity verified directly against a live `codex.exe` install and official docs, but not yet exercised through a full multi-cycle swarm run or live spawn_agent call, since that requires `codex login` first). `grok` is not implemented: the actual installed `grok` CLI in this environment turned out to be a third-party project (`grok-cli-hurry-mode`, not an official xAI tool) whose persistent/interactive session has no non-interactive auto-approve path in its current build (confirmed by reading its bundled source) — only its one-shot `-p` headless mode auto-approves, which can't sustain Kiln's persistent per-role session model without a fundamentally different poll-and-relaunch design.
-- **`kiln.sh` has no loop/runtime template injection for Claude/Copilot** — Unix agents are launched from a much thinner instruction file than Windows' generated `CLAUDE.md`, with no `auto`/`manual` mode concept; the receive→delegate→handoff loop and Phase 6's delegation pattern may not be active there until this pre-existing gap is closed. (Codex's `kiln.sh` path was built to full parity with `kiln.ps1` regardless — its wrapper prompt and `.codex/agents/<role>-worker.toml` are hand-assembled rather than routed through the template mechanism, since `kiln.sh` has no `Get-KilnTemplate`-style loader at all, but the content and delegation pattern match.)
+- **Unix parity is no longer a gap.** The former "`kiln.sh` has no loop/runtime template injection" limitation is resolved: both shims call the same Python `generate.py`, so template injection, `auto`/`manual` modes and worker delegation are identical on every platform. What remains platform-specific is only the terminal backend.
+- **Scheduler mode is Claude-only.** `copilot` and `codex` adapters are not written; those roles fall back to wrapper mode.
+- **No Unix full-reset script** — see the Known gap under **Cleanup**.
+- **Symlink creation needs Developer Mode on Windows.** Without it (`WinError 1314`), worktrees fall back to *copying* `.kiln` instead of sharing it. The swarm still runs, but shared state is not actually shared.
 
 ### Recommended Next Steps
 
-1. **Run real feature workflows** — Test specifier → coder → refactorer → architect chain with actual code implementation
-2. **Add error handling** — Implement graceful failure modes when agents can't process messages
-3. **Multi-language projects** — Test with Python, Kotlin, JavaScript projects beyond the LibraryHub FastAPI example
-4. **CI/CD integration** — Determine how to integrate Kiln agents into GitHub Actions / GitLab CI workflows
-5. **Validate Phase 6 against `/kiln-ping`, then LibraryHub** — confirm worker-subagent dispatch and Skill invocation work as designed before rolling the pattern out further
-6. **Bring `kiln.sh` up to parity** — port the loop/runtime template injection Windows already has, so Phase 6 (and future loop changes) apply equally on Unix
+1. **Validate the full scheduler loop** — one uninterrupted specifier → coder → refactorer → architect → human-in-the-loop cycle, plus concurrent SQLite access by four schedulers
+2. **Copilot and Codex scheduler adapters** — the adapter interface is one function; the work is establishing each CLI's one-shot flags and sentinel behaviour
+3. **Port `kiln-cleanup.ps1` to Python** — closes the Unix cleanup gap and removes the last non-shim PowerShell in the launch path
+4. **Add error handling** — graceful failure modes when agents can't process messages
+5. **Multi-language projects** — test beyond the LibraryHub FastAPI example
+6. **CI/CD integration** — how Kiln agents fit into GitHub Actions / GitLab CI
 
 ---
 

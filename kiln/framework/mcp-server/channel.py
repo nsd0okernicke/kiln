@@ -22,7 +22,20 @@ from pathlib import Path
 # script, hence the explicit insert.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from mcp.server.fastmcp import FastMCP
+# mcp 2.0 deleted `mcp.server.fastmcp` and renamed the class to `MCPServer`. The surface this
+# module uses — `@server.tool()` and `.run()` defaulting to stdio — is identical in both, so a
+# compatibility import supports either release.
+#
+# This is worth an import dance rather than a version pin because the server is launched by the
+# *user's* interpreter (the generated .mcp.json calls bare `python`), so Kiln does not control
+# which mcp is installed. Pinning would only move the failure to pip. Found live: an mcp 2.0.0
+# install made kiln-channel fail to start at all, which silently degraded every wrapper-mode
+# role to asking its human for help instead of receiving handoffs.
+try:
+    from mcp.server.fastmcp import FastMCP  # mcp 1.x
+except ImportError:  # pragma: no cover - depends on the installed mcp release
+    from mcp.server.mcpserver import MCPServer as FastMCP  # mcp 2.x
+
 from scheduler import db
 
 MY_ROLE = os.getenv("KILN_ROLE", "")
@@ -142,7 +155,9 @@ def mark_processed(message_id: str) -> dict:
 
 if __name__ == "__main__":
     log.info(
-        "starting — role=%s branch=%s poll=%.1fs db=%s log=%s",
+        # ASCII only: stderr goes to the console codepage (cp1252 here), not UTF-8, and
+        # .mcp.json cannot set PYTHONIOENCODING for a server the agent CLI spawns.
+        "starting - role=%s branch=%s poll=%.1fs db=%s log=%s",
         MY_ROLE, BRANCH, POLL_INTERVAL, DB_PATH, LOG_PATH or "(stderr only)",
     )
     mcp.run()

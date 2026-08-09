@@ -39,6 +39,7 @@ SAVE_CURSOR = "\x1b7"  # DECSC: saves absolute position, unlike CSI s on some te
 RESTORE_CURSOR = "\x1b8"
 RESET_STYLE = "\x1b[0m"
 RESET_REGION = "\x1b[r"
+BOLD = "\x1b[1m"
 
 
 def scroll_region(top: int, bottom: int) -> str:
@@ -52,28 +53,68 @@ def move_to(row: int, column: int = 1) -> str:
 
 # --- appearance ---------------------------------------------------------------------
 
-#: (background, foreground) as 256-colour indices, keyed by the states role_scheduler
-#: reports through `set_status`. Deliberately the same vocabulary as the WezTerm tab-bar
-#: colours in launcher/terminals/wezterm.py, so a role reads the same in both places.
-STATE_STYLE = {
-    "starting": (24, 231),
-    "waiting": (238, 252),
-    "idle": (238, 252),
-    "receiving": (25, 231),
-    "working": (130, 231),
-    "retrying": (90, 231),
-    "handing-off": (30, 231),
-    "blocked": (88, 231),
-    "escalated": (124, 231),
-    "halted": (196, 16),
+#: `#rrggbb`, keyed by the states role_scheduler reports through `set_status`.
+#:
+#: This is the single source of truth for state colour, full stop -- launcher/terminals/
+#: wezterm.py's tab-bar badges read the same table (exported as JSON via an env var, see
+#: `build_environment`) rather than keeping a second, hand-copied one. They used to be two
+#: independently-maintained palettes that happened to use the same state *names*; in
+#: practice they drifted (a role's pane bar and its own tab-bar badge showed different
+#: colours for the same state) because nothing forced them to agree on *values*. Now there
+#: is exactly one table, and both surfaces render from it.
+#:
+#: `blocked` / `escalated` / `halted` step from amber-red to pure red so repeated trouble
+#: reads as escalating, not as one flat "something's wrong" red.
+#:
+#: `working` / `delegating` is teal, not the orange it used to be: orange reads as caution,
+#: but this is the normal, desired, productive state -- the one an operator most wants to
+#: see -- so it should read as calm, positive activity instead. Teal was picked because
+#: green (waiting/idle) and blue (receiving) -- the palette's other "calm" hues -- are
+#: already spoken for; reusing either would make working indistinguishable from an idle or
+#: just-arrived role at a glance.
+STATE_COLORS_HEX = {
+    "starting": "#8a8a88",
+    "waiting": "#5ab363",
+    "idle": "#5ab363",
+    "receiving": "#7aadff",
+    "working": "#2fbf9f",
+    "delegating": "#2fbf9f",
+    "approval": "#ffdd6a",
+    "retrying": "#ffdd6a",
+    "handoff": "#ac9aff",
+    "handing-off": "#ac9aff",
+    "blocked": "#c23b3b",
+    "escalated": "#e2451f",
+    "halted": "#ff2d2d",
 }
-DEFAULT_STYLE = (238, 252)
+DEFAULT_COLOR_HEX = "#8a8a88"
 
 STATE_GLYPH = "\N{BLACK CIRCLE}"
 
 
-def style_for(state: str) -> tuple[int, int]:
-    return STATE_STYLE.get(state, DEFAULT_STYLE)
+def _hex_to_rgb(colour: str) -> tuple[int, int, int]:
+    return int(colour[1:3], 16), int(colour[3:5], 16), int(colour[5:7], 16)
+
+
+def style_for(state: str) -> tuple[int, int, int]:
+    return _hex_to_rgb(STATE_COLORS_HEX.get(state, DEFAULT_COLOR_HEX))
+
+
+#: A faint background wash, applied per line, for one-shot worker output specifically --
+#: the streamed `render_event()` lines in adapters/claude_adapter.py (and future
+#: copilot/codex adapters), never the scheduler's own `log.info` lines. The scheduler's
+#: log line and the worker's own words were, until now, visually identical plain text
+#: sharing one pane; a glance couldn't tell "Kiln talking" from "the agent talking" apart.
+#: Background only, no foreground override -- deliberately faint enough to read as a
+#: wash behind the existing text colour rather than a competing highlight, since the
+#: worker's own tool-call icons and text already carry the visual weight in that stream.
+WORKER_OUTPUT_BG_HEX = "#1c2333"
+
+
+def tint_worker_output(line: str) -> str:
+    """Wrap one line of streamed worker output in its background wash."""
+    r, g, b = _hex_to_rgb(WORKER_OUTPUT_BG_HEX)
+    return f"\x1b[48;2;{r};{g};{b}m{line}{RESET_STYLE}"
 
 
 @dataclass
@@ -114,10 +155,20 @@ def format_bar(status: PaneStatus, width: int) -> str:
 
 
 def paint(status: PaneStatus, width: int) -> str:
-    """The bar text wrapped in its colours."""
-    background, foreground = style_for(status.state)
+    """
+    The bar text wrapped in its colours.
+
+    True 24-bit colour, not the 256-colour palette: it's what lets this match the WezTerm
+    tab-bar badge's colours exactly rather than the closest available approximation.
+    Foreground is always black, matching the tab-bar badges (`Foreground = '#000000'` in
+    wezterm.py) -- every background in `STATE_COLORS_HEX` is light/mid enough for that to
+    stay readable, and one fixed foreground is one less thing that could drift between the
+    two surfaces. Bold gives the bar enough visual weight to read as a status indicator
+    rather than a second line of ordinary pane text.
+    """
+    r, g, b = style_for(status.state)
     body = format_bar(status, width)
-    return f"\x1b[48;5;{background}m\x1b[38;5;{foreground}m{body}{RESET_STYLE}"
+    return f"{BOLD}\x1b[48;2;{r};{g};{b}m\x1b[38;2;0;0;0m{body}{RESET_STYLE}"
 
 
 # --- terminal driver ----------------------------------------------------------------
@@ -161,6 +212,7 @@ class StatusBar:
     _painted: str | None = field(default=None, init=False)
     _rows: int = field(default=0, init=False)
     _columns: int = field(default=0, init=False)
+    _header: list[str] = field(default_factory=list, init=False)
 
     def __post_init__(self) -> None:
         if self.enabled is None:
@@ -200,16 +252,19 @@ class StatusBar:
 
         _enable_windows_vt(self.stream)
         self._rows, self._columns = rows, columns
-        lines = header or []
+        self._header = header or []
+        self._paint_frame(rows)
+        self._installed = True
+        self.refresh()
 
+    def _paint_frame(self, rows: int) -> None:
+        """Clear the pane, lay out the stored header, and (re)install the scrolling region."""
         self._write(
             CLEAR_SCREEN
             + scroll_region(1, rows - BAR_ROWS)
             + move_to(1)
-            + ("\n".join(lines) + "\n" if lines else "")
+            + ("\n".join(self._header) + "\n" if self._header else "")
         )
-        self._installed = True
-        self.refresh()
 
     def update(self, **fields: object) -> None:
         """Set any subset of the status fields and repaint if that changed anything."""
@@ -226,9 +281,21 @@ class StatusBar:
             # The pane was resized: the region and the bar row both moved.
             if rows < MIN_USABLE_ROWS:
                 return
+            # WezTerm's gui-startup splits panes in sequence, resizing every pane already
+            # created each time a new one is split off -- a grid layout resizes an
+            # early-created pane once per *later* pane split off it (up to three times for a
+            # 2x2 grid's first pane), not just once. Clearing only the immediately-preceding
+            # bar row assumed exactly one clean transition; with several resizes landing
+            # between two `refresh()` calls, that left stale header/bar text behind anyway
+            # (observed live: a duplicated banner rule and two "waiting" bars in one pane).
+            # A full clear-and-redraw on every detected size change removes the whole class
+            # of bug regardless of how many intermediate resizes happened, at the cost of
+            # whatever had already scrolled into the region since `start()` -- normally
+            # nothing yet, since these resizes land within the first second or two of
+            # startup, well before the first real cycle has anything to say.
             self._rows, self._columns = rows, columns
             self._painted = None
-            self._write(SAVE_CURSOR + scroll_region(1, rows - BAR_ROWS) + RESTORE_CURSOR)
+            self._paint_frame(rows)
 
         rendered = paint(self.status, columns)
         if rendered == self._painted:

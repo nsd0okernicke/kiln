@@ -291,6 +291,112 @@ Suite: **589 passing**.
 
 Unrelated leftover spotted while grepping and now removed: `temp/claude/*.md` and `temp/copilot/*.md` were auto-generated wrapper instruction files from 2026-06-24, committed by accident and referenced by nothing. They still carried the old two-column routing table, so anyone grepping for it found four stale copies alongside the real one. Their generator no longer exists — `launcher/generate.py:write_instructions` writes into each worktree instead. Deleted (8 files), along with the now-dead `"temp"` entry in `pyproject.toml`'s ruff `extend-exclude`.
 
+## Documentation & dead-code audit (2026-08-08)
+
+A sweep for unused files and doc/reality drift after the port settled. It turned up **two silent port regressions** that no test covered, which is the part worth remembering — the docs were right and the code was wrong.
+
+### Port regressions found by reading the docs against the code
+
+1. **`-ProfileName` stopped working.** The PowerShell original declared `[Alias("Profile")] [string]$ProfileName` — `-ProfileName` was the *primary* spelling and what the README documented in six places. The Python port kept only `-Profile`, so every existing invocation failed with `unrecognized arguments: -ProfileName`. Restored as an alias, and `TestCliParsing` now pins every spelling of every flag in the original param block, not just this one.
+2. **`/etc/kiln/profiles.json` stopped being searched.** The two shell originals disagreed: `profile-loader.ps1` looked in `C:\ProgramData\kiln\`, `profile-loader.sh` in `/etc/kiln/`. The port merged the cascade but kept only the Windows path, so the documented system-wide location silently died on Unix. Now `SYSTEM_PROFILES_PATH` picks per platform, with `TestSearchPaths` asserting the whole documented cascade in order.
+
+Both are the same failure mode: the port was validated against *behaviour on this machine*, and neither the dropped alias nor the Unix-only path is reachable from a Windows test run.
+
+### Dead files removed
+
+- `lib/` entirely (10 files): `profile-loader.{ps1,sh}`, `terminal-adapter.sh`, `terminal-adapters/{wezterm.ps1,wezterm.sh,windows-terminal.sh,terminal-app.sh,ghostty.sh,none.sh}`, `kiln-window-watchdog.sh`. Superseded by `launcher/config.py` and `launcher/terminals/*.py`.
+- `bin/kiln-cleanup.sh` — **had been broken since before the port**: it sourced `"$SCRIPT_DIR/terminal-adapter.sh"` with `SCRIPT_DIR=bin/`, but the file lives in `lib/`, so it aborted on line 21 under `set -euo pipefail`. Its usage string still said `swarm-cleanup.sh` and took a tmux socket, while the README documented `kiln-cleanup.sh <path-to-project>`. Removed rather than left looking like a feature; the Unix cleanup gap is now stated explicitly in the README.
+- A stale `.claude/settings.json` permission entry for `lib/profile-loader.ps1`, and the now-dead `"temp"` ruff exclusion.
+
+`lib/kiln-window-watchdog.sh` was the one deletion with real lost functionality — reopening closed terminal surfaces, never ported. The README's tmux section had described it as current behaviour.
+
+### Documentation corrected
+
+The README had drifted badly enough that its architecture section described a system that no longer existed:
+
+- **The scheduler was entirely undocumented** — zero mentions of `scheduler`, `launcher/`, or `python -m`, despite being the largest change. Added an **Execution Modes: Wrapper vs Scheduler** section with the per-role opt-in, the sentinel contract, the trade-offs, and a comparison table.
+- **Platform Support** claimed Unix needed zsh and PyYAML. Neither is true — nothing has imported yaml since profiles became JSON, and the shim is `#!/usr/bin/env bash`.
+- **Framework Structure** listed the deleted `lib/` tree and omitted `launcher/` and `scheduler/` completely.
+- **Adding A Terminal Backend** documented a shell function contract (`terminal_open_session`, `terminal_window_exists`, …) that no longer exists; replaced with the Python `launch(panes, layout, dry_run)` interface.
+- **tmux Behavior** claimed a project-specific socket, `base-index` handling and a window watchdog. `terminals/tmux.py` does none of these.
+- **Cleanup** documented the broken script; now split into `--stop` (safe) vs full reset (destructive, Windows only).
+- **Profile Loading & "Inheritance"** — there is no inheritance. `find_profiles_config` returns the first file that exists; a project's `kiln.profiles.json` *replaces* the framework set rather than extending it, so a one-profile file silently removes `default`, `compact` and `scheduler-all`. Now called out with a warning. Two locations documented as "Not used" are in fact searched.
+- **Project Maturity** was pinned at v0.2/Phase 6; added Phase 7 and rewrote Known Limitations (Unix parity is no longer a gap; scheduler mode is Claude-only; no Unix full reset).
+
+Suite: **604 passing**.
+
+## Bug: kiln-channel silently dead against mcp 2.0 (2026-08-08)
+
+Symptom: a wrapper-mode role ran one cycle, then started asking its human for confirmation on everything instead of receiving handoffs. The role's own diagnosis was right — `channel.py` imports `mcp.server.fastmcp.FastMCP`, and the installed SDK was **mcp 2.0.0**, which deleted that module. Verified directly: `mcp.server` in 2.0 exposes `mcpserver`, `lowlevel`, `session`, … and no `fastmcp`.
+
+**The fix is not a version pin.** `.mcp.json` names the bare command `python`, so the server runs under the *user's* interpreter — one Kiln neither controls nor installs into. Pinning `mcp<2.0` in `requirements.txt` would only move the failure to whoever last ran pip, and downgrading a global site-packages install to satisfy Kiln is not Kiln's call to make.
+
+Instead `channel.py` supports both releases. The surface it uses — `@server.tool()` and `.run()` defaulting to stdio — is identical in `FastMCP` and 2.0's `MCPServer`, confirmed by inspecting both signatures and registering a tool against the new class:
+
+```python
+try:
+    from mcp.server.fastmcp import FastMCP          # mcp 1.x
+except ImportError:
+    from mcp.server.mcpserver import MCPServer as FastMCP   # mcp 2.x
+```
+
+Verified end to end with a real JSON-RPC stdio handshake against the server under mcp 2.0.0: `initialize` succeeds and `tools/list` returns all four tools (`wait_for_message`, `get_channel_status`, `mark_processing`, `mark_processed`).
+
+### The worse problem: the failure was invisible
+
+An MCP server that fails to start produces no Kiln-visible error at all. The role just cannot receive, so it falls back to asking its human — which reads as a confused agent rather than a missing dependency. This is the second time the same class of failure has bitten (the first was no `mcp` installed at all).
+
+`cli.warn_if_channel_unavailable()` now runs at launch, probing the **exact command `.mcp.json` will use** with the same import `channel.py` performs, and warns with the affected role names and a `pip install -r` remedy. Deliberately a warning, not a hard failure: a fully scheduled swarm needs no MCP at all, and the check skips entirely when no role is in wrapper mode.
+
+`TestChannelPreflight` covers it, including a test that reads `channel.py` and asserts the probe still matches its imports — otherwise the probe could start passing while the server still fails.
+
+Note this is another argument for scheduler mode: it talks to SQLite directly and has no MCP dependency to break.
+
+Suite: **610 passing**.
+
+## Human entry point: inbox pane + send CLI (2026-08-09)
+
+The `human-in-the-loop` role was asked to be two mutually exclusive things in one LLM session. As an entry point it must sit idle at a prompt the human can type into; as a swarm participant it must be blocked inside `wait_for_message()`, which polls `while True:` with **no timeout**. `loop-manual-claude.md` step 5 forces the second ("Immediately return to Step 1 ... without waiting for the user"), so after one completed cycle the session enters an unbounded blocking tool call and stops being reachable. There is no state where it both listens and talks.
+
+Evidence: `coder -> human-in-the-loop` sat `queued` with `delivered_at = NULL` for a day. Nobody was ever told the swarm had stopped. Escalations and cycle completions both terminate at the human, so this is the role where a lost message costs most — and it was the only one with no retry path.
+
+Two Python modules split the role's two jobs, mirroring what `role_scheduler` did for the agent roles:
+
+- **`scheduler/inbox.py`** — watches a role's queue, performs the deterministic half of `/kiln-receive`, prints each message with framing (sender, time, escalation/ping/handoff), rings the terminal bell, marks it processed. Displayed *is* processed for a human: their reply is a new message, and leaving it `delivered` makes `fetch_and_deliver` re-serve it every poll forever.
+
+  **The first version only notified, which was not enough.** `human-in-the-loop` is a real role in the graph — it works in the project root on the base branch — so an inbound handoff must be *merged into its tree* or the person is reading a description of work that is not there. The inbox now does `/kiln-receive` step 1 (persist `tmp/handoff-in.md`, which is also how a person's own Claude session picks the message up — there is no way to inject one into a running session) and step 4 (`git merge <commit>`), reusing `git_ops.merge_commit` and the now-public `role_scheduler.persist_inbound`. A failed merge is shouted about in the pane and turns the status bar red, but the message is still marked processed: left queued it would be re-served on every poll by nobody. `--no-merge` and an absent `--worktree` both reduce it to display-only, so an ad-hoc `kiln inbox` never touches a repo it was not given.
+- **`scheduler/send.py`** — inserts a handoff directly. No MCP, no LLM, so a human can start or unblock a cycle even when the agents are the broken thing. A new request carries no commit, so `is_mergeable` is false and the receiver takes the same path as a ping.
+
+Both are reachable as `kiln inbox` / `kiln send`, intercepted in `cli.main()` before the main parser (adding argparse subparsers would change how the PowerShell flag spellings are matched). `resolve_queue_context()` fills in `--db-path` and `--branch` from the project — branch especially, since messages are branch-scoped and an inbox on the wrong branch is indistinguishable from an empty one.
+
+### Making it automatic
+
+Per user request, no manual second terminal. `"scheduler": "inbox"` is now a third role kind alongside `"python"`:
+
+```jsonc
+{ "role": "inbox", "worktree": "@current", "mode": "manual",
+  "scheduler": "inbox", "watches": "human-in-the-loop" }
+```
+
+`RoleConfig.is_inbox` gates it out of every per-role step — worktree creation, worker definitions, instruction files, agent configs, MCP config — because it runs no agent. `current_dir_role` also had to exclude it: both it and the human's session live in the project root, so an inbox listed first would have stolen ownership of the root `.mcp.json`.
+
+The WezTerm Lua's simple-split branch gained optional per-pane `direction` and `size` (defaults reproduce the old equal-rightward split), so `scheduler-all` puts the inbox as a 22% strip *beneath* the human's session in the same tab. Validated against the real binary with `wezterm --config-file ... show-keys`.
+
+**Bug in that first attempt** — the inbox came up on the right regardless. The branch test was:
+
+```lua
+local grid_cols = tab_def.gridCols or #tab_def.panes
+if grid_rows > 1 or grid_cols > 1 then   -- grid branch, direction hardcoded 'Right'
+```
+
+`grid_cols` defaulted to the *pane count*, so any tab with two panes took the grid branch — which meant adding the inbox to a previously single-pane tab silently flipped it there, and the per-pane `direction` in the other branch never ran. The condition now tests what the tab declared (`if tab_def.gridRows or tab_def.gridCols`), which is equivalent for every existing profile: a 1×N grid produces exactly the same rightward splits as the simple branch. Pinned by `test_the_grid_branch_is_only_taken_when_a_grid_was_asked_for`.
+
+Verified live against `library-hub-testrun3`: the inbox immediately surfaced the day-old escalation, and `kiln send` queued a request the specifier's scheduler could fetch (test message removed afterwards).
+
+Suite: **650 passing**. The headline test is `TestTheBugThisReplaces`, which drives an escalation from queue to human with no LLM, no MCP server and no agent CLI involved.
+
+Still open: the wrapper `human-in-the-loop` role keeps its blocking receive loop, so nothing forces the new path yet. Once it is trusted, the receive steps can come out of `loop-manual-claude.md` — and at that point `scheduler-all` needs no MCP at all.
+
 ## Findings surfaced while implementing PR #1
 
 Both were pre-existing and are **not** caused by this change:

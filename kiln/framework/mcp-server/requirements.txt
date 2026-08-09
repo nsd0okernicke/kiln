@@ -1,1 +1,4 @@
+# channel.py works with both the 1.x and 2.x SDKs — see its compatibility import. mcp 2.0
+# deleted `mcp.server.fastmcp` and renamed FastMCP to `mcp.server.mcpserver.MCPServer`, so a
+# `>=1.0.0` pin alone was not enough to guarantee a working install.
 mcp>=1.0.0

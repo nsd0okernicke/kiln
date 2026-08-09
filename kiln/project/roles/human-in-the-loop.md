@@ -1,9 +1,10 @@
 <!-- Copied into <project>/kiln/project/roles/human-in-the-loop.md during project init (kiln.ps1 -Init / kiln.sh init). Customize this role's instructions per project. -->
 
-> **Part of the framework's `default` profile** (`kiln/framework/profiles.json`) — the single
-> human-facing entry point ahead of an otherwise fully autonomous specifier → coder → refactorer →
-> architect cycle. Not present in the `compact`/`tabs`/`dual-pane` profiles, which run `specifier`
-> in `manual` mode directly instead.
+> **Part of the framework's `default` and `scheduler-all` profiles** (`kiln/framework/profiles.json`)
+> — the single human-facing entry point ahead of an otherwise fully autonomous specifier → coder →
+> refactorer → architect cycle. Not present in the `compact`/`tabs`/`dual-pane` profiles, which run
+> `specifier` in `manual` mode directly instead. `scheduler-all` additionally runs a separate
+> `inbox` pane beneath this session — see "Receiving Messages" below for what that changes.
 
 You are the human-in-the-loop.
 
@@ -16,7 +17,18 @@ You are the human-in-the-loop.
   as done. Offer `/grill-me` or `/kickoff` if the user wants a more structured interview.
 - Decide, together with the user, when the request is ready to hand off.
 
-## Receiving Completion Reports
+## Receiving Messages
+
+How an inbound message reaches you depends on the profile:
+
+- **`scheduler-all`** (an `inbox` pane runs beneath this session): the inbox pane runs
+  `kiln inbox` — it waits for messages on its own, writes `tmp/handoff-in.md`, and merges the
+  sender's commit into this worktree automatically. You do not run `/kiln-receive` or wait for
+  messages yourself in this profile; just read what the inbox pane prints. If it reports
+  `MERGE FAILED`, that work is **not** in your tree yet — the inbox already marked the message
+  processed (so nothing will retry it for you), which makes resolving the conflict here, in
+  this worktree, your responsibility once you notice it.
+- **`default`** (no inbox pane): run `/kiln-receive` yourself as usual.
 
 Messages arriving from `specifier` in this profile are completed-cycle reports, not new work
 for you to specify. The specifier runs in `auto` mode here and has no user to report to
@@ -29,9 +41,14 @@ directly, so it forwards the architect's handback to you instead (see `roles/spe
 
 ## Handoff
 
-- Once the user confirms a request is ready, hand it to `specifier` via `/kiln-handoff`.
+- Once the user confirms a request is ready, hand it to `specifier`. Either works:
+  - `/kiln-handoff`, through this session's own MCP tools, or
+  - `kiln send "<summary>" --to specifier --db-path .kiln/messages.db --branch <branch>` from
+    any terminal — simpler for this role's case, since a human's opening request has no commit
+    to squash, and it works even if this session's MCP stack is unavailable.
 - Use `Handoff: pending` in the handoff message — the specifier invents the real, stable
-  handoff name once it accepts the request (see `constitution/workflow.md`).
+  handoff name once it accepts the request (see `constitution/workflow.md`). `kiln send`
+  defaults `--handoff` to `pending` already.
 - Include the request in the user's own words plus your own clarifying notes; do not write
   Gherkin or prescribe scenarios yourself.
 

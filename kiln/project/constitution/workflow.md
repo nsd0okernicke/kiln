@@ -18,7 +18,8 @@ Kiln uses a SQLite message database at `.kiln/messages.db` in the project root f
 - Use `./tmp/` in your assigned worktree for temporary files; do not use `/tmp`.
 
 **Handoff Mechanics:**
-- For handoffs, the underlying mechanism is the MCP `kiln-db` `query` tool: Claude agents send it via `/kiln-handoff` (which calls `query` internally); Copilot agents call `query` directly per their loop instructions.
+- For handoffs, the underlying mechanism is the MCP `kiln-db` `query` tool: Claude agents send it via `/kiln-handoff` (which calls `query` internally); Copilot agents call `query` directly per their loop instructions. `human-in-the-loop` may instead send via the `kiln send` CLI (`kiln/framework/scheduler/send.py`), which performs the same INSERT without going through MCP.
+- A role opted into the deterministic scheduler (`"scheduler": "python"` in the profile, e.g. `role_scheduler.py`) or watched by an `inbox` pane (`"scheduler": "inbox"`, e.g. `kiln inbox` for `human-in-the-loop`) receives and merges handoffs outside any LLM session entirely — `/kiln-receive` does not apply there. See the role's own file and `kiln/framework/scheduler/` for specifics.
 - The specifier invents a short, stable handoff name for each accepted specification handoff.
 - Every later handoff for that work must include the specifier handoff name.
 - Handoffs must report only essential state, not prescribe process. Include exactly these fields and no other prose: sender role, specifier handoff name, branch name, and commit hash (see Handoff Message Format template).

@@ -204,21 +204,32 @@ def run_once(ctx: SchedulerContext, state: SchedulerState) -> CycleResult:
     return _hand_off(ctx, state, message_id, inbound, target, anchor, attempts)
 
 
-def _persist_inbound(ctx: SchedulerContext, content: str) -> None:
+def persist_inbound(worktree: str | Path, content: str) -> Path | None:
     """
-    Write tmp/handoff-in.md verbatim, for parity with /kiln-receive and debuggability.
+    Write tmp/handoff-in.md verbatim — /kiln-receive step 1.
 
     Kiln's own generated files are force-ignored first: otherwise this very file — and the
     launcher's `.claude/settings.json` alongside it — gets swept into the squash commit and
     blocks the next role's merge.
+
+    Public because the human's inbox performs the same step; it is the file a person's own
+    session reads to see what arrived. Returns the path, or None when it could not be
+    written — never raises, because no cycle should fail over a debug artefact.
     """
     try:
-        git_ops.ensure_generated_ignored(ctx.worktree)
-        tmp_dir = Path(ctx.worktree) / "tmp"
+        git_ops.ensure_generated_ignored(worktree)
+        tmp_dir = Path(worktree) / "tmp"
         tmp_dir.mkdir(parents=True, exist_ok=True)
-        (tmp_dir / "handoff-in.md").write_text(content, encoding="utf-8")
-    except OSError as exc:  # never fail a cycle over a debug artefact
+        target = tmp_dir / "handoff-in.md"
+        target.write_text(content, encoding="utf-8")
+        return target
+    except OSError as exc:
         log.warning("could not write tmp/handoff-in.md: %s", exc)
+        return None
+
+
+def _persist_inbound(ctx: SchedulerContext, content: str) -> None:
+    persist_inbound(ctx.worktree, content)
 
 
 def _delegate(ctx: SchedulerContext, inbound: handoff.InboundHandoff) -> _Attempts:
@@ -468,12 +479,26 @@ def format_banner(ctx: SchedulerContext, args: argparse.Namespace) -> list[str]:
     ]
 
 
+def _make_worker_output_emitter() -> Callable[[str], None]:
+    """
+    Print streamed worker output tinted, so it reads as a distinct voice from the
+    scheduler's own (unstyled) log lines sharing the same pane.
+
+    Piped or captured output (tests, `> log.txt`) must stay free of escape sequences,
+    matching pane_status.StatusBar's own rule for the same reason.
+    """
+    if not sys.stdout.isatty():
+        return lambda line: print(line, flush=True)
+    return lambda line: print(pane_status.tint_worker_output(line), flush=True)
+
+
 def build_context(args: argparse.Namespace) -> SchedulerContext:
     """Assemble a context from CLI arguments."""
     from .adapters import claude_adapter
 
     definition = load_worker_definition(args.worker_agent)
     model = resolve_model(args, definition)
+    emit_worker_output = _make_worker_output_emitter()
 
     def run_worker(*, prompt: str) -> WorkerInvocation:
         return claude_adapter.run_worker(
@@ -482,6 +507,7 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
             cwd=args.worktree,
             model=model,
             timeout=args.worker_timeout,
+            on_output=emit_worker_output,
         )
 
     return SchedulerContext(
@@ -567,12 +593,15 @@ def _record_cycle(bar: pane_status.StatusBar, result: CycleResult) -> None:
     )
 
 
-def configure_logging(log_file: str | Path | None = None) -> None:
+def configure_logging(log_file: str | Path | None = None, label: str = "kiln-scheduler") -> None:
     """
     Log to the pane, and to a file when one is given.
 
     Without a file, a scheduler that dies takes its own explanation with it — the pane
     scrollback is the only record, and it is gone as soon as the window closes.
+
+    `label` names the emitter in every line; the inbox reuses this function and is not a
+    scheduler, so a pane full of `[kiln-scheduler/...]` would misattribute its output.
     """
     handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
     if log_file:
@@ -585,7 +614,7 @@ def configure_logging(log_file: str | Path | None = None) -> None:
 
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s [kiln-scheduler/%(levelname)s] %(message)s",
+        format=f"%(asctime)s [{label}/%(levelname)s] %(message)s",
         datefmt="%H:%M:%S",
         handlers=handlers,
         force=True,
@@ -650,10 +679,15 @@ def _run_loop(
                 f"{ICON_BLOCKED} cycle failed (%d/%d consecutive)",
                 consecutive_errors, MAX_CONSECUTIVE_ERRORS,
             )
-            bar.update(state="blocked", detail=f"cycle failed ({consecutive_errors})")
+            # Through ctx.set_status, not bar.update directly -- that's what also writes
+            # .kiln/status/<role>.json, which drives the WezTerm tab-bar badge. A direct
+            # bar.update only ever reached this pane's own bottom row; the badge was
+            # silently left showing whatever state was last written successfully.
+            ctx.set_status("blocked")
+            bar.update(detail=f"cycle failed ({consecutive_errors})")
             if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
                 log.error(f"{ICON_HALT} too many consecutive failures; exiting")
-                bar.update(state="halted")
+                ctx.set_status("halted")
                 return 1
             time.sleep(min(args.poll_interval * consecutive_errors, 30))
             continue
@@ -663,7 +697,7 @@ def _run_loop(
             log.info("cycle -> %s %s", result.outcome, result.detail)
         if state.halted:
             log.error(f"{ICON_HALT} scheduler halted; exiting")
-            bar.update(state="halted")
+            ctx.set_status("halted")
             return 1
         if args.once:
             return 0

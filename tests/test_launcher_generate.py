@@ -31,6 +31,7 @@ ROLES = {
 TEMPLATES = {
     "loop-auto-claude.md": "# Loop\n\nRole is {{ROLE}}, target {{HANDOFF_TARGET}}.\n",
     "loop-manual-claude.md": "# Manual Loop\n\nRole {{ROLE}}.\n",
+    "loop-manual-claude-with-inbox.md": "# Manual Loop With Inbox\n\nRole {{ROLE}}.\n",
     "runtime-claude.md": "# Runtime\n\nBranch {{BRANCH}}, db {{DB_PATH}}.\n",
     "wrapper-prompt-auto-claude.md": "# Wrapper\n\nDelegate to {{ROLE}}-worker.\n",
     "loop-auto-copilot.md": "# Copilot Loop\n",
@@ -95,6 +96,26 @@ class TestInstructionFiles:
         )
         assert not (paths.project_root / "CLAUDE.md").exists()
 
+    def test_an_inbox_pane_does_not_delete_the_role_it_watches_claude_md(self, paths):
+        # Regression: an inbox pane shares its worktree (@current) with the role it watches
+        # (e.g. human-in-the-loop in scheduler-all), so instruction_file_for() resolves to
+        # *that* role's CLAUDE.md, not a file of the inbox's own -- it has no worktree and no
+        # generated files at all (RoleConfig.is_inbox). Deleting "a stale file for the inbox
+        # role" here used to delete a real, just-written CLAUDE.md instead: when a profile
+        # processes human-in-the-loop before inbox (as scheduler-all does), the inbox role's
+        # own write_instructions call silently erased human-in-the-loop's real instructions,
+        # leaving that session with nothing telling it to call set-status.py at all.
+        human = role(role="human-in-the-loop", mode="manual")
+        inbox = role(role="inbox", mode="manual", scheduler="inbox", watches="human-in-the-loop")
+
+        written = generate.write_instructions(human, paths, "main", paths.project_root)
+        assert written is not None
+        assert (paths.project_root / "CLAUDE.md").exists()
+
+        result = generate.write_instructions(inbox, paths, "main", paths.project_root)
+        assert result is None
+        assert (paths.project_root / "CLAUDE.md").exists(), "the inbox role must not touch it"
+
     def test_wrapper_role_gets_claude_md(self, paths):
         written = generate.write_instructions(role(), paths, "main", paths.project_root)
         assert written.name == "CLAUDE.md"
@@ -150,6 +171,58 @@ class TestInstructionFiles:
         )
         # The loop belongs to the wrapper template, not the role file's own copy.
         assert "Wait for a message" not in content
+
+    def test_no_profile_uses_the_plain_manual_loop(self, paths):
+        # Most callers (most tests, and any caller not modelling a full profile) do not pass
+        # one -- that must not accidentally opt a role into the inbox-aware loop.
+        content = generate.render_instructions(
+            role(role="specifier", mode="manual"), paths, "main", paths.project_root
+        )
+        assert "# Manual Loop\n" in content
+        assert "With Inbox" not in content
+
+    def test_a_role_watched_by_an_inbox_gets_the_inbox_aware_loop(self, paths):
+        # Regression: without this, a role with a companion inbox pane still ran the plain
+        # loop's receive/poll step, which either raced the inbox for the same message or
+        # (observed live) got silently skipped along with the `set-status.py waiting` call
+        # inside it -- leaving the tab title stuck on "handoff" forever.
+        profile = parse_profile(
+            {
+                "profiles": {
+                    "p": {
+                        "terminals": [
+                            {"role": "specifier", "mode": "manual"},
+                            {"role": "inbox", "scheduler": "inbox", "watches": "specifier"},
+                        ]
+                    }
+                }
+            },
+            "p",
+        )
+        content = generate.render_instructions(
+            role(role="specifier", mode="manual"), paths, "main", paths.project_root, profile
+        )
+        assert "# Manual Loop With Inbox" in content
+
+    def test_a_role_not_watched_by_an_inbox_still_gets_the_plain_loop(self, paths):
+        profile = parse_profile(
+            {
+                "profiles": {
+                    "p": {
+                        "terminals": [
+                            {"role": "specifier", "mode": "manual"},
+                            {"role": "coder", "worktree": "coder"},
+                            {"role": "inbox", "scheduler": "inbox", "watches": "specifier"},
+                        ]
+                    }
+                }
+            },
+            "p",
+        )
+        content = generate.render_instructions(
+            role(role="coder", mode="manual"), paths, "main", paths.project_root, profile
+        )
+        assert "With Inbox" not in content
 
 
 class TestWorkerFiles:

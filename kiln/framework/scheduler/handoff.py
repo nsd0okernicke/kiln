@@ -71,6 +71,16 @@ def parse_handoff(content: str) -> InboundHandoff:
     )
 
 
+def is_escalation(content: str) -> bool:
+    """
+    True when a message carries `Kiln-Escalation: true`.
+
+    Public because the inbox needs it to decide whether a human is looking at a routine
+    handoff or at a swarm that has stopped and is asking for help.
+    """
+    return _is_truthy(_field(content, ESCALATION_FIELD))
+
+
 def parse_trail(content: str) -> tuple[str, ...]:
     """
     Read the `Trail:` list of a kiln-ping message.

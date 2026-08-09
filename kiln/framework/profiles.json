@@ -348,7 +348,7 @@
       }
     },
     "scheduler-all": {
-      "description": "Every auto-mode role runs on the deterministic Python scheduler; only human-in-the-loop stays an interactive session",
+      "description": "Every auto-mode role runs on the deterministic Python scheduler; human-in-the-loop stays an interactive session with a live inbox pane beneath it",
       "terminals": [
         {
           "role": "human-in-the-loop",
@@ -357,6 +357,14 @@
           "title": "Kiln Human-in-the-Loop",
           "mode": "manual",
           "model": "claude-sonnet-5"
+        },
+        {
+          "role": "inbox",
+          "worktree": "@current",
+          "title": "Kiln Inbox",
+          "mode": "manual",
+          "scheduler": "inbox",
+          "watches": "human-in-the-loop"
         },
         {
           "role": "specifier",
@@ -402,6 +410,11 @@
             "panes": [
               {
                 "role": "human-in-the-loop"
+              },
+              {
+                "role": "inbox",
+                "direction": "Bottom",
+                "size": 0.22
               }
             ]
           },

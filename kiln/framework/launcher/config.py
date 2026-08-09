@@ -1,5 +1,6 @@
 """
-Profile loading — replaces lib/profile-loader.ps1 and Load-ConfigFromProfile.
+Profile loading — replaces the deleted lib/profile-loader.ps1 and Load-ConfigFromProfile
+(both recoverable from git history if the original behaviour ever needs checking).
 
 The PowerShell original round-tripped profile data through generated *source code*: it
 emitted `$TERMINAL_0_ROLE = '...'` strings that the caller ran through `Invoke-Expression`,
@@ -10,8 +11,17 @@ three places. Here a profile parses straight into dataclasses.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
+
+#: System-wide profile location, per platform. The two shell originals disagreed — the
+#: PowerShell one looked in ProgramData, the shell one in /etc — and the first Python port
+#: kept only the Windows path, silently dropping the documented Unix location.
+SYSTEM_PROFILES_PATH = (
+    Path("C:/ProgramData/kiln/profiles.json") if os.name == "nt"
+    else Path("/etc/kiln/profiles.json")
+)
 
 #: `grok` is accepted by config but has no launch implementation yet (see README's
 #: Known Limitations); it is listed so an existing profile does not fail validation.
@@ -23,6 +33,13 @@ CURRENT_DIR_ALIASES = ("@current", "none", "master")
 
 #: Opt-in value for the deterministic Python scheduler, per role.
 SCHEDULER_PYTHON = "python"
+
+#: Turns a role entry into a notification pane rather than an agent. It runs
+#: `scheduler.inbox` against the queue of the role named by `watches`, and has no worktree,
+#: no generated instructions, no worker definition and no agent CLI.
+SCHEDULER_INBOX = "inbox"
+
+VALID_SCHEDULERS = (SCHEDULER_PYTHON, SCHEDULER_INBOX)
 
 
 class ProfileError(Exception):
@@ -38,8 +55,11 @@ class RoleConfig:
     mode: str = "auto"
     model: str = ""
     worker_model: str = ""
-    #: "python" opts this role into the deterministic scheduler; None keeps the LLM wrapper.
+    #: "python" opts this role into the deterministic scheduler, "inbox" makes it a
+    #: notification pane; None keeps the LLM wrapper.
     scheduler: str | None = None
+    #: Whose queue an inbox pane watches. Ignored for every other kind of role.
+    watches: str = ""
 
     @property
     def uses_current_dir(self) -> bool:
@@ -65,6 +85,23 @@ class RoleConfig:
         """
         return self.scheduler == SCHEDULER_PYTHON and self.mode == "auto"
 
+    @property
+    def is_inbox(self) -> bool:
+        """
+        True for a notification pane rather than an agent.
+
+        An inbox has no agent, no worktree and no generated files. Every per-role step in
+        the launch sequence has to skip it, so this is checked in a lot of places — the
+        alternative was a second, parallel notion of "pane" running through the whole
+        launcher.
+        """
+        return self.scheduler == SCHEDULER_INBOX
+
+    @property
+    def watched_role(self) -> str:
+        """The queue an inbox shows. Defaults to its own name."""
+        return self.watches or self.role
+
     def branch_name(self, base_branch: str) -> str:
         """Sub-branch for this role's worktree; `@current` roles stay on the base branch."""
         return base_branch if self.uses_current_dir else f"{base_branch}-{self.worktree}"
@@ -82,11 +119,21 @@ class Profile:
 
     @property
     def current_dir_role(self) -> RoleConfig | None:
-        """First role working in the project root — it owns the root `.mcp.json`."""
-        return next((r for r in self.roles if r.uses_current_dir), None)
+        """
+        First *agent* working in the project root — it owns the root `.mcp.json`.
+
+        Inbox panes also live in the project root but run no agent, so one listed ahead of
+        the human's session would otherwise steal ownership and leave the real role with no
+        MCP config at all.
+        """
+        return next((r for r in self.roles if r.uses_current_dir and not r.is_inbox), None)
 
     def has_agent(self, agent: str) -> bool:
         return any(r.agent == agent for r in self.roles)
+
+    def inbox_watches(self, role_name: str) -> bool:
+        """True when some `inbox` pane in this profile watches `role_name`'s queue."""
+        return any(r.is_inbox and r.watched_role == role_name for r in self.roles)
 
 
 def _search_paths(project_root: Path, framework_root: Path | None) -> list[Path]:
@@ -100,7 +147,7 @@ def _search_paths(project_root: Path, framework_root: Path | None) -> list[Path]
         paths.append(framework_root / "kiln" / "framework" / "profiles.json")
     paths += [
         Path.home() / ".kiln" / "profiles.json",
-        Path("C:/ProgramData/kiln/profiles.json"),
+        SYSTEM_PROFILES_PATH,
     ]
     return paths
 
@@ -161,14 +208,14 @@ def _parse_role(entry: dict) -> RoleConfig:
     scheduler = entry.get("scheduler")
     if scheduler is not None:
         scheduler = str(scheduler).strip()
-        if scheduler != SCHEDULER_PYTHON:
+        if scheduler not in VALID_SCHEDULERS:
             raise ProfileError(
-                f"unsupported scheduler {scheduler!r} for role {role!r}; "
-                f"expected {SCHEDULER_PYTHON!r}"
+                f"unsupported scheduler {scheduler!r} for role {role!r}; expected one of "
+                + ", ".join(repr(name) for name in VALID_SCHEDULERS)
             )
         # Fail loudly rather than silently running an unsupported backend's worker through
-        # an adapter that does not exist yet.
-        if agent != "claude":
+        # an adapter that does not exist yet. An inbox runs no agent, so it is exempt.
+        if scheduler == SCHEDULER_PYTHON and agent != "claude":
             raise ProfileError(
                 f"role {role!r} requests the python scheduler with agent {agent!r}, but only "
                 "'claude' has a validated one-shot adapter so far"
@@ -183,6 +230,7 @@ def _parse_role(entry: dict) -> RoleConfig:
         model=str(entry.get("model") or "").strip(),
         worker_model=str(entry.get("workerModel") or "").strip(),
         scheduler=scheduler,
+        watches=str(entry.get("watches") or "").strip(),
     )
 
 

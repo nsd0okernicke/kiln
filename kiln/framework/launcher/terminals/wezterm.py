@@ -5,9 +5,10 @@ WezTerm builds the panes itself: this module writes a generated Lua config plus 
 JSON into the environment, then runs `wezterm start`. WezTerm's embedded Lua interpreter
 handles `gui-startup` and does the actual `spawn_window`/`split`/`send_text` work.
 
-The Lua below is a verbatim port of lib/terminal-adapters/wezterm.ps1's template with two
-bug fixes, both noted at their site: `Kiln_PROJECT_DIR` is now actually exported (it never
-was, which silently disabled the live status bar), and the pane-id path casing is corrected.
+The Lua below began as a verbatim port of the since-deleted lib/terminal-adapters/wezterm.ps1
+template (in git history) with two bug fixes, both noted at their site: `Kiln_PROJECT_DIR` is
+now actually exported (it never was, which silently disabled the live status bar), and the
+pane-id path casing is corrected. It has since gained keybindings and scheduler state colours.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ log = logging.getLogger(__name__)
 ENV_ROLES = "Kiln_ROLES_JSON"
 ENV_LAYOUT = "Kiln_LAYOUT_JSON"
 ENV_PROJECT_DIR = "Kiln_PROJECT_DIR"
+ENV_STATE_COLORS = "Kiln_STATE_COLORS_JSON"
 
 #: How long to leave the generated config in place before restoring the user's own, so
 #: WezTerm has finished reading it.
@@ -90,22 +92,13 @@ local roles_json  = os.getenv('Kiln_ROLES_JSON') or '[]'
 local roles       = wezterm.json_parse(roles_json)
 local project_dir = os.getenv('Kiln_PROJECT_DIR') or ''
 
-local STATE_COLORS = {
-  waiting    = '#5ab363',
-  receiving  = '#7aadff',
-  working    = '#ff7a5a',
-  approval   = '#ffdd6a',
-  delegating = '#ff7a5a',
-  handoff    = '#ac9aff',
-  -- The scheduler reports 'handing-off'; the wrapper reported 'handoff'. Both are listed
-  -- rather than renaming one, because manual roles still run the wrapper.
-  ['handing-off'] = '#ac9aff',
-  retrying   = '#ffdd6a',
-  blocked    = '#ff5a5a',
-  escalated  = '#ff5a5a',
-  halted     = '#ff5a5a',
-  idle       = '#5ab363',
-}
+-- Read, not hardcoded: `scheduler.pane_status.STATE_COLORS_HEX` (Python) is the single
+-- source of truth for state colour, exported here as JSON by `build_environment` so this
+-- badge and the pane's own bottom-row status bar can no longer drift into two different
+-- palettes for the same state names -- which is exactly what a hand-copied second table
+-- here used to let happen.
+local state_colors_json = os.getenv('Kiln_STATE_COLORS_JSON') or '{}'
+local STATE_COLORS = wezterm.json_parse(state_colors_json) or {}
 local STATE_COLOR_DEFAULT = '#8a8a88'
 
 wezterm.on('format-window-title', function(tab, pane, tabs, panes, config)
@@ -222,10 +215,14 @@ wezterm.on('gui-startup', function(cmd)
           table.insert(all_panes, first_pane)
           role_map[first_role.role] = first_pane:pane_id()
 
+          -- Take the grid path only when the tab actually ASKED for a grid. The old test
+          -- defaulted grid_cols to #panes, so any tab with two panes fell into the grid
+          -- branch and had its split direction hardcoded to 'Right' -- which silently
+          -- overrode the per-pane 'direction' honoured in the simple branch below.
           local grid_rows = tab_def.gridRows or 1
           local grid_cols = tab_def.gridCols or #tab_def.panes
 
-          if grid_rows > 1 or grid_cols > 1 then
+          if tab_def.gridRows or tab_def.gridCols then
             local panes_grid = { [1] = { [1] = first_pane } }
             local prev_row_pane = first_pane
 
@@ -271,11 +268,15 @@ wezterm.on('gui-startup', function(cmd)
           else
             local prev_pane = first_pane
             for idx = 2, #tab_def.panes do
-              local role_data = find_role(tab_def.panes[idx].role)
+              local pane_def = tab_def.panes[idx]
+              local role_data = find_role(pane_def.role)
               if role_data then
+                -- 'direction' and 'size' are optional per pane. The defaults reproduce the
+                -- old behaviour (split rightwards into equal shares); an inbox sets
+                -- direction='Bottom' with a small size so it is a strip, not a column.
                 local new_pane = prev_pane:split({
-                  direction = 'Right',
-                  size = 1.0 / (#tab_def.panes - idx + 2),
+                  direction = pane_def.direction or 'Right',
+                  size = pane_def.size or (1.0 / (#tab_def.panes - idx + 2)),
                   cwd = role_data.path,
                 })
                 new_pane:send_text(role_data.cmd .. '\r\n')
@@ -345,10 +346,15 @@ def build_environment(panes: list[PaneSpec], layout: dict, project_dir: Path) ->
     `update-status` handler returns immediately when it is empty, which silently disabled
     the live status bar the README advertises.
     """
+    # Deferred: only importable once `prepare()` has put `kiln/framework` on sys.path (see
+    # cli.py), and this module must stay importable before that has happened.
+    from scheduler.pane_status import STATE_COLORS_HEX
+
     env = {
         ENV_ROLES: build_roles_json(panes),
         # Lua does `project_dir .. '/.kiln/...'`, so forward slashes keep the path valid.
         ENV_PROJECT_DIR: project_dir.as_posix(),
+        ENV_STATE_COLORS: json.dumps(STATE_COLORS_HEX, separators=(",", ":")),
     }
     if layout:
         env[ENV_LAYOUT] = json.dumps(layout, separators=(",", ":"))
