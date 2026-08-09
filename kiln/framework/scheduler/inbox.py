@@ -27,7 +27,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import db, git_ops, handoff, pane_status
-from .role_scheduler import configure_logging, enable_unicode_output, persist_inbound
+from .role_scheduler import (
+    configure_logging,
+    enable_unicode_output,
+    merge_commit_message,
+    persist_inbound,
+)
 
 log = logging.getLogger(__name__)
 
@@ -99,12 +104,15 @@ def format_message(message: dict, kind: str) -> list[str]:
 
 def receive(ctx: InboxContext, inbound: handoff.InboundHandoff, raw: str) -> list[str]:
     """
-    The deterministic half of `/kiln-receive`, for a human: persist, then merge.
+    The deterministic half of `/kiln-receive`, for a human: persist, then squash-merge.
 
     Showing a person a message is not the same as delivering it. `human-in-the-loop` is a
-    real role in the graph — it works in the project root on the base branch — so an inbound
-    handoff has to be *merged* into their tree or the work they are being asked to review is
-    not there. Step 1 of the skill writes `tmp/handoff-in.md`; step 4 merges the commit.
+    real role in the graph — it works in the project root on the *real* branch (`@current`,
+    not a disposable sub-branch) — so an inbound handoff has to land in their tree or the
+    work they are being asked to review is not there. Step 1 of the skill writes
+    `tmp/handoff-in.md`; step 4 applies the commit — via `git_ops.squash_merge_commit`, not a
+    real merge, so the sender's full branch history does not become part of this branch's
+    permanent ancestry every single cycle.
 
     Returns lines to show. Never raises: a merge that fails is something a human fixes, and
     telling them beats crashing the only channel that could have told them.
@@ -120,10 +128,12 @@ def receive(ctx: InboxContext, inbound: handoff.InboundHandoff, raw: str) -> lis
     if not (ctx.merge and inbound.is_mergeable):
         return lines
 
-    result = git_ops.merge_commit(inbound.commit, ctx.worktree)
+    result = git_ops.squash_merge_commit(
+        inbound.commit, ctx.worktree, message=merge_commit_message(ctx.role, inbound)
+    )
     if result.ok:
-        log.info("merged %s into %s", inbound.commit[:8], ctx.branch)
-        lines.append(f"   {ICON_MERGE} merged {inbound.commit[:8]} into {ctx.branch}")
+        log.info("squash-merged %s into %s", inbound.commit[:8], ctx.branch)
+        lines.append(f"   {ICON_MERGE} squash-merged {inbound.commit[:8]} into {ctx.branch}")
     else:
         log.error("merge of %s failed: %s", inbound.commit, result.output)
         lines.append(f"   {ICON_MERGE_FAILED} MERGE FAILED for {inbound.commit[:8]}:")

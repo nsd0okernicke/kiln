@@ -165,6 +165,22 @@ class TestReceiveDoesTheWorkNotJustTheNotice:
         inbox.poll_once(human)
         assert "merged" in "\n".join(human.lines)
 
+    def test_the_merge_commit_names_the_role_handoff_and_sender(self, human, git_repo, git_cmd):
+        # Otherwise it's git's generic "Merge commit '<hash>' into <branch>" -- identical for
+        # every merge and useless in `git log` without cross-referencing messages.db by hand.
+        from scheduler import git_ops
+
+        commit = self._sender_commit(git_repo, git_cmd)
+        _queue(human.db_path, handoff.format_handoff(
+            sender="architect", handoff="CAT-3", branch="main-architect", commit=commit,
+            summary="done", next_role="human-in-the-loop", timestamp="t",
+        ), sender="architect")
+
+        inbox.poll_once(human)
+
+        subject = git_ops.run_git(["log", "-1", "--format=%s"], git_repo).stdout
+        assert subject == "[Human-in-the-loop] Merge CAT-3 from architect"
+
     def test_the_message_is_persisted_for_the_humans_own_session(self, human, git_repo):
         # tmp/handoff-in.md is how a person's Claude session picks up what arrived — there
         # is no way to inject a message into a running session.

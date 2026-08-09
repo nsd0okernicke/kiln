@@ -90,6 +90,101 @@ class TestMerge:
     def test_unknown_commit_fails_cleanly(self, git_repo):
         assert git_ops.merge_commit("0" * 40, git_repo).ok is False
 
+    def test_custom_message_replaces_gits_generic_default(self, git_repo, git_cmd):
+        git_cmd(git_repo, "checkout", "-q", "-b", "sender")
+        sender_commit = _write_commit(git_repo, git_cmd, "f.txt", "from sender", "sender work")
+        git_cmd(git_repo, "checkout", "-q", "main")
+
+        result = git_ops.merge_commit(
+            sender_commit, git_repo, message="[Coder] Merge CAT-3 from specifier\n\nCommit: x"
+        )
+
+        assert result.ok
+        subject = git_ops.run_git(["log", "-1", "--format=%s"], git_repo).stdout
+        assert subject == "[Coder] Merge CAT-3 from specifier"
+        assert "Merge commit" not in subject
+
+
+class TestSquashMergeCommit:
+    """
+    `human-in-the-loop`'s inbox path: land the sender's work without dragging their whole
+    branch history onto `@current`, which -- unlike every scheduled role's sub-branch -- is
+    the project's real, potentially-pushed branch.
+    """
+
+    def test_lands_the_senders_work(self, git_repo, git_cmd):
+        git_cmd(git_repo, "checkout", "-q", "-b", "sender")
+        sender_commit = _write_commit(git_repo, git_cmd, "f.txt", "from sender", "sender work")
+        git_cmd(git_repo, "checkout", "-q", "main")
+
+        result = git_ops.squash_merge_commit(sender_commit, git_repo, "squashed")
+
+        assert result.ok
+        assert (git_repo / "f.txt").read_text(encoding="utf-8") == "from sender"
+
+    def test_creates_no_merge_commit_no_second_parent(self, git_repo, git_cmd):
+        # The whole point: this must not become something squash_anchor's `--merges` search
+        # would ever find, and it must not carry the sender branch in as ancestry.
+        git_cmd(git_repo, "checkout", "-q", "-b", "sender")
+        sender_commit = _write_commit(git_repo, git_cmd, "f.txt", "sender", "sender work")
+        git_cmd(git_repo, "checkout", "-q", "main")
+        before = git_ops.head_commit(git_repo)
+
+        result = git_ops.squash_merge_commit(sender_commit, git_repo, "squashed")
+
+        parents = git_ops.run_git(["log", "-1", "--format=%P", result.stdout], git_repo).stdout
+        assert parents == before, "must have exactly one parent: the previous HEAD"
+        assert git_ops.run_git(["log", "--merges", "-1"], git_repo).stdout == "", (
+            "must not be discoverable by squash_anchor's --merges search"
+        )
+
+    def test_uses_the_given_message(self, git_repo, git_cmd):
+        git_cmd(git_repo, "checkout", "-q", "-b", "sender")
+        sender_commit = _write_commit(git_repo, git_cmd, "f.txt", "sender", "sender work")
+        git_cmd(git_repo, "checkout", "-q", "main")
+
+        git_ops.squash_merge_commit(
+            sender_commit, git_repo, "[Human-in-the-loop] Merge CAT-3 from architect"
+        )
+
+        subject = git_ops.run_git(["log", "-1", "--format=%s"], git_repo).stdout
+        assert subject == "[Human-in-the-loop] Merge CAT-3 from architect"
+
+    def test_a_conflict_fails_and_leaves_a_clean_tree(self, git_repo, git_cmd):
+        # git merge --squash never sets MERGE_HEAD, so the usual `merge --abort` recovery
+        # would not apply here -- this is the regression that guards against that gap.
+        _write_commit(git_repo, git_cmd, "shared.txt", "main version", "main edit")
+        git_cmd(git_repo, "checkout", "-q", "-b", "sender", "HEAD~1")
+        conflicting = _write_commit(git_repo, git_cmd, "shared.txt", "sender version", "sender")
+        git_cmd(git_repo, "checkout", "-q", "main")
+
+        result = git_ops.squash_merge_commit(conflicting, git_repo, "squashed")
+
+        assert result.ok is False
+        assert git_ops.has_pending_changes(git_repo) is False
+
+    def test_a_noop_handoff_is_success_not_failure(self, git_repo, git_cmd):
+        # Re-sent or already-applied content: nothing to commit, but that's not an error.
+        commit = git_ops.head_commit(git_repo)
+
+        result = git_ops.squash_merge_commit(commit, git_repo, "squashed")
+
+        assert result.ok
+        assert result.stdout == commit
+
+    def test_recovers_from_generated_scaffolding_the_same_as_a_real_merge(self, git_repo, git_cmd):
+        git_cmd(git_repo, "checkout", "-q", "-b", "sender")
+        (git_repo / ".claude").mkdir()
+        (git_repo / ".claude" / "settings.json").write_text("{}", encoding="utf-8")
+        git_cmd(git_repo, "add", "-A")
+        git_cmd(git_repo, "commit", "-q", "-m", "swept in scaffolding")
+        commit = git_ops.head_commit(git_repo)
+        git_cmd(git_repo, "checkout", "-q", "main")
+        (git_repo / ".claude").mkdir()
+        (git_repo / ".claude" / "settings.json").write_text("{}", encoding="utf-8")
+
+        assert git_ops.squash_merge_commit(commit, git_repo, "squashed").ok
+
 
 class TestGeneratedScaffoldingBlockingAMerge:
     """

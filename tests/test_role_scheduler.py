@@ -208,6 +208,17 @@ class TestHappyPath:
         role_scheduler.run_once(make_ctx(FakeWorker()), SchedulerState())
         assert (git_repo / "specifier-1.txt").exists(), "sender's work must be merged in"
 
+    def test_merge_commit_carries_role_and_sender_not_gits_generic_default(
+        self, make_ctx, inbound, git_repo
+    ):
+        inbound(sender="specifier")
+        role_scheduler.run_once(make_ctx(FakeWorker(), role="coder"), SchedulerState())
+        subjects = git_ops.run_git(["log", "--format=%s"], git_repo).stdout.splitlines()
+        assert any(
+            s.startswith("[Coder] Merge order-intake from specifier") for s in subjects
+        )
+        assert not any(s.startswith("Merge commit '") for s in subjects)
+
     def test_writes_the_inbound_message_for_debugging(self, make_ctx, inbound, git_repo):
         inbound()
         role_scheduler.run_once(make_ctx(FakeWorker()), SchedulerState())
@@ -460,6 +471,34 @@ class TestCommitPrefix:
     )
     def test_matches_the_convention(self, role, expected):
         assert role_scheduler.commit_prefix(role) == expected
+
+
+class TestMergeCommitMessage:
+    def _inbound(self, **overrides):
+        fields = dict(
+            sender="specifier", handoff="order-intake", branch="main-specifier",
+            commit="a1b2c3d4", is_ping=False, trail=(), raw="",
+        )
+        fields.update(overrides)
+        return handoff.InboundHandoff(**fields)
+
+    def test_subject_names_role_handoff_and_sender(self):
+        message = role_scheduler.merge_commit_message("coder", self._inbound())
+        subject = message.splitlines()[0]
+        assert subject == "[Coder] Merge order-intake from specifier"
+
+    def test_body_carries_the_detail_git_log_shows_on_demand(self):
+        message = role_scheduler.merge_commit_message("coder", self._inbound())
+        assert "Sender: specifier" in message
+        assert "Handoff: order-intake" in message
+        assert "Branch: main-specifier" in message
+        assert "Commit: a1b2c3d4" in message
+
+    def test_missing_fields_degrade_gracefully_instead_of_blank(self):
+        message = role_scheduler.merge_commit_message(
+            "coder", self._inbound(sender="", handoff="", branch="")
+        )
+        assert message.splitlines()[0] == "[Coder] Merge handoff from unknown"
 
 
 class TestCycleResult:

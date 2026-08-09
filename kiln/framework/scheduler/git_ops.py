@@ -101,7 +101,7 @@ def current_branch(cwd: str | Path) -> str:
     return result.stdout if result.ok else ""
 
 
-def merge_commit(commit: str, cwd: str | Path) -> GitResult:
+def merge_commit(commit: str, cwd: str | Path, message: str | None = None) -> GitResult:
     """
     Merge the sender's commit. The resulting merge commit becomes the squash anchor.
 
@@ -113,8 +113,18 @@ def merge_commit(commit: str, cwd: str | Path) -> GitResult:
     `squash_anchor` would find none and fall back to the repository's ROOT commit — and the
     next `git reset --soft` would then collapse the entire project history into a single
     commit. Forcing a merge commit guarantees every cycle has a well-defined anchor.
+
+    `message`, when given, replaces git's default "Merge commit '<hash>' into <branch>"
+    subject — uninformative in `git log`, and identical for every merge regardless of who
+    sent what. Callers build one with `role_scheduler.merge_commit_message`. Falls back to
+    `--no-edit` (git's default message) when omitted, for callers with nothing to say.
     """
-    result = run_git(["merge", "--no-ff", "--no-edit", commit], cwd)
+    args = (
+        ["merge", "--no-ff", "-m", message, commit]
+        if message
+        else ["merge", "--no-ff", "--no-edit", commit]
+    )
+    result = run_git(args, cwd)
     if result.ok:
         return result
 
@@ -123,7 +133,7 @@ def merge_commit(commit: str, cwd: str | Path) -> GitResult:
     # launch anyway. Retry once after clearing them rather than escalating a deadlock that
     # a human could only fix with the same `rm`.
     if _clear_generated_blockers(result.output, cwd):
-        result = run_git(["merge", "--no-ff", "--no-edit", commit], cwd)
+        result = run_git(args, cwd)
         if result.ok:
             return result
 
@@ -131,6 +141,47 @@ def merge_commit(commit: str, cwd: str | Path) -> GitResult:
     # Leave no half-merged tree behind for the next cycle to trip over.
     run_git(["merge", "--abort"], cwd)
     return result
+
+
+def squash_merge_commit(commit: str, cwd: str | Path, message: str) -> GitResult:
+    """
+    Merge the sender's commit as one flat commit, with no merge-commit parent link.
+
+    For `human-in-the-loop`'s inbox specifically. That role works directly on the project's
+    real, potentially-pushed branch (`@current`), not a disposable local sub-branch the way
+    every scheduled role does — so a real `--no-ff` merge (`merge_commit`, above) would
+    permanently graft the sender's entire commit graph onto that branch's ancestry on every
+    single handoff, including whatever *that* sender had already merged in from its own
+    senders. `git merge --squash` stages the diff with no `MERGE_HEAD` and no second parent;
+    the follow-up commit lands on `@current` looking like one ordinary commit, not a merge.
+
+    Not a substitute for `merge_commit` anywhere a scheduler role receives: `squash_anchor`
+    locates its anchor via `git log --merges -1`, which requires a real merge commit to
+    exist. Using this for a scheduled role's own inbound merge would remove that anchor and
+    silently fall back to the repository's ROOT commit, collapsing the whole project history
+    into one commit on that role's next squash.
+    """
+    result = run_git(["merge", "--squash", commit], cwd)
+    if not result.ok:
+        if _clear_generated_blockers(result.output, cwd):
+            result = run_git(["merge", "--squash", commit], cwd)
+
+    if not result.ok:
+        log.error("squash-merge of %s failed: %s", commit, result.output)
+        # `--squash` never sets MERGE_HEAD, so `merge --abort` has nothing to abort -- only a
+        # hard reset actually clears the conflicted index/worktree it can leave behind.
+        run_git(["reset", "--hard", "HEAD"], cwd)
+        return result
+
+    if not has_pending_changes(cwd):
+        # Content identical to what's already there (e.g. a re-sent or no-op handoff) -- that
+        # is success, not failure. Nothing to commit; reuse HEAD as the resulting commit.
+        return GitResult(True, head_commit(cwd), "", 0)
+
+    committed = run_git(["commit", "-m", message], cwd)
+    if not committed.ok:
+        return committed
+    return GitResult(True, head_commit(cwd), "", 0)
 
 
 def is_generated_path(path: str, patterns: tuple[str, ...] = GENERATED_WORKTREE_PATHS) -> bool:

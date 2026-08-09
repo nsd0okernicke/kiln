@@ -81,6 +81,24 @@ def commit_prefix(role: str) -> str:
     return f"[{role[:1].upper()}{role[1:]}]"
 
 
+def merge_commit_message(role: str, inbound: handoff.InboundHandoff) -> str:
+    """
+    A role-prefixed, handoff-specific subject/body for `git_ops.merge_commit`.
+
+    Replaces git's default "Merge commit '<hash>' into <branch>" -- identical for every
+    merge regardless of who sent what, and useless in `git log` without cross-referencing
+    `messages.db` by hand. `role` is the merging role (the receiver), not the sender.
+    """
+    subject = f"{commit_prefix(role)} Merge {inbound.handoff or 'handoff'} from {inbound.sender or 'unknown'}"
+    body = (
+        f"Sender: {inbound.sender or '-'}\n"
+        f"Handoff: {inbound.handoff or '-'}\n"
+        f"Branch: {inbound.branch or '-'}\n"
+        f"Commit: {inbound.commit}"
+    )
+    return f"{subject}\n\n{body}"
+
+
 @dataclass
 class SchedulerContext:
     """Everything one scheduler process needs; injected so run_once stays testable."""
@@ -183,7 +201,9 @@ def run_once(ctx: SchedulerContext, state: SchedulerState) -> CycleResult:
 
     if inbound.is_mergeable:
         log.info(f"{ICON_MERGE} merging %s from %s", inbound.commit[:8], inbound.branch or "?")
-        merged = git_ops.merge_commit(inbound.commit, ctx.worktree)
+        merged = git_ops.merge_commit(
+            inbound.commit, ctx.worktree, message=merge_commit_message(ctx.role, inbound)
+        )
         if not merged.ok:
             detail = f"merge of {inbound.commit} failed: {merged.output}"
             log.error(detail)
