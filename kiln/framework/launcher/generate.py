@@ -162,16 +162,17 @@ def write_instructions(
 
     Returns the path written, or None when the role is scheduler-driven.
     """
-    if role.is_inbox:
-        # An inbox has no worktree and no generated files of its own (RoleConfig.is_inbox) --
-        # it shares its worktree (@current) with the real role it watches, e.g.
-        # human-in-the-loop in the scheduler-all profile. instruction_file_for() would
-        # resolve to *that* role's CLAUDE.md, so deleting "a stale file for this role" here
-        # deletes a real, just-written file instead: human-in-the-loop is processed first in
-        # profile.roles and writes CLAUDE.md correctly, then inbox is processed right after
-        # and (observed live) silently deletes the same path, leaving human-in-the-loop's
-        # session with no instructions at all -- it never learns to call set-status.py, so
-        # its tab-bar badge sticks on whatever state it last managed to report.
+    if role.is_passive:
+        # A passive pane (inbox, dashboard) has no worktree and no generated files of its
+        # own (RoleConfig.is_passive) -- it shares its worktree (@current) with a real role,
+        # e.g. an inbox with the human-in-the-loop it watches in the scheduler-all profile.
+        # instruction_file_for() would resolve to *that* role's CLAUDE.md, so deleting "a
+        # stale file for this role" here deletes a real, just-written file instead: the real
+        # role is processed first in profile.roles and writes CLAUDE.md correctly, then the
+        # passive pane is processed right after and (observed live, for inbox specifically)
+        # silently deletes the same path, leaving the real role's session with no
+        # instructions at all -- it never learns to call set-status.py, so its tab-bar badge
+        # sticks on whatever state it last managed to report.
         return None
 
     if role.uses_scheduler:
@@ -262,8 +263,8 @@ def render_worker_file(role: RoleConfig, paths: KilnPaths) -> WorkerFile:
 
 
 def write_worker_file(role: RoleConfig, paths: KilnPaths) -> Path | None:
-    """Write the role's worker definition. None for an inbox, which delegates to nothing."""
-    if role.is_inbox:
+    """Write the role's worker definition. None for a passive pane, which delegates to nothing."""
+    if role.is_passive:
         return None
     rendered = render_worker_file(role, paths)
     rendered.path.parent.mkdir(parents=True, exist_ok=True)

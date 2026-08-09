@@ -142,6 +142,32 @@ def _inbox_command(role: RoleConfig, paths: KilnPaths, branch: str) -> AgentComm
     )
 
 
+def _dashboard_command(role: RoleConfig, paths: KilnPaths, branch: str) -> AgentCommand:
+    """
+    Launch the swarm-wide dashboard pane.
+
+    Aggregates every role in the profile rather than watching one, so unlike `_inbox_command`
+    it needs no `--role`/`--worktree` for someone else's queue -- just the shared DB, status
+    directory, and the role inventory `workspace.write_sessions_file` already wrote.
+    """
+    argv = [
+        "python", "-m", "scheduler.dashboard",
+        "--branch", branch,
+        "--db-path", str(paths.db_path),
+        "--status-dir", str(paths.status_dir),
+        "--sessions-file", str(paths.sessions_file),
+        "--project-name", paths.project_root.name,
+        "--log-file", str(paths.scheduler_log(role.role)),
+    ]
+    return AgentCommand(
+        argv=argv,
+        env={
+            "PYTHONPATH": str(paths.python_package_root),
+            "PYTHONIOENCODING": "utf-8",
+        },
+    )
+
+
 def _worktree_for(role: RoleConfig, paths: KilnPaths) -> Path:
     return paths.project_root if role.uses_current_dir else paths.worktree_path(role.worktree)
 
@@ -155,6 +181,9 @@ def build_agent_command(role: RoleConfig, paths: KilnPaths, branch: str) -> Agen
     """
     if role.is_inbox:
         return _inbox_command(role, paths, branch)
+
+    if role.is_dashboard:
+        return _dashboard_command(role, paths, branch)
 
     if role.uses_scheduler:
         return _scheduler_command(role, paths, branch)

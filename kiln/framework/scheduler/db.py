@@ -129,6 +129,30 @@ def count_queued(db_path: str | Path, role: str, branch: str) -> int:
         return int(cur.fetchone()[0])
 
 
+def count_queued_by_role(db_path: str | Path, branch: str) -> dict[str, int]:
+    """Queued-message count per target role, for the dashboard's queue-depth column."""
+    with closing(connect(db_path)) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT target, COUNT(*) AS n FROM messages WHERE branch=? AND status=? "
+            "GROUP BY target",
+            (branch, STATUS_QUEUED),
+        )
+        return {row["target"]: int(row["n"]) for row in cur.fetchall()}
+
+
+def recent_messages(db_path: str | Path, branch: str, limit: int = 10) -> list[dict]:
+    """The most recent messages on a branch, newest first -- the dashboard's activity feed."""
+    with closing(connect(db_path)) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, sender, target, status, content, created_at FROM messages "
+            "WHERE branch=? ORDER BY created_at DESC LIMIT ?",
+            (branch, limit),
+        )
+        return [dict(row) for row in cur.fetchall()]
+
+
 def mark_processing(db_path: str | Path, message_id: str) -> bool:
     """Flag a message as actively being worked. False when no such message exists."""
     return _set_status(db_path, message_id, STATUS_PROCESSING)

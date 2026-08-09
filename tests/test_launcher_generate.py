@@ -116,6 +116,21 @@ class TestInstructionFiles:
         assert result is None
         assert (paths.project_root / "CLAUDE.md").exists(), "the inbox role must not touch it"
 
+    def test_a_dashboard_pane_does_not_delete_the_role_it_shares_a_worktree_with(self, paths):
+        # Same collision class as the inbox regression above, for the second passive-pane
+        # type: a dashboard also always uses "@current" (RoleConfig.is_dashboard), so it can
+        # end up co-located with a real role's worktree just like an inbox does.
+        human = role(role="human-in-the-loop", mode="manual")
+        dashboard = role(role="dashboard", mode="manual", scheduler="dashboard")
+
+        written = generate.write_instructions(human, paths, "main", paths.project_root)
+        assert written is not None
+        assert (paths.project_root / "CLAUDE.md").exists()
+
+        result = generate.write_instructions(dashboard, paths, "main", paths.project_root)
+        assert result is None
+        assert (paths.project_root / "CLAUDE.md").exists(), "the dashboard role must not touch it"
+
     def test_wrapper_role_gets_claude_md(self, paths):
         written = generate.write_instructions(role(), paths, "main", paths.project_root)
         assert written.name == "CLAUDE.md"

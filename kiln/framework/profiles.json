@@ -401,6 +401,13 @@
           "mode": "auto",
           "model": "claude-sonnet-5",
           "scheduler": "python"
+        },
+        {
+          "role": "dashboard",
+          "worktree": "@current",
+          "title": "Kiln Dashboard",
+          "mode": "manual",
+          "scheduler": "dashboard"
         }
       ],
       "layout": {
@@ -434,6 +441,14 @@
               },
               {
                 "role": "architect"
+              }
+            ]
+          },
+          {
+            "title": "Dashboard",
+            "panes": [
+              {
+                "role": "dashboard"
               }
             ]
           }

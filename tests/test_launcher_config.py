@@ -122,6 +122,38 @@ class TestSchedulerOptIn:
             parse_profile(config, "p")
 
 
+class TestPassivePanes:
+    """Roles that run no agent at all: inbox and dashboard. See RoleConfig.is_passive."""
+
+    def test_inbox_role(self):
+        role = RoleConfig(role="inbox", scheduler="inbox")
+        assert role.is_inbox is True
+        assert role.is_dashboard is False
+        assert role.is_passive is True
+
+    def test_dashboard_role(self):
+        role = RoleConfig(role="dashboard", scheduler="dashboard")
+        assert role.is_inbox is False
+        assert role.is_dashboard is True
+        assert role.is_passive is True
+
+    def test_a_normal_role_is_neither(self):
+        role = RoleConfig(role="coder")
+        assert role.is_inbox is False
+        assert role.is_dashboard is False
+        assert role.is_passive is False
+
+    def test_a_scheduler_role_is_not_passive(self):
+        # uses_scheduler and is_passive are different axes -- a scheduler-driven role still
+        # runs a real worker, it just isn't an interactive wrapper session.
+        role = RoleConfig(role="coder", scheduler="python", mode="auto")
+        assert role.is_passive is False
+
+    def test_dashboard_is_accepted_by_profile_parsing(self):
+        config = {"profiles": {"p": {"terminals": [{"role": "dashboard", "scheduler": "dashboard"}]}}}
+        assert parse_profile(config, "p").roles[0].is_dashboard is True
+
+
 class TestParsing:
     def test_parses_all_role_fields(self):
         role = parse_profile(CONFIG, "compact").roles[0]

@@ -210,6 +210,8 @@ def run_launch(args: argparse.Namespace) -> int:
     for role in profile.roles:
         if role.is_inbox:
             kind = f"inbox -> {role.watched_role}"  # runs no agent at all
+        elif role.is_dashboard:
+            kind = "dashboard"  # runs no agent at all, aggregates every role
         elif role.uses_scheduler:
             kind = f"{role.agent} [scheduler]"
         else:

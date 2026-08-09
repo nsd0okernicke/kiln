@@ -93,7 +93,7 @@ class SchedulerContext:
     definition: WorkerDefinition
     run_worker: Callable[..., WorkerInvocation]
     clock: Callable[[], datetime] = datetime.now
-    set_status: Callable[[str], None] = lambda _state: None
+    set_status: Callable[..., None] = lambda _state, **_kwargs: None
     #: One retry, then escalate — matches loop-auto-*.md step 4.
     max_attempts: int = 2
     #: Consecutive escalations before this role stops polling entirely.
@@ -418,15 +418,30 @@ def _insert_verified(ctx: SchedulerContext, target: str, content: str) -> str | 
     return None
 
 
-def make_status_writer(role: str, script: Path | None) -> Callable[[str], None]:
-    """Status writer that shells out to set-status.py, or a no-op when it is absent."""
-    if not script or not Path(script).is_file():
-        return lambda _state: None
+def make_status_writer(
+    role: str, script: Path | None
+) -> Callable[..., None]:
+    """
+    Status writer that shells out to set-status.py, or a no-op when it is absent.
 
-    def _write(state: str) -> None:
+    `cycles`/`cost_usd` are optional and forwarded as `--cycles=`/`--cost=` flags -- the
+    dashboard's swarm-wide totals read these straight out of the JSON set-status.py writes.
+    Omitted (not passed as 0) when the caller doesn't have them, matching set-status.py's own
+    build_status(): a role that never tracks cost must not have its status file claim
+    "$0.00 spent" as if that were a measured fact.
+    """
+    if not script or not Path(script).is_file():
+        return lambda _state, **_kwargs: None
+
+    def _write(state: str, *, cycles: int | None = None, cost_usd: float | None = None) -> None:
+        command = [sys.executable, str(script), role, state]
+        if cycles is not None:
+            command.append(f"--cycles={cycles}")
+        if cost_usd is not None:
+            command.append(f"--cost={cost_usd}")
         try:
             subprocess.run(
-                [sys.executable, str(script), role, state],
+                command,
                 capture_output=True,
                 stdin=subprocess.DEVNULL,
                 timeout=15,
@@ -571,7 +586,10 @@ def attach_status_bar(ctx: SchedulerContext, args: argparse.Namespace) -> pane_s
     write_status = ctx.set_status
 
     def set_status(state: str) -> None:
-        write_status(state)
+        # bar.status.cycles/cost_usd are already tracked (see _record_cycle) -- this just
+        # threads the current totals one hop further, into the JSON file the dashboard reads,
+        # rather than tracking them a second time.
+        write_status(state, cycles=bar.status.cycles, cost_usd=bar.status.cost_usd)
         bar.update(state=state)
 
     ctx.set_status = set_status

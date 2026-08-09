@@ -254,10 +254,12 @@ def test_default_profile_still_parses():
     profile = _shipped_profile()
     scheduled = [r.role for r in profile.roles if r.uses_scheduler]
     inboxes = [r.role for r in profile.roles if r.is_inbox]
-    interactive = [r.role for r in profile.roles if not r.uses_scheduler and not r.is_inbox]
+    dashboards = [r.role for r in profile.roles if r.is_dashboard]
+    interactive = [r.role for r in profile.roles if not r.uses_scheduler and not r.is_passive]
     assert scheduled == ["specifier", "coder", "refactorer", "architect"]
     assert interactive == ["human-in-the-loop"], "the human role must stay interactive"
     assert inboxes == ["inbox"], "escalations need somewhere visible to land"
+    assert dashboards == ["dashboard"], "the swarm-wide view needs somewhere to live"
 
 
 class TestShippedInboxPane:
@@ -278,4 +280,19 @@ class TestShippedInboxPane:
 
     def test_the_human_role_still_owns_the_root_mcp_config(self):
         # Both live in the project root; the inbox must not win current_dir_role.
+        assert _shipped_profile().current_dir_role.role == "human-in-the-loop"
+
+
+class TestShippedDashboardPane:
+    def test_it_has_its_own_dedicated_tab(self):
+        # Not a strip like the inbox pairing -- a full tab, per its own purpose (a swarm-wide
+        # view, not a companion notification for one role).
+        tabs = _shipped_profile().layout["tabs"]
+        dashboard_tabs = [t for t in tabs if any(p["role"] == "dashboard" for p in t["panes"])]
+        assert len(dashboard_tabs) == 1
+        assert len(dashboard_tabs[0]["panes"]) == 1
+
+    def test_it_does_not_steal_the_root_mcp_config_from_the_human(self):
+        # Also "@current", same as human-in-the-loop and inbox -- current_dir_role must
+        # still resolve to the human, not whichever passive pane happens to be listed first.
         assert _shipped_profile().current_dir_role.role == "human-in-the-loop"

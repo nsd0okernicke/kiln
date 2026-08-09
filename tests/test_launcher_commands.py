@@ -197,6 +197,48 @@ class TestInboxPane:
         assert argv[argv.index("--log-file") + 1].endswith("scheduler-inbox.log")
 
 
+class TestDashboardPane:
+    """A cross-role aggregate view, not an agent -- see scheduler/dashboard.py."""
+
+    def _command(self, paths):
+        from launcher.commands import build_agent_command
+        from launcher.config import RoleConfig
+
+        role = RoleConfig(role="dashboard", worktree="@current", mode="manual", scheduler="dashboard")
+        return build_agent_command(role, paths, "main")
+
+    def test_runs_the_dashboard_module(self, paths):
+        argv = self._command(paths).argv
+        assert argv[:3] == ["python", "-m", "scheduler.dashboard"]
+
+    def test_is_scoped_to_the_launch_branch(self, paths):
+        argv = self._command(paths).argv
+        assert argv[argv.index("--branch") + 1] == "main"
+
+    def test_points_at_the_shared_status_and_sessions_files(self, paths):
+        argv = self._command(paths).argv
+        assert argv[argv.index("--status-dir") + 1] == str(paths.status_dir)
+        assert argv[argv.index("--sessions-file") + 1] == str(paths.sessions_file)
+
+    def test_has_no_role_or_worktree_flag(self, paths):
+        # Unlike inbox, a dashboard aggregates every role -- it doesn't watch one.
+        argv = self._command(paths).argv
+        assert "--role" not in argv
+        assert "--worktree" not in argv
+
+    def test_forces_utf8_so_the_glyphs_cannot_crash_it(self, paths):
+        assert self._command(paths).env["PYTHONIOENCODING"] == "utf-8"
+
+    def test_runs_no_agent_cli(self, paths):
+        argv = self._command(paths).argv
+        assert "claude" not in argv
+        assert "--permission-mode" not in argv
+
+    def test_writes_a_log_file(self, paths):
+        argv = self._command(paths).argv
+        assert argv[argv.index("--log-file") + 1].endswith("scheduler-dashboard.log")
+
+
 class TestInboxIsNotAnAgent:
     """Every per-role generation step must skip it, or it gets an agent's paperwork."""
 
@@ -243,6 +285,44 @@ class TestInboxIsNotAnAgent:
         # uses_scheduler drives MCP config and worktree branching; an inbox is neither.
         assert self._role().uses_scheduler is False
         assert self._role().is_inbox is True
+
+
+class TestDashboardIsNotAnAgent:
+    """Same class of role as inbox -- see TestInboxIsNotAnAgent and RoleConfig.is_passive."""
+
+    def _role(self):
+        from launcher.config import RoleConfig
+
+        return RoleConfig(role="dashboard", worktree="@current", mode="manual", scheduler="dashboard")
+
+    def test_no_worker_definition_is_written(self, paths):
+        from launcher.generate import write_worker_file
+
+        assert write_worker_file(self._role(), paths) is None
+
+    def test_no_instruction_file_is_written(self, tmp_path, paths):
+        from launcher.generate import write_instructions
+
+        assert write_instructions(self._role(), paths, "main", tmp_path) is None
+
+    def test_it_never_deletes_the_file_at_its_own_computed_path(self, tmp_path, paths):
+        # Same collision class as the inbox regression: a dashboard also always uses
+        # "@current", so instruction_file_for() for its config resolves to whatever real
+        # role shares that worktree, not a file the dashboard ever owned.
+        from launcher.generate import instruction_file_for, write_instructions
+
+        role = self._role()
+        existing = instruction_file_for(role, tmp_path)
+        existing.parent.mkdir(parents=True, exist_ok=True)
+        existing.write_text("belongs to human-in-the-loop, not the dashboard", encoding="utf-8")
+
+        write_instructions(role, paths, "main", tmp_path)
+        assert existing.exists()
+
+    def test_it_is_not_treated_as_a_scheduler_role(self, paths):
+        assert self._role().uses_scheduler is False
+        assert self._role().is_dashboard is True
+        assert self._role().is_passive is True
 
 
 class TestPowerShellRendering:

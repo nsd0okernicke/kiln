@@ -39,7 +39,13 @@ SCHEDULER_PYTHON = "python"
 #: no generated instructions, no worker definition and no agent CLI.
 SCHEDULER_INBOX = "inbox"
 
-VALID_SCHEDULERS = (SCHEDULER_PYTHON, SCHEDULER_INBOX)
+#: Turns a role entry into a live cross-role dashboard rather than an agent. It runs
+#: `scheduler.dashboard`, aggregating every role in the profile instead of watching one, and
+#: has no worktree, no generated instructions, no worker definition and no agent CLI --
+#: the same shape as an inbox pane (see `RoleConfig.is_passive`).
+SCHEDULER_DASHBOARD = "dashboard"
+
+VALID_SCHEDULERS = (SCHEDULER_PYTHON, SCHEDULER_INBOX, SCHEDULER_DASHBOARD)
 
 
 class ProfileError(Exception):
@@ -98,6 +104,35 @@ class RoleConfig:
         return self.scheduler == SCHEDULER_INBOX
 
     @property
+    def is_dashboard(self) -> bool:
+        """
+        True for a cross-role dashboard pane rather than an agent.
+
+        Same shape as `is_inbox` -- no agent, no worktree, no generated files -- except it
+        aggregates every role in the profile instead of watching one, so it has no `watches`
+        equivalent.
+        """
+        return self.scheduler == SCHEDULER_DASHBOARD
+
+    @property
+    def is_passive(self) -> bool:
+        """
+        True for any pane that runs no agent at all (inbox or dashboard).
+
+        Use this, not `is_inbox`/`is_dashboard` individually, wherever the decision is
+        simply "does this role get normal per-role generation" (instructions, worker
+        definitions, `.mcp.json` ownership). A role that shares its worktree with a real
+        role -- which every passive pane does, by design -- must never be treated as owning
+        files at that path, or one passive-pane type's cleanup can delete another role's real
+        file out from under it (observed live: an `inbox` role deleted the `human-in-the-loop`
+        role's just-written CLAUDE.md this same session, because only `is_inbox` was checked
+        in `generate.write_instructions` and nothing generalized the pattern before a second
+        passive-pane type was added). Only check `is_inbox`/`is_dashboard` directly where the
+        code needs to know *which* passive pane it is, e.g. which command to build.
+        """
+        return self.is_inbox or self.is_dashboard
+
+    @property
     def watched_role(self) -> str:
         """The queue an inbox shows. Defaults to its own name."""
         return self.watches or self.role
@@ -122,11 +157,11 @@ class Profile:
         """
         First *agent* working in the project root — it owns the root `.mcp.json`.
 
-        Inbox panes also live in the project root but run no agent, so one listed ahead of
-        the human's session would otherwise steal ownership and leave the real role with no
-        MCP config at all.
+        Passive panes (inbox, dashboard) also live in the project root but run no agent, so
+        one listed ahead of the human's session would otherwise steal ownership and leave the
+        real role with no MCP config at all.
         """
-        return next((r for r in self.roles if r.uses_current_dir and not r.is_inbox), None)
+        return next((r for r in self.roles if r.uses_current_dir and not r.is_passive), None)
 
     def has_agent(self, agent: str) -> bool:
         return any(r.agent == agent for r in self.roles)

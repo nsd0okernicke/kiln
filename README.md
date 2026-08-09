@@ -233,6 +233,7 @@ kiln/
 │       │   ├── git_ops.py                # Merge, squash-to-anchor, local excludes
 │       │   ├── pane_status.py            # The pinned status bar in each pane
 │       │   ├── inbox.py                  # The human's notification pane (`kiln inbox`)
+│       │   ├── dashboard.py              # Swarm-wide live view (`"scheduler": "dashboard"`)
 │       │   ├── send.py                   # Queue a handoff from the CLI (`kiln send`)
 │       │   └── adapters/claude_adapter.py  # One-shot `claude -p` invocation
 │       │
@@ -354,9 +355,56 @@ Both resolve the queue path and current branch from the project. Branch matters 
 looks — messages are branch-scoped, so an inbox on the wrong branch is indistinguishable from
 an empty one.
 
+### Dashboard mode (`"scheduler": "dashboard"`)
+
+A fourth kind of pane, and the swarm-wide counterpart to the inbox's one-role view. It runs
+`scheduler.dashboard`: a `top`-style live view that aggregates every role at once instead of
+watching one — no agent, no worktree, no generated instructions, no MCP, same "no agent" shape
+as `inbox`.
+
+```jsonc
+{ "role": "dashboard", "worktree": "@current", "title": "Kiln Dashboard",
+  "mode": "manual", "scheduler": "dashboard" }
+```
+
+Each poll (every 2s by default, `--poll-interval` to change it) it clears the pane and redraws
+a full frame — unlike the inbox and the pane status bar, which deliberately preserve
+scrollback, there is nothing here worth scrolling back through:
+
+```text
+Kiln Dashboard — library-hub-testrun5 (run1)                    17:42:11
+──────────────────────────────────────────────────────────────────────
+ROLE                 STATE            SINCE      QUEUE  CYCLES     COST
+human-in-the-loop    ● waiting        2m ago         0       -       -
+specifier            ● working       12s ago         1       4   $0.82
+coder                ● working        3s ago         2       7   $3.41
+refactorer           ● idle           1m ago         0       5   $1.15
+architect            ● idle           4m ago         0       3   $0.94
+──────────────────────────────────────────────────────────────────────
+TOTAL COST: $6.32        TOTAL CYCLES: 19        ESCALATIONS: 1
+
+Recent activity
+  17:41:58  coder → refactorer            [Coder] Implement CAT-3 endpoint
+  17:40:12  specifier → coder             [Specifier] Wrote acceptance criteria
+  17:38:44  human-in-the-loop → specifier Approved request for CAT-3
+
+Escalations
+  (none in the recent window)
+```
+
+State per role comes from `.kiln/sessions` (the static role inventory) joined with each
+role's `.kiln/status/<role>.json`; queue depth and recent activity come straight from
+`messages.db`. Cost and cycles are only shown for roles that report them — scheduler roles
+do (see "Pane Status Bar" below for where those numbers come from), wrapper roles don't track
+either today, so their cells read `-` rather than a misleading `$0.00`.
+
+Run it standalone against any project with `python -m scheduler.dashboard --once ...` (see
+`--help` for the required paths), or just launch a profile that includes it.
+
 **Try it:** the shipped `scheduler-all` profile runs all four `auto` roles on the scheduler,
-keeps `human-in-the-loop` as an interactive session, and puts an inbox strip beneath it in the
-same tab. `scheduler-coder` schedules only the coder.
+keeps `human-in-the-loop` as an interactive session, puts an inbox strip beneath it in the same
+tab, and gives the dashboard its own dedicated tab. `scheduler-coder` schedules only the coder
+and has no dashboard pane.
 
 ```powershell
 .\bin\kiln.ps1 -WorkingDir . -Profile scheduler-all
@@ -687,6 +735,8 @@ The framework's `default` profile pairs a human-facing intake role with a fully 
 - **`compact`** — the standard 4-agent swarm (specifier, coder, refactorer, architect; no `human-in-the-loop`), all in one tab as a 2×2 grid.
 - **`tabs`** — the same 4-agent swarm, one role per tab instead of a grid.
 - **`dual-pane`** — the same 4-agent swarm across two tabs, two roles side-by-side per tab.
+- **`scheduler-coder`** — same shape as `default`, but `coder` runs in scheduler mode instead of wrapper mode (opt-in validation profile for the scheduler rollout).
+- **`scheduler-all`** — every `auto`-mode role runs in scheduler mode; `human-in-the-loop` stays an interactive wrapper session with an inbox strip beneath it, plus a dedicated `dashboard` tab. See **Inbox mode** and **Dashboard mode** below.
 
 Switch to any of these with `-ProfileName <name>` (Windows) or `--profile <name>` (Unix).
 
@@ -966,7 +1016,7 @@ Each `auto`-mode role's wrapper cycles through four states — **waiting** (idle
 - **`.kiln/status/<role>.json`** — `{"role", "state", "detail", "since", "title"}`. Always reliable, readable on any platform/terminal.
 - **A terminal title OSC sequence** — unreliable on its own: the agent CLI running in that same pane also writes its own title on every render tick (spinner frames, idle icon, ...) and, updating far more often, usually wins the race.
 
-On WezTerm, Kiln's generated Lua config polls the status JSON files directly (not the contested pane title) roughly once a second and renders a live, color-coded status bar in the top-right of the window — one badge per role, background colored by state (green = waiting, blue = receiving, red = delegating, violet = handoff), visible regardless of which tab or pane is focused. This is what makes state visible even in grid/pane layouts like `compact`, where multiple roles share a single tab and would otherwise have no per-pane title of their own.
+On WezTerm, Kiln's generated Lua config polls the status JSON files directly (not the contested pane title) roughly once a second and renders a live, color-coded status bar in the top-right of the window — one badge per role, background colored by state (green = waiting, blue = receiving, teal = delegating, violet = handoff), visible regardless of which tab or pane is focused. This is what makes state visible even in grid/pane layouts like `compact`, where multiple roles share a single tab and would otherwise have no per-pane title of their own.
 
 ![Live status bar in the top-right of a WezTerm window, showing human-in-the-loop as "handoff" and specifier as "delegating: specifier-worker" while coder, refactorer, and architect show "waiting"](docs/images/kiln4.png)
 
@@ -974,9 +1024,15 @@ On WezTerm, Kiln's generated Lua config polls the status JSON files directly (no
 
 Neither Windows Terminal nor tmux has an equivalent scripting hook for a composite status bar — you can still read the JSON files directly (e.g. `Get-Content .kiln/status/coder.json`, or `cat .kiln/status/coder.json` on Unix) to see live state. This is one of the two concrete things you lose by not using WezTerm; the other is layout fidelity (see "Layout Examples" above).
 
-**Scheduler roles report a wider set of states** — `waiting`, `receiving`, `working`,
-`retrying`, `handing-off`, `blocked`, `idle` — through the same `set-status.py` call, so the
-WezTerm badges work identically for them.
+**Scheduler roles report a wider set of states** — `starting`, `waiting`, `receiving`,
+`working`, `retrying`, `handing-off`, `idle`, `blocked`, `halted` — through the same
+`set-status.py` call, so the WezTerm badges work identically for them. Colour follows an
+attention-need gradient, not a strict "green good / red bad" reading: green/teal/blue cover
+the normal cycle (including `working`, deliberately calm rather than alarming — it's the
+state an operator most wants to see), amber (`retrying`) flags a recoverable hiccup, and
+`blocked` → `escalated` → `halted` step from amber-red to pure red as trouble compounds. The
+full table — the single source of truth both this badge and the pane status bar below read
+from — is `STATE_COLORS_HEX` in `kiln/framework/scheduler/pane_status.py`.
 
 ### Pane Status Bar (scheduler roles, every backend)
 
@@ -1231,6 +1287,14 @@ wrapper architecture, which is still the default and still supported.
   `When Sender` column, so sender-dependent routing is data both the wrapper and the scheduler
   can follow rather than prose only an LLM could interpret.
 - ✓ **Per-pane status bar** and a configuration banner for scheduler roles.
+- ✓ **Swarm-wide dashboard** (`"scheduler": "dashboard"`, `scheduler/dashboard.py`) — a
+  `top`-style pane aggregating role state, queue depth, cost/cycle totals and recent
+  activity/escalations across every role at once. Shipped as its own tab in `scheduler-all`.
+  See **Dashboard mode** above.
+- ✓ **Cost/cycle persistence** — `.kiln/status/<role>.json` now carries optional
+  `cycles`/`cost_usd` fields (threaded from the pane status bar through `set-status.py`), so
+  spend and cycle count survive the process that tracked them and are readable by anything
+  else polling status, not just the bar that produced them.
 - ✓ **Test suite** — pytest over `launcher/` and `scheduler/`, with mutation testing on the
   pure modules. `pip install -e .` then `pytest`.
 
@@ -1279,6 +1343,7 @@ queue by four schedulers is untested.
 - ✓ Flexible terminal layouts (tabs, split panes, grids, focus layouts)
 - ✓ Per-agent model configuration for Claude agents
 - ✓ Built-in communication health check (`/kiln-ping` skill, on request from `human-in-the-loop`)
+- ✓ Swarm-wide live dashboard (`"scheduler": "dashboard"`) — role state, queue depth, cost/cycle totals, recent activity and escalations in one pane
 - ✓ Logbook tracking of all handoffs and agent actions
 - ✓ Wrapper + worker-subagent delegation for Claude `auto`-mode roles — persistent thin wrappers dispatch work to disposable worker subagents, keeping wrapper context at ~140 lines through unlimited cycles
 - ✓ Codex agent support, including worker-subagent delegation via Codex's own multi-agent spawn tools — generated `AGENTS.md` + `.codex/agents/<role>-worker.toml`, isolated per-role `CODEX_HOME` MCP config, `--dangerously-bypass-approvals-and-sandbox` launch flag

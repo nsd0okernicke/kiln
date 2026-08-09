@@ -37,12 +37,19 @@ STATE_EMOJIS = {
     "halted": "🛑",
 }
 
-USAGE = "Usage: set-status.py <role> <state> [detail] [--mode=auto|manual]"
+USAGE = (
+    "Usage: set-status.py <role> <state> [detail] "
+    "[--mode=auto|manual] [--cycles=N] [--cost=X.XX]"
+)
 
 
 def parse_argv(argv):
     """
-    Parse `role, state, detail, mode` from argv (excluding the script name).
+    Parse `role, state, detail, mode, cycles, cost_usd` from argv (excluding the script name).
+
+    `cycles`/`cost_usd` are None when not passed -- only role_scheduler.py's scheduler-driven
+    roles track these; wrapper-mode roles never pass them, and build_status() omits them from
+    the written JSON entirely in that case rather than writing a misleading 0.
 
     Raises ValueError (message is the usage string) if `role`/`state` are missing.
     """
@@ -54,15 +61,27 @@ def parse_argv(argv):
     detail = argv[2] if len(argv) > 2 and argv[2] != "-" and not argv[2].startswith("--") else None
 
     mode = "auto"
+    cycles = None
+    cost_usd = None
     for arg in argv[2:]:
         if arg.startswith("--mode="):
             mode = arg.split("=", 1)[1]
-            break
+        elif arg.startswith("--cycles="):
+            cycles = int(arg.split("=", 1)[1])
+        elif arg.startswith("--cost="):
+            cost_usd = float(arg.split("=", 1)[1])
 
-    return role, state, detail, mode
+    return role, state, detail, mode, cycles, cost_usd
 
 
-def build_status(role: str, state: str, detail: str | None, mode: str) -> dict:
+def build_status(
+    role: str,
+    state: str,
+    detail: str | None,
+    mode: str,
+    cycles: int | None = None,
+    cost_usd: float | None = None,
+) -> dict:
     """Build the status dict for one role. Raises ValueError for an unrecognized state."""
     if state not in STATE_EMOJIS:
         raise ValueError(f"unknown state '{state}'")
@@ -74,7 +93,7 @@ def build_status(role: str, state: str, detail: str | None, mode: str) -> dict:
     if detail:
         title += f": {detail}"
 
-    return {
+    status = {
         "role": role,
         "state": state,
         "detail": detail,
@@ -82,17 +101,24 @@ def build_status(role: str, state: str, detail: str | None, mode: str) -> dict:
         "since": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "title": title,
     }
+    # Omitted, not written as 0/None, when absent: a wrapper-mode role's status file should
+    # not claim "$0.00 spent, 0 cycles" when it never tracked either in the first place.
+    if cycles is not None:
+        status["cycles"] = cycles
+    if cost_usd is not None:
+        status["cost_usd"] = cost_usd
+    return status
 
 
 def main():
     try:
-        role, state, detail, mode = parse_argv(sys.argv[1:])
+        role, state, detail, mode, cycles, cost_usd = parse_argv(sys.argv[1:])
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         sys.exit(1)
 
     try:
-        status = build_status(role, state, detail, mode)
+        status = build_status(role, state, detail, mode, cycles, cost_usd)
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)

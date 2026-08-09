@@ -118,6 +118,41 @@ class TestCountQueued:
         assert db.count_queued(db_path, "coder", "main") == 0
 
 
+class TestCountQueuedByRole:
+    def test_groups_by_target_for_this_branch(self, db_path, add_message):
+        add_message(target="coder", branch="main")
+        add_message(target="coder", branch="main")
+        add_message(target="refactorer", branch="main")
+        add_message(target="coder", branch="other")
+        add_message(target="coder", branch="main", status=db.STATUS_DELIVERED)
+        assert db.count_queued_by_role(db_path, "main") == {"coder": 2, "refactorer": 1}
+
+    def test_empty_queue_is_an_empty_dict(self, db_path):
+        assert db.count_queued_by_role(db_path, "main") == {}
+
+
+class TestRecentMessages:
+    def test_newest_first(self, db_path, add_message):
+        add_message(target="coder", created_at="2026-01-01 00:00:00")
+        add_message(target="refactorer", created_at="2026-01-02 00:00:00")
+        rows = db.recent_messages(db_path, "main")
+        assert [r["target"] for r in rows] == ["refactorer", "coder"]
+
+    def test_respects_the_limit(self, db_path, add_message):
+        for _ in range(5):
+            add_message(target="coder")
+        assert len(db.recent_messages(db_path, "main", limit=3)) == 3
+
+    def test_only_this_branch(self, db_path, add_message):
+        add_message(target="coder", branch="main")
+        add_message(target="coder", branch="other")
+        rows = db.recent_messages(db_path, "main")
+        assert len(rows) == 1
+
+    def test_empty_db_is_an_empty_list(self, db_path):
+        assert db.recent_messages(db_path, "main") == []
+
+
 class TestStatusTransitions:
     def test_mark_processing(self, db_path, add_message, read_message):
         message_id = add_message()

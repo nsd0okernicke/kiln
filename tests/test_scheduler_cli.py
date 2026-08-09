@@ -303,7 +303,7 @@ class TestCliLoop:
         # whatever state was last written successfully.
         seen = []
         ctx = _dummy_ctx(tmp_path)
-        ctx.set_status = seen.append
+        ctx.set_status = lambda state, **_kwargs: seen.append(state)
 
         def halting_cycle(ctx, state):
             state.halted = True
@@ -320,7 +320,7 @@ class TestCliLoop:
         # "blocked" during retries, then "halted" once MAX_CONSECUTIVE_ERRORS is reached.
         seen = []
         ctx = _dummy_ctx(tmp_path)
-        ctx.set_status = seen.append
+        ctx.set_status = lambda state, **_kwargs: seen.append(state)
 
         def always_fails(ctx, state):
             raise RuntimeError("boom")
@@ -364,14 +364,32 @@ class TestStatusBarWiring:
         # The JSON file drives the WezTerm tab-bar badges; the pane bar is additive.
         written = []
         ctx = _dummy_ctx(tmp_path)
-        ctx.set_status = written.append
+        ctx.set_status = lambda state, **kwargs: written.append((state, kwargs))
         args = role_scheduler.parse_args(self._args(tmp_path))
 
         bar = role_scheduler.attach_status_bar(ctx, args)
         ctx.set_status("working")
 
-        assert written == ["working"]
+        assert written[0][0] == "working"
         assert bar.status.state == "working"
+
+    def test_current_cycles_and_cost_are_threaded_through(self, tmp_path):
+        # The dashboard's swarm-wide totals read cycles/cost_usd straight out of the JSON
+        # set-status.py writes -- this is what actually gets them there, on every state
+        # change, from the same bar.status the pane's own bottom row already tracks.
+        written = []
+        ctx = _dummy_ctx(tmp_path)
+        ctx.set_status = lambda state, **kwargs: written.append((state, kwargs))
+        args = role_scheduler.parse_args(self._args(tmp_path))
+
+        bar = role_scheduler.attach_status_bar(ctx, args)
+        role_scheduler._record_cycle(
+            bar, role_scheduler.CycleResult(role_scheduler.HANDED_OFF, cost_usd=1.5)
+        )
+        ctx.set_status("working")
+
+        _, kwargs = written[-1]
+        assert kwargs == {"cycles": 1, "cost_usd": 1.5}
 
     def test_the_handoff_target_is_shown_before_the_first_cycle(self, tmp_path):
         bar, _ = self._bar(tmp_path)
