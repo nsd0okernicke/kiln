@@ -1059,6 +1059,13 @@ On WezTerm, Kiln's generated Lua config polls the status JSON files directly (no
 
 Neither Windows Terminal nor tmux has an equivalent scripting hook for a composite status bar — you can still read the JSON files directly (e.g. `Get-Content .kiln/status/coder.json`, or `cat .kiln/status/coder.json` on Unix) to see live state. This is one of the two concrete things you lose by not using WezTerm; the other is layout fidelity (see "Layout Examples" above).
 
+> Until the first Linux test run this was aspirational rather than true: `set-status.py`
+> located the project through `KILN_PROJECT_DIR`, which only the WezTerm backend ever
+> exported, so under tmux or Windows Terminal every write failed and `.kiln/status/` stayed
+> empty — taking the dashboard's whole STATE column with it. It now falls back to deriving
+> the project root from its own installed location (`<project>/.kiln/tools/set-status.py`),
+> so the JSON is written on every backend.
+
 **Scheduler roles report a wider set of states** — `starting`, `waiting`, `receiving`,
 `working`, `retrying`, `handing-off`, `idle`, `blocked`, `halted` — through the same
 `set-status.py` call, so the WezTerm badges work identically for them. Colour follows an

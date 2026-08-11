@@ -138,6 +138,41 @@ class TestEndToEnd:
         status = json.loads((tmp_path / ".kiln" / "status" / "coder.json").read_text())
         assert status["state"] == "halted"
 
+    def test_writes_without_the_env_var_when_installed_in_a_project(self, tmp_path, monkeypatch):
+        # KILN_PROJECT_DIR is exported only by the WezTerm backend, so under tmux or Windows
+        # Terminal every call died with "environment variable not set" and .kiln/status/ was
+        # never written -- silently emptying the dashboard's STATE column and the persisted
+        # cycle/cost totals. Found on Linux, where tmux is the only fallback there is.
+        monkeypatch.delenv("KILN_PROJECT_DIR", raising=False)
+        tools = tmp_path / ".kiln" / "tools"
+        tools.mkdir(parents=True)
+        installed = tools / "set-status.py"
+        installed.write_bytes(SET_STATUS_PY.read_bytes())
+
+        result = subprocess.run(
+            [sys.executable, str(installed), "coder", "working"],
+            capture_output=True, text=True, timeout=15,
+        )
+        assert result.returncode == 0, result.stderr
+        status = json.loads((tmp_path / ".kiln" / "status" / "coder.json").read_text())
+        assert status["state"] == "working"
+
+    def test_env_var_still_wins_over_the_derived_path(self, tmp_path, monkeypatch):
+        # The fallback must not override an explicit launcher-supplied location.
+        elsewhere = tmp_path / "explicit"
+        monkeypatch.setenv("KILN_PROJECT_DIR", str(elsewhere))
+        tools = tmp_path / ".kiln" / "tools"
+        tools.mkdir(parents=True)
+        installed = tools / "set-status.py"
+        installed.write_bytes(SET_STATUS_PY.read_bytes())
+
+        subprocess.run(
+            [sys.executable, str(installed), "coder", "working"],
+            capture_output=True, text=True, timeout=15, check=True,
+        )
+        assert (elsewhere / ".kiln" / "status" / "coder.json").exists()
+        assert not (tmp_path / ".kiln" / "status" / "coder.json").exists()
+
     def test_an_unknown_state_still_exits_nonzero(self, tmp_path, monkeypatch):
         monkeypatch.setenv("KILN_PROJECT_DIR", str(tmp_path))
         result = subprocess.run(

@@ -110,6 +110,27 @@ def build_status(
     return status
 
 
+def project_root_from_own_path():
+    """
+    Derive the project root from where this script sits, as a fallback.
+
+    `KILN_PROJECT_DIR` is exported only by the WezTerm backend, so under tmux or Windows
+    Terminal every call died with "environment variable not set" and `.kiln/status/` stayed
+    empty — taking the dashboard's whole STATE column, the persisted cycle/cost totals, and
+    the "just cat .kiln/status/<role>.json" fallback the README offers non-WezTerm users
+    down with it. Found on Linux, where tmux is the only fallback there is.
+
+    `copy_framework_tools()` always installs this file at `<project>/.kiln/tools/`, so its
+    own location identifies the project without any cooperation from the launcher. `resolve()`
+    matters: in a worktree `.kiln` is a symlink to the real project's, and following it is
+    what makes every role write into the one shared status directory.
+    """
+    tools_dir = Path(__file__).resolve().parent
+    if tools_dir.name == "tools" and tools_dir.parent.name == ".kiln":
+        return str(tools_dir.parent.parent)
+    return None
+
+
 def main():
     try:
         role, state, detail, mode, cycles, cost_usd = parse_argv(sys.argv[1:])
@@ -123,8 +144,7 @@ def main():
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    # Determine status directory from project root environment variable
-    project_dir = os.environ.get("KILN_PROJECT_DIR")
+    project_dir = os.environ.get("KILN_PROJECT_DIR") or project_root_from_own_path()
     if not project_dir:
         print("Error: KILN_PROJECT_DIR environment variable not set", file=sys.stderr)
         sys.exit(1)
