@@ -1348,19 +1348,32 @@ equivalent).
   cannot work: there is no `[project]` or `[build-system]` table). Imports resolve through
   `pythonpath = ["kiln/framework"]` in `[tool.pytest.ini_options]`.
 
-**Live validation status:** a full specifier cycle (receive → merge → one-shot worker → sentinel
-→ squash → handoff) has been validated end to end **on Windows**. The complete four-role loop
-returning to `human-in-the-loop` has **not** yet been observed in one run. Concurrent access to
-the SQLite queue by four schedulers is untested.
+**Live validation status: the complete loop has now been observed in one uninterrupted run** —
+and, for the record, the first platform it closed on was Linux, not Windows.
 
-**Platform validation status:** Windows is the platform every live agent cycle so far has run
-on. Linux (Ubuntu 24.04 / WSL2) has been validated up to but not including a live agent: the
-test suite, the `kiln.sh` shim, scaffolding, worktrees, real symlinks, git hooks, the tmux
-backend, all three scheduler pane types, `.kiln/status` reporting, the dashboard and `--stop`
-all work. Running an actual swarm cycle there against a live Claude Code is the remaining gap.
-macOS remains entirely untested — it shares the Linux code paths (POSIX shim, tmux/WezTerm
+```text
+human-in-the-loop → specifier → coder → refactorer → architect → specifier → human-in-the-loop
+```
+
+Five scheduler cycles, $2.52 total, **zero escalations and zero stalls**, on Ubuntu 24.04
+under WSL2 with `claude` workers. Each hop ran the real cycle: receive → merge → one-shot
+worker → `KILN-STATUS` sentinel → squash → verified handoff insert. The last hop is the one
+worth calling out — the specifier correctly recognised the architect's inbound message as a
+completed-cycle report and applied the `specifier | human-in-the-loop | architect` row of the
+routing table, returning it to the human instead of looping it back to `coder`. That
+conditional-routing row is the thing that closes the cycle, and this is the first time it has
+been exercised end to end by real agents rather than by unit tests. The `inbox` pane received
+the report, squash-merged it into `main` and marked it processed.
+
+Still untested: concurrent contention on the SQLite queue (all five cycles were sequential —
+only one role had work at any moment, so the schedulers never actually raced), and the
+`mixed-backends` profile across every backend at once.
+
+**Platform validation status:** Linux (Ubuntu 24.04 / WSL2) is now validated end to end,
+including live agents. Windows remains validated for everything except the full loop above.
+macOS is entirely untested — it shares the Linux code paths (POSIX shim, tmux/WezTerm
 backends, `python3`), so it is *likely* fine, but "likely" is exactly what Linux was before it
-was run and six defects fell out.
+was run and seven defects fell out.
 
 ### ✓ Completed Features
 
@@ -1485,9 +1498,13 @@ This means agents can read/write/execute any file in their worktree without prom
 
 ### Recommended Next Steps
 
-1. **Validate the full scheduler loop across every backend at once** — one uninterrupted
-   specifier → coder → refactorer → architect → human-in-the-loop cycle on `mixed-backends`,
-   plus concurrent SQLite access by four schedulers
+1. **Validate the full scheduler loop across every backend at once** — the all-Claude
+   `default` profile has now completed one uninterrupted
+   human-in-the-loop → specifier → coder → refactorer → architect → human-in-the-loop cycle
+   (see **Live validation status**), so what remains here is the same run on
+   `mixed-backends`, plus genuine concurrent SQLite contention: every cycle so far has been
+   sequential, with only one role holding work at a time, so four schedulers have still
+   never actually raced for the queue
 2. **`grok` wrapper mode** — closes the one remaining "backend accepted but one mode
    unimplemented" gap, following the same shape as the Copilot/Codex wrapper work
 3. **Port `kiln-cleanup.ps1` to Python** — closes the Unix cleanup gap and removes the last non-shim PowerShell in the launch path
