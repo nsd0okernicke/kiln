@@ -39,10 +39,16 @@ fi
 
 # A bare first argument that is not a known subcommand is treated as the project directory,
 # preserving the old `kiln.sh /path/to/project` calling convention.
+#
+# Every subcommand launcher.cli recognises has to be listed here, or it gets swallowed as a
+# directory: `send` and `inbox` were missing, so `kiln.sh send --to specifier ...` was
+# rewritten to `--working-dir send --to specifier ...` and died on "unrecognized arguments:
+# --to". Both are documented in the README and both were unusable on Unix; kiln.ps1 never had
+# the bug because it forwards @args untouched.
 args=("$@")
 if [ "${#args[@]}" -gt 0 ]; then
   case "${args[0]}" in
-    init|-*) ;;
+    init|send|inbox|-*) ;;
     *)
       args=(--working-dir "${args[0]}" "${args[@]:1}")
       ;;
