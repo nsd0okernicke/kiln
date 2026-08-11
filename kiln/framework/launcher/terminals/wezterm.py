@@ -6,7 +6,7 @@ JSON into the environment, then runs `wezterm start`. WezTerm's embedded Lua int
 handles `gui-startup` and does the actual `spawn_window`/`split`/`send_text` work.
 
 The Lua below began as a verbatim port of the since-deleted lib/terminal-adapters/wezterm.ps1
-template (in git history) with two bug fixes, both noted at their site: `Kiln_PROJECT_DIR` is
+template (in git history) with two bug fixes, both noted at their site: `KILN_PROJECT_DIR` is
 now actually exported (it never was, which silently disabled the live status bar), and the
 pane-id path casing is corrected. It has since gained keybindings and scheduler state colours.
 """
@@ -25,10 +25,10 @@ from . import PaneSpec
 
 log = logging.getLogger(__name__)
 
-ENV_ROLES = "Kiln_ROLES_JSON"
-ENV_LAYOUT = "Kiln_LAYOUT_JSON"
-ENV_PROJECT_DIR = "Kiln_PROJECT_DIR"
-ENV_STATE_COLORS = "Kiln_STATE_COLORS_JSON"
+ENV_ROLES = "KILN_ROLES_JSON"
+ENV_LAYOUT = "KILN_LAYOUT_JSON"
+ENV_PROJECT_DIR = "KILN_PROJECT_DIR"
+ENV_STATE_COLORS = "KILN_STATE_COLORS_JSON"
 
 #: How long to leave the generated config in place before restoring the user's own, so
 #: WezTerm has finished reading it.
@@ -88,16 +88,16 @@ config.keys = {
 }
 
 local role_map    = {}
-local roles_json  = os.getenv('Kiln_ROLES_JSON') or '[]'
+local roles_json  = os.getenv('KILN_ROLES_JSON') or '[]'
 local roles       = wezterm.json_parse(roles_json)
-local project_dir = os.getenv('Kiln_PROJECT_DIR') or ''
+local project_dir = os.getenv('KILN_PROJECT_DIR') or ''
 
 -- Read, not hardcoded: `scheduler.pane_status.STATE_COLORS_HEX` (Python) is the single
 -- source of truth for state colour, exported here as JSON by `build_environment` so this
 -- badge and the pane's own bottom-row status bar can no longer drift into two different
 -- palettes for the same state names -- which is exactly what a hand-copied second table
 -- here used to let happen.
-local state_colors_json = os.getenv('Kiln_STATE_COLORS_JSON') or '{}'
+local state_colors_json = os.getenv('KILN_STATE_COLORS_JSON') or '{}'
 local STATE_COLORS = wezterm.json_parse(state_colors_json) or {}
 local STATE_COLOR_DEFAULT = '#8a8a88'
 
@@ -169,7 +169,7 @@ end
 
 wezterm.on('gui-startup', function(cmd)
   local mux = wezterm.mux
-  local layout_json = os.getenv('Kiln_LAYOUT_JSON') or ''
+  local layout_json = os.getenv('KILN_LAYOUT_JSON') or ''
 
   if not roles or #roles == 0 then
     return
@@ -342,7 +342,7 @@ def build_environment(panes: list[PaneSpec], layout: dict, project_dir: Path) ->
     """
     Environment handed to WezTerm.
 
-    `Kiln_PROJECT_DIR` is essential and was missing from the PowerShell original: the Lua
+    `KILN_PROJECT_DIR` is essential and was missing from the PowerShell original: the Lua
     `update-status` handler returns immediately when it is empty, which silently disabled
     the live status bar the README advertises.
     """

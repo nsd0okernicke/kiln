@@ -82,7 +82,9 @@ class TestBuildStatus:
 class TestParseArgv:
     def test_role_and_state(self, set_status):
         role, state, detail, mode, cycles, cost = set_status.parse_argv(["coder", "working"])
-        assert (role, state, detail, mode, cycles, cost) == ("coder", "working", None, "auto", None, None)
+        assert (role, state, detail, mode, cycles, cost) == (
+            "coder", "working", None, "auto", None, None,
+        )
 
     def test_detail_is_captured(self, set_status):
         _, _, detail, _, _, _ = set_status.parse_argv(["coder", "delegating", "coder-worker"])
@@ -112,7 +114,9 @@ class TestParseArgv:
         role, state, detail, mode, cycles, cost = set_status.parse_argv(
             ["coder", "working", "-", "--mode=auto", "--cycles=3", "--cost=0.5"]
         )
-        assert (role, state, detail, mode, cycles, cost) == ("coder", "working", None, "auto", 3, 0.5)
+        assert (role, state, detail, mode, cycles, cost) == (
+            "coder", "working", None, "auto", 3, 0.5,
+        )
 
     def test_missing_arguments_raise(self, set_status):
         with pytest.raises(ValueError, match="Usage"):
@@ -124,7 +128,7 @@ class TestEndToEnd:
         # "halted" was rejected before STATE_EMOJIS gained parity with STATE_COLORS_HEX --
         # the whole point of the fix. Runs the real script as a subprocess, not the loaded
         # module, so this exercises exactly what role_scheduler.py's make_status_writer does.
-        monkeypatch.setenv("Kiln_PROJECT_DIR", str(tmp_path))
+        monkeypatch.setenv("KILN_PROJECT_DIR", str(tmp_path))
         result = subprocess.run(
             [sys.executable, str(SET_STATUS_PY), "coder", "halted"],
             capture_output=True, text=True, timeout=15,
@@ -135,7 +139,7 @@ class TestEndToEnd:
         assert status["state"] == "halted"
 
     def test_an_unknown_state_still_exits_nonzero(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("Kiln_PROJECT_DIR", str(tmp_path))
+        monkeypatch.setenv("KILN_PROJECT_DIR", str(tmp_path))
         result = subprocess.run(
             [sys.executable, str(SET_STATUS_PY), "coder", "nonsense"],
             capture_output=True, text=True, timeout=15,
@@ -146,7 +150,7 @@ class TestEndToEnd:
     def test_cycles_and_cost_flags_land_in_the_json(self, tmp_path, monkeypatch):
         # This is what role_scheduler.py's make_status_writer actually invokes -- the
         # dashboard reads these two fields straight out of the written JSON.
-        monkeypatch.setenv("Kiln_PROJECT_DIR", str(tmp_path))
+        monkeypatch.setenv("KILN_PROJECT_DIR", str(tmp_path))
         result = subprocess.run(
             [
                 sys.executable, str(SET_STATUS_PY), "coder", "working",

@@ -210,7 +210,9 @@ class TestDashboardPane:
         from launcher.commands import build_agent_command
         from launcher.config import RoleConfig
 
-        role = RoleConfig(role="dashboard", worktree="@current", mode="manual", scheduler="dashboard")
+        role = RoleConfig(
+            role="dashboard", worktree="@current", mode="manual", scheduler="dashboard"
+        )
         return build_agent_command(role, paths, "main")
 
     def test_runs_the_dashboard_module(self, paths):
@@ -299,7 +301,9 @@ class TestDashboardIsNotAnAgent:
     def _role(self):
         from launcher.config import RoleConfig
 
-        return RoleConfig(role="dashboard", worktree="@current", mode="manual", scheduler="dashboard")
+        return RoleConfig(
+            role="dashboard", worktree="@current", mode="manual", scheduler="dashboard"
+        )
 
     def test_no_worker_definition_is_written(self, paths):
         from launcher.generate import write_worker_file

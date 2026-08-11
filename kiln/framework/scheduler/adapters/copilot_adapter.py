@@ -70,12 +70,13 @@ def build_command(
     could not request permission from user" doesn't carry. Off by default, same reasoning as
     the Claude adapter's `--debug-file`: expensive to write for a healthy run.
 
-    `--allow-tool=read/write/shell` alongside `--allow-all`: decompiling the shipped CLI bundle
-    (`@github/copilot-win32-x64/app.js` 1.0.79) showed `--allow-all`'s `approveAllToolPermissionRequests`
-    is a runtime flag that an enterprise managed-settings re-resolution (auth refresh, or an
-    hourly timer) can silently zero out mid-session on a fail-closed policy check, while an
-    explicit `--allow-tool` grant is stored under a separate `rules` key untouched by that same
-    flip -- this is the confirmed mechanism behind long scheduler-mode sessions eventually
+    `--allow-tool=read/write/shell` alongside `--allow-all`: decompiling the shipped CLI
+    bundle (`@github/copilot-win32-x64/app.js` 1.0.79) showed that `--allow-all`'s
+    `approveAllToolPermissionRequests` is a runtime flag that an enterprise managed-settings
+    re-resolution (auth refresh, or an hourly timer) can silently zero out mid-session on a
+    fail-closed policy check, while an explicit `--allow-tool` grant is stored under a
+    separate `rules` key untouched by that same flip -- this is the confirmed mechanism
+    behind long scheduler-mode sessions eventually
     denying every write/MCP call ("...and could not request permission from user") while reads
     (gated by the still-unaffected `approveAllReadPermissionRequests`) keep working. Verified
     live that the flag combination itself parses and runs cleanly; matches the three tool

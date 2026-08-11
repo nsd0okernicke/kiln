@@ -15,10 +15,10 @@ may not be on `sys.path` there, and this file's hyphenated name means it can't b
 either), so the two dicts are kept in sync by hand, guarded by that test rather than code.
 """
 
-import sys
 import json
 import os
-from datetime import datetime, timezone
+import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 STATE_EMOJIS = {
@@ -98,7 +98,7 @@ def build_status(
         "state": state,
         "detail": detail,
         "mode": mode,
-        "since": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "since": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "title": title,
     }
     # Omitted, not written as 0/None, when absent: a wrapper-mode role's status file should
@@ -124,9 +124,9 @@ def main():
         sys.exit(1)
 
     # Determine status directory from project root environment variable
-    project_dir = os.environ.get("Kiln_PROJECT_DIR")
+    project_dir = os.environ.get("KILN_PROJECT_DIR")
     if not project_dir:
-        print("Error: Kiln_PROJECT_DIR environment variable not set", file=sys.stderr)
+        print("Error: KILN_PROJECT_DIR environment variable not set", file=sys.stderr)
         sys.exit(1)
 
     status_dir = Path(project_dir) / ".kiln" / "status"

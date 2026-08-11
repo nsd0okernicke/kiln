@@ -454,7 +454,9 @@ class TestTrustCopilotWorktrees:
         workspace.prepare_agent_configs(PROFILE, paths)
         assert self._config_path(fake_home).read_text(encoding="utf-8") == before
 
-    def test_missing_config_file_is_a_warning_not_a_crash(self, paths, tmp_path, monkeypatch, caplog):
+    def test_missing_config_file_is_a_warning_not_a_crash(
+        self, paths, tmp_path, monkeypatch, caplog
+    ):
         home = tmp_path / "no-copilot-yet"
         home.mkdir()
         monkeypatch.setattr(workspace.Path, "home", lambda: home)

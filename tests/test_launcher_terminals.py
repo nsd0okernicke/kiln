@@ -153,7 +153,7 @@ class TestWezTermLua:
         assert "pane_def.size or" in wezterm.LUA_CONFIG
 
     def test_layout_extras_survive_serialisation_to_the_lua(self):
-        # The Lua can only honour keys that actually reach it in Kiln_LAYOUT_JSON.
+        # The Lua can only honour keys that actually reach it in KILN_LAYOUT_JSON.
         layout = {
             "tabs": [
                 {

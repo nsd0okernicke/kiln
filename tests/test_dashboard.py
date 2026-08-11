@@ -8,14 +8,14 @@ pane_status.py and inbox.py are tested -- no live terminal, no real clock.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from scheduler import dashboard, db, handoff
 
 pytestmark = pytest.mark.integration
 
-NOW_UTC = datetime(2026, 8, 9, 15, 0, 0, tzinfo=timezone.utc)
+NOW_UTC = datetime(2026, 8, 9, 15, 0, 0, tzinfo=UTC)
 NOW_LOCAL = datetime(2026, 8, 9, 17, 0, 0)
 
 
@@ -28,19 +28,33 @@ def _status(state="working", since=None, cycles=None, cost_usd=None):
     return status
 
 
-def _message(sender="specifier", target="coder", summary="did the thing", escalation=False, created_at="2026-08-09 16:59:00"):
+def _message(
+    sender="specifier",
+    target="coder",
+    summary="did the thing",
+    escalation=False,
+    created_at="2026-08-09 16:59:00",
+):
     content = handoff.format_handoff(
         sender=sender, handoff="pending", branch="main", commit="abc1234",
         summary=summary, next_role=target, timestamp="2026-08-09 16:59:00",
         escalation=escalation,
     )
-    return {"sender": sender, "target": target, "status": "queued", "content": content, "created_at": created_at}
+    return {
+        "sender": sender,
+        "target": target,
+        "status": "queued",
+        "content": content,
+        "created_at": created_at,
+    }
 
 
 class TestReadSessions:
     def test_parses_tab_separated_rows(self, tmp_path):
         path = tmp_path / "sessions"
-        path.write_text("1\tcoder\tclaude\tCoder\n2\tspecifier\tclaude\tSpecifier\n", encoding="utf-8")
+        path.write_text(
+            "1\tcoder\tclaude\tCoder\n2\tspecifier\tclaude\tSpecifier\n", encoding="utf-8"
+        )
         sessions = dashboard.read_sessions(path)
         assert [s.role for s in sessions] == ["coder", "specifier"]
         assert sessions[0].agent == "claude"
@@ -216,7 +230,9 @@ class TestSnapshot:
     def test_end_to_end_against_a_real_db_and_status_files(self, tmp_path, db_path):
         status_dir = tmp_path / "status"
         status_dir.mkdir()
-        (status_dir / "coder.json").write_text(json.dumps(_status(cycles=2, cost_usd=0.9)), encoding="utf-8")
+        (status_dir / "coder.json").write_text(
+            json.dumps(_status(cycles=2, cost_usd=0.9)), encoding="utf-8"
+        )
 
         sessions_file = tmp_path / "sessions"
         sessions_file.write_text("1\tcoder\tclaude\tCoder\n", encoding="utf-8")

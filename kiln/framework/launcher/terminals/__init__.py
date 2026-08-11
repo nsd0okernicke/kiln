@@ -36,7 +36,7 @@ class PaneSpec:
     agent: str = "claude"
 
     def as_role_data(self) -> dict:
-        """Shape consumed by the WezTerm Lua config's `Kiln_ROLES_JSON`."""
+        """Shape consumed by the WezTerm Lua config's `KILN_ROLES_JSON`."""
         return {
             "role": self.role,
             "name": self.name,

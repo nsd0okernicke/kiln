@@ -12,10 +12,11 @@ Must never raise or block the tool call it's attached to — any failure here
 is swallowed so the underlying tool call always proceeds normally.
 """
 
-import sys
+import contextlib
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -40,17 +41,22 @@ def main():
     state = None
     detail = None
 
+    subagent = str(tool_input.get("subagent_type", ""))
+
     if event == "PreToolUse":
         if tool_name == "mcp__kiln-channel__wait_for_message":
             state = "waiting"
-        elif tool_name in ("Task", "Agent") and str(tool_input.get("subagent_type", "")).endswith("-worker"):
+        elif tool_name in ("Task", "Agent") and subagent.endswith("-worker"):
             state = "delegating"
             detail = tool_input.get("subagent_type")
         elif tool_name == "Skill" and tool_input.get("skill") == "kiln-handoff":
             state = "handoff"
-    elif event == "PostToolUse":
-        if tool_name == "mcp__kiln-channel__wait_for_message" and tool_response.get("received"):
-            state = "receiving"
+    elif (
+        event == "PostToolUse"
+        and tool_name == "mcp__kiln-channel__wait_for_message"
+        and tool_response.get("received")
+    ):
+        state = "receiving"
 
     if not state:
         return
@@ -72,7 +78,6 @@ def main():
 
 
 if __name__ == "__main__":
-    try:
+    # Never let a status-reporting failure surface to the tool call this hook is attached to.
+    with contextlib.suppress(Exception):
         main()
-    except Exception:
-        pass

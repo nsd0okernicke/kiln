@@ -255,7 +255,9 @@ class TestResolveModel:
 
     def _args(self, tmp_path, agent, model=""):
         worker_file = tmp_path / "coder-worker.md"
-        worker_file.write_text(WORKER_FILE.replace("model: claude-sonnet-5\n", ""), encoding="utf-8")
+        worker_file.write_text(
+            WORKER_FILE.replace("model: claude-sonnet-5\n", ""), encoding="utf-8"
+        )
         workflow = tmp_path / "workflow.md"
         workflow.write_text("| coder | refactorer |\n", encoding="utf-8")
         argv = [
@@ -343,7 +345,9 @@ class TestStartupBanner:
         # (copilot )" -- a trailing blank that looks like broken config, not "the CLI picks
         # its own default".
         worker_file = tmp_path / "coder-worker.agent.md"
-        worker_file.write_text(WORKER_FILE.replace("model: claude-sonnet-5\n", ""), encoding="utf-8")
+        worker_file.write_text(
+            WORKER_FILE.replace("model: claude-sonnet-5\n", ""), encoding="utf-8"
+        )
         workflow = tmp_path / "workflow.md"
         workflow.write_text("| coder | refactorer |\n", encoding="utf-8")
         argv = [

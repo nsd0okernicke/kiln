@@ -114,7 +114,10 @@ class TestEventRendering:
         ]
 
     def test_agent_message_text_is_shown(self):
-        event = {"type": "item.completed", "item": {"type": "agent_message", "text": "Working on it"}}
+        event = {
+            "type": "item.completed",
+            "item": {"type": "agent_message", "text": "Working on it"},
+        }
         assert codex_adapter.render_event(event) == ["    Working on it"]
 
     def test_empty_agent_message_renders_nothing(self):

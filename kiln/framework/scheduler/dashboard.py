@@ -21,7 +21,7 @@ import re
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from . import db, handoff, pane_status
@@ -36,12 +36,18 @@ ICON_TITLE = "\N{BAR CHART}"
 
 #: Everything after a handoff message's closing banner rule, up to the next blank line --
 #: matches `handoff.format_handoff`'s layout exactly (SEPARATOR, banner, SEPARATOR, summary).
-_SUMMARY_RE = re.compile(re.escape(handoff.SEPARATOR) + r".*\n" + re.escape(handoff.SEPARATOR) + r"\n(?P<summary>.*)", re.DOTALL)
+_SEPARATOR_RE = re.escape(handoff.SEPARATOR)
+_SUMMARY_RE = re.compile(
+    _SEPARATOR_RE + r".*\n" + _SEPARATOR_RE + r"\n(?P<summary>.*)", re.DOTALL
+)
 
 
 @dataclass(frozen=True)
 class RoleSession:
-    """One row of `.kiln/sessions` — the static role inventory `workspace.write_sessions_file` writes at launch."""
+    """
+    One row of `.kiln/sessions` — the static role inventory
+    `workspace.write_sessions_file` writes at launch.
+    """
 
     role: str
     agent: str
@@ -239,7 +245,7 @@ def snapshot(ctx: DashboardContext) -> list[str]:
         statuses=statuses,
         queue_depth=queue_depth,
         messages=messages,
-        now_utc=datetime.now(timezone.utc),
+        now_utc=datetime.now(UTC),
         now_local=datetime.now(),
         activity_limit=ctx.activity_limit,
     )
@@ -284,7 +290,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         except Exception:
             # A dashboard that dies over one bad poll takes the swarm-wide view with it.
             log.exception("render failed; continuing")
-            frame = [f"{ICON_TITLE} Kiln Dashboard \N{EM DASH} render failed, retrying\N{HORIZONTAL ELLIPSIS}"]
+            frame = [
+                f"{ICON_TITLE} Kiln Dashboard \N{EM DASH} render failed, "
+                f"retrying\N{HORIZONTAL ELLIPSIS}"
+            ]
 
         print(pane_status.CLEAR_SCREEN + "\n".join(frame), flush=True)
 

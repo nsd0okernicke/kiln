@@ -163,7 +163,9 @@ class TestPassivePanes:
         assert role.is_passive is False
 
     def test_dashboard_is_accepted_by_profile_parsing(self):
-        config = {"profiles": {"p": {"terminals": [{"role": "dashboard", "scheduler": "dashboard"}]}}}
+        config = {
+            "profiles": {"p": {"terminals": [{"role": "dashboard", "scheduler": "dashboard"}]}}
+        }
         assert parse_profile(config, "p").roles[0].is_dashboard is True
 
 

@@ -121,7 +121,7 @@ class TestParseCliOutput:
         ids=["empty", "garbage", "broken-json", "only-empty-message"],
     )
     def test_no_usable_message_raises(self, stdout):
-        with pytest.raises(ValueError, match="no assistant.message"):
+        with pytest.raises(ValueError, match=r"no assistant\.message"):
             copilot_adapter.parse_cli_output(stdout)
 
 
@@ -297,7 +297,11 @@ class TestRunWorker:
         assert invocation.is_error is True
 
     def test_nonzero_exit_is_treated_as_blocked(self, fake_run, tmp_path):
-        fake_run(stdout=_stream(_message_event("KILN-STATUS: done x")), stderr="crashed", returncode=1)
+        fake_run(
+            stdout=_stream(_message_event("KILN-STATUS: done x")),
+            stderr="crashed",
+            returncode=1,
+        )
         invocation = copilot_adapter.run_worker(
             definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
             on_output=lambda _l: None,

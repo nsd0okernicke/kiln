@@ -89,7 +89,10 @@ def merge_commit_message(role: str, inbound: handoff.InboundHandoff) -> str:
     merge regardless of who sent what, and useless in `git log` without cross-referencing
     `messages.db` by hand. `role` is the merging role (the receiver), not the sender.
     """
-    subject = f"{commit_prefix(role)} Merge {inbound.handoff or 'handoff'} from {inbound.sender or 'unknown'}"
+    subject = (
+        f"{commit_prefix(role)} Merge {inbound.handoff or 'handoff'} "
+        f"from {inbound.sender or 'unknown'}"
+    )
     body = (
         f"Sender: {inbound.sender or '-'}\n"
         f"Handoff: {inbound.handoff or '-'}\n"
@@ -252,7 +255,9 @@ def _persist_inbound(ctx: SchedulerContext, content: str) -> None:
     persist_inbound(ctx.worktree, content)
 
 
-def _persist_worker_debug(ctx: SchedulerContext, invocation: WorkerInvocation, attempt: int) -> None:
+def _persist_worker_debug(
+    ctx: SchedulerContext, invocation: WorkerInvocation, attempt: int
+) -> None:
     """
     Save a blocked worker's raw output for post-mortem, in `.kiln/logs/`.
 

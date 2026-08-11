@@ -109,7 +109,8 @@ class TestColours:
         # (JSON-exported via build_environment) and confirm nothing was lost in translation.
         from launcher.terminals import wezterm
 
-        exported = json.loads(wezterm.build_environment([], {}, Path("/proj"))[wezterm.ENV_STATE_COLORS])
+        environment = wezterm.build_environment([], {}, Path("/proj"))
+        exported = json.loads(environment[wezterm.ENV_STATE_COLORS])
         assert exported == pane_status.STATE_COLORS_HEX
 
 
@@ -117,7 +118,10 @@ class TestWorkerOutputTint:
     def test_wraps_the_line_in_its_background_and_resets(self):
         rendered = pane_status.tint_worker_output("  \N{HAMMER AND WRENCH} Bash  pytest -q")
         r, g, b = pane_status._hex_to_rgb(pane_status.WORKER_OUTPUT_BG_HEX)
-        assert rendered == f"\x1b[48;2;{r};{g};{b}m  \N{HAMMER AND WRENCH} Bash  pytest -q{pane_status.RESET_STYLE}"
+        assert rendered == (
+            f"\x1b[48;2;{r};{g};{b}m  \N{HAMMER AND WRENCH} Bash  pytest -q"
+            f"{pane_status.RESET_STYLE}"
+        )
 
     def test_does_not_override_foreground(self):
         # A wash behind existing text colour, not a competing highlight -- the worker's own

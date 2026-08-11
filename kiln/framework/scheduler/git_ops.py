@@ -162,9 +162,8 @@ def squash_merge_commit(commit: str, cwd: str | Path, message: str) -> GitResult
     into one commit on that role's next squash.
     """
     result = run_git(["merge", "--squash", commit], cwd)
-    if not result.ok:
-        if _clear_generated_blockers(result.output, cwd):
-            result = run_git(["merge", "--squash", commit], cwd)
+    if not result.ok and _clear_generated_blockers(result.output, cwd):
+        result = run_git(["merge", "--squash", commit], cwd)
 
     if not result.ok:
         log.error("squash-merge of %s failed: %s", commit, result.output)
