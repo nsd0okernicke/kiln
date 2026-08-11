@@ -240,7 +240,7 @@ class TestShippedRoutingTable:
         ]
 
 
-def _shipped_profile(name: str = "scheduler-all"):
+def _shipped_profile(name: str = "default"):
     import json
     from pathlib import Path
 
@@ -250,7 +250,7 @@ def _shipped_profile(name: str = "scheduler-all"):
 
 
 def test_default_profile_still_parses():
-    """The scheduler-all profile must stay valid as roles change."""
+    """The default profile must stay valid as roles change."""
     profile = _shipped_profile()
     scheduled = [r.role for r in profile.roles if r.uses_scheduler]
     inboxes = [r.role for r in profile.roles if r.is_inbox]

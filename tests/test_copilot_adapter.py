@@ -53,6 +53,17 @@ class TestBuildCommand:
         # on a confirmation prompt with nobody able to answer it.
         assert "--allow-all" in self._cmd()
 
+    def test_grants_explicit_allow_tool_rules_alongside_allow_all(self):
+        # --allow-all's approveAllToolPermissionRequests can be silently zeroed out mid-session
+        # by an enterprise managed-settings re-resolution (confirmed by decompiling the shipped
+        # bundle), while an --allow-tool grant is stored under a separate `rules` key that
+        # survives the flip -- this is the belt-and-suspenders fix for the "...and could not
+        # request permission from user" failures seen on long scheduler-mode sessions.
+        command = self._cmd()
+        assert "--allow-tool=read" in command
+        assert "--allow-tool=write" in command
+        assert "--allow-tool=shell" in command
+
     def test_isolates_mcp_completely(self):
         # Verified live: workspace.prepare_agent_configs() writes kiln-db into Copilot's
         # *global* ~/.copilot/mcp-config.json whenever any role uses copilot, so an

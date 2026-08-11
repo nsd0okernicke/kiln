@@ -3,365 +3,8 @@
   "description": "Kiln configuration profiles for different development scenarios",
   "default": "default",
   "profiles": {
-    "compact": {
-      "description": "Compact pane layout with all roles in one tab (2x2 grid); auto roles run on the deterministic scheduler",
-      "terminals": [
-        {
-          "role": "specifier",
-          "agent": "claude",
-          "worktree": "@current",
-          "title": "Kiln Specifier",
-          "mode": "manual",
-          "model": "claude-sonnet-5"
-        },
-        {
-          "role": "coder",
-          "agent": "copilot",
-          "worktree": "coder",
-          "title": "Kiln Coder",
-          "mode": "auto",
-          "scheduler": "python"
-        },
-        {
-          "role": "refactorer",
-          "agent": "claude",
-          "worktree": "refactorer",
-          "title": "Kiln Refactorer",
-          "mode": "auto",
-          "model": "claude-sonnet-5",
-          "scheduler": "python"
-        },
-        {
-          "role": "architect",
-          "agent": "claude",
-          "worktree": "architect",
-          "title": "Kiln Architect",
-          "mode": "auto",
-          "model": "claude-sonnet-5",
-          "scheduler": "python"
-        }
-      ],
-      "layout": {
-        "tabs": [
-          {
-            "title": "All Roles",
-            "gridRows": 2,
-            "gridCols": 2,
-            "panes": [
-              {
-                "role": "specifier"
-              },
-              {
-                "role": "coder"
-              },
-              {
-                "role": "refactorer"
-              },
-              {
-                "role": "architect"
-              }
-            ]
-          }
-        ]
-      },
-      "messageBackend": "sqlite",
-      "logLevel": "info",
-      "env": {
-        "DEBUG": "false"
-      }
-    },
-    "tabs": {
-      "description": "Standard 4-agent swarm in separate tabs; auto roles run on the deterministic scheduler",
-      "terminals": [
-        {
-          "role": "specifier",
-          "agent": "claude",
-          "worktree": "@current",
-          "title": "Kiln Specifier",
-          "mode": "manual",
-          "model": "claude-sonnet-5"
-        },
-        {
-          "role": "coder",
-          "agent": "claude",
-          "worktree": "coder",
-          "title": "Kiln Coder",
-          "mode": "auto",
-          "model": "claude-haiku-4-5-20251001",
-          "workerModel": "claude-sonnet-5",
-          "scheduler": "python"
-        },
-        {
-          "role": "refactorer",
-          "agent": "claude",
-          "worktree": "refactorer",
-          "title": "Kiln Refactorer",
-          "mode": "auto",
-          "model": "claude-haiku-4-5-20251001",
-          "workerModel": "claude-sonnet-5",
-          "scheduler": "python"
-        },
-        {
-          "role": "architect",
-          "agent": "claude",
-          "worktree": "architect",
-          "title": "Kiln Architect",
-          "mode": "auto",
-          "model": "claude-haiku-4-5-20251001",
-          "workerModel": "claude-sonnet-5",
-          "scheduler": "python"
-        }
-      ],
-      "layout": {
-        "type": "tabs",
-        "roles": [
-          "specifier",
-          "coder",
-          "refactorer",
-          "architect"
-        ]
-      },
-      "messageBackend": "sqlite",
-      "logLevel": "info",
-      "env": {
-        "DEBUG": "false"
-      }
-    },
     "default": {
-      "description": "Human-guided request intake (human-in-the-loop) feeding a fully autonomous specifier -> coder -> refactorer -> architect cycle on the deterministic scheduler",
-      "terminals": [
-        {
-          "role": "human-in-the-loop",
-          "agent": "claude",
-          "worktree": "@current",
-          "title": "Kiln Human-in-the-Loop",
-          "mode": "manual",
-          "model": "claude-sonnet-5"
-        },
-        {
-          "role": "specifier",
-          "agent": "claude",
-          "worktree": "specifier",
-          "title": "Kiln Specifier",
-          "mode": "auto",
-          "model": "claude-sonnet-5",
-          "scheduler": "python"
-        },
-        {
-          "role": "coder",
-          "agent": "claude",
-          "worktree": "coder",
-          "title": "Kiln Coder",
-          "mode": "auto",
-          "model": "claude-sonnet-5",
-          "scheduler": "python"
-        },
-        {
-          "role": "refactorer",
-          "agent": "claude",
-          "worktree": "refactorer",
-          "title": "Kiln Refactorer",
-          "mode": "auto",
-          "model": "claude-sonnet-5",
-          "scheduler": "python"
-        },
-        {
-          "role": "architect",
-          "agent": "claude",
-          "worktree": "architect",
-          "title": "Kiln Architect",
-          "mode": "auto",
-          "model": "claude-sonnet-5",
-          "scheduler": "python"
-        }
-      ],
-      "layout": {
-        "tabs": [
-          {
-            "title": "Human-in-the-Loop",
-            "panes": [
-              {
-                "role": "human-in-the-loop"
-              }
-            ]
-          },
-          {
-            "title": "Autonomous Cycle",
-            "gridRows": 2,
-            "gridCols": 2,
-            "panes": [
-              {
-                "role": "specifier"
-              },
-              {
-                "role": "coder"
-              },
-              {
-                "role": "refactorer"
-              },
-              {
-                "role": "architect"
-              }
-            ]
-          }
-        ]
-      },
-      "messageBackend": "sqlite",
-      "logLevel": "info",
-      "env": {
-        "DEBUG": "false"
-      }
-    },
-    "dual-pane": {
-      "description": "Two tabs with two panes each; auto roles run on the deterministic scheduler",
-      "terminals": [
-        {
-          "role": "specifier",
-          "agent": "claude",
-          "worktree": "@current",
-          "title": "Kiln Specifier",
-          "mode": "manual",
-          "model": "claude-sonnet-5"
-        },
-        {
-          "role": "coder",
-          "agent": "claude",
-          "worktree": "coder",
-          "title": "Kiln Coder",
-          "mode": "auto",
-          "model": "claude-sonnet-5",
-          "scheduler": "python"
-        },
-        {
-          "role": "refactorer",
-          "agent": "claude",
-          "worktree": "refactorer",
-          "title": "Kiln Refactorer",
-          "mode": "auto",
-          "model": "claude-sonnet-5",
-          "scheduler": "python"
-        },
-        {
-          "role": "architect",
-          "agent": "claude",
-          "worktree": "architect",
-          "title": "Kiln Architect",
-          "mode": "auto",
-          "model": "claude-sonnet-5",
-          "scheduler": "python"
-        }
-      ],
-      "layout": {
-        "tabs": [
-          {
-            "title": "Specifier & Coder",
-            "panes": [
-              {
-                "role": "specifier"
-              },
-              {
-                "role": "coder"
-              }
-            ]
-          },
-          {
-            "title": "Refactorer & Architect",
-            "panes": [
-              {
-                "role": "refactorer"
-              },
-              {
-                "role": "architect"
-              }
-            ]
-          }
-        ]
-      },
-      "messageBackend": "sqlite",
-      "logLevel": "info",
-      "env": {
-        "DEBUG": "false"
-      }
-    },
-    "scheduler-coder": {
-      "description": "Same cycle as default, but the coder runs on the deterministic Python scheduler (opt-in validation profile for the scheduler rollout)",
-      "terminals": [
-        {
-          "role": "human-in-the-loop",
-          "agent": "claude",
-          "worktree": "@current",
-          "title": "Kiln Human-in-the-Loop",
-          "mode": "manual",
-          "model": "claude-sonnet-5"
-        },
-        {
-          "role": "specifier",
-          "agent": "claude",
-          "worktree": "specifier",
-          "title": "Kiln Specifier",
-          "mode": "auto",
-          "model": "claude-sonnet-5"
-        },
-        {
-          "role": "coder",
-          "agent": "claude",
-          "worktree": "coder",
-          "title": "Kiln Coder",
-          "mode": "auto",
-          "model": "claude-sonnet-5",
-          "scheduler": "python"
-        },
-        {
-          "role": "refactorer",
-          "agent": "claude",
-          "worktree": "refactorer",
-          "title": "Kiln Refactorer",
-          "mode": "auto",
-          "model": "claude-sonnet-5"
-        },
-        {
-          "role": "architect",
-          "agent": "claude",
-          "worktree": "architect",
-          "title": "Kiln Architect",
-          "mode": "auto",
-          "model": "claude-sonnet-5"
-        }
-      ],
-      "layout": {
-        "tabs": [
-          {
-            "title": "Human-in-the-Loop",
-            "panes": [
-              {
-                "role": "human-in-the-loop"
-              }
-            ]
-          },
-          {
-            "title": "Autonomous Cycle",
-            "gridRows": 2,
-            "gridCols": 2,
-            "panes": [
-              {
-                "role": "specifier"
-              },
-              {
-                "role": "coder"
-              },
-              {
-                "role": "refactorer"
-              },
-              {
-                "role": "architect"
-              }
-            ]
-          }
-        ]
-      }
-    },
-    "scheduler-all": {
-      "description": "Every auto-mode role runs on the deterministic Python scheduler; human-in-the-loop stays an interactive session with a live inbox pane beneath it",
+      "description": "Human-guided request intake (human-in-the-loop, with a live inbox pane) feeding a fully autonomous specifier -> coder -> refactorer -> architect cycle on the deterministic scheduler, plus a dashboard tab. Every agent-bearing role runs on Claude.",
       "terminals": [
         {
           "role": "human-in-the-loop",
@@ -468,8 +111,111 @@
         ]
       }
     },
+    "codex-only": {
+      "description": "Same topology as the default profile, but every agent-bearing role (including human-in-the-loop) runs on Codex -- validates codex end-to-end, wrapper mode and scheduler mode together.",
+      "terminals": [
+        {
+          "role": "human-in-the-loop",
+          "agent": "codex",
+          "worktree": "@current",
+          "title": "Kiln Human-in-the-Loop (Codex)",
+          "mode": "manual"
+        },
+        {
+          "role": "inbox",
+          "worktree": "@current",
+          "title": "Kiln Inbox",
+          "mode": "manual",
+          "scheduler": "inbox",
+          "watches": "human-in-the-loop"
+        },
+        {
+          "role": "specifier",
+          "agent": "codex",
+          "worktree": "specifier",
+          "title": "Kiln Specifier (Codex)",
+          "mode": "auto",
+          "scheduler": "python"
+        },
+        {
+          "role": "coder",
+          "agent": "codex",
+          "worktree": "coder",
+          "title": "Kiln Coder (Codex)",
+          "mode": "auto",
+          "scheduler": "python"
+        },
+        {
+          "role": "refactorer",
+          "agent": "codex",
+          "worktree": "refactorer",
+          "title": "Kiln Refactorer (Codex)",
+          "mode": "auto",
+          "scheduler": "python"
+        },
+        {
+          "role": "architect",
+          "agent": "codex",
+          "worktree": "architect",
+          "title": "Kiln Architect (Codex)",
+          "mode": "auto",
+          "scheduler": "python"
+        },
+        {
+          "role": "dashboard",
+          "worktree": "@current",
+          "title": "Kiln Dashboard",
+          "mode": "manual",
+          "scheduler": "dashboard"
+        }
+      ],
+      "layout": {
+        "tabs": [
+          {
+            "title": "Human-in-the-Loop",
+            "panes": [
+              {
+                "role": "human-in-the-loop"
+              },
+              {
+                "role": "inbox",
+                "direction": "Bottom",
+                "size": 0.22
+              }
+            ]
+          },
+          {
+            "title": "Autonomous Cycle",
+            "gridRows": 2,
+            "gridCols": 2,
+            "panes": [
+              {
+                "role": "specifier"
+              },
+              {
+                "role": "coder"
+              },
+              {
+                "role": "refactorer"
+              },
+              {
+                "role": "architect"
+              }
+            ]
+          },
+          {
+            "title": "Dashboard",
+            "panes": [
+              {
+                "role": "dashboard"
+              }
+            ]
+          }
+        ]
+      }
+    },
     "mixed-backends": {
-      "description": "Validates the deterministic scheduler across all three backends: specifier runs on copilot, refactorer on codex, everything else on claude, all auto roles on the scheduler (no wrapper LLM session).",
+      "description": "Same topology as the default profile, but validates the deterministic scheduler across backends at once: specifier and refactorer run on codex, everything else on claude. Copilot is parked out of scheduler-mode rotation for now -- see github/copilot-cli#4433 (non-interactive sessions silently and permanently lose write permission mid-session).",
       "terminals": [
         {
           "role": "human-in-the-loop",
@@ -480,10 +226,18 @@
           "model": "claude-sonnet-5"
         },
         {
+          "role": "inbox",
+          "worktree": "@current",
+          "title": "Kiln Inbox",
+          "mode": "manual",
+          "scheduler": "inbox",
+          "watches": "human-in-the-loop"
+        },
+        {
           "role": "specifier",
-          "agent": "copilot",
+          "agent": "codex",
           "worktree": "specifier",
-          "title": "Kiln Specifier (Copilot)",
+          "title": "Kiln Specifier (Codex)",
           "mode": "auto",
           "scheduler": "python",
           "workerDebug": true
@@ -516,6 +270,13 @@
           "model": "claude-sonnet-5",
           "scheduler": "python",
           "workerDebug": true
+        },
+        {
+          "role": "dashboard",
+          "worktree": "@current",
+          "title": "Kiln Dashboard",
+          "mode": "manual",
+          "scheduler": "dashboard"
         }
       ],
       "layout": {
@@ -525,6 +286,11 @@
             "panes": [
               {
                 "role": "human-in-the-loop"
+              },
+              {
+                "role": "inbox",
+                "direction": "Bottom",
+                "size": 0.22
               }
             ]
           },
@@ -544,6 +310,14 @@
               },
               {
                 "role": "architect"
+              }
+            ]
+          },
+          {
+            "title": "Dashboard",
+            "panes": [
+              {
+                "role": "dashboard"
               }
             ]
           }

@@ -409,13 +409,12 @@ either today, so their cells read `-` rather than a misleading `$0.00`.
 Run it standalone against any project with `python -m scheduler.dashboard --once ...` (see
 `--help` for the required paths), or just launch a profile that includes it.
 
-**Try it:** the shipped `scheduler-all` profile runs all four `auto` roles on the scheduler,
-keeps `human-in-the-loop` as an interactive session, puts an inbox strip beneath it in the same
-tab, and gives the dashboard its own dedicated tab. `scheduler-coder` schedules only the coder
-and has no dashboard pane.
+**Try it:** the shipped `default` profile runs all four `auto` roles on the scheduler, keeps
+`human-in-the-loop` as an interactive session, puts an inbox strip beneath it in the same tab,
+and gives the dashboard its own dedicated tab.
 
 ```powershell
-.\bin\kiln.ps1 -WorkingDir . -Profile scheduler-all
+.\bin\kiln.ps1 -WorkingDir .
 ```
 
 Each scheduled pane opens with a configuration banner (role, branch, resolved worker and model,
@@ -470,10 +469,10 @@ By default, **all projects use the framework's `kiln/framework/profiles.json`**,
 **To customize profiles for a specific project**, create `kiln.profiles.json` at the project root.
 
 > ⚠️ That file **replaces** the framework's profile set rather than extending it. There is no
-> `extends` mechanism: once `kiln.profiles.json` exists, `default`, `compact`, `scheduler-all`
-> and the rest are no longer available unless you copy the ones you want into it. Start by
-> copying `kiln/framework/profiles.json` and editing, rather than writing a file with a single
-> profile in it.
+> `extends` mechanism: once `kiln.profiles.json` exists, `default`, `codex-only`,
+> `mixed-backends` and the rest are no longer available unless you copy the ones you want into
+> it. Start by copying `kiln/framework/profiles.json` and editing, rather than writing a file
+> with a single profile in it.
 
 ### Layered Constitution
 
@@ -544,8 +543,8 @@ The cycle flows: **specifier → coder → refactorer → architect → specifie
 | **Unix/macOS** | `./bin/kiln.sh .` |
 
 Both shims forward every argument to the same Python CLI, so **all flags work on both
-platforms in either spelling** — `-ProfileName compact`, `-Profile compact` and
-`--profile compact` are the same flag.
+platforms in either spelling** — `-ProfileName mixed-backends`, `-Profile mixed-backends` and
+`--profile mixed-backends` are the same flag.
 
 | Flag | Aliases | Effect |
 |---|---|---|
@@ -596,8 +595,8 @@ command line and working directory for every role without spawning a terminal.
    # Run the default 'default' profile (human-in-the-loop intake feeding an autonomous specifier -> coder -> refactorer -> architect cycle)
    .\bin\kiln.ps1 -WorkingDir .
 
-   # Run a different profile (e.g., 'compact' with different layout or agent configuration)
-   .\bin\kiln.ps1 -WorkingDir . -ProfileName compact
+   # Run a different profile (e.g., 'mixed-backends' to validate multiple agent backends at once)
+   .\bin\kiln.ps1 -WorkingDir . -ProfileName mixed-backends
 
    # Use Windows Terminal instead of WezTerm (default)
    .\bin\kiln.ps1 -WorkingDir . -Terminal wt
@@ -664,17 +663,17 @@ Kiln uses JSON profiles to define swarm topology. The default profile is `defaul
 
 ### Framework Default Profile
 
-The framework's `default` profile pairs a human-facing intake role with a fully autonomous specifier → coder → refactorer → architect cycle: `human-in-the-loop` runs `manual` in the main directory (`@current`) to gather and confirm the request with you, then the other four roles run `auto` **on the deterministic scheduler** in their own worktrees with no human input needed. Each `auto` role's scheduler pane and worker both run on Sonnet by default — see "Decoupling wrapper and worker models" below if you want to split a role's pane onto a cheaper/faster model than its worker:
+The framework's `default` profile pairs a human-facing intake role with a fully autonomous specifier → coder → refactorer → architect cycle: `human-in-the-loop` runs `manual` in the main directory (`@current`) to gather and confirm the request with you, with a live `inbox` strip beneath it for escalations, then the other four roles run `auto` **on the deterministic scheduler** in their own worktrees with no human input needed, and a dedicated `dashboard` tab gives a swarm-wide view. Each `auto` role's scheduler pane and worker both run on Sonnet by default — see "Decoupling wrapper and worker models" below if you want to split a role's pane onto a cheaper/faster model than its worker:
 
 ![Default profile topology: human-in-the-loop gathers and confirms a request, hands it to an autonomous specifier → coder → refactorer → architect cycle, which reports completion back](docs/images/agentic_coding_topology_human_left_v3.svg)
 
-*What the JSON below configures: one manual, human-facing role feeding a fully autonomous 4-role cycle.*
+*What the JSON below configures: one manual, human-facing role (with an inbox strip for escalations) feeding a fully autonomous 4-role cycle, plus a dashboard tab. See **Inbox mode** and **Dashboard mode** below for what those two extra panes do.*
 
 ```json
 {
   "profiles": {
     "default": {
-      "description": "Human-guided request intake (human-in-the-loop) feeding a fully autonomous specifier -> coder -> refactorer -> architect cycle on the deterministic scheduler",
+      "description": "Human-guided request intake (human-in-the-loop, with a live inbox pane) feeding a fully autonomous specifier -> coder -> refactorer -> architect cycle on the deterministic scheduler, plus a dashboard tab",
       "terminals": [
         {
           "role": "human-in-the-loop",
@@ -682,6 +681,13 @@ The framework's `default` profile pairs a human-facing intake role with a fully 
           "worktree": "@current",
           "mode": "manual",
           "model": "claude-sonnet-5"
+        },
+        {
+          "role": "inbox",
+          "worktree": "@current",
+          "mode": "manual",
+          "scheduler": "inbox",
+          "watches": "human-in-the-loop"
         },
         {
           "role": "specifier",
@@ -714,13 +720,22 @@ The framework's `default` profile pairs a human-facing intake role with a fully 
           "mode": "auto",
           "model": "claude-sonnet-5",
           "scheduler": "python"
+        },
+        {
+          "role": "dashboard",
+          "worktree": "@current",
+          "mode": "manual",
+          "scheduler": "dashboard"
         }
       ],
       "layout": {
         "tabs": [
           {
             "title": "Human-in-the-Loop",
-            "panes": [{"role": "human-in-the-loop"}]
+            "panes": [
+              {"role": "human-in-the-loop"},
+              {"role": "inbox", "direction": "Bottom", "size": 0.22}
+            ]
           },
           {
             "title": "Autonomous Cycle",
@@ -732,6 +747,10 @@ The framework's `default` profile pairs a human-facing intake role with a fully 
               {"role": "refactorer"},
               {"role": "architect"}
             ]
+          },
+          {
+            "title": "Dashboard",
+            "panes": [{"role": "dashboard"}]
           }
         ]
       }
@@ -742,16 +761,12 @@ The framework's `default` profile pairs a human-facing intake role with a fully 
 
 ### Other Bundled Profiles
 
-`kiln/framework/profiles.json` also ships:
+`kiln/framework/profiles.json` also ships two variants of the same topology, each swapping which backend runs the agent-bearing roles:
 
-- **`compact`** — the standard 4-agent swarm (specifier, coder, refactorer, architect; no `human-in-the-loop`), all in one tab as a 2×2 grid.
-- **`tabs`** — the same 4-agent swarm, one role per tab instead of a grid.
-- **`dual-pane`** — the same 4-agent swarm across two tabs, two roles side-by-side per tab.
-- **`scheduler-coder`** — same shape as `default`, but only `coder` runs on the scheduler; `specifier`/`refactorer`/`architect` stay in wrapper mode. Useful for comparing the two modes side by side, or for wrapper-mode regression testing.
-- **`scheduler-all`** — every `auto`-mode role runs on the scheduler (same as `default` now); its distinguishing feature is `human-in-the-loop` getting an inbox strip beneath it plus a dedicated `dashboard` tab. See **Inbox mode** and **Dashboard mode** below.
-- **`mixed-backends`** — every `auto`-mode role runs on the scheduler across three different backends at once: `coder` on Copilot, `refactorer` on Codex, everything else on Claude. Validates the scheduler's per-backend adapters together, not just individually.
+- **`codex-only`** — every agent-bearing role, including `human-in-the-loop`, runs on Codex instead of Claude. Validates codex end-to-end, wrapper mode and scheduler mode together.
+- **`mixed-backends`** — validates multiple backends at once: `specifier` and `refactorer` run on Codex, everything else on Claude. Copilot is currently parked out of scheduler-mode rotation — see [Known Limitations & Future Work](#known-limitations--future-work) below.
 
-Switch to any of these with `-ProfileName <name>` (Windows) or `--profile <name>` (Unix).
+Switch to either of these with `-ProfileName <name>` (Windows) or `--profile <name>` (Unix).
 
 **Terminal fields:**
 
@@ -1031,7 +1046,7 @@ Each `auto`-mode role's wrapper cycles through four states — **waiting** (idle
 - **`.kiln/status/<role>.json`** — `{"role", "state", "detail", "since", "title"}`. Always reliable, readable on any platform/terminal.
 - **A terminal title OSC sequence** — unreliable on its own: the agent CLI running in that same pane also writes its own title on every render tick (spinner frames, idle icon, ...) and, updating far more often, usually wins the race.
 
-On WezTerm, Kiln's generated Lua config polls the status JSON files directly (not the contested pane title) roughly once a second and renders a live, color-coded status bar in the top-right of the window — one badge per role, background colored by state (green = waiting, blue = receiving, teal = delegating, violet = handoff), visible regardless of which tab or pane is focused. This is what makes state visible even in grid/pane layouts like `compact`, where multiple roles share a single tab and would otherwise have no per-pane title of their own.
+On WezTerm, Kiln's generated Lua config polls the status JSON files directly (not the contested pane title) roughly once a second and renders a live, color-coded status bar in the top-right of the window — one badge per role, background colored by state (green = waiting, blue = receiving, teal = delegating, violet = handoff), visible regardless of which tab or pane is focused. This is what makes state visible even in grid/pane layouts like the default profile's "Autonomous Cycle" tab, where multiple roles share a single tab and would otherwise have no per-pane title of their own.
 
 ![Live status bar in the top-right of a WezTerm window, showing human-in-the-loop as "handoff" and specifier as "delegating: specifier-worker" while coder, refactorer, and architect show "waiting"](docs/images/kiln4.png)
 
@@ -1079,8 +1094,8 @@ with the agent command sent via `send-keys`. Attach to one with `tmux attach -t 
 `--stop` kills them all. The profile's `layout` config (grid/split/focus) is not read at all —
 every role is always its own independent session, one `tmux new-session` per role, regardless
 of what the profile specifies. If you want roles visually grouped together the way the
-`layout` config describes (e.g. the `human-in-the-loop` + `inbox` pane pairing in
-`scheduler-all`), install WezTerm instead — it runs natively on Linux/macOS and reads the
+`layout` config describes (e.g. the `human-in-the-loop` + `inbox` pane pairing in the
+`default` profile), install WezTerm instead — it runs natively on Linux/macOS and reads the
 same `layout` config Windows does; there is no Unix-specific limitation on that path, only on
 this one.
 
@@ -1309,8 +1324,8 @@ equivalent).
 - ✓ **Per-pane status bar** and a configuration banner for scheduler roles.
 - ✓ **Swarm-wide dashboard** (`"scheduler": "dashboard"`, `scheduler/dashboard.py`) — a
   `top`-style pane aggregating role state, queue depth, cost/cycle totals and recent
-  activity/escalations across every role at once. Shipped as its own tab in `scheduler-all`.
-  See **Dashboard mode** above.
+  activity/escalations across every role at once. Shipped as its own tab in the `default`
+  profile. See **Dashboard mode** above.
 - ✓ **Cost/cycle persistence** — `.kiln/status/<role>.json` now carries optional
   `cycles`/`cost_usd` fields (threaded from the pane status bar through `set-status.py`), so
   spend and cycle count survive the process that tracked them and are readable by anything
@@ -1403,8 +1418,18 @@ This means agents can read/write/execute any file in their worktree without prom
   401s, so this adapter deliberately reuses the ambient authenticated one instead), and `grok`
   (`grok_adapter.py` — its `--output-format streaming-messages-json` turned out to be
   Anthropic-Messages-API-compatible, close to a drop-in twin of the Claude adapter, and unlike
-  Copilot/Codex it reports real `total_cost_usd`). Full multi-cycle swarm runs through every
-  backend simultaneously (the `mixed-backends` profile) have not yet been observed end to end.
+  Copilot/Codex it reports real `total_cost_usd`). The `mixed-backends` profile has run multiple
+  live cycles combining Claude and Codex scheduler-mode workers successfully.
+- **Copilot scheduler-mode workers are currently unreliable on long sessions.** Non-interactive
+  (`-p`) Copilot CLI sessions (roughly 4-8 minutes, many tool calls) silently and permanently
+  lose tool-call approval mid-session — every subsequent write-capable call is denied with
+  `Permission denied and could not request permission from user`, with no recovery for the rest
+  of that session. Short sessions with identical flags/worktree never reproduce it. This appears
+  to be an upstream Copilot CLI bug, not a kiln configuration issue — filed as
+  [github/copilot-cli#4433](https://github.com/github/copilot-cli/issues/4433), tracked locally
+  as [nsd0okernicke/kiln#8](https://github.com/nsd0okernicke/kiln/issues/8). Copilot is parked
+  out of every shipped profile's scheduler-mode rotation until this is resolved; it remains fine
+  for wrapper-mode (interactive) roles, where this failure mode has never been observed.
 - **`grok` has no wrapper-mode implementation.** Its scheduler adapter is real and live-verified,
   but there is no `loop-auto-grok.md`/wrapper dispatch path — a `grok` role must run `auto` +
   `"scheduler": "python"`; it cannot run `manual`.

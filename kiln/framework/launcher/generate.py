@@ -165,7 +165,7 @@ def write_instructions(
     if role.is_passive:
         # A passive pane (inbox, dashboard) has no worktree and no generated files of its
         # own (RoleConfig.is_passive) -- it shares its worktree (@current) with a real role,
-        # e.g. an inbox with the human-in-the-loop it watches in the scheduler-all profile.
+        # e.g. an inbox with the human-in-the-loop it watches in the default profile.
         # instruction_file_for() would resolve to *that* role's CLAUDE.md, so deleting "a
         # stale file for this role" here deletes a real, just-written file instead: the real
         # role is processed first in profile.roles and writes CLAUDE.md correctly, then the

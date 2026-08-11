@@ -98,11 +98,11 @@ class TestInstructionFiles:
 
     def test_an_inbox_pane_does_not_delete_the_role_it_watches_claude_md(self, paths):
         # Regression: an inbox pane shares its worktree (@current) with the role it watches
-        # (e.g. human-in-the-loop in scheduler-all), so instruction_file_for() resolves to
-        # *that* role's CLAUDE.md, not a file of the inbox's own -- it has no worktree and no
+        # (e.g. human-in-the-loop in the default profile), so instruction_file_for() resolves
+        # to *that* role's CLAUDE.md, not a file of the inbox's own -- it has no worktree and no
         # generated files at all (RoleConfig.is_inbox). Deleting "a stale file for the inbox
         # role" here used to delete a real, just-written CLAUDE.md instead: when a profile
-        # processes human-in-the-loop before inbox (as scheduler-all does), the inbox role's
+        # processes human-in-the-loop before inbox (as the default profile does), the inbox role's
         # own write_instructions call silently erased human-in-the-loop's real instructions,
         # leaving that session with nothing telling it to call set-status.py at all.
         human = role(role="human-in-the-loop", mode="manual")

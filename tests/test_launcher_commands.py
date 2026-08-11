@@ -273,7 +273,7 @@ class TestInboxIsNotAnAgent:
         # the SAME path as the watched role's own CLAUDE.md, not a file the inbox ever
         # owned. Regression: this used to unconditionally delete "a stale file for this
         # role" here, which meant an inbox processed after the role it watches (as
-        # scheduler-all's terminals order does) silently erased that role's real,
+        # the default profile's terminals order does) silently erased that role's real,
         # just-written CLAUDE.md -- see TestInstructionFiles.
         # test_an_inbox_pane_does_not_delete_the_role_it_watches_claude_md in
         # test_launcher_generate.py for the end-to-end version of this.

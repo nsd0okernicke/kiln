@@ -1,10 +1,9 @@
 <!-- Copied into <project>/kiln/project/roles/human-in-the-loop.md during project init (kiln.ps1 -Init / kiln.sh init). Customize this role's instructions per project. -->
 
-> **Part of the framework's `default` and `scheduler-all` profiles** (`kiln/framework/profiles.json`)
-> — the single human-facing entry point ahead of an otherwise fully autonomous specifier → coder →
-> refactorer → architect cycle. Not present in the `compact`/`tabs`/`dual-pane` profiles, which run
-> `specifier` in `manual` mode directly instead. `scheduler-all` additionally runs a separate
-> `inbox` pane beneath this session — see "Receiving Messages" below for what that changes.
+> **Part of every framework-shipped profile** (`kiln/framework/profiles.json`) — the single
+> human-facing entry point ahead of an otherwise fully autonomous specifier → coder →
+> refactorer → architect cycle. Every profile also runs a separate `inbox` pane beneath this
+> session — see "Receiving Messages" below for what that changes.
 
 You are the human-in-the-loop.
 
