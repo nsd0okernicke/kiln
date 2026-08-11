@@ -1349,9 +1349,18 @@ equivalent).
   `pythonpath = ["kiln/framework"]` in `[tool.pytest.ini_options]`.
 
 **Live validation status:** a full specifier cycle (receive → merge → one-shot worker → sentinel
-→ squash → handoff) has been validated end to end. The complete four-role loop returning to
-`human-in-the-loop` has **not** yet been observed in one run. Concurrent access to the SQLite
-queue by four schedulers is untested.
+→ squash → handoff) has been validated end to end **on Windows**. The complete four-role loop
+returning to `human-in-the-loop` has **not** yet been observed in one run. Concurrent access to
+the SQLite queue by four schedulers is untested.
+
+**Platform validation status:** Windows is the platform every live agent cycle so far has run
+on. Linux (Ubuntu 24.04 / WSL2) has been validated up to but not including a live agent: the
+test suite, the `kiln.sh` shim, scaffolding, worktrees, real symlinks, git hooks, the tmux
+backend, all three scheduler pane types, `.kiln/status` reporting, the dashboard and `--stop`
+all work. Running an actual swarm cycle there against a live Claude Code is the remaining gap.
+macOS remains entirely untested — it shares the Linux code paths (POSIX shim, tmux/WezTerm
+backends, `python3`), so it is *likely* fine, but "likely" is exactly what Linux was before it
+was run and six defects fell out.
 
 ### ✓ Completed Features
 
@@ -1448,7 +1457,29 @@ This means agents can read/write/execute any file in their worktree without prom
 - **`grok` has no wrapper-mode implementation.** Its scheduler adapter is real and live-verified,
   but there is no `loop-auto-grok.md`/wrapper dispatch path — a `grok` role must run `auto` +
   `"scheduler": "python"`; it cannot run `manual`.
-- **Unix parity is no longer a gap.** The former "`kiln.sh` has no loop/runtime template injection" limitation is resolved: both shims call the same Python `generate.py`, so template injection, `auto`/`manual` modes and worker delegation are identical on every platform. What remains platform-specific is only the terminal backend.
+- **Unix parity is real, but was unverified until it was actually run.** Both shims call the
+  same Python `generate.py`, so template injection, `auto`/`manual` modes and worker
+  delegation are structurally identical on every platform, and what remains platform-specific
+  is only the terminal backend. That was the theory; the Python port had never once been
+  *executed* on Linux. The first real run (Ubuntu 24.04 on WSL2) found the theory broadly
+  sound — the full suite passes (932 passed, 3 Windows-console tests skipped) and worktrees,
+  real symlinks, git hooks, the tmux backend and `--stop` all work — but it also found six
+  defects that only a real run could surface:
+  - `bin/*.sh` were not executable (mode `100644`), so the documented `./bin/kiln.sh .` died
+    with `Permission denied`
+  - `python` was hardcoded for the scheduler/inbox/dashboard panes and the kiln-channel MCP
+    entry; stock Debian/Ubuntu ships only `python3`, so every one of those panes died
+    instantly with `Command 'python' not found`
+  - `kiln init <dir>`, the form documented in this README, was rejected by argparse
+  - `--terminal none` rendered PowerShell on every platform, so the backend whose entire job
+    is *printing* the command showed Linux users commands no shell of theirs could run
+  - `set-status.py` found the project only via `KILN_PROJECT_DIR`, which just the WezTerm
+    backend exports — under tmux the whole dashboard STATE column stayed empty
+  - the MCP install command this README and Kiln's own error message gave fails outright on
+    Debian/Ubuntu under PEP 668
+
+  All six are fixed. **Still unverified on Linux:** a real swarm cycle against a live agent
+  CLI (Tier 3), which needs an authenticated Claude Code inside the Linux environment.
 - **No Unix full-reset script** — see the Known gap under **Cleanup**.
 - **Symlink creation needs Developer Mode on Windows.** Without it (`WinError 1314`), worktrees fall back to *copying* `.kiln` instead of sharing it. The swarm still runs, but shared state is not actually shared.
 
