@@ -549,3 +549,60 @@ class TestTemplateCopying:
         workspace.copy_template_tree(source, destination)
         assert (destination / "SKILL.md").read_text(encoding="utf-8") == "new\n"
         assert (destination / "keep.md").read_text(encoding="utf-8") == "keep\n"
+
+
+class TestExecutableBit:
+    """
+    A filesystem that refuses chmod must not take the whole launch down.
+
+    `install_git_hooks` called `hook.chmod(0o755)` unguarded. A WSL DrvFs mount of a Windows
+    drive rejects chmod with EPERM while already reporting every file as `rwxrwxrwx`, so the
+    call was ceremony that crashed `kiln .` against a `/mnt/c/...` project outright.
+    """
+
+    def _deny_chmod(self, monkeypatch):
+        import os
+
+        def deny(*_args, **_kwargs):
+            raise PermissionError(1, "Operation not permitted")
+
+        monkeypatch.setattr(os, "chmod", deny)
+
+    def test_silent_when_the_file_is_executable_anyway(self, tmp_path, monkeypatch, caplog):
+        import logging
+        import os
+
+        target = tmp_path / "pre-push"
+        target.write_text("#!/bin/sh\n", encoding="utf-8")
+        self._deny_chmod(monkeypatch)
+        monkeypatch.setattr(os, "access", lambda *_a, **_k: True)
+
+        with caplog.at_level(logging.WARNING):
+            workspace.make_executable(target)
+        assert "could not make" not in caplog.text
+
+    def test_warns_when_the_file_really_is_not_executable(self, tmp_path, monkeypatch, caplog):
+        import logging
+        import os
+
+        target = tmp_path / "pre-push"
+        target.write_text("#!/bin/sh\n", encoding="utf-8")
+        self._deny_chmod(monkeypatch)
+        monkeypatch.setattr(os, "access", lambda *_a, **_k: False)
+
+        with caplog.at_level(logging.WARNING):
+            workspace.make_executable(target)
+        assert "could not make" in caplog.text
+        assert "silently skip" in caplog.text
+
+    def test_hook_install_survives_a_filesystem_refusing_chmod(
+        self, paths, monkeypatch, repo
+    ):
+        import os
+
+        self._deny_chmod(monkeypatch)
+        monkeypatch.setattr(os, "access", lambda *_a, **_k: True)
+        monkeypatch.setattr(workspace.os, "name", "posix")
+
+        hook = workspace.install_git_hooks(paths)
+        assert hook is not None and hook.is_file()

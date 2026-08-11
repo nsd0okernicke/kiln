@@ -135,8 +135,31 @@ def install_git_hooks(paths: KilnPaths) -> Path | None:
     with hook.open("wb") as handle:
         handle.write(PRE_PUSH_HOOK.replace("\r\n", "\n").encode("utf-8"))
     if os.name != "nt":
-        hook.chmod(0o755)
+        make_executable(hook)
     return hook
+
+
+def make_executable(path: Path) -> None:
+    """
+    `chmod +x`, tolerating filesystems that refuse the call.
+
+    git silently skips a hook that is not executable, so this genuinely matters on a normal
+    filesystem. But a WSL DrvFs mount of a Windows drive rejects `chmod` outright with EPERM
+    while already reporting every file as `rwxrwxrwx` — so the call was pure ceremony there
+    and yet took the entire launch down with a raw traceback (confirmed on Ubuntu 24.04,
+    launching against a `/mnt/c/...` project).
+
+    Only warn when the file really is not executable afterwards: that is the case that
+    actually costs the user a working hook, and it is worth a message rather than silence.
+    """
+    try:
+        path.chmod(0o755)
+    except OSError as exc:
+        if not os.access(path, os.X_OK):
+            log.warning(
+                "could not make %s executable (%s); git will silently skip this hook",
+                path, exc,
+            )
 
 
 def initialize_repo(paths: KilnPaths) -> None:
