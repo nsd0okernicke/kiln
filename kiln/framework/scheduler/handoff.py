@@ -23,6 +23,12 @@ ESCALATION_FIELD = "Kiln-Escalation"
 
 _TRAIL_ENTRY_RE = re.compile(r"^\s*-\s+(?P<entry>.+?)\s*$")
 
+#: A `Commit:` value only means "merge this" when it actually looks like a git object name.
+#: Senders that have nothing to merge — a human's first request, a ping — do not reliably
+#: leave the field empty; they write prose like `(none — human request, no prior commit)`.
+#: Handing that to `git merge` fails and escalates a cycle that was never broken.
+_COMMIT_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
+
 
 def _field(content: str, name: str) -> str:
     """Read a `Name: value` header field, or '' when absent."""
@@ -49,7 +55,7 @@ class InboundHandoff:
     @property
     def is_mergeable(self) -> bool:
         """True when there is a commit to merge. Pings legitimately carry no commit."""
-        return bool(self.commit)
+        return bool(_COMMIT_RE.match(self.commit))
 
 
 def parse_handoff(content: str) -> InboundHandoff:

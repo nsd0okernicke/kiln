@@ -57,6 +57,22 @@ class TestParsing:
         assert parsed.commit == ""
         assert parsed.is_mergeable is False
 
+    @pytest.mark.parametrize("value", [
+        "(none — human request, no prior commit)",
+        "none",
+        "n/a",
+        "-",
+        "TBD",
+    ])
+    def test_prose_placeholder_commit_is_not_mergeable(self, value):
+        # A sender with nothing to merge often writes prose instead of leaving the field
+        # empty; feeding that to `git merge` escalated an otherwise healthy cycle.
+        assert handoff.parse_handoff(f"Commit: {value}\n").is_mergeable is False
+
+    def test_short_and_full_hashes_are_mergeable(self):
+        assert handoff.parse_handoff("Commit: abc123d\n").is_mergeable is True
+        assert handoff.parse_handoff(f"Commit: {'a1b2c3d4' * 5}\n").is_mergeable is True
+
     def test_empty_message_parses(self):
         parsed = handoff.parse_handoff("")
         assert parsed.sender == ""
