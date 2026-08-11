@@ -61,14 +61,14 @@ def copy_constitution(paths: KilnPaths, result: ScaffoldResult) -> None:
     for name in CONSTITUTION_FILES:
         source = source_dir / name
         if source.is_file():
-            shutil.copy2(source, paths.constitution_dir / name)
+            workspace.copy_template_file(source, paths.constitution_dir / name)
             copied += 1
 
     # The framework's own constitution.md is copied rather than synthesised, so there is one
     # source of truth for it like everything else under kiln/project/.
     header = paths.bundled_dir / "project" / "constitution.md"
     if header.is_file():
-        shutil.copy2(header, paths.kiln_project_dir / "constitution.md")
+        workspace.copy_template_file(header, paths.kiln_project_dir / "constitution.md")
         copied += 1
 
     result.note(f"copied {copied} constitution file(s)")
@@ -81,7 +81,7 @@ def copy_roles(paths: KilnPaths, result: ScaffoldResult) -> None:
         return
     count = 0
     for source in source_dir.glob("*.md"):
-        shutil.copy2(source, paths.roles_dir / source.name)
+        workspace.copy_template_file(source, paths.roles_dir / source.name)
         count += 1
     result.note(f"copied {count} role file(s)")
 
@@ -99,7 +99,7 @@ def copy_skills(paths: KilnPaths, result: ScaffoldResult) -> None:
         destination = paths.skills_dir / source.name
         if destination.exists():
             shutil.rmtree(destination, ignore_errors=True)
-        shutil.copytree(source, destination)
+        workspace.copy_template_tree(source, destination)
         count += 1
     result.note(f"copied {count} skill(s)")
 
@@ -129,7 +129,7 @@ def write_claude_settings(paths: KilnPaths, result: ScaffoldResult) -> None:
         return
     target = paths.project_root / ".claude"
     target.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(template, target / "settings.json")
+    workspace.copy_template_file(template, target / "settings.json")
     workspace.write_directory_gitignore(target)
     result.note("created .claude/settings.json")
 
@@ -150,7 +150,7 @@ def copy_example(paths: KilnPaths, example: str, result: ScaffoldResult) -> None
 
     readme = example_dir / "README.md"
     if readme.is_file():
-        shutil.copy2(readme, paths.project_root / "README.md")
+        workspace.copy_template_file(readme, paths.project_root / "README.md")
         result.note(f"copied example brief from {example}")
 
     overrides = example_dir / "kiln" / "project" / "constitution"
@@ -158,7 +158,7 @@ def copy_example(paths: KilnPaths, example: str, result: ScaffoldResult) -> None
         count = 0
         for source in overrides.iterdir():
             if source.is_file():
-                shutil.copy2(source, paths.constitution_dir / source.name)
+                workspace.copy_template_file(source, paths.constitution_dir / source.name)
                 count += 1
         if count:
             result.note(f"applied {count} example constitution override(s)")

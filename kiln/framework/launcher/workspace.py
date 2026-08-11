@@ -220,6 +220,44 @@ def prepare_state_dirs(paths: KilnPaths) -> None:
         log.warning("removed stray kiln/.gitignore that was excluding kiln/project/")
 
 
+def copy_template_file(source: Path, destination: Path) -> None:
+    """
+    Copy a framework file into a project — contents only, no metadata.
+
+    `shutil.copy2` was used at every one of these call sites, and it replays the source's
+    mode and mtime onto the copy via `chmod`/`utime`. Both are rejected with `EPERM` on a WSL
+    DrvFs mount of a Windows drive whenever the mount maps files to a different uid than the
+    calling user, so `kiln init` into a `/mnt/c/...` directory died on a raw PermissionError
+    traceback having already created the directory tree — a half-scaffolded project and a
+    stack trace (confirmed on Ubuntu 24.04). Network shares and container volume mounts
+    reject the same calls.
+
+    Nothing Kiln copies needs either attribute: these are `.md`/`.json` templates, read by
+    agents and by Kiln itself and never executed by path. A brand-new project's files
+    carrying the framework checkout's modification times would be actively misleading.
+    """
+    shutil.copyfile(source, destination)
+
+
+def copy_template_tree(source: Path, destination: Path) -> None:
+    """
+    Recursively copy a framework directory into a project — contents only.
+
+    `shutil.copytree` cannot be rescued by passing `copy_function=copyfile`: it always
+    finishes by calling `copystat` on each directory it created, collects the resulting
+    error and raises `shutil.Error`. That is the very call `copy_template_file` exists to
+    avoid, so the walk is done here instead.
+    """
+    destination.mkdir(parents=True, exist_ok=True)
+    for item in sorted(source.rglob("*")):
+        target = destination / item.relative_to(source)
+        if item.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            copy_template_file(item, target)
+
+
 def copy_framework_tools(paths: KilnPaths) -> None:
     """Refresh `.kiln/tools/` so agents can invoke set-status.py."""
     if not paths.framework_tools_dir.is_dir():
@@ -227,7 +265,7 @@ def copy_framework_tools(paths: KilnPaths) -> None:
     paths.state_tools_dir.mkdir(parents=True, exist_ok=True)
     for item in paths.framework_tools_dir.iterdir():
         if item.is_file():
-            shutil.copy2(item, paths.state_tools_dir / item.name)
+            copy_template_file(item, paths.state_tools_dir / item.name)
 
 
 def _link_or_copy(link: Path, target: Path, label: str) -> None:
@@ -252,7 +290,7 @@ def _link_or_copy(link: Path, target: Path, label: str) -> None:
         )
         link.mkdir(parents=True, exist_ok=True)
         if (target / "tools").is_dir():
-            shutil.copytree(target / "tools", link / "tools", dirs_exist_ok=True)
+            copy_template_tree(target / "tools", link / "tools")
         (link / "logs").mkdir(parents=True, exist_ok=True)
 
 
@@ -348,7 +386,7 @@ def _copy_settings(paths: KilnPaths, worktree: Path) -> None:
         return
     target = worktree / ".claude"
     target.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(template, target / "settings.json")
+    copy_template_file(template, target / "settings.json")
 
 
 def _copy_worker_definitions(paths: KilnPaths, worktree: Path) -> None:
@@ -364,7 +402,7 @@ def _copy_worker_definitions(paths: KilnPaths, worktree: Path) -> None:
         if not source.is_dir():
             continue
         for item in source.glob(pattern):
-            shutil.copy2(item, destination / item.name)
+            copy_template_file(item, destination / item.name)
 
 
 #: Every project-level convention a supported CLI might scan for skills, relative to a
@@ -427,7 +465,7 @@ def prepare_skills(profile: Profile, paths: KilnPaths) -> int:
                     (skills_dir / skill.name).symlink_to(skill, target_is_directory=True)
                     linked += 1
                 except (OSError, NotImplementedError):
-                    shutil.copytree(skill, skills_dir / skill.name, dirs_exist_ok=True)
+                    copy_template_tree(skill, skills_dir / skill.name)
                     linked += 1
     return linked
 

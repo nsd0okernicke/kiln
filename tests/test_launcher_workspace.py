@@ -488,3 +488,64 @@ class TestSessionsFile:
         lines = content.strip().splitlines()
         assert len(lines) == 2
         assert lines[0].split("\t") == ["1", "specifier", "claude", "Specifier"]
+
+
+class TestTemplateCopying:
+    """
+    Copying framework templates must not replay the source's mode or mtime.
+
+    `shutil.copy2`/`copytree` were used, and their trailing `chmod`/`utime` calls are
+    rejected with EPERM on a WSL DrvFs mount of a Windows drive whose uid mapping differs
+    from the calling user. `kiln init` into a `/mnt/c/...` directory therefore died on a raw
+    PermissionError traceback with the project half-created (confirmed on Ubuntu 24.04).
+    Network shares and container volume mounts reject the same calls.
+    """
+
+    @pytest.fixture
+    def no_metadata_calls(self, monkeypatch):
+        """Make chmod/utime fail exactly the way a DrvFs mount makes them fail."""
+        import os
+
+        def deny(*_args, **_kwargs):
+            raise PermissionError(1, "Operation not permitted")
+
+        monkeypatch.setattr(os, "chmod", deny)
+        monkeypatch.setattr(os, "utime", deny)
+
+    def test_file_copy_survives_a_filesystem_refusing_metadata(
+        self, tmp_path, no_metadata_calls
+    ):
+        source = tmp_path / "engineering.md"
+        source.write_text("rules\n", encoding="utf-8")
+        destination = tmp_path / "out" / "engineering.md"
+        destination.parent.mkdir()
+
+        workspace.copy_template_file(source, destination)
+        assert destination.read_text(encoding="utf-8") == "rules\n"
+
+    def test_tree_copy_survives_a_filesystem_refusing_metadata(
+        self, tmp_path, no_metadata_calls
+    ):
+        # shutil.copytree fails here even with copy_function=copyfile: it always finishes by
+        # calling copystat on every directory it created.
+        source = tmp_path / "skill"
+        (source / "nested").mkdir(parents=True)
+        (source / "SKILL.md").write_text("skill\n", encoding="utf-8")
+        (source / "nested" / "extra.md").write_text("extra\n", encoding="utf-8")
+
+        workspace.copy_template_tree(source, tmp_path / "out")
+        assert (tmp_path / "out" / "SKILL.md").read_text(encoding="utf-8") == "skill\n"
+        assert (tmp_path / "out" / "nested" / "extra.md").read_text(encoding="utf-8") == "extra\n"
+
+    def test_tree_copy_merges_into_an_existing_directory(self, tmp_path):
+        # The symlink fallbacks copy into a directory that may already hold files.
+        source = tmp_path / "skill"
+        source.mkdir()
+        (source / "SKILL.md").write_text("new\n", encoding="utf-8")
+        destination = tmp_path / "out"
+        destination.mkdir()
+        (destination / "keep.md").write_text("keep\n", encoding="utf-8")
+
+        workspace.copy_template_tree(source, destination)
+        assert (destination / "SKILL.md").read_text(encoding="utf-8") == "new\n"
+        assert (destination / "keep.md").read_text(encoding="utf-8") == "keep\n"

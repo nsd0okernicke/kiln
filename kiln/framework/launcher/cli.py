@@ -212,7 +212,7 @@ def _copy_root_settings(paths: KilnPaths) -> None:
         return
     target = paths.project_root / ".claude"
     target.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(template, target / "settings.json")
+    workspace.copy_template_file(template, target / "settings.json")
     workspace.write_directory_gitignore(target)
 
 
