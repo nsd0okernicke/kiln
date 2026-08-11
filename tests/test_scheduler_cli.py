@@ -188,6 +188,104 @@ class TestCli:
         assert callable(captured["on_output"])
 
 
+class TestAgentDispatch:
+    """`--agent` must route to the matching adapter, not just be accepted and ignored."""
+
+    def _args(self, tmp_path, worker_file, agent, **overrides):
+        workflow = tmp_path / "workflow.md"
+        workflow.write_text("| coder | refactorer |\n", encoding="utf-8")
+        argv = [
+            "--role", "coder",
+            "--branch", "main",
+            "--db-path", str(tmp_path / "messages.db"),
+            "--worktree", str(tmp_path),
+            "--workflow", str(workflow),
+            "--worker-agent", str(worker_file),
+            "--agent", agent,
+        ]
+        for key, value in overrides.items():
+            argv += [f"--{key}", str(value)]
+        return argv
+
+    def test_copilot_agent_dispatches_to_the_copilot_adapter(self, tmp_path, monkeypatch):
+        worker_file = tmp_path / "coder-worker.agent.md"
+        worker_file.write_text(WORKER_FILE, encoding="utf-8")
+        captured = {}
+        monkeypatch.setattr(
+            "scheduler.adapters.copilot_adapter.run_worker",
+            lambda **kwargs: captured.update(kwargs) or worker(),
+        )
+        args = role_scheduler.parse_args(self._args(tmp_path, worker_file, "copilot"))
+        role_scheduler.build_context(args).run_worker(prompt="p")
+        assert captured["definition"].name == "coder-worker"
+
+    def test_codex_agent_dispatches_to_the_codex_adapter(self, tmp_path, monkeypatch):
+        worker_file = tmp_path / "coder-worker.toml"
+        worker_file.write_text(
+            'name = "coder-worker"\n'
+            'description = "does the work"\n'
+            "mcp_servers = {}\n"
+            "developer_instructions = '''\n# Coder Role\n'''\n",
+            encoding="utf-8",
+        )
+        captured = {}
+        monkeypatch.setattr(
+            "scheduler.adapters.codex_adapter.run_worker",
+            lambda **kwargs: captured.update(kwargs) or worker(),
+        )
+        args = role_scheduler.parse_args(self._args(tmp_path, worker_file, "codex"))
+        role_scheduler.build_context(args).run_worker(prompt="p")
+        assert captured["definition"].name == "coder-worker"
+
+    def test_grok_agent_dispatches_to_the_grok_adapter(self, tmp_path, monkeypatch):
+        worker_file = tmp_path / "coder-worker.md"
+        worker_file.write_text(WORKER_FILE, encoding="utf-8")
+        captured = {}
+        monkeypatch.setattr(
+            "scheduler.adapters.grok_adapter.run_worker",
+            lambda **kwargs: captured.update(kwargs) or worker(),
+        )
+        args = role_scheduler.parse_args(self._args(tmp_path, worker_file, "grok"))
+        role_scheduler.build_context(args).run_worker(prompt="p")
+        assert captured["definition"].name == "coder-worker"
+
+
+class TestResolveModel:
+    """Only Claude has a model called 'sonnet' -- the fallback must not leak to the others."""
+
+    def _args(self, tmp_path, agent, model=""):
+        worker_file = tmp_path / "coder-worker.md"
+        worker_file.write_text(WORKER_FILE.replace("model: claude-sonnet-5\n", ""), encoding="utf-8")
+        workflow = tmp_path / "workflow.md"
+        workflow.write_text("| coder | refactorer |\n", encoding="utf-8")
+        argv = [
+            "--role", "coder", "--branch", "main",
+            "--db-path", str(tmp_path / "messages.db"), "--worktree", str(tmp_path),
+            "--workflow", str(workflow), "--worker-agent", str(worker_file), "--agent", agent,
+        ]
+        if model:
+            argv += ["--model", model]
+        return role_scheduler.parse_args(argv)
+
+    def test_claude_falls_back_to_sonnet(self, tmp_path):
+        args = self._args(tmp_path, "claude")
+        definition = role_scheduler.load_worker_definition(args.worker_agent)
+        assert role_scheduler.resolve_model(args, definition) == "sonnet"
+
+    @pytest.mark.parametrize("agent", ["copilot", "codex", "grok"])
+    def test_other_backends_fall_back_to_no_flag_at_all(self, tmp_path, agent):
+        # Empty string means "the CLI picks its own default" -- "sonnet" is not a model name
+        # any of these backends recognises.
+        args = self._args(tmp_path, agent)
+        definition = role_scheduler.load_worker_definition(args.worker_agent)
+        assert role_scheduler.resolve_model(args, definition) == ""
+
+    def test_an_explicit_flag_still_wins_for_any_backend(self, tmp_path):
+        args = self._args(tmp_path, "codex", model="o3")
+        definition = role_scheduler.load_worker_definition(args.worker_agent)
+        assert role_scheduler.resolve_model(args, definition) == "o3"
+
+
 class TestWorkerOutputEmitter:
     def test_tints_lines_when_the_pane_is_a_terminal(self, monkeypatch, capsys):
         monkeypatch.setattr(role_scheduler.sys.stdout, "isatty", lambda: True)
@@ -239,6 +337,24 @@ class TestStartupBanner:
 
     def test_an_explicit_model_is_what_gets_shown(self, tmp_path):
         assert "opus" in self._banner(tmp_path, model="opus")
+
+    def test_an_unset_model_reads_as_a_deliberate_default_not_blank(self, tmp_path):
+        # Observed live: a copilot role with no configured model rendered "coder-worker
+        # (copilot )" -- a trailing blank that looks like broken config, not "the CLI picks
+        # its own default".
+        worker_file = tmp_path / "coder-worker.agent.md"
+        worker_file.write_text(WORKER_FILE.replace("model: claude-sonnet-5\n", ""), encoding="utf-8")
+        workflow = tmp_path / "workflow.md"
+        workflow.write_text("| coder | refactorer |\n", encoding="utf-8")
+        argv = [
+            "--role", "coder", "--branch", "main",
+            "--db-path", str(tmp_path / "messages.db"), "--worktree", str(tmp_path),
+            "--workflow", str(workflow), "--worker-agent", str(worker_file), "--agent", "copilot",
+        ]
+        args = role_scheduler.parse_args(argv)
+        banner = "\n".join(role_scheduler.format_banner(role_scheduler.build_context(args), args))
+        assert "(CLI default)" in banner
+        assert "copilot )" not in banner
 
     def test_shows_where_handoffs_will_go(self, tmp_path):
         # Routing is the single most surprising piece of config; showing it makes a

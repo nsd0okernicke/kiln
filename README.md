@@ -75,7 +75,7 @@ See **"Running Kiln"** below for more options and customization.
 
 Kiln is a lightweight orchestration layer that:
 
-- Launches a **config-driven swarm** — specify each agent's role, AI tool/backend (claude/copilot/codex, `grok` configurable but not yet functional — see Known Limitations), and workspace (main directory or isolated worktree)
+- Launches a **config-driven swarm** — specify each agent's role, AI tool/backend (claude/copilot/codex/grok, all four scheduler-capable; `grok` has no wrapper mode yet — see Known Limitations), and workspace (main directory or isolated worktree)
   - Uses framework defaults from `kiln/framework/profiles.json`
   - Projects can override by creating `kiln.profiles.json` at the root
   - Flexible terminal layouts: tabs, split panes, grids, or custom hierarchical arrangements
@@ -272,29 +272,35 @@ kiln/
 ## Execution Modes: Wrapper vs Scheduler
 
 Every `auto`-mode role runs a receive → merge → work → squash → hand-off cycle. Kiln can drive
-that cycle two ways, chosen per role with the `scheduler` field in a profile.
+that cycle two ways, chosen per role with the `scheduler` field in a profile — and now that
+every accepted backend (`claude`, `copilot`, `codex`, `grok`) has a one-shot scheduler adapter,
+every shipped profile's `auto`-mode roles default to scheduler mode. Wrapper mode remains for
+exactly two cases: whichever single role is a profile's human-facing `manual` entry point
+(that role needs a real conversation, which the scheduler's one-shot model has no room for),
+and any backend without a scheduler adapter (`grok`'s wrapper mode specifically is not
+implemented — see Known Limitations).
 
-### Wrapper mode (default)
+### Scheduler mode (`"scheduler": "python"`, the default for `auto` roles)
 
-A persistent LLM session sits in the pane and follows the loop written in
-`kiln/framework/templates/loop-auto-<agent>.md`. It reaches the message queue through two MCP
-servers (`kiln-db` for SQL, `kiln-channel` for a blocking `wait_for_message()`), decides when a
-turn is finished, and delegates the actual work to a disposable worker subagent.
-
-Works with `claude`, `copilot` and `codex`. The mechanics are prose, so the model can
-misread them — a turn that ends early, a merge step that gets skipped.
-
-### Scheduler mode (`"scheduler": "python"`)
-
-A Python process owns the pane instead. It polls SQLite directly, merges, invokes the agent CLI
+A Python process owns the pane. It polls SQLite directly, merges, invokes the agent CLI
 **once per handoff** as a subprocess, reads the result, squashes and inserts the next handoff —
 then loops. The LLM only does the work; it makes none of the control-flow decisions.
 
 ```jsonc
 { "role": "coder", "agent": "claude", "worktree": "coder",
   "mode": "auto", "model": "claude-sonnet-5",
-  "scheduler": "python" }        // <- this line is the whole opt-in
+  "scheduler": "python" }        // <- what every shipped `auto` role sets
 ```
+
+### Wrapper mode (manual roles, and any backend without an adapter)
+
+A persistent LLM session sits in the pane and follows the loop written in
+`kiln/framework/templates/loop-auto-<agent>.md`. It reaches the message queue through two MCP
+servers (`kiln-db` for SQL, `kiln-channel` for a blocking `wait_for_message()`), decides when a
+turn is finished, and delegates the actual work to a disposable worker subagent. The mechanics
+are prose, so the model can misread them — a turn that ends early, a merge step that gets
+skipped — which is exactly the class of failure scheduler mode was built to remove for
+anything that doesn't structurally need a live conversation.
 
 What changes when a role is scheduled:
 
@@ -322,8 +328,10 @@ silently reporting success.
 **Trade-offs.** The scheduler cannot get bored, skip a merge, or forget to hand off, and its
 whole cycle is unit-testable without an LLM. But each invocation is one-shot: the worker starts
 fresh every handoff with no memory of the last one, so anything it must remember has to be in
-the handoff, the repo, or the constitution. Currently `claude` only — `copilot` and `codex`
-adapters are not written yet, and those roles stay in wrapper mode.
+the handoff, the repo, or the constitution. All four adapters
+(`kiln/framework/scheduler/adapters/{claude,copilot,codex,grok}_adapter.py`) are one-shot,
+subprocess-based invocations, verified live against each CLI's actual non-interactive flags —
+`copilot`/`codex` report no dollar cost (only token/request counts), `claude`/`grok` do.
 
 ### Inbox mode (`"scheduler": "inbox"`)
 
@@ -481,7 +489,7 @@ By default, **all projects use the framework's `kiln/framework/profiles.json`**,
   - **Claude agents**: `CLAUDE.md` in the worktree root
   - **Copilot agents**: `.github/copilot-instructions.md` in the worktree root
   - **Codex agents**: `AGENTS.md` in the worktree root — Codex CLI's own project-instructions convention (confirmed against the installed binary's string table)
-  - **Grok**: not yet supported — see Known Limitations
+  - **Grok**: no wrapper-mode instruction file — grok has no wrapper mode at all yet, only the scheduler path (which reads the worker definition directly, not a generated instruction file) — see Known Limitations
 
 This ensures every agent operates with full constitutional context plus its specific role directives.
 
@@ -656,7 +664,7 @@ Kiln uses JSON profiles to define swarm topology. The default profile is `defaul
 
 ### Framework Default Profile
 
-The framework's `default` profile pairs a human-facing intake role with a fully autonomous specifier → coder → refactorer → architect cycle: `human-in-the-loop` runs `manual` in the main directory (`@current`) to gather and confirm the request with you, then the other four roles run `auto` in their own worktrees with no human input needed. Each `auto` role's wrapper and worker both run on Sonnet by default — see "Decoupling wrapper and worker models" below if you want to split a role's wrapper onto a cheaper/faster model than its worker:
+The framework's `default` profile pairs a human-facing intake role with a fully autonomous specifier → coder → refactorer → architect cycle: `human-in-the-loop` runs `manual` in the main directory (`@current`) to gather and confirm the request with you, then the other four roles run `auto` **on the deterministic scheduler** in their own worktrees with no human input needed. Each `auto` role's scheduler pane and worker both run on Sonnet by default — see "Decoupling wrapper and worker models" below if you want to split a role's pane onto a cheaper/faster model than its worker:
 
 ![Default profile topology: human-in-the-loop gathers and confirms a request, hands it to an autonomous specifier → coder → refactorer → architect cycle, which reports completion back](docs/images/agentic_coding_topology_human_left_v3.svg)
 
@@ -666,7 +674,7 @@ The framework's `default` profile pairs a human-facing intake role with a fully 
 {
   "profiles": {
     "default": {
-      "description": "Human-guided request intake (human-in-the-loop) feeding a fully autonomous specifier -> coder -> refactorer -> architect cycle",
+      "description": "Human-guided request intake (human-in-the-loop) feeding a fully autonomous specifier -> coder -> refactorer -> architect cycle on the deterministic scheduler",
       "terminals": [
         {
           "role": "human-in-the-loop",
@@ -680,28 +688,32 @@ The framework's `default` profile pairs a human-facing intake role with a fully 
           "agent": "claude",
           "worktree": "specifier",
           "mode": "auto",
-          "model": "claude-sonnet-5"
+          "model": "claude-sonnet-5",
+          "scheduler": "python"
         },
         {
           "role": "coder",
           "agent": "claude",
           "worktree": "coder",
           "mode": "auto",
-          "model": "claude-sonnet-5"
+          "model": "claude-sonnet-5",
+          "scheduler": "python"
         },
         {
           "role": "refactorer",
           "agent": "claude",
           "worktree": "refactorer",
           "mode": "auto",
-          "model": "claude-sonnet-5"
+          "model": "claude-sonnet-5",
+          "scheduler": "python"
         },
         {
           "role": "architect",
           "agent": "claude",
           "worktree": "architect",
           "mode": "auto",
-          "model": "claude-sonnet-5"
+          "model": "claude-sonnet-5",
+          "scheduler": "python"
         }
       ],
       "layout": {
@@ -735,15 +747,16 @@ The framework's `default` profile pairs a human-facing intake role with a fully 
 - **`compact`** — the standard 4-agent swarm (specifier, coder, refactorer, architect; no `human-in-the-loop`), all in one tab as a 2×2 grid.
 - **`tabs`** — the same 4-agent swarm, one role per tab instead of a grid.
 - **`dual-pane`** — the same 4-agent swarm across two tabs, two roles side-by-side per tab.
-- **`scheduler-coder`** — same shape as `default`, but `coder` runs in scheduler mode instead of wrapper mode (opt-in validation profile for the scheduler rollout).
-- **`scheduler-all`** — every `auto`-mode role runs in scheduler mode; `human-in-the-loop` stays an interactive wrapper session with an inbox strip beneath it, plus a dedicated `dashboard` tab. See **Inbox mode** and **Dashboard mode** below.
+- **`scheduler-coder`** — same shape as `default`, but only `coder` runs on the scheduler; `specifier`/`refactorer`/`architect` stay in wrapper mode. Useful for comparing the two modes side by side, or for wrapper-mode regression testing.
+- **`scheduler-all`** — every `auto`-mode role runs on the scheduler (same as `default` now); its distinguishing feature is `human-in-the-loop` getting an inbox strip beneath it plus a dedicated `dashboard` tab. See **Inbox mode** and **Dashboard mode** below.
+- **`mixed-backends`** — every `auto`-mode role runs on the scheduler across three different backends at once: `coder` on Copilot, `refactorer` on Codex, everything else on Claude. Validates the scheduler's per-backend adapters together, not just individually.
 
 Switch to any of these with `-ProfileName <name>` (Windows) or `--profile <name>` (Unix).
 
 **Terminal fields:**
 
 - **role** — maps to `kiln/project/roles/<role>.md` (must exist)
-- **agent** — which AI tool to use: `claude`, `copilot`, `codex`, or `grok` (accepted but not yet functional — see Known Limitations)
+- **agent** — which AI tool to use: `claude`, `copilot`, `codex`, or `grok`. All four have a scheduler adapter (`"scheduler": "python"` works for any of them); only `grok` has no *wrapper*-mode implementation yet, so a `grok` role must run `auto` + scheduled, never `manual` — see Known Limitations.
 - **worktree** — `@current` to work in the main directory, or any name (creates `.worktrees/<name>/`)
   - Use `@current` for coordinator/review roles that work on the current branch
   - Use separate worktree names for roles that need isolation (e.g., each agent on its own branch)
@@ -874,7 +887,9 @@ You can mix different agents in a single swarm:
         {
           "role": "architect",
           "agent": "grok",
-          "worktree": "architect"
+          "worktree": "architect",
+          "mode": "auto",
+          "scheduler": "python"
         }
       ],
       "layout": {
@@ -886,7 +901,7 @@ You can mix different agents in a single swarm:
 }
 ```
 
-Each agent backend requires the corresponding CLI tool to be installed and available in `PATH`. (The `architect: grok` line above illustrates the config shape only — `grok` isn't a working backend yet; see Known Limitations.)
+Each agent backend requires the corresponding CLI tool to be installed and available in `PATH`. The `architect: grok` role needs `"scheduler": "python"` explicitly — grok has no wrapper mode, so it can only run as a scheduled `auto` role (see Known Limitations). The framework ships a real, working version of this idea as the **`mixed-backends`** profile (`coder` on Copilot, `refactorer` on Codex, everything else on Claude, all on the scheduler) — see **Other Bundled Profiles** above.
 
 ### Running a Different Profile
 
@@ -1274,15 +1289,20 @@ If the ping never comes back:
 ### Kiln v0.3 — Phase 7: Python Core + Deterministic Scheduler
 
 Phase 7 replaced the dual PowerShell/shell launcher with a single Python implementation and
-added the deterministic scheduler as an opt-in execution mode. Phases 1-6 below describe the
-wrapper architecture, which is still the default and still supported.
+added the deterministic scheduler. Every accepted backend now has a scheduler adapter, so
+every shipped profile's `auto`-mode roles default to it — Phases 1-6 below describe the
+wrapper architecture, which remains fully supported and is still what every `manual`-mode
+role uses (it's structural, not a rollout stage: a live conversation has no scheduler
+equivalent).
 
 - ✓ **Python launcher** (`kiln/framework/launcher/`) — ~3,200 lines of parallel PowerShell and
   shell collapsed into one implementation plus ~95 lines of shim. Profile loading, scaffolding,
   worktrees, generation, terminal backends and process teardown are all shared across platforms.
 - ✓ **Deterministic scheduler** (`kiln/framework/scheduler/`) — see **Execution Modes** above.
-  Opt in per role with `"scheduler": "python"`; the `scheduler-all` profile enables it for every
-  `auto` role. Claude only so far.
+  `"scheduler": "python"` is the default for every `auto`-mode role in every shipped profile;
+  wrapper mode remains for `manual`-mode roles and any backend without an adapter. All four
+  accepted backends (`claude`, `copilot`, `codex`, `grok`) have one, each verified live against
+  the real CLI (`kiln/framework/scheduler/adapters/`).
 - ✓ **Conditional handoff routing** — `workflow.md`'s routing table gained an optional
   `When Sender` column, so sender-dependent routing is data both the wrapper and the scheduler
   can follow rather than prose only an LLM could interpret.
@@ -1355,7 +1375,7 @@ queue by four schedulers is untested.
 - **Claude agents**: `--permission-mode bypassPermissions` (auto-approve all MCP tools and file operations)
 - **Copilot agents**: `--allow-all` (auto-approve GitHub Copilot tools and file access)
 - **Codex agents**: `--dangerously-bypass-approvals-and-sandbox` (auto-approve all tool calls and disable the sandbox — Codex's own explicitly-named equivalent). Each Codex role also gets its own isolated config directory via the `CODEX_HOME` env var (`.kiln/codex-home/<role>/`), so Kiln never overwrites your real `~/.codex/config.toml`.
-- **Grok**: not implemented — see Known Limitations
+- **Grok agents** (scheduler mode only — no wrapper mode yet): `--always-approve` (auto-approve all tool executions) plus `--no-subagents` (disables grok's own recursive subagent spawning, the same worker-isolation principle as the other three backends)
 
 This means agents can read/write/execute any file in their worktree without prompting. This is intentional for autonomous development workflows but should be understood as a security trade-off.
 
@@ -1372,16 +1392,33 @@ This means agents can read/write/execute any file in their worktree without prom
 - **Real feature workflows are continuously validated** — multi-cycle specifier → coder → refactorer → architect chains run successfully against the LibraryHub example; 8+ cycle test runs show stable state flow with 34+ processed messages and zero stalls or message loss
 - **Error handling** — Minimal error recovery in agent workflows; graceful degradation not yet implemented
 - **Scaling** — Tested with 4 agents over 8+ cycles with stable performance; behavior with 10+ agents unknown
-- **Multi-agent backend validation** — Framework supports `claude` (validated, including Phase 6 wrapper+worker delegation live-tested through 8+ cycles), `copilot` (worker delegation implemented and confirmed against a live CLI session, but not yet exercised through a full multi-cycle swarm run the way Claude has been), and `codex` (worker delegation via Codex's own multi-agent spawn tools — MCP config, `AGENTS.md`/worker-`.toml` generation, and TOML validity verified directly against a live `codex.exe` install and official docs, but not yet exercised through a full multi-cycle swarm run or live spawn_agent call, since that requires `codex login` first). `grok` is not implemented: the actual installed `grok` CLI in this environment turned out to be a third-party project (`grok-cli-hurry-mode`, not an official xAI tool) whose persistent/interactive session has no non-interactive auto-approve path in its current build (confirmed by reading its bundled source) — only its one-shot `-p` headless mode auto-approves, which can't sustain Kiln's persistent per-role session model without a fundamentally different poll-and-relaunch design.
+- **Multi-agent backend validation** — All four accepted backends have a scheduler adapter
+  now, each verified live against the real CLI (not just documentation): `claude`
+  (`claude_adapter.py`, also the most-exercised via Phase 6 wrapper+worker delegation live-tested
+  through 8+ cycles), `copilot` (`copilot_adapter.py` — required disabling its globally-registered
+  `kiln-db` MCP server per invocation, since Copilot reads MCP config from
+  `~/.copilot/mcp-config.json` rather than a per-call flag), `codex` (`codex_adapter.py` — no
+  `--agent`-by-name flag exists for `codex exec`, so the worker's persona is embedded directly in
+  the prompt; also confirmed live that a per-role isolated `CODEX_HOME` has no `auth.json` and
+  401s, so this adapter deliberately reuses the ambient authenticated one instead), and `grok`
+  (`grok_adapter.py` — its `--output-format streaming-messages-json` turned out to be
+  Anthropic-Messages-API-compatible, close to a drop-in twin of the Claude adapter, and unlike
+  Copilot/Codex it reports real `total_cost_usd`). Full multi-cycle swarm runs through every
+  backend simultaneously (the `mixed-backends` profile) have not yet been observed end to end.
+- **`grok` has no wrapper-mode implementation.** Its scheduler adapter is real and live-verified,
+  but there is no `loop-auto-grok.md`/wrapper dispatch path — a `grok` role must run `auto` +
+  `"scheduler": "python"`; it cannot run `manual`.
 - **Unix parity is no longer a gap.** The former "`kiln.sh` has no loop/runtime template injection" limitation is resolved: both shims call the same Python `generate.py`, so template injection, `auto`/`manual` modes and worker delegation are identical on every platform. What remains platform-specific is only the terminal backend.
-- **Scheduler mode is Claude-only.** `copilot` and `codex` adapters are not written; those roles fall back to wrapper mode.
 - **No Unix full-reset script** — see the Known gap under **Cleanup**.
 - **Symlink creation needs Developer Mode on Windows.** Without it (`WinError 1314`), worktrees fall back to *copying* `.kiln` instead of sharing it. The swarm still runs, but shared state is not actually shared.
 
 ### Recommended Next Steps
 
-1. **Validate the full scheduler loop** — one uninterrupted specifier → coder → refactorer → architect → human-in-the-loop cycle, plus concurrent SQLite access by four schedulers
-2. **Copilot and Codex scheduler adapters** — the adapter interface is one function; the work is establishing each CLI's one-shot flags and sentinel behaviour
+1. **Validate the full scheduler loop across every backend at once** — one uninterrupted
+   specifier → coder → refactorer → architect → human-in-the-loop cycle on `mixed-backends`,
+   plus concurrent SQLite access by four schedulers
+2. **`grok` wrapper mode** — closes the one remaining "backend accepted but one mode
+   unimplemented" gap, following the same shape as the Copilot/Codex wrapper work
 3. **Port `kiln-cleanup.ps1` to Python** — closes the Unix cleanup gap and removes the last non-shim PowerShell in the launch path
 4. **Add error handling** — graceful failure modes when agents can't process messages
 5. **Multi-language projects** — test beyond the LibraryHub FastAPI example

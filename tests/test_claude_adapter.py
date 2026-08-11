@@ -99,6 +99,13 @@ class TestBuildCommand:
         assert "--max-budget-usd" not in self._cmd()
         assert "--max-budget-usd" in self._cmd(max_budget_usd=1.5)
 
+    def test_debug_file_is_optional(self):
+        # Off by default -- verified live it's substantial volume (191 lines for a trivial
+        # call), worth paying for only while actively diagnosing a failure.
+        assert "--debug-file" not in self._cmd()
+        command = self._cmd(debug_log="/tmp/agent-debug-coder-attempt1.log")
+        assert command[command.index("--debug-file") + 1] == "/tmp/agent-debug-coder-attempt1.log"
+
 
 class TestParseCliOutput:
     def test_reads_a_plain_envelope(self):

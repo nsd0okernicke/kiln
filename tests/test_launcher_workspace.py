@@ -249,17 +249,18 @@ class TestSkills:
         assert workspace.prepare_skills(PROFILE, repo) > 0
         assert (repo.project_root / ".claude" / "skills" / "mutation-testing").exists()
 
-    @pytest.mark.parametrize(
-        ("agent", "expected"),
-        [
-            ("claude", ".claude/skills"),
-            ("copilot", ".github/skills"),
-            ("codex", ".agents/skills"),
-        ],
-    )
-    def test_each_backend_scans_a_different_location(self, tmp_path, agent, expected):
-        target = workspace._skills_dir_for(agent, tmp_path)
-        assert target.as_posix().endswith(expected)
+    def test_every_skill_convention_is_populated_in_every_worktree(self, repo):
+        # Copilot's own `skill --help` documents that it checks .github/skills, .agents/skills,
+        # AND .claude/skills from cwd -- not just the one usually thought of as "its own" -- so
+        # a role's worktree must keep all three in sync, not only the location matching its
+        # current agent.
+        self._add_skill(repo)
+        workspace.prepare_state_dirs(repo)
+        workspace.prepare_worktrees(PROFILE, repo, "main")
+        workspace.prepare_skills(PROFILE, repo)
+        coder_root = repo.worktree_path("coder")
+        for parent, name in workspace.SKILL_DIR_CONVENTIONS:
+            assert (coder_root / parent / name / "mutation-testing").exists()
 
     def test_removed_skills_do_not_linger(self, repo):
         self._add_skill(repo, "old-skill")
@@ -273,6 +274,94 @@ class TestSkills:
         skills_root = repo.project_root / ".claude" / "skills"
         assert (skills_root / "new-skill").exists()
         assert not (skills_root / "old-skill").exists()
+
+    def test_scheduler_mode_roles_skip_wrapper_only_meta_skills(self, repo):
+        # A one-shot scheduler worker has been observed following kiln-receive's
+        # message-queue protocol against MCP access the scheduler adapter deliberately
+        # disables, turning an expected permission denial into a confused, credit-burning
+        # session that never produces a result. The scheduler handles receive/merge/handoff
+        # mechanically in Python, so the worker never needs these skills.
+        self._add_skill(repo, "kiln-receive")
+        self._add_skill(repo, "kiln-handoff")
+        self._add_skill(repo, "kiln-ping")
+        self._add_skill(repo, "tdd-red")
+        profile = parse_profile(
+            {
+                "profiles": {
+                    "p": {
+                        "terminals": [
+                            {"role": "specifier", "worktree": "@current", "mode": "manual"},
+                            {
+                                "role": "coder",
+                                "agent": "copilot",
+                                "worktree": "coder",
+                                "mode": "auto",
+                                "scheduler": "python",
+                            },
+                        ]
+                    }
+                }
+            },
+            "p",
+        )
+        workspace.prepare_state_dirs(repo)
+        workspace.prepare_worktrees(profile, repo, "main")
+        workspace.prepare_skills(profile, repo)
+
+        wrapper_skills = repo.project_root / ".claude" / "skills"
+        assert (wrapper_skills / "kiln-receive").exists()
+        assert (wrapper_skills / "tdd-red").exists()
+
+        # Copilot scans .github/skills, .agents/skills, AND .claude/skills from cwd (confirmed
+        # via `copilot skill --help`) -- every convention in the worker's worktree must be
+        # filtered, not just the one nominally "belonging" to its agent.
+        coder_root = repo.worktree_path("coder")
+        for parent, name in workspace.SKILL_DIR_CONVENTIONS:
+            worker_skills = coder_root / parent / name
+            assert not (worker_skills / "kiln-receive").exists()
+            assert not (worker_skills / "kiln-handoff").exists()
+            assert not (worker_skills / "kiln-ping").exists()
+            assert (worker_skills / "tdd-red").exists()
+
+    def test_a_stale_directory_from_a_former_agent_does_not_leak_wrapper_skills(self, repo):
+        # Observed live: a role that used to run as `agent: claude` (or was never cleaned up
+        # after a profile change) leaves .claude/skills populated with the full, unfiltered
+        # skill set. When the role becomes a scheduler-mode `agent: copilot` role, the old code
+        # only ever rewrote .github/skills -- the directory matching the *current* agent -- and
+        # left .claude/skills untouched, which Copilot still reads from the same cwd. The
+        # worker followed kiln-receive's protocol anyway despite it being excluded from
+        # .github/skills.
+        self._add_skill(repo, "kiln-receive")
+        self._add_skill(repo, "tdd-red")
+        profile = parse_profile(
+            {
+                "profiles": {
+                    "p": {
+                        "terminals": [
+                            {"role": "specifier", "worktree": "@current", "mode": "manual"},
+                            {
+                                "role": "coder",
+                                "agent": "copilot",
+                                "worktree": "coder",
+                                "mode": "auto",
+                                "scheduler": "python",
+                            },
+                        ]
+                    }
+                }
+            },
+            "p",
+        )
+        workspace.prepare_state_dirs(repo)
+        workspace.prepare_worktrees(profile, repo, "main")
+
+        stale = repo.worktree_path("coder") / ".claude" / "skills" / "kiln-receive"
+        stale.mkdir(parents=True)
+        (stale / "SKILL.md").write_text("---\nname: x\n---\n", encoding="utf-8")
+
+        workspace.prepare_skills(profile, repo)
+
+        assert not stale.exists()
 
 
 class TestAgentConfigs:
@@ -288,6 +377,107 @@ class TestAgentConfigs:
     def test_no_codex_home_without_a_codex_role(self, paths):
         workspace.prepare_agent_configs(PROFILE, paths)
         assert not paths.codex_home("coder").exists()
+
+
+class TestTrustCopilotWorktrees:
+    """
+    Regression: a git worktree is a different filesystem path from the project root even
+    though it shares history, so Copilot's per-path workspace-trust check does not inherit
+    from a trusted root. Observed live: every write-capable tool (including the `kiln-db` MCP
+    tool) returned "Permission denied and could not request permission from user" for 8+
+    minutes before the worker gave up having made zero changes.
+    """
+
+    @pytest.fixture
+    def fake_home(self, tmp_path, monkeypatch):
+        home = tmp_path / "home"
+        (home / ".copilot").mkdir(parents=True)
+        monkeypatch.setattr(workspace.Path, "home", lambda: home)
+        return home
+
+    def _config_path(self, home):
+        return home / ".copilot" / "config.json"
+
+    def _seed_config(self, home, trusted_folders):
+        import json
+
+        self._config_path(home).write_text(
+            "// User settings belong in settings.json.\n"
+            "// This file is managed automatically.\n"
+            + json.dumps({"trustedFolders": trusted_folders}, indent=2),
+            encoding="utf-8",
+        )
+
+    def _read_trusted_folders(self, home):
+        import json
+
+        text = self._config_path(home).read_text(encoding="utf-8")
+        return json.loads(text[text.index("{"):])["trustedFolders"]
+
+    def _profile_with_copilot(self, paths, role="coder"):
+        return parse_profile(
+            {
+                "profiles": {
+                    "p": {"terminals": [{"role": role, "agent": "copilot", "worktree": role}]}
+                }
+            },
+            "p",
+        )
+
+    def test_adds_the_copilot_worktree_to_trusted_folders(self, paths, fake_home):
+        self._seed_config(fake_home, [str(paths.project_root)])
+        workspace.prepare_agent_configs(self._profile_with_copilot(paths), paths)
+        assert str(paths.worktree_path("coder")) in self._read_trusted_folders(fake_home)
+
+    def test_preserves_folders_the_user_already_trusted_interactively(self, paths, fake_home):
+        self._seed_config(fake_home, [r"C:\Users\someone", str(paths.project_root)])
+        workspace.prepare_agent_configs(self._profile_with_copilot(paths), paths)
+        assert r"C:\Users\someone" in self._read_trusted_folders(fake_home)
+
+    def test_preserves_the_managed_by_comment_header(self, paths, fake_home):
+        self._seed_config(fake_home, [str(paths.project_root)])
+        workspace.prepare_agent_configs(self._profile_with_copilot(paths), paths)
+        content = self._config_path(fake_home).read_text(encoding="utf-8")
+        assert content.startswith("// User settings belong in settings.json.")
+
+    def test_a_current_dir_copilot_role_trusts_the_project_root(self, paths, fake_home):
+        self._seed_config(fake_home, [])
+        profile = parse_profile(
+            {"profiles": {"p": {"terminals": [{"role": "coder", "agent": "copilot"}]}}}, "p"
+        )
+        workspace.prepare_agent_configs(profile, paths)
+        assert str(paths.project_root) in self._read_trusted_folders(fake_home)
+
+    def test_no_copilot_role_touches_nothing(self, paths, fake_home):
+        self._seed_config(fake_home, [str(paths.project_root)])
+        before = self._config_path(fake_home).read_text(encoding="utf-8")
+        workspace.prepare_agent_configs(PROFILE, paths)
+        assert self._config_path(fake_home).read_text(encoding="utf-8") == before
+
+    def test_missing_config_file_is_a_warning_not_a_crash(self, paths, tmp_path, monkeypatch, caplog):
+        home = tmp_path / "no-copilot-yet"
+        home.mkdir()
+        monkeypatch.setattr(workspace.Path, "home", lambda: home)
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            workspace.prepare_agent_configs(self._profile_with_copilot(paths), paths)
+        assert "run `copilot` interactively" in caplog.text
+
+    def test_malformed_config_file_is_a_warning_not_a_crash(self, paths, fake_home, caplog):
+        self._config_path(fake_home).write_text("not json at all", encoding="utf-8")
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            workspace.prepare_agent_configs(self._profile_with_copilot(paths), paths)
+        assert "could not read" in caplog.text
+
+    def test_already_trusted_worktree_is_left_untouched(self, paths, fake_home):
+        worktree = str(paths.worktree_path("coder"))
+        self._seed_config(fake_home, [str(paths.project_root), worktree])
+        before = self._config_path(fake_home).read_text(encoding="utf-8")
+        workspace.prepare_agent_configs(self._profile_with_copilot(paths), paths)
+        assert self._config_path(fake_home).read_text(encoding="utf-8") == before
 
 
 class TestSessionsFile:

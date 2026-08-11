@@ -9,6 +9,7 @@ import json
 import os
 
 import pytest
+from launcher import config
 from launcher.config import (
     Profile,
     ProfileError,
@@ -110,16 +111,28 @@ class TestSchedulerOptIn:
         }
         assert parse_profile(config, "p").roles[0].uses_scheduler is True
 
-    @pytest.mark.parametrize("agent", ["copilot", "codex"])
-    def test_scheduler_rejected_for_unvalidated_backends(self, agent):
-        # Only Claude has a spiked, validated one-shot adapter so far.
+    @pytest.mark.parametrize("agent", ["copilot", "codex", "grok"])
+    def test_scheduler_accepted_for_backends_with_an_adapter(self, agent):
         config = {
             "profiles": {
                 "p": {"terminals": [{"role": "coder", "agent": agent, "scheduler": "python"}]}
             }
         }
-        with pytest.raises(ProfileError, match="validated one-shot adapter"):
-            parse_profile(config, "p")
+        assert parse_profile(config, "p").roles[0].uses_scheduler is True
+
+    def test_scheduler_rejected_for_a_backend_with_no_adapter(self, monkeypatch):
+        # Every currently-accepted agent has an adapter now, so this exercises the guard the
+        # same way a future VALID_AGENTS addition without one yet would trip it -- by
+        # temporarily excluding a real agent from SCHEDULER_CAPABLE_AGENTS rather than
+        # asserting on a fictional one.
+        monkeypatch.setattr(config, "SCHEDULER_CAPABLE_AGENTS", ("claude",))
+        cfg = {
+            "profiles": {
+                "p": {"terminals": [{"role": "coder", "agent": "codex", "scheduler": "python"}]}
+            }
+        }
+        with pytest.raises(ProfileError, match="no one-shot adapter"):
+            parse_profile(cfg, "p")
 
 
 class TestPassivePanes:
@@ -172,6 +185,13 @@ class TestParsing:
     def test_applies_defaults_to_a_minimal_entry(self):
         role = parse_profile(CONFIG, "solo").roles[0]
         assert (role.agent, role.mode, role.worktree) == ("claude", "auto", "@current")
+        assert role.worker_debug is False
+
+    def test_worker_debug_opts_in(self):
+        config = {
+            "profiles": {"p": {"terminals": [{"role": "coder", "workerDebug": True}]}}
+        }
+        assert parse_profile(config, "p").roles[0].worker_debug is True
 
     def test_unknown_profile_lists_the_alternatives(self):
         with pytest.raises(ProfileError, match="compact, solo"):

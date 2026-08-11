@@ -95,6 +95,8 @@ def _scheduler_command(role: RoleConfig, paths: KilnPaths, branch: str) -> Agent
     model = role.worker_model or role.model
     if model:
         argv += ["--model", model]
+    if role.worker_debug:
+        argv += ["--worker-debug"]
 
     status_script = paths.state_tools_dir / "set-status.py"
     argv += ["--status-script", str(status_script)]

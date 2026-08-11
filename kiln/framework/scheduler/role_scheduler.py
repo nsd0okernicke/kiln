@@ -24,7 +24,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import db, git_ops, handoff, pane_status
-from .adapters.claude_adapter import WorkerInvocation
+from .adapters import WorkerInvocation
 from .routing import RoutingTable, load_routing_table
 from .worker_prompt import WorkerDefinition, build_task_prompt, load_worker_definition
 
@@ -252,6 +252,28 @@ def _persist_inbound(ctx: SchedulerContext, content: str) -> None:
     persist_inbound(ctx.worktree, content)
 
 
+def _persist_worker_debug(ctx: SchedulerContext, invocation: WorkerInvocation, attempt: int) -> None:
+    """
+    Save a blocked worker's raw output for post-mortem, in `.kiln/logs/`.
+
+    `WorkerInvocation.raw_output` is captured in memory but the scheduler only ever logs
+    `.result.summary` — a one-line detail, not the actual stream. That's fine when the
+    summary is trustworthy, but it stopped being enough the moment a real failure showed
+    "0 stream events seen" while the worker's own resumed transcript proved substantial
+    activity happened: the summary alone gave no way to tell whether nothing was captured or
+    nothing was written. Never raises — a debug artefact must not fail the cycle it exists to
+    explain.
+    """
+    try:
+        logs_dir = ctx.db_path.parent / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        target = logs_dir / f"worker-debug-{ctx.role}-attempt{attempt}.log"
+        target.write_text(invocation.raw_output or "(no output captured)", encoding="utf-8")
+        log.info("worker output for attempt %d saved to %s", attempt, target)
+    except OSError as exc:
+        log.warning("could not save worker debug output: %s", exc)
+
+
 def _delegate(ctx: SchedulerContext, inbound: handoff.InboundHandoff) -> _Attempts:
     """Invoke the worker, retrying once with the failure report folded in."""
     attempts = _Attempts()
@@ -270,7 +292,11 @@ def _delegate(ctx: SchedulerContext, inbound: handoff.InboundHandoff) -> _Attemp
             f"{ICON_DELEGATE} delegating to %s (attempt %d/%d)",
             ctx.definition.name, len(attempts.invocations) + 1, ctx.max_attempts,
         )
-        attempts.invocations.append(ctx.run_worker(prompt=prompt))
+        attempts.invocations.append(
+            ctx.run_worker(prompt=prompt, attempt=len(attempts.invocations) + 1)
+        )
+        if not attempts.last.is_done:
+            _persist_worker_debug(ctx, attempts.last, len(attempts.invocations))
 
         if not should_retry(attempts.invocations, ctx.max_attempts):
             return attempts
@@ -474,8 +500,29 @@ def make_status_writer(
 
 
 def resolve_model(args: argparse.Namespace, definition: WorkerDefinition) -> str:
-    """CLI flag wins, then the worker definition's own frontmatter, then the cheap default."""
-    return args.model or definition.model or "sonnet"
+    """
+    CLI flag wins, then the worker definition's own frontmatter, then a cheap default.
+
+    The default is Claude-specific ("sonnet" is not a model name Copilot or Codex recognise),
+    so it only applies when `args.agent == "claude"`. For the other backends, an empty string
+    means "no `--model`/`-m` flag at all" -- each adapter already treats that as "let the CLI
+    pick its own default", matching how `commands.py` already handles an unset model for
+    wrapper-mode Copilot.
+    """
+    if args.model:
+        return args.model
+    if definition.model:
+        return definition.model
+    return "sonnet" if args.agent == "claude" else ""
+
+
+def display_model(args: argparse.Namespace, definition: WorkerDefinition) -> str:
+    """
+    `resolve_model()`'s value, but never the empty string -- an unset model for
+    copilot/codex/grok means "the CLI picks its own default", and printing that blank in a
+    banner or log line reads as broken configuration rather than a deliberate choice.
+    """
+    return resolve_model(args, definition) or "(CLI default)"
 
 
 def format_banner(ctx: SchedulerContext, args: argparse.Namespace) -> list[str]:
@@ -494,7 +541,7 @@ def format_banner(ctx: SchedulerContext, args: argparse.Namespace) -> list[str]:
     fields = [
         ("role", ctx.role),
         ("branch", ctx.branch),
-        ("worker", f"{ctx.definition.name} ({args.agent} {resolve_model(args, ctx.definition)})"),
+        ("worker", f"{ctx.definition.name} ({args.agent} {display_model(args, ctx.definition)})"),
         ("hands off to", ", ".join(routes) or "(no route - handoffs will escalate)"),
         ("worktree", str(ctx.worktree)),
         ("workflow", str(args.workflow)),
@@ -529,20 +576,31 @@ def _make_worker_output_emitter() -> Callable[[str], None]:
 
 def build_context(args: argparse.Namespace) -> SchedulerContext:
     """Assemble a context from CLI arguments."""
-    from .adapters import claude_adapter
+    from .adapters import claude_adapter, codex_adapter, copilot_adapter, grok_adapter
+
+    adapters = {
+        "claude": claude_adapter, "copilot": copilot_adapter,
+        "codex": codex_adapter, "grok": grok_adapter,
+    }
+    adapter = adapters[args.agent]
 
     definition = load_worker_definition(args.worker_agent)
     model = resolve_model(args, definition)
     emit_worker_output = _make_worker_output_emitter()
 
-    def run_worker(*, prompt: str) -> WorkerInvocation:
-        return claude_adapter.run_worker(
+    def run_worker(*, prompt: str, attempt: int = 1) -> WorkerInvocation:
+        debug_base = None
+        if args.worker_debug:
+            logs_dir = Path(args.db_path).parent / "logs"
+            debug_base = logs_dir / f"agent-debug-{args.role}-attempt{attempt}"
+        return adapter.run_worker(
             definition=definition,
             prompt=prompt,
             cwd=args.worktree,
             model=model,
             timeout=args.worker_timeout,
             on_output=emit_worker_output,
+            debug_base=debug_base,
         )
 
     return SchedulerContext(
@@ -565,7 +623,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--worktree", required=True)
     parser.add_argument("--workflow", required=True, help="path to constitution/workflow.md")
     parser.add_argument("--worker-agent", required=True, help="generated worker agent file")
-    parser.add_argument("--agent", default="claude", choices=["claude"])
+    parser.add_argument(
+        "--agent", default="claude", choices=["claude", "copilot", "codex", "grok"]
+    )
     parser.add_argument("--model", default="")
     parser.add_argument("--status-script", default=None)
     parser.add_argument(
@@ -575,6 +635,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--poll-interval", type=float, default=DEFAULT_POLL_INTERVAL_SEC)
     parser.add_argument("--worker-timeout", type=int, default=900)
     parser.add_argument("--once", action="store_true", help="run a single cycle and exit")
+    parser.add_argument(
+        "--worker-debug", action="store_true",
+        help=(
+            "write the backend CLI's own internal debug trace per attempt to "
+            "<db-path-dir>/logs/agent-debug-<role>-attempt<N>[.log]"
+        ),
+    )
     parser.add_argument(
         "--no-status-bar", action="store_true",
         help="do not reserve the pane's bottom row for the live status bar",
@@ -676,7 +743,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     log.info(
         "scheduler started role=%s branch=%s worker=%s model=%s worktree=%s",
         ctx.role, ctx.branch, ctx.definition.name,
-        resolve_model(args, ctx.definition), ctx.worktree,
+        display_model(args, ctx.definition), ctx.worktree,
     )
 
     # The launcher normally covers this, but a scheduler started by hand — or in a project

@@ -280,6 +280,20 @@ class TestWorkerFiles:
         assert "mcp_servers = {}" in rendered.content
         assert "developer_instructions = '''" in rendered.content
 
+    def test_grok_worker_is_frontmatter_markdown_with_no_claude_tool_names(self, paths):
+        # Same format as Claude's (both are read via an inline --agents JSON payload built
+        # from the same parser), but must not carry Claude's own built-in tool names.
+        rendered = generate.render_worker_file(role(agent="grok", model="grok-4.5"), paths)
+        assert rendered.path.name == "coder-worker.md"
+        assert ".grok" in str(rendered.path)
+        assert rendered.content.startswith("---\nname: coder-worker\n")
+        assert "tools:" not in rendered.content
+        assert "model: grok-4.5" in rendered.content
+
+    def test_grok_worker_model_is_optional(self, paths):
+        rendered = generate.render_worker_file(role(agent="grok"), paths)
+        assert "model:" not in rendered.content
+
     def test_description_contains_no_bare_colon(self, paths):
         # An unquoted ':' breaks Copilot's YAML frontmatter parsing.
         rendered = generate.render_worker_file(role(agent="copilot"), paths)

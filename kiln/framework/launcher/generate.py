@@ -249,6 +249,12 @@ def render_worker_file(role: RoleConfig, paths: KilnPaths) -> WorkerFile:
     if role.agent == "copilot":
         # A strict allowlist with no MCP server name, mirroring the Claude worker's isolation.
         frontmatter += ["tools:", "  - read", "  - write", "  - shell"]
+    elif role.agent == "grok":
+        # No `tools:` line: those are Claude's own built-in tool names (below), and would be
+        # actively wrong content in a grok file -- grok's scheduler adapter feeds this file's
+        # description+prompt through an inline --agents payload and never reads `.tools`.
+        if model:
+            frontmatter.append(f"model: {model}")
     else:
         frontmatter.append(
             "tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell, Skill, "

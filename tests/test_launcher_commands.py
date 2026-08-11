@@ -143,6 +143,12 @@ class TestScheduler:
     def test_role_without_the_flag_keeps_the_wrapper(self, paths):
         assert build(paths).argv[0] == "claude"
 
+    def test_worker_debug_is_off_by_default(self, paths):
+        assert "--worker-debug" not in self._scheduler(paths).argv
+
+    def test_worker_debug_opts_in(self, paths):
+        assert "--worker-debug" in self._scheduler(paths, worker_debug=True).argv
+
 
 class TestInboxPane:
     """

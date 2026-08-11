@@ -58,7 +58,7 @@ class FakeWorker:
         self.prompts = []
         self.edits_file = edits_file
 
-    def __call__(self, *, prompt):
+    def __call__(self, *, prompt, attempt=1):
         self.prompts.append(prompt)
         if self.edits_file:
             self.edits_file.write_text("worker output\n", encoding="utf-8")
@@ -300,6 +300,54 @@ class TestRetryPolicy:
         fake = FakeWorker(worker(STATUS_BLOCKED, "no"), worker(STATUS_BLOCKED, "no"))
         role_scheduler.run_once(make_ctx(fake), SchedulerState())
         assert read_message(message_id)["status"] == db.STATUS_PROCESSED
+
+
+class TestWorkerDebugPersistence:
+    """
+    A blocked WorkerInvocation's raw_output must survive the process, not just its one-line
+    summary. Found live: a copilot worker's summary said "0 stream events seen" while its own
+    resumed session proved substantial activity happened -- with no persisted raw output,
+    there was no way to tell whether nothing was captured or the capture itself was lying.
+    """
+
+    def _debug_file(self, db_path, role, attempt):
+        return db_path.parent / "logs" / f"worker-debug-{role}-attempt{attempt}.log"
+
+    def test_a_blocked_attempts_raw_output_is_saved(self, make_ctx, inbound, db_path):
+        inbound()
+        fake = FakeWorker(
+            worker(STATUS_BLOCKED, "no", raw_output="the actual raw stream"),
+            worker(),
+        )
+        role_scheduler.run_once(make_ctx(fake), SchedulerState())
+
+        saved = self._debug_file(db_path, "coder", 1)
+        assert saved.is_file()
+        assert saved.read_text(encoding="utf-8") == "the actual raw stream"
+
+    def test_each_retry_attempt_gets_its_own_file(self, make_ctx, inbound, db_path):
+        inbound()
+        fake = FakeWorker(
+            worker(STATUS_BLOCKED, "no", raw_output="attempt one"),
+            worker(STATUS_BLOCKED, "still no", raw_output="attempt two"),
+        )
+        role_scheduler.run_once(make_ctx(fake), SchedulerState())
+
+        assert self._debug_file(db_path, "coder", 1).read_text(encoding="utf-8") == "attempt one"
+        assert self._debug_file(db_path, "coder", 2).read_text(encoding="utf-8") == "attempt two"
+
+    def test_empty_raw_output_still_leaves_evidence(self, make_ctx, inbound, db_path):
+        # An empty capture is itself the diagnostic: it says nothing reached the adapter.
+        inbound()
+        fake = FakeWorker(worker(STATUS_BLOCKED, "no", raw_output=""), worker())
+        role_scheduler.run_once(make_ctx(fake), SchedulerState())
+
+        assert "no output captured" in self._debug_file(db_path, "coder", 1).read_text("utf-8")
+
+    def test_a_successful_attempt_leaves_no_debug_file(self, make_ctx, inbound, db_path):
+        inbound()
+        role_scheduler.run_once(make_ctx(FakeWorker(worker())), SchedulerState())
+        assert not self._debug_file(db_path, "coder", 1).exists()
 
 
 class TestRetryDecision:

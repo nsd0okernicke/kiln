@@ -1,26 +1,45 @@
 """
-One-shot Claude Code worker invocation.
+One-shot Grok CLI worker invocation.
 
-Every flag here was verified live against Claude Code 2.1.224 (see "Spike results: Claude"
-in full-python-plan.md). The non-obvious ones:
+Every flag here was verified live against `grok` 1.0.0 (3cd0d0cbce, stable) in scratch spikes
+this session, the same methodology claude_adapter.py's own flags were verified with. The
+non-obvious ones:
 
-- `--strict-mcp-config` with no `--mcp-config`: verified to yield zero MCP tools, which is
-  what keeps a worker from reaching kiln-db/kiln-channel and sending its own handoffs.
-- `--setting-sources project`: project skills stay available, the operator's *user-global*
-  plugin skills do not leak into the worker's context.
-- `--agents` + `--agent`: feeds the generated worker definition; its prompt demonstrably
-  governs the response.
-- `--model` is always passed explicitly. The CLI default is Opus, which measured 5-10x the
-  cost of Sonnet on an identical trivial call.
-- `--bare` is deliberately NOT used: it would suppress CLAUDE.md, but its auth is strictly
-  ANTHROPIC_API_KEY and it fails outright for OAuth/subscription users.
-- stdin is redirected from devnull: without it the CLI blocks ~3s waiting for input.
+- `--output-format streaming-messages-json`: documented by the CLI itself as "NDJSON in the
+  Anthropic Messages API wire format" -- and verified live, its event shapes (`system`/
+  `assistant`/`user`/`result`, `tool_use`/`tool_result` content blocks) are structurally
+  identical to what claude_adapter.py already parses, right down to the `result` event's
+  `is_error`/`result`/`total_cost_usd` fields. Only the tool *names* differ (grok's are
+  lowercase/snake_case: `write`, `run_terminal_command`, `read_file`, ... vs Claude's
+  PascalCase), so this module needs its own tool-name table but can reuse the rest of the
+  parsing/rendering shape.
+- `--agents '<json>' --agent <name>`: the same inline-definition mechanism Claude uses
+  (`{name: {description, prompt}}`) -- no per-worktree file mirroring needed, and
+  `worker_prompt.build_agents_payload()` is reused unchanged.
+- `--always-approve`: required for non-interactive execution, same role as Claude's
+  `--permission-mode bypassPermissions`.
+- `--no-subagents`: disables grok's own `spawn_subagent` tool -- the isolation-from-recursive-
+  delegation equivalent of the Claude worker having no `Agent` tool, and Codex's
+  `mcp_servers = {}`.
+- **Grok reports real USD cost** (`total_cost_usd`, same field name as Claude, confirmed live)
+  -- unlike the Copilot/Codex adapters, `cost_usd` here is genuinely populated, not left at
+  the dataclass default.
+- MCP isolation: verified live, a fresh session reports `"mcp_servers":[]` with nothing
+  configured (`grok mcp list` confirms the same). Kiln has never wired grok into any MCP
+  registration, so there is nothing to defensively disable today -- but note this CLI has no
+  `--strict-mcp-config`-equivalent override flag the way Claude/Copilot do. If a future
+  feature ever registers an MCP server globally for grok, this adapter needs revisiting.
+- The resolved binary is looked up with `shutil.which` before `Popen`, same reasoning as the
+  Copilot/Codex adapters: nothing guarantees `grok` ships as a native `.exe` everywhere the
+  way it happens to on this machine.
+- stdin is redirected from devnull, same reasoning as the Claude adapter.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import shutil
 import subprocess
 import threading
 from collections.abc import Callable
@@ -33,33 +52,39 @@ from . import WorkerInvocation
 log = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SEC = 900  # 15 minutes; a hang is indistinguishable from a blocked worker
-DEFAULT_PERMISSION_MODE = "bypassPermissions"
 
-# Glyphs for the streamed worker output. Rendering them needs UTF-8 stdout, which
-# role_scheduler.enable_unicode_output() guarantees.
 ICON_SESSION = "\N{HIGH VOLTAGE SIGN}"
 ICON_TOOL = "\N{HAMMER AND WRENCH}"
 ICON_FINISHED = "\N{CHEQUERED FLAG}"
 ICON_FAILED = "\N{CROSS MARK}"
 ICON_TOOL_ERROR = "\N{WARNING SIGN}"
 
-#: The one input field worth showing per tool. `[ICON_TOOL] Bash` alone tells an operator
-#: nothing — which command, which file, which pattern is the whole point of watching.
+#: The one input field worth showing per tool -- grok's own (lowercase/snake_case) tool
+#: names, verified live against its default tool list. `None` means "noise, show the bare
+#: name" (mirrors Claude's TodoWrite entry).
 TOOL_DETAIL_FIELD = {
-    "Bash": "command",
-    "BashOutput": "bash_id",
-    "Read": "file_path",
-    "Write": "file_path",
-    "Edit": "file_path",
-    "NotebookEdit": "notebook_path",
-    "Glob": "pattern",
-    "Grep": "pattern",
-    "Skill": "skill",
-    "Task": "description",
-    "Agent": "description",
-    "WebFetch": "url",
-    "WebSearch": "query",
-    "TodoWrite": None,  # a JSON todo array is noise in a pane
+    "write": "file_path",
+    "search_replace": "file_path",
+    "read_file": "file_path",
+    "list_dir": "path",
+    "grep": "pattern",
+    "run_terminal_command": "command",
+    "web_search": "query",
+    "web_fetch": "url",
+    "search_tool": "query",
+    "spawn_subagent": "description",
+    "todo_write": None,
+    "kill_command_or_subagent": None,
+    "get_command_or_subagent_output": None,
+    "scheduler_create": None,
+    "scheduler_delete": None,
+    "scheduler_list": None,
+    "monitor": None,
+    "use_tool": None,
+    "workflow": None,
+    "enter_plan_mode": None,
+    "exit_plan_mode": None,
+    "ask_user_question": None,
 }
 
 #: Fallback order for tools not listed above, including any the CLI adds later.
@@ -70,50 +95,25 @@ MAX_DETAIL_CHARS = 140
 
 
 def build_command(
-    *,
-    agents_json: str,
-    agent_name: str,
-    prompt: str,
-    model: str,
-    permission_mode: str = DEFAULT_PERMISSION_MODE,
-    max_budget_usd: float | None = None,
-    debug_log: Path | str | None = None,
+    *, agents_json: str, agent_name: str, prompt: str, model: str = "",
 ) -> list[str]:
-    """
-    Construct the one-shot argv. Pure — spawns nothing.
-
-    `stream-json` rather than a single `json` blob so the worker's progress can be shown in
-    the pane as it happens. With plain `json` the CLI emits nothing until it finishes, which
-    left the scheduler's pane looking hung for minutes at a time — the same
-    "worker output isn't visible" problem that motivated replacing the wrapper.
-    `--verbose` is required for streaming in print mode.
-
-    `--debug-file` (when `debug_log` is set) works in `-p` mode too -- verified live, a
-    trivial call produced 191 lines of internal trace. Off by default: it's a lot of volume
-    for a healthy run, worth paying for only while actively diagnosing a failure.
-    """
+    """Construct the one-shot argv. Pure -- spawns nothing."""
     command = [
-        "claude",
-        "-p",
-        "--output-format", "stream-json",
-        "--verbose",
-        "--model", model,
+        "grok",
+        "-p", prompt,
         "--agents", agents_json,
         "--agent", agent_name,
-        "--strict-mcp-config",
-        "--setting-sources", "project",
-        "--permission-mode", permission_mode,
+        "--always-approve",
+        "--output-format", "streaming-messages-json",
+        "--no-subagents",
     ]
-    if max_budget_usd is not None:
-        command += ["--max-budget-usd", str(max_budget_usd)]
-    if debug_log is not None:
-        command += ["--debug-file", str(debug_log)]
-    command.append(prompt)
+    if model:
+        command += ["-m", model]
     return command
 
 
 def _condense(value: object) -> str:
-    """One line, bounded length — a heredoc in a Bash command must not flood the pane."""
+    """One line, bounded length -- a heredoc in a Bash command must not flood the pane."""
     text = " ".join(str(value).split())
     if len(text) > MAX_DETAIL_CHARS:
         return text[: MAX_DETAIL_CHARS - 1] + "\N{HORIZONTAL ELLIPSIS}"
@@ -121,7 +121,7 @@ def _condense(value: object) -> str:
 
 
 def summarise_tool_use(name: str, payload: dict) -> str:
-    """`Bash` + {'command': 'pytest -q'} -> 'Bash  pytest -q'."""
+    """`run_terminal_command` + {'command': 'pytest -q'} -> 'run_terminal_command  pytest -q'."""
     if name in TOOL_DETAIL_FIELD:
         field = TOOL_DETAIL_FIELD[name]
         detail = payload.get(field) if field else None
@@ -136,9 +136,8 @@ def render_event(event: dict) -> list[str]:
     """
     Turn one stream event into human-readable pane lines.
 
-    Only the parts an operator watching the pane cares about: what the worker said, which
-    tools it reached for and with what, and which of those failed. Everything else is
-    bookkeeping.
+    Same shape as claude_adapter.render_event -- the wire format is the same Anthropic
+    Messages API events, just with grok's own tool names.
     """
     kind = event.get("type")
 
@@ -152,8 +151,6 @@ def render_event(event: dict) -> list[str]:
             if block_type == "text":
                 text = str(block.get("text", "")).strip()
                 if text:
-                    # Plain indent, no glyph: prose is the bulk of the output and a marker
-                    # on every line would be noise rather than signal.
                     lines.extend(f"    {line}" for line in text.splitlines())
             elif block_type == "tool_use":
                 name = str(block.get("name", "tool"))
@@ -161,9 +158,6 @@ def render_event(event: dict) -> list[str]:
         return lines
 
     if kind == "user":
-        # Tool results are far too voluminous to show wholesale, but a *failing* tool is
-        # exactly what an operator needs to see: it is usually why the worker ends up
-        # blocked, and without this the pane shows a silent retry loop.
         lines = []
         for block in event.get("message", {}).get("content", []):
             if block.get("type") == "tool_result" and block.get("is_error"):
@@ -192,10 +186,8 @@ def parse_cli_output(stdout: str) -> dict:
     """
     Pull the final `result` event out of a captured stream.
 
-    Scans for JSON objects line by line rather than parsing the whole stream, because the
-    CLI can emit an unstructured notice ahead of the events. The last `result` event wins;
-    if none is present, the last parseable object is used so a caller still gets something
-    to report.
+    Same logic as claude_adapter.parse_cli_output -- scans line by line, last `result` event
+    wins, falls back to the last parseable object.
     """
     result: dict | None = None
     fallback: dict | None = None
@@ -216,7 +208,7 @@ def parse_cli_output(stdout: str) -> dict:
         return result
     if fallback is not None:
         return fallback
-    raise ValueError("no JSON envelope found in claude output")
+    raise ValueError("no JSON envelope found in grok output")
 
 
 def _blocked(summary: str, raw: str, **kwargs) -> WorkerInvocation:
@@ -240,33 +232,32 @@ def run_worker(
     cwd: str | Path,
     model: str,
     timeout: int = DEFAULT_TIMEOUT_SEC,
-    permission_mode: str = DEFAULT_PERMISSION_MODE,
-    max_budget_usd: float | None = None,
     on_output: Callable[[str], None] | None = None,
     debug_base: Path | str | None = None,
 ) -> WorkerInvocation:
     """
     Run one worker to completion, streaming its progress, and parse its verdict.
 
-    Never raises for a worker-level failure: a timeout, a crash, a malformed stream and an
-    explicit `KILN-STATUS: blocked` all converge on a blocked WorkerInvocation, because the
-    scheduler's retry/escalation policy handles them identically.
+    Same failure-convergence contract as claude_adapter.run_worker: a timeout, a crash, a
+    malformed stream and an explicit `KILN-STATUS: blocked` all converge on a blocked
+    WorkerInvocation, because the scheduler's retry/escalation policy handles them identically.
 
     `on_output` receives each rendered line (defaults to printing to the pane), so tests can
     assert on what an operator would see without capturing stdout.
 
-    `debug_base` (when set) becomes `{debug_base}.log` for `--debug-file` -- one flat file,
-    unlike Copilot's own `--log-dir` which wants a directory.
+    `debug_base` is accepted for signature parity with the other adapters (the scheduler
+    dispatches to whichever backend a role picked without knowing which). Unused here: no
+    `--debug-file`/`--log-dir`-equivalent flag has been found in `grok`'s help output.
     """
     command = build_command(
         agents_json=build_agents_payload(definition),
         agent_name=definition.name,
         prompt=prompt,
         model=model,
-        permission_mode=permission_mode,
-        max_budget_usd=max_budget_usd,
-        debug_log=f"{debug_base}.log" if debug_base is not None else None,
     )
+    resolved = shutil.which(command[0])
+    if resolved:
+        command[0] = resolved
 
     emit = on_output or _default_emit
     timed_out = threading.Event()
@@ -285,7 +276,7 @@ def run_worker(
         )
     except OSError as exc:
         log.error("could not launch worker %s: %s", definition.name, exc)
-        return _blocked(f"could not launch claude: {exc}", "", is_error=True)
+        return _blocked(f"could not launch grok: {exc}", "", is_error=True)
 
     def _abort() -> None:
         timed_out.set()
@@ -324,7 +315,7 @@ def run_worker(
     try:
         envelope = parse_cli_output(stdout)
     except ValueError:
-        detail = stderr.strip() or "claude produced no parseable output"
+        detail = stderr.strip() or "grok produced no parseable output"
         log.error("worker %s produced no result event: %s", definition.name, detail)
         return _blocked(detail, stdout, is_error=True)
 
@@ -333,7 +324,7 @@ def run_worker(
 
     if envelope.get("is_error"):
         log.error("worker %s reported an error: %s", definition.name, text)
-        return _blocked(text or "claude reported is_error", text, cost_usd=cost, is_error=True)
+        return _blocked(text or "grok reported is_error", text, cost_usd=cost, is_error=True)
 
     result = parse_worker_report(text)
     log.info(

@@ -23,10 +23,17 @@ SYSTEM_PROFILES_PATH = (
     else Path("/etc/kiln/profiles.json")
 )
 
-#: `grok` is accepted by config but has no launch implementation yet (see README's
-#: Known Limitations); it is listed so an existing profile does not fail validation.
+#: `grok` has a scheduler adapter (`scheduler/adapters/grok_adapter.py`) but no *wrapper*-mode
+#: launch implementation (see README's Known Limitations) -- it is listed so an existing
+#: profile does not fail validation for a wrapper-mode role.
 VALID_AGENTS = ("claude", "copilot", "codex", "grok")
 VALID_MODES = ("auto", "manual")
+
+#: Agents with a one-shot adapter in `scheduler/adapters/` -- the deterministic scheduler can
+#: only drive a backend it knows how to invoke non-interactively. Every currently-accepted
+#: agent has one; a future agent added to VALID_AGENTS without an adapter yet would stay out
+#: of this set until it has one too (same path `grok` followed here).
+SCHEDULER_CAPABLE_AGENTS = ("claude", "copilot", "codex", "grok")
 
 #: Worktree names that mean "work in the project root on the current branch".
 CURRENT_DIR_ALIASES = ("@current", "none", "master")
@@ -66,6 +73,11 @@ class RoleConfig:
     scheduler: str | None = None
     #: Whose queue an inbox pane watches. Ignored for every other kind of role.
     watches: str = ""
+    #: Scheduler-mode only: write the backend CLI's own internal debug trace per attempt
+    #: (Claude's `--debug-file`, Copilot's `--log-dir`/`--log-level all`) to `.kiln/logs/`.
+    #: Off by default -- it's substantial volume for a healthy run, worth paying for only
+    #: while actively diagnosing a failure like the copilot "permission denied" investigation.
+    worker_debug: bool = False
 
     @property
     def uses_current_dir(self) -> bool:
@@ -250,10 +262,11 @@ def _parse_role(entry: dict) -> RoleConfig:
             )
         # Fail loudly rather than silently running an unsupported backend's worker through
         # an adapter that does not exist yet. An inbox runs no agent, so it is exempt.
-        if scheduler == SCHEDULER_PYTHON and agent != "claude":
+        if scheduler == SCHEDULER_PYTHON and agent not in SCHEDULER_CAPABLE_AGENTS:
             raise ProfileError(
-                f"role {role!r} requests the python scheduler with agent {agent!r}, but only "
-                "'claude' has a validated one-shot adapter so far"
+                f"role {role!r} requests the python scheduler with agent {agent!r}, but it "
+                "has no one-shot adapter yet; expected one of "
+                + ", ".join(repr(name) for name in SCHEDULER_CAPABLE_AGENTS)
             )
 
     return RoleConfig(
@@ -266,6 +279,7 @@ def _parse_role(entry: dict) -> RoleConfig:
         worker_model=str(entry.get("workerModel") or "").strip(),
         scheduler=scheduler,
         watches=str(entry.get("watches") or "").strip(),
+        worker_debug=bool(entry.get("workerDebug", False)),
     )
 
 

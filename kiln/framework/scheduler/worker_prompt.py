@@ -11,6 +11,7 @@ path and the legacy in-session delegation path cannot describe the worker differ
 from __future__ import annotations
 
 import json
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -68,12 +69,44 @@ def parse_worker_definition(text: str) -> WorkerDefinition:
     )
 
 
+def parse_toml_worker_definition(text: str) -> WorkerDefinition:
+    """
+    Parse a generated `.codex/agents/<role>-worker.toml` file.
+
+    Structurally nothing like Claude/Copilot's frontmatter-markdown shape (see
+    `render_worker_file`'s `codex` branch in `launcher/generate.py`): a flat TOML document
+    with `name`, `description`, `mcp_servers = {}`, and a `developer_instructions` literal
+    string holding the *entire* worker body (role rules + constitution + status
+    instruction). That field maps to `.prompt` -- after this, `WorkerDefinition.prompt` is
+    the canonical worker persona text regardless of which backend produced the file, so
+    nothing downstream (scheduler retry/delegate logic) needs to know the format differed.
+    Codex's TOML never sets `model`/`tools`, so both stay `None`.
+    """
+    try:
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError(f"worker definition is not valid TOML: {exc}") from exc
+
+    name = data.get("name", "")
+    if not name:
+        raise ValueError("worker definition TOML has no 'name'")
+
+    return WorkerDefinition(
+        name=name,
+        description=data.get("description", ""),
+        prompt=str(data.get("developer_instructions", "")).strip(),
+    )
+
+
 def load_worker_definition(path: str | Path) -> WorkerDefinition:
-    """Read and parse a generated worker agent file."""
+    """Read and parse a generated worker agent file, dispatching on its format by extension."""
     file_path = Path(path)
     if not file_path.is_file():
         raise FileNotFoundError(f"no generated worker agent at {file_path}")
-    return parse_worker_definition(file_path.read_text(encoding="utf-8"))
+    text = file_path.read_text(encoding="utf-8")
+    if file_path.suffix == ".toml":
+        return parse_toml_worker_definition(text)
+    return parse_worker_definition(text)
 
 
 def build_agents_payload(definition: WorkerDefinition) -> str:

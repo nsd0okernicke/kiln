@@ -147,10 +147,15 @@ class KilnPaths:
         Where Write-GeneratedWorkerAgent puts a role's worker definition.
 
         Each CLI discovers project-scoped agents in its own location, so this is per-agent
-        rather than one shared path.
+        rather than one shared path. Grok's file is the same frontmatter-markdown *format* as
+        Claude's (both consume it via an inline `--agents` JSON payload built from the same
+        `worker_prompt.build_agents_payload()`), but gets its own directory rather than
+        sharing `.claude/agents/` -- a separate namespace per backend, matching Copilot/Codex.
         """
         if agent == "copilot":
             return self.project_root / ".github" / "agents" / f"{role}-worker.agent.md"
         if agent == "codex":
             return self.project_root / ".codex" / "agents" / f"{role}-worker.toml"
+        if agent == "grok":
+            return self.project_root / ".grok" / "agents" / f"{role}-worker.md"
         return self.project_root / ".claude" / "agents" / f"{role}-worker.md"

@@ -11,6 +11,7 @@ most were learned the hard way (a tracked `.kiln` symlink breaking later merges,
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
@@ -45,6 +46,7 @@ REQUIRED_GITIGNORE_ENTRIES = (
     ".agents/skills",
     ".claude/agents/*-worker.md",
     ".codex/agents/*-worker.toml",
+    ".grok/agents/*-worker.md",
     "CLAUDE.md",
     "AGENTS.md",
     ".mcp.json",
@@ -365,63 +367,138 @@ def _copy_worker_definitions(paths: KilnPaths, worktree: Path) -> None:
             shutil.copy2(item, destination / item.name)
 
 
-def _skills_dir_for(agent: str, root: Path) -> Path:
-    """Each CLI scans a different location for skills."""
-    if agent == "copilot":
-        return root / ".github" / "skills"
-    if agent == "codex":
-        # Cross-agent standard location Codex scans automatically, no config flag needed.
-        return root / ".agents" / "skills"
-    return root / ".claude" / "skills"
+#: Every project-level convention a supported CLI might scan for skills, relative to a
+#: worktree root. Confirmed live via `copilot skill --help`: Copilot alone checks all three
+#: ("Project .github/skills/, .agents/skills/, or .claude/skills/"), not just the one usually
+#: thought of as "its own" -- so a directory left over from an earlier profile/agent change
+#: (e.g. a role that used to be `agent: claude` leaving `.claude/skills` behind after switching
+#: to `agent: copilot`) is just as visible to Copilot as `.github/skills`. Every convention is
+#: therefore kept in sync in every worktree, not just whichever one nominally belongs to that
+#: role's current agent.
+SKILL_DIR_CONVENTIONS = (
+    (".claude", "skills"),
+    (".github", "skills"),
+    (".agents", "skills"),
+)
+
+#: Skills that only make sense inside an interactive wrapper session, which discovers a
+#: handoff/message by reading these skills itself. A scheduler-mode worker never needs them --
+#: the scheduler handles receive/merge/handoff mechanically in Python -- and a one-shot worker
+#: that sees them anyway has been observed trying to follow their message-queue protocol
+#: (checking tmp/handoff-in.md, hunting for the kiln-channel MCP server) against MCP access
+#: the scheduler adapter deliberately disables, turning an expected denial into a confused,
+#: credit-burning session that never produces a result.
+WRAPPER_ONLY_SKILLS = frozenset({"kiln-receive", "kiln-handoff", "kiln-ping"})
 
 
 def prepare_skills(profile: Profile, paths: KilnPaths) -> int:
-    """Link every project skill into each role's agent-specific skills directory."""
+    """Link every project skill into each role's worktree, across every skills-directory
+    convention a backend's CLI might scan."""
     if not paths.skills_dir.is_dir():
         return 0
     skills = [item for item in paths.skills_dir.iterdir() if item.is_dir()]
     if not skills:
         return 0
 
-    targets: list[tuple[str, str, Path]] = [
+    targets: list[tuple[Path, bool]] = [
         (
-            role.role,
-            role.agent,
             paths.project_root if role.uses_current_dir else paths.worktree_path(role.worktree),
+            role.uses_scheduler,
         )
         for role in profile.roles
         if role.agent in ("claude", "copilot", "codex")
     ]
     if targets:
-        targets.append(("root", "claude", paths.project_root))
+        targets.append((paths.project_root, False))
 
     linked = 0
-    for _label, agent, root in targets:
-        skills_dir = _skills_dir_for(agent, root)
-        # Always recreate so removed skills do not linger.
-        if skills_dir.exists():
-            shutil.rmtree(skills_dir, ignore_errors=True)
-        skills_dir.mkdir(parents=True, exist_ok=True)
-        for skill in skills:
-            try:
-                (skills_dir / skill.name).symlink_to(skill, target_is_directory=True)
-                linked += 1
-            except (OSError, NotImplementedError):
-                shutil.copytree(skill, skills_dir / skill.name, dirs_exist_ok=True)
-                linked += 1
+    for root, uses_scheduler in targets:
+        for parent, name in SKILL_DIR_CONVENTIONS:
+            skills_dir = root / parent / name
+            # Always recreate so removed skills -- and stale ones from an earlier agent --
+            # do not linger.
+            if skills_dir.exists():
+                shutil.rmtree(skills_dir, ignore_errors=True)
+            skills_dir.mkdir(parents=True, exist_ok=True)
+            for skill in skills:
+                if uses_scheduler and skill.name in WRAPPER_ONLY_SKILLS:
+                    continue
+                try:
+                    (skills_dir / skill.name).symlink_to(skill, target_is_directory=True)
+                    linked += 1
+                except (OSError, NotImplementedError):
+                    shutil.copytree(skill, skills_dir / skill.name, dirs_exist_ok=True)
+                    linked += 1
     return linked
 
 
-def prepare_agent_configs(profile: Profile, paths: KilnPaths) -> None:
-    """Write the global Copilot MCP config and each Codex role's isolated CODEX_HOME."""
-    if profile.has_agent("copilot"):
-        import json
+def _trust_copilot_worktrees(profile: Profile, paths: KilnPaths) -> None:
+    """
+    Add every copilot-agent role's worktree to `~/.copilot/config.json`'s `trustedFolders`.
 
+    Copilot gates every write-capable tool behind a workspace-trust check that is separate
+    from `--allow-all` and consulted per literal directory path -- observed live: a git
+    worktree is a different path from the project root even though it shares history, so
+    trusting the root does not trust the worktree. Every write tool (including the `kiln-db`
+    MCP tool) returned "Permission denied and could not request permission from user" for 8+
+    minutes before the worker gave up having made zero changes, consuming real AI credits the
+    whole time reading code and retrying writes that could never succeed non-interactively.
+
+    Additive and defensive: preserves whatever folders the user has already trusted
+    interactively, and backs off entirely (logging a warning, never raising) if the file is
+    missing or doesn't parse -- trust is a security-relevant setting the user owns; this only
+    appends what Kiln's own worktrees need, the same way `prepare_agent_configs()` already
+    manages `mcp-config.json` in the same directory.
+    """
+    worktrees = {
+        str(paths.project_root if role.uses_current_dir else paths.worktree_path(role.worktree))
+        for role in profile.roles
+        if role.agent == "copilot"
+    }
+    if not worktrees:
+        return
+
+    config_path = Path.home() / ".copilot" / "config.json"
+    if not config_path.is_file():
+        log.warning(
+            "no %s found; copilot worker writes in an untrusted worktree may be silently "
+            "denied -- run `copilot` interactively once first to create it",
+            config_path,
+        )
+        return
+
+    try:
+        raw = config_path.read_text(encoding="utf-8")
+        brace = raw.index("{")
+        header, body = raw[:brace], json.loads(raw[brace:])
+    except (OSError, ValueError) as exc:
+        log.warning("could not read %s to trust worktrees: %s", config_path, exc)
+        return
+
+    trusted = set(body.get("trustedFolders") or [])
+    missing = worktrees - trusted
+    if not missing:
+        return
+
+    body["trustedFolders"] = sorted(trusted | missing)
+    try:
+        config_path.write_text(header + json.dumps(body, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        log.warning("could not write %s to trust worktrees: %s", config_path, exc)
+        return
+    log.info("trusted for copilot: %s", ", ".join(sorted(missing)))
+
+
+def prepare_agent_configs(profile: Profile, paths: KilnPaths) -> None:
+    """Write the global Copilot MCP config and trusted folders, and each Codex role's
+    isolated CODEX_HOME."""
+    if profile.has_agent("copilot"):
         copilot_dir = Path.home() / ".copilot"
         copilot_dir.mkdir(parents=True, exist_ok=True)
         (copilot_dir / "mcp-config.json").write_text(
             json.dumps(build_copilot_mcp_config(paths), indent=2) + "\n", encoding="utf-8"
         )
+        _trust_copilot_worktrees(profile, paths)
 
     for role in profile.roles:
         if role.agent != "codex":
