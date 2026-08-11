@@ -155,6 +155,11 @@ unchanged. There is no second implementation to fall behind.
 - One or more agent CLIs (Claude Code, GitHub Copilot, Codex) depending on configured agents
 - `pip install -r kiln/framework/mcp-server/requirements.txt` if you use wrapper-mode roles
   (the `kiln-db` / `kiln-channel` MCP servers). Scheduler-mode roles need no MCP server.
+  On Debian/Ubuntu that exact command fails with `error: externally-managed-environment`
+  (PEP 668) — use `python3 -m pip install --user --break-system-packages -r ...` instead.
+  A virtualenv will *not* work here: the agent CLI spawns the channel server as a bare
+  interpreter name resolved from its own PATH, so the SDK must be importable by that
+  interpreter. Kiln prints the correct command for your platform if the import check fails.
 
 ### Windows
 

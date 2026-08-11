@@ -84,12 +84,30 @@ def warn_if_channel_unavailable(profile: Profile) -> bool:
     log.warning(
         "the kiln-channel MCP server will not start: %r cannot import the MCP SDK (%s). "
         "Roles %s receive handoffs through it and will silently fall back to asking you "
-        "for instructions. Fix with:  %s -m pip install -r %s",
+        "for instructions. Fix with:  %s",
         MCP_PYTHON, detail[-1] if detail else "unknown import error",
-        ", ".join(wrapper_roles), MCP_PYTHON,
-        Path("kiln") / "framework" / "mcp-server" / "requirements.txt",
+        ", ".join(wrapper_roles), mcp_install_hint(),
     )
     return True
+
+
+def mcp_install_hint() -> str:
+    """
+    The command that actually installs the MCP SDK for `MCP_PYTHON`.
+
+    A plain `pip install -r` is what this printed before, and on Debian/Ubuntu it fails
+    outright: PEP 668 marks the system interpreter externally managed, so pip refuses with
+    `error: externally-managed-environment` (confirmed on Ubuntu 24.04). Telling someone to
+    run a command that cannot work is worse than saying nothing.
+
+    A virtualenv is not the answer here even though pip suggests one: the agent CLI spawns
+    the channel server as a bare interpreter name resolved from *its* PATH, so the SDK has to
+    be importable by that interpreter — not by a venv it will never look inside. `--user`
+    installs into the same interpreter's user site, which is why it is the flag that works.
+    """
+    requirements = Path("kiln") / "framework" / "mcp-server" / "requirements.txt"
+    flags = "" if os.name == "nt" else " --user --break-system-packages"
+    return f"{MCP_PYTHON} -m pip install{flags} -r {requirements}"
 
 
 def _hosts_posix_shell(backend: str) -> bool:
