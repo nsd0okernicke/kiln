@@ -9,6 +9,8 @@ quotes rather than only tidy ones.
 
 from __future__ import annotations
 
+import shutil
+
 import pytest
 from launcher.commands import (
     START_PROMPT,
@@ -18,7 +20,7 @@ from launcher.commands import (
     render_powershell,
 )
 from launcher.config import RoleConfig
-from launcher.paths import KilnPaths
+from launcher.paths import KilnPaths, python_command
 
 
 @pytest.fixture
@@ -102,7 +104,14 @@ class TestScheduler:
     def test_launches_the_module_not_the_script_path(self, paths):
         # A bare script path fails: the package uses relative imports.
         argv = self._scheduler(paths).argv
-        assert argv[:3] == ["python", "-m", "scheduler.role_scheduler"]
+        assert argv[:3] == [python_command(), "-m", "scheduler.role_scheduler"]
+
+    def test_names_an_interpreter_that_actually_exists(self, paths):
+        # The literal "python" was hardcoded here, and stock Debian/Ubuntu ships only
+        # `python3` -- every scheduler pane, the inbox and the dashboard died instantly with
+        # "Command 'python' not found" (confirmed on Ubuntu 24.04). Whatever name is chosen
+        # has to resolve on the host actually doing the launching.
+        assert shutil.which(self._scheduler(paths).argv[0]) is not None
 
     def test_sets_pythonpath_so_the_package_resolves(self, paths):
         env = self._scheduler(paths).env
@@ -133,7 +142,7 @@ class TestScheduler:
         # `claude` still appears as the --agent VALUE (which adapter the scheduler uses),
         # but nothing invokes the CLI: the scheduler spawns workers itself, one shot each.
         command = self._scheduler(paths)
-        assert command.argv[0] == "python"
+        assert command.argv[0] == python_command()
         assert command.argv[command.argv.index("--agent") + 1] == "claude"
 
     def test_manual_role_still_gets_an_interactive_session(self, paths):
@@ -170,7 +179,7 @@ class TestInboxPane:
 
     def test_runs_the_inbox_module(self, paths):
         argv = self._command(paths).argv
-        assert argv[:3] == ["python", "-m", "scheduler.inbox"]
+        assert argv[:3] == [python_command(), "-m", "scheduler.inbox"]
 
     def test_watches_the_role_it_was_told_to(self, paths):
         # Not its own name: the pane is 'inbox', the queue belongs to 'human-in-the-loop'.
@@ -217,7 +226,7 @@ class TestDashboardPane:
 
     def test_runs_the_dashboard_module(self, paths):
         argv = self._command(paths).argv
-        assert argv[:3] == ["python", "-m", "scheduler.dashboard"]
+        assert argv[:3] == [python_command(), "-m", "scheduler.dashboard"]
 
     def test_is_scoped_to_the_launch_branch(self, paths):
         argv = self._command(paths).argv
@@ -397,4 +406,4 @@ class TestPosixRendering:
             build(paths, scheduler="python", mode="auto", worktree="coder")
         )
         assert "export PYTHONPATH=" in rendered
-        assert "python -m scheduler.role_scheduler" in rendered
+        assert f"{python_command()} -m scheduler.role_scheduler" in rendered

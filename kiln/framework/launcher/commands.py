@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .config import RoleConfig
-from .paths import KilnPaths
+from .paths import KilnPaths, python_command
 
 #: Opening prompt handed to an interactive wrapper session.
 START_PROMPT = "Start your role session."
@@ -83,7 +83,7 @@ def _scheduler_command(role: RoleConfig, paths: KilnPaths, branch: str) -> Agent
     `scheduler` and `launcher` resolve.
     """
     argv = [
-        "python", "-m", "scheduler.role_scheduler",
+        python_command(), "-m", "scheduler.role_scheduler",
         "--role", role.role,
         "--branch", branch,
         "--db-path", str(paths.db_path),
@@ -125,7 +125,7 @@ def _inbox_command(role: RoleConfig, paths: KilnPaths, branch: str) -> AgentComm
     messages it shows are addressed to `human-in-the-loop`.
     """
     argv = [
-        "python", "-m", "scheduler.inbox",
+        python_command(), "-m", "scheduler.inbox",
         "--role", role.watched_role,
         "--branch", branch,
         "--db-path", str(paths.db_path),
@@ -153,7 +153,7 @@ def _dashboard_command(role: RoleConfig, paths: KilnPaths, branch: str) -> Agent
     directory, and the role inventory `workspace.write_sessions_file` already wrote.
     """
     argv = [
-        "python", "-m", "scheduler.dashboard",
+        python_command(), "-m", "scheduler.dashboard",
         "--branch", branch,
         "--db-path", str(paths.db_path),
         "--status-dir", str(paths.status_dir),

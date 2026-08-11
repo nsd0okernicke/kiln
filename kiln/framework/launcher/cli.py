@@ -25,7 +25,7 @@ from .config import Profile, ProfileError, list_profiles, load_profile
 from .generate import CHANNEL_IMPORT_PROBE, MCP_PYTHON
 from .paths import KilnPaths
 from .templates import TemplateError, check_project_scaffolding, resolve_framework_root
-from .terminals import TMUX, WEZTERM, PaneSpec, TerminalError, detect_backend
+from .terminals import TMUX, WEZTERM, WINDOWS_TERMINAL, PaneSpec, TerminalError, detect_backend
 from .terminals import launch as launch_terminal
 
 log = logging.getLogger("kiln")
@@ -101,8 +101,18 @@ def _hosts_posix_shell(backend: str) -> bool:
     pwsh, same as Windows Terminal (which only runs on Windows at all). Keying this off
     backend name alone would send PowerShell syntax into a Linux WezTerm pane's bash/zsh —
     it would echo back as a wall of syntax errors instead of launching anything.
+
+    Only the two backends that genuinely pin a shell are special-cased; everything else
+    follows the host OS. `none` used to fall through to the PowerShell branch on every
+    platform, so the one backend whose entire job is *printing* the command — the thing the
+    README pairs with `--dry-run` for diagnosis — showed Linux users `$env:VAR = '...'`
+    commands no shell of theirs could run.
     """
-    return backend == TMUX or (backend == WEZTERM and os.name != "nt")
+    if backend == TMUX:
+        return True
+    if backend == WINDOWS_TERMINAL:
+        return False
+    return os.name != "nt"
 
 
 def build_panes(profile: Profile, paths: KilnPaths, branch: str, backend: str) -> list[PaneSpec]:
@@ -288,6 +298,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("command", nargs="?", default="",
                         help="'init' to scaffold a new project; 'send' or 'inbox' for the "
                              "human entry points; omit to launch")
+    # `kiln init <dir>` is the form both the README and kiln.sh's own usage block document,
+    # but only `command` existed, so argparse rejected the directory as an unrecognised
+    # argument and the documented Unix scaffolding invocation could not run at all.
+    parser.add_argument("init_target", nargs="?", default="",
+                        help="with 'init', the project directory to scaffold "
+                             "(equivalent to --working-dir)")
     parser.add_argument("--init", "-Init", dest="init", action="store_true",
                         help="scaffold a new project instead of launching")
     parser.add_argument("--example", "-Example", dest="example", default="",
@@ -378,6 +394,13 @@ def main(argv: list[str] | None = None) -> int:
             "like -WorkingDir.", args.command,
         )
         return 1
+
+    if args.init_target:
+        # Only reachable as `init <dir>`: argparse fills positionals in order, so a first
+        # positional that is not "init" has already returned above. The bare directory wins
+        # over --working-dir's "." default — `kiln init <dir>` naming one directory and
+        # scaffolding another would be indefensible.
+        args.working_dir = args.init_target
 
     try:
         if args.list_profiles:

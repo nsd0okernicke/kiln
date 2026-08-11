@@ -13,8 +13,33 @@ They are the same directory only when Kiln is dogfooding itself.
 
 from __future__ import annotations
 
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
+
+#: Bare interpreter names to try, in order, for `python_command()`.
+PYTHON_CANDIDATES = ("python", "python3")
+
+
+def python_command() -> str:
+    """
+    The interpreter name to embed in generated pane commands and `.mcp.json`.
+
+    A *bare* name rather than `sys.executable`, deliberately: each pane's shell and the agent
+    CLI spawning the kiln-channel server resolve it from their own PATH at spawn time, which
+    is not necessarily the environment the launcher ran in.
+
+    Which bare name is the part that cannot be hardcoded. `python` was, and does not exist on
+    a stock Debian/Ubuntu — only `python3` is installed there, so every scheduler pane, the
+    inbox, the dashboard and the MCP server died instantly with "Command 'python' not found"
+    (confirmed on Ubuntu 24.04). Resolving against PATH keeps Windows on `python` and gives
+    Linux/macOS `python3`, with `python3` as the fallback so a miss degrades to the more
+    likely name rather than the one already known to be absent.
+    """
+    for name in PYTHON_CANDIDATES:
+        if shutil.which(name):
+            return name
+    return PYTHON_CANDIDATES[-1]
 
 
 @dataclass(frozen=True)

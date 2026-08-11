@@ -1,0 +1,19 @@
+# Line-ending policy.
+#
+# Kiln is developed on Windows (where Git for Windows sets core.autocrlf=true by default) but
+# runs on Linux and macOS too. Without this file, whether a contributor commits LF or CRLF
+# depends entirely on their local autocrlf setting — and a CRLF-terminated shell script fails
+# on Linux with the famously unhelpful `bad interpreter: /usr/bin/env bash^M`.
+
+# Let git decide for anything not named below, normalising to LF in the repository.
+* text=auto
+
+# The POSIX shims are executed by /usr/bin/env; they MUST have LF in the working tree, on
+# every platform, regardless of the checking-out developer's autocrlf.
+*.sh text eol=lf
+
+# PowerShell keeps the platform convention it is written for.
+*.ps1 text eol=crlf
+
+# Binary assets must never be line-ending converted.
+*.png binary

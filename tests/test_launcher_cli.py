@@ -258,6 +258,18 @@ class TestHostsPosixShell:
         monkeypatch.setattr(cli.os, "name", "nt")
         assert cli._hosts_posix_shell(cli.WEZTERM) is False
 
+    def test_none_backend_follows_the_host_os(self, monkeypatch):
+        # `none` prints the command instead of running it, and the README pairs it with
+        # --dry-run as *the* way to see what a profile will do. It used to fall through to
+        # the PowerShell branch on every platform, so on Linux the one backend whose whole
+        # job is showing you the command showed `$env:VAR = '...'` that no shell there runs.
+        monkeypatch.setattr(cli.os, "name", "posix")
+        assert cli._hosts_posix_shell("none") is True
+
+    def test_none_backend_is_powershell_on_windows(self, monkeypatch):
+        monkeypatch.setattr(cli.os, "name", "nt")
+        assert cli._hosts_posix_shell("none") is False
+
 
 class TestCliParsing:
     def test_init_subcommand_is_recognised(self):
@@ -294,6 +306,32 @@ class TestCliParsing:
 
     def test_unknown_positional_is_rejected(self, caplog):
         assert cli.main(["bogus"]) == 1
+
+    def test_init_accepts_the_documented_bare_directory(self, monkeypatch):
+        # `kiln init <dir>` is the form the README and kiln.sh's own usage block document,
+        # but only one positional existed, so argparse rejected the directory outright and
+        # the documented Unix scaffolding invocation could not run at all.
+        seen = {}
+
+        def fake_init(args):
+            seen["working_dir"] = args.working_dir
+            return 0
+
+        monkeypatch.setattr(cli, "run_init", fake_init)
+        assert cli.main(["init", "/tmp/new-project"]) == 0
+        assert seen["working_dir"] == "/tmp/new-project"
+
+    def test_bare_directory_beats_the_working_dir_default(self, monkeypatch):
+        # Otherwise `init <dir>` would scaffold "." while naming another directory.
+        seen = {}
+
+        def fake_init(args):
+            seen["working_dir"] = args.working_dir
+            return 0
+
+        monkeypatch.setattr(cli, "run_init", fake_init)
+        cli.main(["init", "/tmp/explicit"])
+        assert seen["working_dir"] == "/tmp/explicit"
 
     def test_stop_and_list_flags(self):
         assert cli.build_parser().parse_args(["--stop"]).stop is True

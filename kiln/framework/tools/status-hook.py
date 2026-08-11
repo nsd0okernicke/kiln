@@ -69,7 +69,10 @@ def main():
     if not script.exists():
         return
 
-    args = ["python", str(script), role, state]
+    # sys.executable, not a bare "python": this file is copied into each worktree and run by
+    # the agent CLI's hook runner, and stock Debian/Ubuntu has no `python` on PATH at all —
+    # only `python3`. The interpreter already running this hook is by definition a working one.
+    args = [sys.executable, str(script), role, state]
     if detail:
         args.append(detail)
     args.append("--mode=auto")

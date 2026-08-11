@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .config import Profile, RoleConfig
-from .paths import KilnPaths
+from .paths import KilnPaths, python_command
 from .templates import (
     generated_header,
     join_blocks,
@@ -40,8 +40,9 @@ from scheduler.status_contract import WORKER_STATUS_INSTRUCTION
 #: The interpreter `.mcp.json` names for kiln-channel. Deliberately the bare command rather
 #: than sys.executable: the agent CLI resolves it from PATH at spawn time, which may not be
 #: the interpreter running the launcher. `cli.warn_if_channel_unavailable` probes this exact
-#: command so the preflight check tests what will actually run.
-MCP_PYTHON = "python"
+#: command so the preflight check tests what will actually run. Which bare name is resolved
+#: per platform -- see `paths.python_command()`; `python` alone is absent on stock Ubuntu.
+MCP_PYTHON = python_command()
 
 #: What channel.py imports, mirroring its mcp 1.x/2.x compatibility fallback.
 CHANNEL_IMPORT_PROBE = (

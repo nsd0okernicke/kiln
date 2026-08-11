@@ -1331,7 +1331,10 @@ equivalent).
   spend and cycle count survive the process that tracked them and are readable by anything
   else polling status, not just the bar that produced them.
 - ✓ **Test suite** — pytest over `launcher/` and `scheduler/`, with mutation testing on the
-  pure modules. `pip install -e .` then `pytest`.
+  pure modules. `pip install pytest ruff` then `pytest` — there is no install step, because
+  `pyproject.toml` is tooling configuration rather than a packaging manifest (`pip install -e .`
+  cannot work: there is no `[project]` or `[build-system]` table). Imports resolve through
+  `pythonpath = ["kiln/framework"]` in `[tool.pytest.ini_options]`.
 
 **Live validation status:** a full specifier cycle (receive → merge → one-shot worker → sentinel
 → squash → handoff) has been validated end to end. The complete four-role loop returning to

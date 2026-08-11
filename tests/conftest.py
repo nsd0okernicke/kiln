@@ -10,6 +10,27 @@ import pytest
 from scheduler import db
 
 
+@pytest.fixture(autouse=True)
+def git_identity(monkeypatch):
+    """
+    Give every test a git identity through the environment.
+
+    Several tests make real commits, which git refuses outright without `user.name`/
+    `user.email`. The suite used to inherit whatever the developer happened to have
+    configured globally, so it passed on a workstation and failed on a clean machine — found
+    on a fresh Ubuntu, where `test_initializes_a_fresh_project` was the *only* failure in the
+    whole run. These four variables override config and need no repository to exist yet,
+    unlike `git config`, which has to run inside one.
+    """
+    for name, value in {
+        "GIT_AUTHOR_NAME": "Kiln Test",
+        "GIT_AUTHOR_EMAIL": "test@kiln.invalid",
+        "GIT_COMMITTER_NAME": "Kiln Test",
+        "GIT_COMMITTER_EMAIL": "test@kiln.invalid",
+    }.items():
+        monkeypatch.setenv(name, value)
+
+
 @pytest.fixture
 def db_path(tmp_path):
     """Path to an initialised, empty messages.db."""
