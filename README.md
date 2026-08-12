@@ -1467,7 +1467,6 @@ under **Deterministic Scheduler** above.
 - **`grok` has no wrapper-mode implementation.** Its scheduler adapter is real and live-verified,
   but there is no `loop-auto-grok.md`/wrapper dispatch path — a `grok` role must run `auto` +
   `"scheduler": "python"`; it cannot run `manual`.
-<<<<<<< HEAD
 - **Unix parity is real, but was unverified until it was actually run.** Both shims call the
   same Python `generate.py`, so template injection, `auto`/`manual` modes and worker
   delegation are structurally identical on every platform, and what remains platform-specific
@@ -1491,9 +1490,6 @@ under **Deterministic Scheduler** above.
 
   All six are fixed. **Still unverified on Linux:** a real swarm cycle against a live agent
   CLI (Tier 3), which needs an authenticated Claude Code inside the Linux environment.
-=======
-- **Terminal backend is the one remaining platform difference.** Everything else is shared: both shims call the same Python `generate.py`, so template injection, `auto`/`manual` modes and worker delegation are identical on every platform.
->>>>>>> f968e6164b9fa06819d4660f43e7de8bcb6d16ea
 - **No Unix full-reset script** — see the Known gap under **Cleanup**.
 - **Symlink creation needs Developer Mode on Windows.** Without it (`WinError 1314`), worktrees fall back to *copying* `.kiln` instead of sharing it. The swarm still runs, but shared state is not actually shared.
 
