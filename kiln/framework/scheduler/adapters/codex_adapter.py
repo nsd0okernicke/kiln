@@ -51,7 +51,7 @@ from pathlib import Path
 
 from ..status_contract import STATUS_BLOCKED, WorkerResult, parse_worker_report
 from ..worker_prompt import WorkerDefinition
-from . import WorkerInvocation
+from . import TokenUsage, WorkerInvocation
 
 log = logging.getLogger(__name__)
 
@@ -155,6 +155,75 @@ def find_turn_failure(stdout: str) -> str | None:
         if event.get("type") == "turn.failed":
             return str((event.get("error") or {}).get("message", "turn failed"))
     return None
+
+
+#: Candidate wire names per TokenUsage field, tried in order.
+#:
+#: Deliberately tolerant, unlike the Claude/Grok tables. Those two emit the Anthropic
+#: Messages API format, whose key names are pinned by a public API; Codex's `usage` payload
+#: is known here only from this module's own docstring (`turn.completed.usage`) and has not
+#: been checked against a captured stream. Trying several plausible spellings and returning
+#: None on a total miss means a wrong guess degrades to "no data" -- which the scheduler and
+#: dashboard already render as `-` -- rather than to a confidently wrong number, which is the
+#: worse failure for something whose entire purpose is measurement.
+#:
+#: Confirm against a real `codex exec --json` stream and then narrow this table.
+_USAGE_ALIASES = {
+    "input_tokens": ("input_tokens", "prompt_tokens"),
+    "output_tokens": ("output_tokens", "completion_tokens"),
+    "cache_read_tokens": ("cached_input_tokens", "cache_read_input_tokens", "cached_tokens"),
+}
+
+
+def _as_int(value: object) -> int | None:
+    """A usage count, or None when absent or not a number (`bool` excluded — it is an int)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value)
+
+
+def _usage_from(payload: dict) -> TokenUsage | None:
+    values = {}
+    for field_name, wire_names in _USAGE_ALIASES.items():
+        for wire_name in wire_names:
+            count = _as_int(payload.get(wire_name))
+            if count is not None:
+                values[field_name] = count
+                break
+    return TokenUsage(**values) if values else None
+
+
+def find_usage(stdout: str) -> TokenUsage | None:
+    """
+    Scan a captured JSONL stream for the turn's token usage, or None when it reports none.
+
+    A scan rather than a field read, because `run_worker` never parses an envelope for
+    Codex the way the other adapters do -- it takes the final message from the `-o` output
+    file, so the usage event would otherwise go past unread. Shaped exactly like
+    `find_turn_failure` for that reason.
+
+    The last `turn.completed` wins: a stream carrying more than one reports the final state.
+    """
+    usage: TokenUsage | None = None
+    for line in stdout.splitlines():
+        candidate = line.strip()
+        if not candidate.startswith("{"):
+            continue
+        try:
+            event = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if event.get("type") != "turn.completed":
+            continue
+        # Both nestings are accepted for the same reason the key names are: the exact
+        # envelope shape is documented, not verified.
+        for payload in (event.get("usage"), (event.get("turn") or {}).get("usage")):
+            if isinstance(payload, dict):
+                found = _usage_from(payload)
+                if found is not None:
+                    usage = found
+                    break
+    return usage
 
 
 def _blocked(summary: str, raw: str, **kwargs) -> WorkerInvocation:
@@ -261,28 +330,32 @@ def run_worker(
             return _blocked(f"worker timed out after {timeout}s", stdout, timed_out=True)
 
         stderr = (process.stderr.read() if process.stderr else "") or ""
+        # Read once, up front: every path below this point ends in a WorkerInvocation, and a
+        # turn that failed or produced no message still burned tokens worth counting.
+        tokens = find_usage(stdout)
 
         failure = find_turn_failure(stdout)
         if failure:
             log.error("worker %s reported a failed turn: %s", definition.name, failure)
-            return _blocked(failure, stdout, is_error=True)
+            return _blocked(failure, stdout, is_error=True, tokens=tokens)
 
         if process.returncode != 0:
             detail = stderr.strip() or f"codex exited {process.returncode}"
             log.error("worker %s failed: %s", definition.name, detail)
-            return _blocked(detail, stdout, is_error=True)
+            return _blocked(detail, stdout, is_error=True, tokens=tokens)
 
         text = output_file.read_text(encoding="utf-8").strip() if output_file.is_file() else ""
         if not text:
             detail = stderr.strip() or "codex produced no output message"
             log.error("worker %s produced no output message: %s", definition.name, detail)
-            return _blocked(detail, stdout, is_error=True)
+            return _blocked(detail, stdout, is_error=True, tokens=tokens)
 
         result = parse_worker_report(text)
         log.info(
-            "worker %s finished: status=%s sentinel=%s",
+            "worker %s finished: status=%s sentinel=%s tokens=%s",
             definition.name, result.status, result.sentinel_found,
+            tokens.total if tokens else "-",
         )
-        return WorkerInvocation(result=result, raw_output=text)
+        return WorkerInvocation(result=result, raw_output=text, tokens=tokens)
     finally:
         output_file.unlink(missing_ok=True)

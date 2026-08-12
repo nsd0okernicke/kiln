@@ -19,12 +19,18 @@ NOW_UTC = datetime(2026, 8, 9, 15, 0, 0, tzinfo=UTC)
 NOW_LOCAL = datetime(2026, 8, 9, 17, 0, 0)
 
 
-def _status(state="working", since=None, cycles=None, cost_usd=None):
+def _status(
+    state="working", since=None, cycles=None, cost_usd=None, tokens=None, token_usage=None
+):
     status = {"role": "coder", "state": state, "since": since or "2026-08-09T14:59:30Z"}
     if cycles is not None:
         status["cycles"] = cycles
     if cost_usd is not None:
         status["cost_usd"] = cost_usd
+    if tokens is not None:
+        status["tokens"] = tokens
+    if token_usage is not None:
+        status["token_usage"] = token_usage
     return status
 
 
@@ -144,23 +150,106 @@ class TestRenderStateGrid:
         row = next(line for line in lines if "coder" in line)
         assert "4" in row and "$1.50" in row
 
+    def test_shows_tokens(self):
+        sessions = [dashboard.RoleSession("coder", "claude", "Coder")]
+        statuses = {"coder": _status(tokens=12_345)}
+        lines = dashboard.render_state_grid(sessions, statuses, {}, NOW_UTC)
+        row = next(line for line in lines if "coder" in line)
+        assert "12.3k tok" in row
+
+    def test_a_role_reporting_no_usage_shows_a_placeholder_not_zero(self):
+        # Codex/Copilot roles whose usage could not be read must not claim they spent
+        # nothing -- that is the failure mode this whole column exists to remove.
+        sessions = [dashboard.RoleSession("specifier", "codex", "Specifier")]
+        statuses = {"specifier": _status(cycles=2)}
+        lines = dashboard.render_state_grid(sessions, statuses, {}, NOW_UTC)
+        row = next(line for line in lines if "specifier" in line)
+        assert "tok" not in row
+
+
+class TestCacheShare:
+    def test_is_the_cache_read_fraction_of_all_tokens(self):
+        assert dashboard.cache_share({"input": 100, "cache_read": 900}) == pytest.approx(0.9)
+
+    def test_no_breakdown_is_unknown_not_zero(self):
+        # A backend that reported nothing has not told us its cache rate is zero.
+        assert dashboard.cache_share(None) is None
+        assert dashboard.cache_share({}) is None
+
+    def test_an_all_zero_breakdown_is_unknown(self):
+        assert dashboard.cache_share({"input": 0, "cache_read": 0}) is None
+
+    def test_no_cache_reads_is_a_real_zero(self):
+        assert dashboard.cache_share({"input": 500, "output": 20}) == pytest.approx(0.0)
+
+    def test_the_column_renders_a_percentage(self):
+        sessions = [dashboard.RoleSession("coder", "claude", "Coder")]
+        statuses = {"coder": _status(tokens=1000, token_usage={"input": 100, "cache_read": 900})}
+        lines = dashboard.render_state_grid(sessions, statuses, {}, NOW_UTC)
+        assert "90%" in next(line for line in lines if "coder" in line)
+
+
+class TestTokenBreakdown:
+    def test_sums_each_kind_across_roles(self):
+        statuses = {
+            "coder": _status(token_usage={"input": 10, "cache_read": 100}),
+            "refactorer": _status(token_usage={"input": 5, "output": 2}),
+        }
+        assert dashboard.total_token_usage(statuses) == {
+            "input": 15, "cache_read": 100, "output": 2
+        }
+
+    def test_roles_without_a_breakdown_are_skipped(self):
+        assert dashboard.total_token_usage({"coder": _status()}) == {}
+
+    def test_formats_only_the_kinds_reported(self):
+        rendered = dashboard.format_token_breakdown({"input": 1200, "cache_read": 8_800_000})
+        assert "in 1.2k" in rendered
+        assert "cache-read 8.8M" in rendered
+        assert "out" not in rendered
+
+    def test_an_empty_breakdown_renders_nothing(self):
+        assert dashboard.format_token_breakdown({}) == ""
+
 
 class TestRenderTotals:
-    def test_sums_cost_and_cycles_across_roles(self):
+    def test_sums_cost_cycles_and_tokens_across_roles(self):
         statuses = {
-            "coder": _status(cycles=4, cost_usd=1.5),
-            "refactorer": _status(cycles=2, cost_usd=0.5),
+            "coder": _status(cycles=4, cost_usd=1.5, tokens=1000),
+            "refactorer": _status(cycles=2, cost_usd=0.5, tokens=500),
         }
-        cost, cycles = dashboard.render_totals(statuses)
+        cost, cycles, tokens = dashboard.render_totals(statuses)
         assert cost == pytest.approx(2.0)
         assert cycles == 6
+        assert tokens == 1500
 
     def test_missing_fields_count_as_zero(self):
         statuses = {"coder": _status()}
-        assert dashboard.render_totals(statuses) == (0, 0)
+        assert dashboard.render_totals(statuses) == (0, 0, 0)
 
     def test_empty_is_zero(self):
-        assert dashboard.render_totals({}) == (0, 0)
+        assert dashboard.render_totals({}) == (0, 0, 0)
+
+
+class TestCostIsPartial:
+    def _sessions(self, *pairs):
+        return [dashboard.RoleSession(role, agent, role) for role, agent in pairs]
+
+    def test_all_cost_reporting_backends_is_complete(self):
+        sessions = self._sessions(("coder", "claude"), ("refactorer", "grok"))
+        statuses = {"coder": _status(), "refactorer": _status()}
+        assert dashboard.cost_is_partial(sessions, statuses) is False
+
+    def test_a_running_codex_role_makes_it_partial(self):
+        sessions = self._sessions(("coder", "claude"), ("specifier", "codex"))
+        statuses = {"coder": _status(), "specifier": _status()}
+        assert dashboard.cost_is_partial(sessions, statuses) is True
+
+    def test_a_copilot_role_that_never_ran_does_not_count(self):
+        # No status file means the role has produced nothing, so the total is not yet
+        # missing anything on its account.
+        sessions = self._sessions(("coder", "claude"), ("specifier", "copilot"))
+        assert dashboard.cost_is_partial(sessions, {"coder": _status()}) is False
 
 
 class TestRenderActivity:
@@ -210,6 +299,27 @@ class TestRenderDashboard:
         lines = self._render()
         assert "library-hub-testrun5" in lines[0]
         assert "run1" in lines[0]
+
+    def test_the_rule_is_at_least_as_wide_as_the_grid(self):
+        # A rule sized to the title alone left the table visibly overhanging its own
+        # borders once the TOKENS column widened the grid.
+        lines = self._render()
+        rule, grid_header = lines[1], lines[2]
+        assert len(rule) >= len(grid_header)
+
+    def test_a_cost_reporting_swarm_has_no_partial_marker(self):
+        text = "\n".join(self._render())
+        assert "partial" not in text
+
+    def test_a_codex_role_marks_the_cost_total_partial(self):
+        text = "\n".join(
+            self._render(
+                sessions=[dashboard.RoleSession("specifier", "codex", "Specifier")],
+                statuses={"specifier": _status(cycles=2, tokens=4000)},
+            )
+        )
+        assert "$0.00+" in text
+        assert "partial" in text
 
     def test_includes_every_section(self):
         text = "\n".join(self._render())

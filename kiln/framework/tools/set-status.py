@@ -39,17 +39,35 @@ STATE_EMOJIS = {
 
 USAGE = (
     "Usage: set-status.py <role> <state> [detail] "
-    "[--mode=auto|manual] [--cycles=N] [--cost=X.XX]"
+    "[--mode=auto|manual] [--cycles=N] [--cost=X.XX] "
+    "[--tokens-in=N] [--tokens-out=N] [--tokens-cache-read=N] [--tokens-cache-write=N]"
 )
+
+#: Flag -> key in the status file's `token_usage` object. Each kind arrives as its own
+#: scalar flag because this script is copied verbatim into every worktree and cannot import
+#: scheduler.adapters.TokenUsage to unpack a structured value.
+#:
+#: The breakdown is kept rather than pre-summed because it is the actionable part: a large
+#: `cache_read` is cheap and healthy, a large `input` is prompt bloat, and one total cannot
+#: tell those apart.
+TOKEN_FLAGS = {
+    "--tokens-in=": "input",
+    "--tokens-out=": "output",
+    "--tokens-cache-read=": "cache_read",
+    "--tokens-cache-write=": "cache_write",
+}
 
 
 def parse_argv(argv):
     """
-    Parse `role, state, detail, mode, cycles, cost_usd` from argv (excluding the script name).
+    Parse `role, state, detail, mode, cycles, cost_usd, tokens` from argv (excluding the
+    script name).
 
-    `cycles`/`cost_usd` are None when not passed -- only role_scheduler.py's scheduler-driven
-    roles track these; wrapper-mode roles never pass them, and build_status() omits them from
-    the written JSON entirely in that case rather than writing a misleading 0.
+    `tokens` is a dict of the `TOKEN_FLAGS` kinds that were actually passed, or None when
+    none were. `cycles`/`cost_usd`/`tokens` are None when not passed -- only
+    role_scheduler.py's scheduler-driven roles track these; wrapper-mode roles never pass
+    them, and build_status() omits them from the written JSON entirely in that case rather
+    than writing a misleading 0.
 
     Raises ValueError (message is the usage string) if `role`/`state` are missing.
     """
@@ -63,6 +81,7 @@ def parse_argv(argv):
     mode = "auto"
     cycles = None
     cost_usd = None
+    tokens = {}
     for arg in argv[2:]:
         if arg.startswith("--mode="):
             mode = arg.split("=", 1)[1]
@@ -70,8 +89,13 @@ def parse_argv(argv):
             cycles = int(arg.split("=", 1)[1])
         elif arg.startswith("--cost="):
             cost_usd = float(arg.split("=", 1)[1])
+        else:
+            for flag, key in TOKEN_FLAGS.items():
+                if arg.startswith(flag):
+                    tokens[key] = int(arg.split("=", 1)[1])
+                    break
 
-    return role, state, detail, mode, cycles, cost_usd
+    return role, state, detail, mode, cycles, cost_usd, tokens or None
 
 
 def build_status(
@@ -81,6 +105,7 @@ def build_status(
     mode: str,
     cycles: int | None = None,
     cost_usd: float | None = None,
+    tokens: dict | None = None,
 ) -> dict:
     """Build the status dict for one role. Raises ValueError for an unrecognized state."""
     if state not in STATE_EMOJIS:
@@ -107,6 +132,12 @@ def build_status(
         status["cycles"] = cycles
     if cost_usd is not None:
         status["cost_usd"] = cost_usd
+    if tokens:
+        # Both: `tokens` is the one number the pane bar and the dashboard's TOKENS column
+        # want, `token_usage` is the breakdown the optimization work needs. Deriving the
+        # total here rather than accepting it as a flag keeps them from disagreeing.
+        status["tokens"] = sum(tokens.values())
+        status["token_usage"] = tokens
     return status
 
 
@@ -133,13 +164,13 @@ def project_root_from_own_path():
 
 def main():
     try:
-        role, state, detail, mode, cycles, cost_usd = parse_argv(sys.argv[1:])
+        role, state, detail, mode, cycles, cost_usd, tokens = parse_argv(sys.argv[1:])
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         sys.exit(1)
 
     try:
-        status = build_status(role, state, detail, mode, cycles, cost_usd)
+        status = build_status(role, state, detail, mode, cycles, cost_usd, tokens)
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)

@@ -15,6 +15,7 @@ from datetime import datetime
 
 import pytest
 from scheduler import db, git_ops, handoff, pane_status, role_scheduler
+from scheduler.adapters import TokenUsage
 from scheduler.role_scheduler import SchedulerContext, SchedulerState
 from scheduler.routing import parse_routing_table
 from scheduler.worker_prompt import WorkerDefinition
@@ -493,9 +494,9 @@ class TestStatusBarWiring:
         assert written[0][0] == "working"
         assert bar.status.state == "working"
 
-    def test_current_cycles_and_cost_are_threaded_through(self, tmp_path):
-        # The dashboard's swarm-wide totals read cycles/cost_usd straight out of the JSON
-        # set-status.py writes -- this is what actually gets them there, on every state
+    def test_current_cycles_cost_and_tokens_are_threaded_through(self, tmp_path):
+        # The dashboard's swarm-wide totals read cycles/cost_usd/tokens straight out of the
+        # JSON set-status.py writes -- this is what actually gets them there, on every state
         # change, from the same bar.status the pane's own bottom row already tracks.
         written = []
         ctx = _dummy_ctx(tmp_path)
@@ -503,13 +504,15 @@ class TestStatusBarWiring:
         args = role_scheduler.parse_args(self._args(tmp_path))
 
         bar = role_scheduler.attach_status_bar(ctx, args)
+        usage = TokenUsage(input_tokens=200, cache_read_tokens=4000)
         role_scheduler._record_cycle(
-            bar, role_scheduler.CycleResult(role_scheduler.HANDED_OFF, cost_usd=1.5)
+            bar,
+            role_scheduler.CycleResult(role_scheduler.HANDED_OFF, cost_usd=1.5, tokens=usage),
         )
         ctx.set_status("working")
 
         _, kwargs = written[-1]
-        assert kwargs == {"cycles": 1, "cost_usd": 1.5}
+        assert kwargs == {"cycles": 1, "cost_usd": 1.5, "tokens": usage}
 
     def test_the_handoff_target_is_shown_before_the_first_cycle(self, tmp_path):
         bar, _ = self._bar(tmp_path)

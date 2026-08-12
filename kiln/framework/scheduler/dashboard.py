@@ -128,7 +128,10 @@ def render_state_grid(
     queue_depth: dict[str, int],
     now_utc: datetime,
 ) -> list[str]:
-    header = f"{'ROLE':<20} {'STATE':<16} {'SINCE':<10} {'QUEUE':>5} {'CYCLES':>7} {'COST':>8}"
+    header = (
+        f"{'ROLE':<20} {'STATE':<16} {'SINCE':<10} {'QUEUE':>5} {'CYCLES':>7} "
+        f"{'COST':>8} {'TOKENS':>9} {'CACHE':>6}"
+    )
     lines = [header, "\N{BOX DRAWINGS LIGHT HORIZONTAL}" * len(header)]
     for session in sessions:
         status = statuses.get(session.role)
@@ -140,20 +143,84 @@ def render_state_grid(
         )
         cycles = status.get("cycles") if status else None
         cost = status.get("cost_usd") if status else None
+        tokens = status.get("tokens") if status else None
         state_cell = _colorize(f"{pane_status.STATE_GLYPH} {state}".ljust(16), state)
         cycles_display = "-" if cycles is None else str(cycles)
         cost_display = "-" if cost is None else f"${cost:.2f}"
+        # `-` for both "no status file yet" and "this backend reported no usage" -- the same
+        # treatment CYCLES/COST already give a role that never tracked them.
+        tokens_display = "-" if not tokens else pane_status.format_tokens(tokens)
+        share = cache_share(status.get("token_usage") if status else None)
+        cache_display = "-" if share is None else f"{share:.0%}"
         lines.append(
             f"{session.role:<20} {state_cell} {since:<10} "
-            f"{queue_depth.get(session.role, 0):>5} {cycles_display:>7} {cost_display:>8}"
+            f"{queue_depth.get(session.role, 0):>5} {cycles_display:>7} {cost_display:>8} "
+            f"{tokens_display:>9} {cache_display:>6}"
         )
     return lines
 
 
-def render_totals(statuses: dict[str, dict]) -> tuple[float, int]:
+def cache_share(usage: dict | None) -> float | None:
+    """
+    Fraction of a role's tokens served from cache, or None when unknown.
+
+    This is the column worth watching. Token counts alone do not explain cost: a role can
+    burn millions of tokens cheaply if nearly all of them are cache reads, while another
+    burning far fewer can cost more because each cycle re-sends an uncached prompt. The
+    ratio is what points at prompt bloat, which is the whole point of measuring.
+
+    None (rendered `-`) rather than 0% when there is no breakdown: a backend that reported
+    no usage has not told us its cache rate is zero.
+    """
+    if not usage:
+        return None
+    total = sum(usage.values())
+    if total <= 0:
+        return None
+    return usage.get("cache_read", 0) / total
+
+
+#: Backends whose one-shot adapter reports real dollars. Copilot and Codex report token
+#: usage but no cost at all (see their module docstrings), so a swarm containing either has
+#: a TOTAL COST that is structurally incomplete rather than merely small -- which looked
+#: identical to a genuinely cheap run until this marker existed.
+COST_REPORTING_AGENTS = frozenset({"claude", "grok"})
+
+
+def cost_is_partial(sessions: list[RoleSession], statuses: dict[str, dict]) -> bool:
+    """True when some role that has actually run cannot contribute cost."""
+    return any(
+        session.agent not in COST_REPORTING_AGENTS and session.role in statuses
+        for session in sessions
+    )
+
+
+def render_totals(statuses: dict[str, dict]) -> tuple[float, int, int]:
     total_cost = sum(status.get("cost_usd") or 0 for status in statuses.values())
     total_cycles = sum(status.get("cycles") or 0 for status in statuses.values())
-    return total_cost, total_cycles
+    total_tokens = sum(status.get("tokens") or 0 for status in statuses.values())
+    return total_cost, total_cycles, total_tokens
+
+
+def total_token_usage(statuses: dict[str, dict]) -> dict[str, int]:
+    """Swarm-wide token breakdown, summed per kind across every role that reported one."""
+    totals: dict[str, int] = {}
+    for status in statuses.values():
+        for kind, count in (status.get("token_usage") or {}).items():
+            totals[kind] = totals.get(kind, 0) + count
+    return totals
+
+
+def format_token_breakdown(totals: dict[str, int]) -> str:
+    """`in 120k · out 45k · cache-read 8.8M` -- omits kinds nobody reported."""
+    labels = (("input", "in"), ("output", "out"), ("cache_read", "cache-read"),
+              ("cache_write", "cache-write"))
+    parts = [
+        f"{label} {pane_status.format_tokens(totals[kind]).removesuffix(' tok')}"
+        for kind, label in labels
+        if totals.get(kind)
+    ]
+    return " \N{MIDDLE DOT} ".join(parts)
 
 
 def _activity_line(row: dict, now_local: datetime) -> str:
@@ -197,18 +264,35 @@ def render_dashboard(
     timestamp = now_local.strftime("%H:%M:%S")
     padding = max(2, 74 - len(header) - len(timestamp))
     title_line = f"{header}{' ' * padding}{timestamp}"
-    rule = "\N{BOX DRAWINGS LIGHT HORIZONTAL}" * len(title_line)
+
+    grid = render_state_grid(sessions, statuses, queue_depth, now_utc)
+    # Sized to the widest thing it has to underline, not to the title alone: the grid grew
+    # past a title-width rule when the TOKENS column was added, leaving the table visibly
+    # overhanging its own borders. `grid[0]` is the column header, the one grid line
+    # carrying no ANSI colour codes and therefore the only one whose len() is its width.
+    rule = "\N{BOX DRAWINGS LIGHT HORIZONTAL}" * max(len(title_line), len(grid[0]))
 
     lines = [title_line, rule]
-    lines += render_state_grid(sessions, statuses, queue_depth, now_utc)
+    lines += grid
     lines.append(rule)
 
-    total_cost, total_cycles = render_totals(statuses)
+    total_cost, total_cycles, total_tokens = render_totals(statuses)
     escalation_count = sum(1 for row in messages if handoff.is_escalation(row["content"]))
+    cost_display = f"${total_cost:.2f}"
+    if cost_is_partial(sessions, statuses):
+        cost_display += "+"
     lines.append(
-        f"TOTAL COST: ${total_cost:.2f}        TOTAL CYCLES: {total_cycles}        "
+        f"TOTAL COST: {cost_display}        TOTAL CYCLES: {total_cycles}        "
+        f"TOKENS: {pane_status.format_tokens(total_tokens)}        "
         f"ESCALATIONS: {escalation_count}"
     )
+    breakdown = format_token_breakdown(total_token_usage(statuses))
+    if breakdown:
+        lines.append(f"  tokens by kind: {breakdown}")
+    if cost_is_partial(sessions, statuses):
+        lines.append(
+            "  + partial: codex/copilot roles report tokens but no cost"
+        )
 
     lines += render_activity(messages, now_local, activity_limit)
     lines += render_escalations(messages, now_local)

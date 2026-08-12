@@ -47,7 +47,7 @@ from pathlib import Path
 
 from ..status_contract import STATUS_BLOCKED, WorkerResult, parse_worker_report
 from ..worker_prompt import WorkerDefinition, build_agents_payload
-from . import WorkerInvocation
+from . import TokenUsage, WorkerInvocation
 
 log = logging.getLogger(__name__)
 
@@ -211,6 +211,39 @@ def parse_cli_output(stdout: str) -> dict:
     raise ValueError("no JSON envelope found in grok output")
 
 
+#: Grok emits the Anthropic Messages API wire format (see the module docstring), so the
+#: usage keys are the same ones claude_adapter reads. Kept as its own table rather than
+#: imported from there: these adapters deliberately duplicate small helpers (`_condense`,
+#: `render_event`) so one CLI changing its output cannot break another's parsing.
+_USAGE_FIELDS = {
+    "input_tokens": "input_tokens",
+    "output_tokens": "output_tokens",
+    "cache_read_input_tokens": "cache_read_tokens",
+    "cache_creation_input_tokens": "cache_creation_tokens",
+}
+
+
+def _as_int(value: object) -> int | None:
+    """A usage count, or None when absent or not a number (`bool` excluded — it is an int)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value)
+
+
+def parse_usage(envelope: dict) -> TokenUsage | None:
+    """Extract token counts from a `result` event, or None when it reports none."""
+    usage = envelope.get("usage")
+    if not isinstance(usage, dict):
+        return None
+
+    values = {}
+    for wire_name, field_name in _USAGE_FIELDS.items():
+        count = _as_int(usage.get(wire_name))
+        if count is not None:
+            values[field_name] = count
+    return TokenUsage(**values) if values else None
+
+
 def _blocked(summary: str, raw: str, **kwargs) -> WorkerInvocation:
     return WorkerInvocation(
         result=WorkerResult(status=STATUS_BLOCKED, summary=summary, sentinel_found=False),
@@ -321,14 +354,20 @@ def run_worker(
 
     text = str(envelope.get("result", ""))
     cost = float(envelope.get("total_cost_usd") or 0.0)
+    # Read before the error branch: a failed turn still burned tokens (see claude_adapter).
+    tokens = parse_usage(envelope)
 
     if envelope.get("is_error"):
         log.error("worker %s reported an error: %s", definition.name, text)
-        return _blocked(text or "grok reported is_error", text, cost_usd=cost, is_error=True)
+        return _blocked(
+            text or "grok reported is_error", text,
+            cost_usd=cost, is_error=True, tokens=tokens,
+        )
 
     result = parse_worker_report(text)
     log.info(
-        "worker %s finished: status=%s sentinel=%s cost=$%.4f",
+        "worker %s finished: status=%s sentinel=%s cost=$%.4f tokens=%s",
         definition.name, result.status, result.sentinel_found, cost,
+        tokens.total if tokens else "-",
     )
-    return WorkerInvocation(result=result, raw_output=text, cost_usd=cost)
+    return WorkerInvocation(result=result, raw_output=text, cost_usd=cost, tokens=tokens)
