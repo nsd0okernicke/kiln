@@ -53,6 +53,8 @@ Commit: <commit-hash>
 Next role: <next-role-name>
 ```
 
+When you have nothing to merge (a human's opening request, a ping), leave `Commit:` **empty** — do not write `none`, `n/a`, or an explanation. Only a git hash in that field makes the receiver merge.
+
 ## Handoff Routing
 
 | Role | Sends to | When Sender |

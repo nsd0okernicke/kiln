@@ -338,6 +338,14 @@ the handoff, the repo, or the constitution. All four adapters
 subprocess-based invocations, verified live against each CLI's actual non-interactive flags —
 `copilot`/`codex` report no dollar cost (only token/request counts), `claude`/`grok` do.
 
+Each CLI needed one accommodation, all of them in the adapter rather than in the scheduler:
+`copilot` reads MCP config from `~/.copilot/mcp-config.json` rather than a per-call flag, so its
+globally-registered `kiln-db` server is disabled per invocation; `codex exec` has no
+`--agent`-by-name flag, so the worker's persona is embedded directly in the prompt, and a
+per-role isolated `CODEX_HOME` has no `auth.json` and 401s, so the adapter deliberately reuses
+the ambient authenticated one; `grok`'s `--output-format streaming-messages-json` turned out to
+be Anthropic-Messages-API-compatible, making it close to a drop-in twin of the Claude adapter.
+
 ### Inbox mode (`"scheduler": "inbox"`)
 
 A third kind of pane, and the human's half of the same idea. It runs `scheduler.inbox`: it
@@ -1441,22 +1449,11 @@ This means agents can read/write/execute any file in their worktree without prom
 
 ### Known Limitations & Future Work
 
-- **Real feature workflows are continuously validated** — multi-cycle specifier → coder → refactorer → architect chains run successfully against the LibraryHub example; 8+ cycle test runs show stable state flow with 34+ processed messages and zero stalls or message loss
+What does *not* work yet, or works with a caveat. For what is already validated, see the ✓ list
+under **Deterministic Scheduler** above.
+
 - **Error handling** — Minimal error recovery in agent workflows; graceful degradation not yet implemented
 - **Scaling** — Tested with 4 agents over 8+ cycles with stable performance; behavior with 10+ agents unknown
-- **Multi-agent backend validation** — All four accepted backends have a scheduler adapter
-  now, each verified live against the real CLI (not just documentation): `claude`
-  (`claude_adapter.py`, also the most-exercised via Phase 6 wrapper+worker delegation live-tested
-  through 8+ cycles), `copilot` (`copilot_adapter.py` — required disabling its globally-registered
-  `kiln-db` MCP server per invocation, since Copilot reads MCP config from
-  `~/.copilot/mcp-config.json` rather than a per-call flag), `codex` (`codex_adapter.py` — no
-  `--agent`-by-name flag exists for `codex exec`, so the worker's persona is embedded directly in
-  the prompt; also confirmed live that a per-role isolated `CODEX_HOME` has no `auth.json` and
-  401s, so this adapter deliberately reuses the ambient authenticated one instead), and `grok`
-  (`grok_adapter.py` — its `--output-format streaming-messages-json` turned out to be
-  Anthropic-Messages-API-compatible, close to a drop-in twin of the Claude adapter, and unlike
-  Copilot/Codex it reports real `total_cost_usd`). The `mixed-backends` profile has run multiple
-  live cycles combining Claude and Codex scheduler-mode workers successfully.
 - **Copilot scheduler-mode workers are currently unreliable on long sessions.** Non-interactive
   (`-p`) Copilot CLI sessions (roughly 4-8 minutes, many tool calls) silently and permanently
   lose tool-call approval mid-session — every subsequent write-capable call is denied with
@@ -1470,6 +1467,7 @@ This means agents can read/write/execute any file in their worktree without prom
 - **`grok` has no wrapper-mode implementation.** Its scheduler adapter is real and live-verified,
   but there is no `loop-auto-grok.md`/wrapper dispatch path — a `grok` role must run `auto` +
   `"scheduler": "python"`; it cannot run `manual`.
+<<<<<<< HEAD
 - **Unix parity is real, but was unverified until it was actually run.** Both shims call the
   same Python `generate.py`, so template injection, `auto`/`manual` modes and worker
   delegation are structurally identical on every platform, and what remains platform-specific
@@ -1493,6 +1491,9 @@ This means agents can read/write/execute any file in their worktree without prom
 
   All six are fixed. **Still unverified on Linux:** a real swarm cycle against a live agent
   CLI (Tier 3), which needs an authenticated Claude Code inside the Linux environment.
+=======
+- **Terminal backend is the one remaining platform difference.** Everything else is shared: both shims call the same Python `generate.py`, so template injection, `auto`/`manual` modes and worker delegation are identical on every platform.
+>>>>>>> f968e6164b9fa06819d4660f43e7de8bcb6d16ea
 - **No Unix full-reset script** — see the Known gap under **Cleanup**.
 - **Symlink creation needs Developer Mode on Windows.** Without it (`WinError 1314`), worktrees fall back to *copying* `.kiln` instead of sharing it. The swarm still runs, but shared state is not actually shared.
 
