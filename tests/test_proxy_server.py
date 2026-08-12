@@ -15,6 +15,7 @@ it would turn every worker pane silent for minutes, destroying the live output t
 
 from __future__ import annotations
 
+import gzip
 import http.client
 import json
 import threading
@@ -261,6 +262,101 @@ class TestCapture:
         assert store.totals_by_role()["coder"] == TokenUsage(
             input_tokens=240, output_tokens=84, cache_read_tokens=1800
         )
+
+
+class _GzipUpstream(BaseHTTPRequestHandler):
+    """
+    An upstream that compresses whenever the client says it can take it.
+
+    This is what api.anthropic.com actually does — Claude Code sends
+    `Accept-Encoding: gzip, deflate, br, zstd` and gets gzip back.
+    """
+
+    received: ClassVar[dict] = {}
+
+    def log_message(self, format, *args):
+        pass
+
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        self.rfile.read(length)
+        type(self).received = {"accept_encoding": self.headers.get("Accept-Encoding")}
+
+        body = _sse({"type": "message_start",
+                     "message": {"usage": {"input_tokens": 77, "output_tokens": 0}}})
+        body += _sse({"type": "message_delta", "usage": {"output_tokens": 5}})
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        if "gzip" in (self.headers.get("Accept-Encoding") or ""):
+            body = gzip.compress(body)
+            self.send_header("Content-Encoding", "gzip")
+        self.end_headers()
+        self.wfile.write(body)
+        self.wfile.flush()
+
+
+class TestCompressedUpstream:
+    """
+    Regression: a compressed response is unreadable, and that was silent.
+
+    Observed live — 113 captured requests, every token column empty, response bodies
+    beginning `1f 8b 08`. The relay was fine (Content-Encoding passes through and the
+    client decompresses), so nothing looked broken; only the measurement was wrong, which
+    is the worst failure mode for a tool whose whole job is measurement.
+    """
+
+    @pytest.fixture
+    def gzip_proxy(self, tmp_path):
+        upstream = ThreadingHTTPServer(("127.0.0.1", 0), _GzipUpstream)
+        upstream_thread = threading.Thread(target=upstream.serve_forever, daemon=True)
+        upstream_thread.start()
+
+        store = TrafficStore(tmp_path / "traffic.db")
+        host, port = upstream.server_address
+        server = serve(
+            store=store, port=0, upstream=f"{host}:{port}",
+            mode=CaptureMode.FULL, use_tls=False,
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        yield server, store
+        server.shutdown()
+        server.server_close()
+        upstream.shutdown()
+        upstream.server_close()
+
+    def test_upstream_is_never_asked_for_a_compressed_encoding(self, gzip_proxy):
+        # The client's `gzip, deflate, br, zstd` must not reach upstream. Dropping it lets
+        # http.client substitute `identity`, which is an explicit request for no
+        # compression -- the outcome wanted, stated positively.
+        server, _ = gzip_proxy
+        _post(
+            server, "/kiln/coder/v1/messages",
+            headers={"Accept-Encoding": "gzip, deflate, br, zstd"},
+        ).getresponse().read()
+        offered = (_GzipUpstream.received["accept_encoding"] or "identity").lower()
+        assert offered == "identity"
+
+    def test_usage_is_parsed_when_the_client_asked_for_gzip(self, gzip_proxy):
+        server, store = gzip_proxy
+        _post(
+            server, "/kiln/coder/v1/messages",
+            headers={"Accept-Encoding": "gzip, deflate, br, zstd"},
+        ).getresponse().read()
+        row = _wait_for_rows(store)[0]
+        assert row["input_tokens"] == 77
+        assert row["output_tokens"] == 5
+
+    def test_the_captured_body_is_readable_text(self, gzip_proxy):
+        server, store = gzip_proxy
+        _post(
+            server, "/kiln/coder/v1/messages",
+            headers={"Accept-Encoding": "gzip"},
+        ).getresponse().read()
+        row = _wait_for_rows(store)[0]
+        assert "message_start" in row["response_body"]
+        assert "�" not in row["response_body"]  # the mojibake signature
 
 
 class TestStubMode:

@@ -66,6 +66,23 @@ HOP_BY_HOP_HEADERS = frozenset(
     }
 )
 
+#: Request headers dropped when forwarding, for reasons specific to *this* proxy rather
+#: than to HTTP framing (those are HOP_BY_HOP_HEADERS).
+#:
+#: `accept-encoding`: the client asks for `gzip, deflate, br, zstd`, and upstream obliges.
+#: The relay itself survives that -- `Content-Encoding` passes through and the client
+#: decompresses correctly -- but everything this proxy exists to *read* does not: the SSE
+#: usage tracker sees gzip bytes and finds no events, and a captured response body is stored
+#: as mojibake. Observed live: 113 requests, every token column empty, bodies beginning
+#: `1f 8b 08`.
+#:
+#: Stripping the header is the fix rather than decompressing, because the client offers
+#: `br` and `zstd` too and neither is decodable with the standard library on this project's
+#: target version. Asking upstream for identity encoding makes every path readable with no
+#: guessing. The cost is more bytes on the upstream hop, paid only when the proxy is
+#: switched on, which is the right trade for a tool whose entire job is measurement.
+STRIPPED_REQUEST_HEADERS = frozenset({"accept-encoding"})
+
 #: The canned reply stub mode returns: a minimal but structurally valid Anthropic SSE
 #: exchange, so a client parses it rather than erroring on malformed output and the
 #: question under test stays "what did the client send", not "did our stub confuse it".
@@ -236,7 +253,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
         headers = {
             name: value
             for name, value in self.headers.items()
-            if name.lower() not in HOP_BY_HOP_HEADERS and name.lower() != "host"
+            if name.lower() not in HOP_BY_HOP_HEADERS
+            and name.lower() not in STRIPPED_REQUEST_HEADERS
+            and name.lower() != "host"
         }
         # Credentials pass through untouched -- they are simply never *recorded*. Rewriting
         # or dropping them here would break the very auth this proxy must stay invisible to.
@@ -267,6 +286,18 @@ class ProxyHandler(BaseHTTPRequestHandler):
         self.send_header("Transfer-Encoding", "chunked")
         self.end_headers()
 
+        # Belt and braces behind the stripped Accept-Encoding: if a response still arrives
+        # compressed, relay it faithfully but read nothing from it. Recording gzip bytes as
+        # text produced 113 rows of mojibake and empty token columns once already; a visible
+        # gap is recoverable, silently wrong data is not.
+        encoding = (response.getheader("Content-Encoding") or "identity").lower()
+        readable = encoding in ("", "identity")
+        if not readable:
+            log.warning(
+                "response is %s-encoded; relaying it but skipping usage and body capture",
+                encoding,
+            )
+
         tracker = StreamingUsageTracker()
         captured = bytearray()
         total = 0
@@ -280,9 +311,10 @@ class ProxyHandler(BaseHTTPRequestHandler):
             if not chunk:
                 break
             total += len(chunk)
-            tracker.feed(chunk)
-            if len(captured) < self.config.body_limit:
-                captured.extend(chunk[: self.config.body_limit - len(captured)])
+            if readable:
+                tracker.feed(chunk)
+                if len(captured) < self.config.body_limit:
+                    captured.extend(chunk[: self.config.body_limit - len(captured)])
             try:
                 self.wfile.write(f"{len(chunk):X}\r\n".encode("ascii"))
                 self.wfile.write(chunk)
