@@ -2,10 +2,11 @@
 The proxy relaying real HTTP — issue #6 Phase B.
 
 These run a fake upstream and a real proxy over real sockets, so the relay is exercised
-end to end **without any vendor quota**: no API key, no account, no spend. What they cannot
-prove is the one thing that needs a live call — that Claude Code's own OAuth/subscription
-auth survives a base-URL override. That check is noted in the issue and is the reason the
-proxy is not yet wired into the launcher.
+end to end **without any vendor quota**: no API key, no account, no spend.
+
+The one thing they cannot prove — that Claude Code honours `ANTHROPIC_BASE_URL` and still
+attaches its OAuth/subscription token to a non-Anthropic host — was settled separately by a
+live spike in stub mode, which is why the launcher wiring exists at all. See issue #6.
 
 The streaming test is the one that matters most. A proxy that buffered a response to inspect
 it would turn every worker pane silent for minutes, destroying the live output that
@@ -76,6 +77,7 @@ def upstream():
     thread.start()
     yield server
     server.shutdown()
+    server.server_close()
 
 
 @pytest.fixture
@@ -90,6 +92,9 @@ def proxy(tmp_path, upstream):
     thread.start()
     yield server, store
     server.shutdown()
+    # Also close the socket: without it, handler threads outlive pytest's capture teardown
+    # and their logging calls raise "I/O operation on closed file" into the test output.
+    server.server_close()
 
 
 def _post(server, path, payload=None, headers=None):
@@ -279,6 +284,7 @@ class TestStubMode:
         thread.start()
         yield server, store
         server.shutdown()
+        server.server_close()
 
     def test_answers_without_forwarding(self, stub_proxy):
         server, _ = stub_proxy

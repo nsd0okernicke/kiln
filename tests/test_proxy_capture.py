@@ -244,6 +244,28 @@ class TestTrafficStore:
                                    tokens=TokenUsage(input_tokens=99)))
         assert store.totals_by_role() == {}
 
+    def test_request_stats_summarise_prompt_weight_per_role(self, tmp_path):
+        store = self._store(tmp_path)
+        for size in (100, 300):
+            store.record(TrafficRecord(role="coder", method="POST", path="/v1/messages",
+                                       request_bytes=size))
+        stats = store.request_stats_by_role()["coder"]
+        assert stats == {
+            "requests": 2, "avg_bytes": 200, "max_bytes": 300, "total_bytes": 400
+        }
+
+    def test_request_stats_are_empty_before_any_traffic(self, tmp_path):
+        assert self._store(tmp_path).request_stats_by_role() == {}
+
+    def test_request_stats_on_a_missing_store_are_empty(self, tmp_path):
+        assert TrafficStore(tmp_path / "absent.db").request_stats_by_role() == {}
+
+    def test_request_stats_on_an_unreadable_store_are_empty(self, tmp_path):
+        # An optional panel must not be able to take the dashboard down.
+        junk = tmp_path / "traffic.db"
+        junk.write_text("not a database", encoding="utf-8")
+        assert TrafficStore(junk).request_stats_by_role() == {}
+
     def test_metadata_mode_leaves_no_prompt_text_on_disk(self, tmp_path):
         store = self._store(tmp_path)
         secret = "PROPRIETARY SOURCE CODE"

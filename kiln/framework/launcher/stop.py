@@ -16,9 +16,29 @@ import subprocess
 log = logging.getLogger(__name__)
 
 #: Command-line fragments identifying a process this swarm started.
+#:
+#: Every python-backed pane type must appear here. `scheduler.inbox` and
+#: `scheduler.dashboard` were missing, so both survived `kiln --stop` and kept polling the
+#: database after the swarm was supposedly down (issue #18) -- which also made the
+#: stuck-in-`processing` bug (#19) easy to hit, since stopping mid-cycle is routine.
+#:
+#: `proxy.server` is a detached background process rather than a pane, but it is started by
+#: the same launch and must end with it: a capture proxy left listening would keep relaying
+#: traffic for whatever ran next.
+#:
+#: Note `channel.py` is not a pane at all -- it is the MCP channel server an agent CLI
+#: spawns -- so an enumeration over pane types will not produce it. It stays here
+#: deliberately.
+#:
+#: Interactive agent-CLI panes (claude/codex/copilot) are absent on purpose: they are not
+#: python processes, `_windows_matches` only ever considers python, and a wrapper session
+#: dies with its window.
 KILN_PROCESS_MARKERS = (
     "channel.py",
     "scheduler.role_scheduler",
+    "scheduler.inbox",
+    "scheduler.dashboard",
+    "proxy.server",
 )
 
 

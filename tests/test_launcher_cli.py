@@ -11,6 +11,7 @@ import json
 import logging
 import subprocess
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 from launcher import cli, scaffold
@@ -269,6 +270,72 @@ class TestHostsPosixShell:
     def test_none_backend_is_powershell_on_windows(self, monkeypatch):
         monkeypatch.setattr(cli.os, "name", "nt")
         assert cli._hosts_posix_shell("none") is False
+
+
+class TestStopMarkers:
+    """
+    Every python-backed pane must be stoppable — issue #18.
+
+    `scheduler.inbox` and `scheduler.dashboard` were missing from the marker list, so both
+    survived `kiln --stop` and kept polling the database after the swarm was supposedly
+    down. This enumerates the pane types rather than restating the strings, so a future
+    pane type cannot quietly reintroduce the gap.
+    """
+
+    #: Every scheduler value a profile can set that produces a python-backed pane.
+    PANE_ROLES: ClassVar[list[dict]] = [
+        {"role": "coder", "agent": "claude", "scheduler": "python", "mode": "auto"},
+        {"role": "inbox", "scheduler": "inbox", "mode": "manual"},
+        {"role": "dashboard", "scheduler": "dashboard", "mode": "manual"},
+    ]
+
+    @pytest.mark.parametrize("role_kwargs", PANE_ROLES)
+    def test_each_python_backed_pane_has_a_stop_marker(self, tmp_path, role_kwargs):
+        from launcher.commands import build_agent_command
+        from launcher.config import RoleConfig
+        from launcher.stop import KILN_PROCESS_MARKERS
+
+        paths = KilnPaths.create(tmp_path / "proj", tmp_path / "fw")
+        command = build_agent_command(RoleConfig(**role_kwargs), paths, branch="main")
+        rendered = " ".join(command.argv)
+        assert any(marker in rendered for marker in KILN_PROCESS_MARKERS), (
+            f"{role_kwargs['role']} pane runs {rendered!r}, which no stop marker matches"
+        )
+
+    def test_the_capture_proxy_is_stoppable(self):
+        # Not a pane -- a detached background process -- but started by the same launch and
+        # it must end with it. A proxy left listening would relay whatever ran next.
+        from launcher.stop import KILN_PROCESS_MARKERS
+
+        assert "proxy.server" in KILN_PROCESS_MARKERS
+
+    def test_the_mcp_channel_server_marker_survives(self):
+        # Not produced by any pane command, so an enumeration test would happily delete it.
+        from launcher.stop import KILN_PROCESS_MARKERS
+
+        assert "channel.py" in KILN_PROCESS_MARKERS
+
+
+class TestProxyFlags:
+    def test_the_proxy_is_off_by_default(self):
+        assert cli.build_parser().parse_args([]).proxy is False
+
+    def test_capture_defaults_to_metadata(self):
+        # Bodies are a second, deliberate opt-in: a capture store holds whatever source the
+        # agent read, in plaintext.
+        assert cli.build_parser().parse_args([]).capture == "metadata"
+
+    def test_full_capture_is_opt_in(self):
+        args = cli.build_parser().parse_args(["--proxy", "--capture", "full"])
+        assert args.proxy is True
+        assert args.capture == "full"
+
+    def test_the_port_is_configurable(self):
+        assert cli.build_parser().parse_args(["--proxy-port", "9999"]).proxy_port == 9999
+
+    def test_an_unknown_capture_mode_is_rejected(self):
+        with pytest.raises(SystemExit):
+            cli.build_parser().parse_args(["--capture", "everything"])
 
 
 class TestCliParsing:

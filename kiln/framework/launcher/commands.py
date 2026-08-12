@@ -25,6 +25,35 @@ START_PROMPT = "Start your role session."
 #: Fallback when a Claude role omits `model` in its profile entry.
 DEFAULT_CLAUDE_MODEL = "sonnet"
 
+#: Backends whose traffic can be routed through the local proxy.
+#:
+#: Claude only, deliberately. `ANTHROPIC_BASE_URL` is *verified* — a live spike confirmed the
+#: CLI honours it and still attaches its OAuth/subscription token to a non-Anthropic host.
+#: The equivalent for codex/grok is unspiked and copilot likely has no override at all, so
+#: routing them would be a guess that silently either does nothing or breaks their auth.
+PROXY_CAPABLE_AGENTS = frozenset({"claude"})
+
+#: Env var each proxy-capable backend reads for its API base URL.
+PROXY_BASE_URL_VARS = {"claude": "ANTHROPIC_BASE_URL"}
+
+
+def proxy_env(role: RoleConfig, proxy_url: str | None) -> dict[str, str]:
+    """
+    The base-URL override for one role, or nothing.
+
+    The URL carries the role name as a path prefix (`/kiln/<role>`) because a proxy sees
+    HTTP requests, not roles — without it the capture is an undifferentiated blob that
+    cannot answer "what did the refactorer cost". `proxy.server.split_role` strips the
+    prefix again before forwarding.
+
+    Returns `{}` for a backend with no verified override, so enabling the proxy on a mixed
+    profile routes what it can and leaves the rest untouched rather than failing the launch.
+    """
+    if not proxy_url or role.agent not in PROXY_CAPABLE_AGENTS:
+        return {}
+    variable = PROXY_BASE_URL_VARS[role.agent]
+    return {variable: f"{proxy_url.rstrip('/')}/kiln/{role.role}"}
+
 
 @dataclass(frozen=True)
 class AgentCommand:
@@ -160,6 +189,10 @@ def _dashboard_command(role: RoleConfig, paths: KilnPaths, branch: str) -> Agent
         "--sessions-file", str(paths.sessions_file),
         "--project-name", paths.project_root.name,
         "--log-file", str(paths.scheduler_log(role.role)),
+        # Always passed, never conditional on the proxy being enabled: the dashboard hides
+        # the panel when the store is absent, so one code path covers both cases and a
+        # swarm launched without the proxy is not a different dashboard.
+        "--traffic-db", str(paths.traffic_db),
     ]
     return AgentCommand(
         argv=argv,
@@ -174,12 +207,18 @@ def _worktree_for(role: RoleConfig, paths: KilnPaths) -> Path:
     return paths.project_root if role.uses_current_dir else paths.worktree_path(role.worktree)
 
 
-def build_agent_command(role: RoleConfig, paths: KilnPaths, branch: str) -> AgentCommand:
+def build_agent_command(
+    role: RoleConfig, paths: KilnPaths, branch: str, proxy_url: str | None = None
+) -> AgentCommand:
     """
     Build the pane command for one role.
 
     Scheduler-enabled roles bypass the agent CLI entirely — the scheduler invokes the worker
     itself, one shot per handoff.
+
+    `proxy_url` routes this role's API traffic through the local capture proxy. It is applied
+    to both scheduler and wrapper roles: a scheduler-mode worker is a subprocess of its pane
+    and inherits the pane's environment, so setting it once on the pane covers both.
     """
     if role.is_inbox:
         return _inbox_command(role, paths, branch)
@@ -188,10 +227,10 @@ def build_agent_command(role: RoleConfig, paths: KilnPaths, branch: str) -> Agen
         return _dashboard_command(role, paths, branch)
 
     if role.uses_scheduler:
-        return _scheduler_command(role, paths, branch)
+        return _scheduler_command(role, paths, branch).with_env(**proxy_env(role, proxy_url))
 
     if role.agent == "claude":
-        return _claude_command(role, paths)
+        return _claude_command(role, paths).with_env(**proxy_env(role, proxy_url))
     if role.agent == "copilot":
         return _copilot_command(role)
     if role.agent == "codex":

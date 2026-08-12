@@ -353,6 +353,42 @@ class TrafficStore:
             conn.commit()
             return int(cursor.lastrowid or 0)
 
+    def request_stats_by_role(self) -> dict[str, dict[str, int]]:
+        """
+        Per-role request count and request-body sizes — the prompt-weight signal.
+
+        Request *bytes* rather than tokens on purpose: this is the number Phase A cannot
+        produce. A role whose every call carries a 100KB payload is re-sending context, and
+        the average and the maximum together say whether that is every call or one outlier.
+
+        Returns `{}` when the store has no rows yet, so a caller can skip the section
+        rather than render an empty table.
+        """
+        if not self.db_path.is_file():
+            return {}
+        with closing(sqlite3.connect(self.db_path)) as conn:
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT role, COUNT(*), AVG(request_bytes), MAX(request_bytes),
+                           SUM(request_bytes)
+                    FROM traffic WHERE role IS NOT NULL GROUP BY role ORDER BY role
+                    """
+                ).fetchall()
+            except sqlite3.DatabaseError:
+                # A store written by an older/newer build, or a half-created file. The
+                # dashboard must not die over an optional panel.
+                return {}
+        return {
+            row[0]: {
+                "requests": int(row[1]),
+                "avg_bytes": int(row[2] or 0),
+                "max_bytes": int(row[3] or 0),
+                "total_bytes": int(row[4] or 0),
+            }
+            for row in rows
+        }
+
     def totals_by_role(self) -> dict[str, TokenUsage]:
         """Token usage per role — the proxy's own answer to Phase A's dashboard columns."""
         with closing(sqlite3.connect(self.db_path)) as conn:

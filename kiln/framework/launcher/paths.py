@@ -73,6 +73,17 @@ class KilnPaths:
         return self.state_dir / "logs"
 
     @property
+    def traffic_db(self) -> Path:
+        """
+        `.kiln/traffic.db` — the proxy's capture store.
+
+        Deliberately not `messages.db`: that file is live swarm state, queried by the
+        dashboard, the inbox and the `kiln-db` MCP server, and small enough to open in a
+        SQLite browser. Captured request bodies are orders of magnitude larger.
+        """
+        return self.state_dir / "traffic.db"
+
+    @property
     def status_dir(self) -> Path:
         """Per-role `<role>.json` read by the WezTerm status bar."""
         return self.state_dir / "status"

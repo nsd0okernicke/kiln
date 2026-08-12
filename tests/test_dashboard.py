@@ -252,6 +252,81 @@ class TestCostIsPartial:
         assert dashboard.cost_is_partial(sessions, {"coder": _status()}) is False
 
 
+class TestPromptWeight:
+    """The proxy panel: what each role actually puts on the wire."""
+
+    def _stats(self, **overrides):
+        stats = {"coder": {"requests": 12, "avg_bytes": 104_200,
+                           "max_bytes": 118_900, "total_bytes": 1_250_400}}
+        stats.update(overrides)
+        return stats
+
+    def test_shows_a_row_per_role(self):
+        lines = dashboard.render_prompt_weight(self._stats())
+        assert any(line.startswith("coder") for line in lines)
+
+    def test_sizes_are_abbreviated(self):
+        # Request sizes are read at a glance, not to the byte.
+        row = next(line for line in dashboard.render_prompt_weight(self._stats())
+                   if line.startswith("coder"))
+        assert "104.2k" in row and "118.9k" in row and "1.3M" in row
+
+    def test_no_data_renders_no_panel(self):
+        # The proxy is opt-in; an empty table would imply it ran and found nothing.
+        assert dashboard.render_prompt_weight({}) == []
+
+    def test_roles_are_ordered_predictably(self):
+        stats = self._stats(architect={"requests": 1, "avg_bytes": 1, "max_bytes": 1,
+                                       "total_bytes": 1})
+        roles = [line.split()[0] for line in dashboard.render_prompt_weight(stats)
+                 if line and line[0].isalpha() and not line.startswith(("ROLE", "Prompt"))]
+        assert roles == sorted(roles)
+
+    def test_the_panel_is_absent_from_a_dashboard_with_no_proxy(self):
+        lines = dashboard.render_dashboard(
+            project_name="p", branch="main",
+            sessions=[dashboard.RoleSession("coder", "claude", "Coder")],
+            statuses={}, queue_depth={}, messages=[],
+            now_utc=NOW_UTC, now_local=NOW_LOCAL,
+        )
+        assert not any("Prompt weight" in line for line in lines)
+
+    def test_the_panel_appears_when_there_is_traffic(self):
+        lines = dashboard.render_dashboard(
+            project_name="p", branch="main",
+            sessions=[dashboard.RoleSession("coder", "claude", "Coder")],
+            statuses={}, queue_depth={}, messages=[],
+            now_utc=NOW_UTC, now_local=NOW_LOCAL,
+            request_stats=self._stats(),
+        )
+        assert any("Prompt weight" in line for line in lines)
+
+
+class TestReadRequestStats:
+    def test_no_path_is_no_data(self):
+        assert dashboard.read_request_stats(None) == {}
+
+    def test_a_missing_store_is_no_data(self, tmp_path):
+        # The dashboard's job is the swarm; it must not die over an optional side channel.
+        assert dashboard.read_request_stats(tmp_path / "absent.db") == {}
+
+    def test_an_unreadable_store_is_no_data(self, tmp_path):
+        junk = tmp_path / "traffic.db"
+        junk.write_text("this is not a database", encoding="utf-8")
+        assert dashboard.read_request_stats(junk) == {}
+
+
+class TestFormatBytes:
+    def test_small_counts_are_exact(self):
+        assert dashboard._format_bytes(512) == "512"
+
+    def test_thousands(self):
+        assert dashboard._format_bytes(104_200) == "104.2k"
+
+    def test_millions(self):
+        assert dashboard._format_bytes(1_250_400) == "1.3M"
+
+
 class TestRenderActivity:
     def test_shows_recent_messages(self):
         lines = dashboard.render_activity([_message()], NOW_LOCAL, limit=8)

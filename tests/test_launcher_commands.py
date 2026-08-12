@@ -16,6 +16,7 @@ from launcher.commands import (
     START_PROMPT,
     AgentCommand,
     build_agent_command,
+    proxy_env,
     render_posix,
     render_powershell,
 )
@@ -28,9 +29,71 @@ def paths(tmp_path):
     return KilnPaths.create(tmp_path / "proj", tmp_path / "fw")
 
 
-def build(paths, **role_kwargs):
+def build(paths, proxy_url=None, **role_kwargs):
     role_kwargs.setdefault("role", "coder")
-    return build_agent_command(RoleConfig(**role_kwargs), paths, branch="main")
+    return build_agent_command(
+        RoleConfig(**role_kwargs), paths, branch="main", proxy_url=proxy_url
+    )
+
+
+PROXY = "http://127.0.0.1:8787"
+
+
+class TestProxyEnv:
+    def test_points_a_claude_role_at_its_own_path_prefix(self):
+        # The prefix is what makes a capture attributable: a proxy sees HTTP, not roles.
+        env = proxy_env(RoleConfig(role="coder", agent="claude"), PROXY)
+        assert env == {"ANTHROPIC_BASE_URL": "http://127.0.0.1:8787/kiln/coder"}
+
+    def test_hyphenated_roles_survive(self):
+        env = proxy_env(RoleConfig(role="human-in-the-loop", agent="claude"), PROXY)
+        assert env["ANTHROPIC_BASE_URL"].endswith("/kiln/human-in-the-loop")
+
+    def test_a_trailing_slash_does_not_double_up(self):
+        env = proxy_env(RoleConfig(role="coder", agent="claude"), "http://127.0.0.1:8787/")
+        assert env["ANTHROPIC_BASE_URL"] == "http://127.0.0.1:8787/kiln/coder"
+
+    def test_no_proxy_means_no_env(self):
+        assert proxy_env(RoleConfig(role="coder", agent="claude"), None) == {}
+
+    @pytest.mark.parametrize("agent", ["codex", "copilot", "grok"])
+    def test_unverified_backends_are_left_alone(self, agent):
+        # Only claude's base-URL override has been verified live. Guessing at the others
+        # would either do nothing or break their auth, silently.
+        assert proxy_env(RoleConfig(role="coder", agent=agent), PROXY) == {}
+
+
+class TestProxyWiring:
+    def test_a_scheduler_role_gets_the_base_url(self, paths):
+        # The one-shot worker is a subprocess of this pane and inherits its environment,
+        # so setting it here covers the worker too.
+        command = build(paths, agent="claude", scheduler="python", mode="auto", proxy_url=PROXY)
+        assert command.env["ANTHROPIC_BASE_URL"] == f"{PROXY}/kiln/coder"
+
+    def test_a_wrapper_role_gets_the_base_url(self, paths):
+        command = build(paths, agent="claude", mode="manual", proxy_url=PROXY)
+        assert command.env["ANTHROPIC_BASE_URL"] == f"{PROXY}/kiln/coder"
+
+    def test_the_scheduler_keeps_its_own_env(self, paths):
+        # with_env must add to PYTHONPATH/PYTHONIOENCODING, not replace them.
+        command = build(paths, agent="claude", scheduler="python", mode="auto", proxy_url=PROXY)
+        assert "PYTHONPATH" in command.env
+        assert command.env["PYTHONIOENCODING"] == "utf-8"
+
+    def test_no_proxy_leaves_the_command_unchanged(self, paths):
+        assert "ANTHROPIC_BASE_URL" not in build(paths, agent="claude").env
+
+    def test_a_codex_role_is_not_routed(self, paths):
+        command = build(paths, agent="codex", mode="manual", proxy_url=PROXY)
+        assert "ANTHROPIC_BASE_URL" not in command.env
+        assert command.env["CODEX_HOME"]  # its own env is untouched
+
+    def test_the_dashboard_is_always_told_where_the_capture_store_is(self, paths):
+        # Unconditional: the dashboard hides the panel when the store is absent, so one
+        # code path covers proxied and unproxied launches alike.
+        command = build(paths, role="dashboard", scheduler="dashboard", mode="manual")
+        assert "--traffic-db" in command.argv
+        assert str(paths.traffic_db) in command.argv
 
 
 class TestClaude:

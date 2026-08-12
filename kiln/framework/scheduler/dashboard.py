@@ -223,6 +223,56 @@ def format_token_breakdown(totals: dict[str, int]) -> str:
     return " \N{MIDDLE DOT} ".join(parts)
 
 
+def _format_bytes(count: int) -> str:
+    """`104.2k` / `1.2M` — request sizes are read at a glance, not to the byte."""
+    if count < 1_000:
+        return str(count)
+    if count < 1_000_000:
+        return f"{count / 1_000:.1f}k"
+    return f"{count / 1_000_000:.1f}M"
+
+
+def read_request_stats(traffic_db: Path | None) -> dict[str, dict[str, int]]:
+    """
+    Per-role prompt weight from the proxy's capture store, or `{}` when there is none.
+
+    Optional by design: the proxy is opt-in, so every failure mode here — no file, no
+    rows, an unreadable store — collapses to "render no panel" rather than an error. The
+    dashboard's job is the swarm, and it must not die over a side channel.
+    """
+    if not traffic_db:
+        return {}
+    try:
+        from proxy.capture import TrafficStore
+
+        return TrafficStore(traffic_db).request_stats_by_role()
+    except Exception:  # pragma: no cover - optional panel, never fatal
+        log.debug("could not read traffic store at %s", traffic_db, exc_info=True)
+        return {}
+
+
+def render_prompt_weight(stats: dict[str, dict[str, int]]) -> list[str]:
+    """
+    What each role actually puts on the wire — the number Phase A cannot produce.
+
+    Token counts say a role is expensive; request size says *why*. A role whose every call
+    carries a six-figure payload is re-sending context it could be caching or trimming,
+    and AVG against MAX says whether that is every call or a single outlier.
+    """
+    if not stats:
+        return []
+    header = f"{'ROLE':<20} {'REQS':>6} {'AVG REQ':>9} {'MAX REQ':>9} {'TOTAL':>9}"
+    lines = ["", "Prompt weight (proxy)", header]
+    for role, entry in sorted(stats.items()):
+        lines.append(
+            f"{role:<20} {entry['requests']:>6} "
+            f"{_format_bytes(entry['avg_bytes']):>9} "
+            f"{_format_bytes(entry['max_bytes']):>9} "
+            f"{_format_bytes(entry['total_bytes']):>9}"
+        )
+    return lines
+
+
 def _activity_line(row: dict, now_local: datetime) -> str:
     when = _ago(_parse_local_timestamp(row["created_at"]), now_local)
     summary = extract_summary(row["content"])
@@ -258,6 +308,7 @@ def render_dashboard(
     now_utc: datetime,
     now_local: datetime,
     activity_limit: int = DEFAULT_ACTIVITY_LIMIT,
+    request_stats: dict[str, dict[str, int]] | None = None,
 ) -> list[str]:
     """Pure: given one snapshot of the world, render every section. No I/O, no clock."""
     header = f"{ICON_TITLE} Kiln Dashboard \N{EM DASH} {project_name} ({branch})"
@@ -294,6 +345,7 @@ def render_dashboard(
             "  + partial: codex/copilot roles report tokens but no cost"
         )
 
+    lines += render_prompt_weight(request_stats or {})
     lines += render_activity(messages, now_local, activity_limit)
     lines += render_escalations(messages, now_local)
     return lines
@@ -307,6 +359,9 @@ class DashboardContext:
     sessions_file: Path
     project_name: str
     activity_limit: int = DEFAULT_ACTIVITY_LIMIT
+    #: The proxy's capture store. None, or a path that does not exist, simply hides the
+    #: prompt-weight panel — the proxy is opt-in and the dashboard works without it.
+    traffic_db: Path | None = None
 
 
 def snapshot(ctx: DashboardContext) -> list[str]:
@@ -332,6 +387,7 @@ def snapshot(ctx: DashboardContext) -> list[str]:
         now_utc=datetime.now(UTC),
         now_local=datetime.now(),
         activity_limit=ctx.activity_limit,
+        request_stats=read_request_stats(ctx.traffic_db),
     )
 
 
@@ -348,6 +404,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--activity-limit", type=int, default=DEFAULT_ACTIVITY_LIMIT)
     parser.add_argument("--once", action="store_true", help="render a single frame and exit")
     parser.add_argument("--log-file", default=None)
+    parser.add_argument(
+        "--traffic-db", default=None,
+        help="proxy capture store; the prompt-weight panel is hidden when absent",
+    )
     return parser
 
 
@@ -363,6 +423,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         sessions_file=Path(args.sessions_file),
         project_name=args.project_name or Path.cwd().name,
         activity_limit=args.activity_limit,
+        traffic_db=Path(args.traffic_db) if args.traffic_db else None,
     )
 
     while True:
