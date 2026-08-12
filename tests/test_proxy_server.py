@@ -258,6 +258,85 @@ class TestCapture:
         )
 
 
+class TestStubMode:
+    """
+    Capture without contacting the vendor at all.
+
+    This is what makes the "does the CLI send its credential here" question answerable for
+    free — which matters when the thing being measured is spend.
+    """
+
+    @pytest.fixture
+    def stub_proxy(self, tmp_path):
+        store = TrafficStore(tmp_path / "traffic.db")
+        # Upstream deliberately points at a port with nothing on it: if stub mode ever
+        # forwarded, the test would fail rather than silently pass.
+        server = serve(
+            store=store, port=0, upstream="127.0.0.1:1", mode=CaptureMode.METADATA,
+            use_tls=False, stub=True,
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        yield server, store
+        server.shutdown()
+
+    def test_answers_without_forwarding(self, stub_proxy):
+        server, _ = stub_proxy
+        response = _post(server, "/kiln/spike/v1/messages").getresponse()
+        assert response.status == 200
+        assert "kiln proxy stub" in response.read().decode("utf-8")
+
+    def test_the_reply_is_a_parseable_anthropic_stream(self, stub_proxy):
+        # Structurally valid, so a real client parses it and the question under test stays
+        # "what did the client send", not "did our stub confuse it".
+        server, _ = stub_proxy
+        body = _post(server, "/kiln/spike/v1/messages").getresponse().read().decode("utf-8")
+        kinds = [
+            json.loads(line[len("data:"):])["type"]
+            for line in body.splitlines()
+            if line.startswith("data:")
+        ]
+        assert kinds[0] == "message_start"
+        assert kinds[-1] == "message_stop"
+
+    def test_every_data_line_is_preceded_by_a_named_event_line(self, stub_proxy):
+        """
+        The Anthropic stream is named-event SSE, not data-only.
+
+        Verified the hard way: a data-only stub made Claude Code fail outright with "API
+        returned an empty or malformed response (HTTP 200)". A stub no real client accepts
+        can only answer half the question it exists for.
+        """
+        server, _ = stub_proxy
+        body = _post(server, "/kiln/spike/v1/messages").getresponse().read().decode("utf-8")
+        blocks = [block for block in body.split("\n\n") if block.strip()]
+        assert blocks, "stub produced no SSE blocks"
+        for block in blocks:
+            lines = block.strip().splitlines()
+            assert lines[0].startswith("event: "), f"missing event line in: {block!r}"
+            assert lines[1].startswith("data: ")
+            assert lines[0][len("event: "):] == json.loads(lines[1][len("data: "):])["type"]
+
+    def test_the_request_is_still_captured(self, stub_proxy):
+        server, store = stub_proxy
+        _post(server, "/kiln/spike/v1/messages").getresponse().read()
+        row = _wait_for_rows(store)[0]
+        assert row["role"] == "spike"
+        assert row["model"] == "claude-sonnet-5"
+
+    def test_the_credential_header_is_recorded_by_name_only(self, stub_proxy):
+        # The whole point of the spike: identify *which* auth scheme was attached without
+        # ever writing the secret to disk.
+        server, store = stub_proxy
+        _post(
+            server, "/kiln/spike/v1/messages", headers={"x-api-key": "sk-ant-supersecret"}
+        ).getresponse().read()
+        row = _wait_for_rows(store)[0]
+        headers = json.loads(row["request_headers"])
+        assert "x-api-key" in {name.lower() for name in headers}
+        assert "sk-ant-supersecret" not in store.db_path.read_bytes().decode("latin-1")
+
+
 class TestFullCaptureMode:
     def test_bodies_are_stored_when_explicitly_enabled(self, tmp_path, upstream):
         store = TrafficStore(tmp_path / "traffic.db")

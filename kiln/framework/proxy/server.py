@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import http.client
+import json
 import logging
 import ssl
 import time
@@ -33,6 +34,7 @@ from pathlib import Path
 
 from .capture import (
     DEFAULT_BODY_LIMIT_BYTES,
+    SENSITIVE_HEADERS,
     CaptureMode,
     StreamingUsageTracker,
     TrafficRecord,
@@ -64,6 +66,29 @@ HOP_BY_HOP_HEADERS = frozenset(
     }
 )
 
+#: The canned reply stub mode returns: a minimal but structurally valid Anthropic SSE
+#: exchange, so a client parses it rather than erroring on malformed output and the
+#: question under test stays "what did the client send", not "did our stub confuse it".
+STUB_EVENTS = (
+    {
+        "type": "message_start",
+        "message": {
+            "id": "msg_kiln_stub", "type": "message", "role": "assistant",
+            "model": "kiln-proxy-stub", "content": [],
+            "usage": {"input_tokens": 0, "output_tokens": 0},
+        },
+    },
+    {"type": "content_block_start", "index": 0,
+     "content_block": {"type": "text", "text": ""}},
+    {"type": "content_block_delta", "index": 0,
+     "delta": {"type": "text_delta",
+               "text": "kiln proxy stub: request captured, nothing forwarded"}},
+    {"type": "content_block_stop", "index": 0},
+    {"type": "message_delta", "delta": {"stop_reason": "end_turn"},
+     "usage": {"output_tokens": 0}},
+    {"type": "message_stop"},
+)
+
 
 def split_role(path: str) -> tuple[str | None, str]:
     """
@@ -92,6 +117,7 @@ class ProxyConfig:
         mode: CaptureMode = CaptureMode.METADATA,
         body_limit: int = DEFAULT_BODY_LIMIT_BYTES,
         use_tls: bool = True,
+        stub: bool = False,
     ) -> None:
         self.store = store
         self.upstream = upstream
@@ -100,6 +126,8 @@ class ProxyConfig:
         #: False reaches a plain-HTTP upstream — an internal gateway, or a fake one in
         #: tests. The vendor API is always HTTPS, so this defaults to on.
         self.use_tls = use_tls
+        #: True answers locally and never contacts the vendor — see `_answer_with_stub`.
+        self.stub = stub
 
 
 class ProxyHandler(BaseHTTPRequestHandler):
@@ -131,6 +159,10 @@ class ProxyHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         request_bytes = self.rfile.read(length) if length else b""
 
+        if self.config.stub:
+            self._answer_with_stub(role, method, upstream_path, request_bytes, started)
+            return
+
         try:
             response = self._forward(method, upstream_path, request_bytes)
         except (OSError, http.client.HTTPException) as exc:
@@ -144,6 +176,53 @@ class ProxyHandler(BaseHTTPRequestHandler):
             return
 
         self._relay_response(response, role, method, upstream_path, request_bytes, started)
+
+    def _answer_with_stub(
+        self, role: str | None, method: str, path: str, request_bytes: bytes, started: float
+    ) -> None:
+        """
+        Record the request and reply locally, without contacting the vendor at all.
+
+        This exists for one specific question: does a CLI pointed at this proxy actually
+        send its request here, and what credential does it attach when the host is not the
+        vendor's? Both are answerable from the request alone, so forwarding is pure cost --
+        stub mode makes that check free, which matters when the thing you are trying to
+        measure is spend.
+
+        It doubles as a dry run: the whole launcher wiring can be exercised end to end
+        without an account, a key, or a single token.
+        """
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Transfer-Encoding", "chunked")
+        self.end_headers()
+
+        for event in STUB_EVENTS:
+            # `event:` line as well as `data:` -- the Anthropic stream is named-event SSE,
+            # and a real client rejects a data-only stream outright ("API returned an empty
+            # or malformed response (HTTP 200)", observed live against Claude Code). A stub
+            # nobody's client accepts would only be able to answer half the question.
+            payload = f"event: {event['type']}\ndata: {json.dumps(event)}\n\n".encode()
+            self.wfile.write(f"{len(payload):X}\r\n".encode("ascii"))
+            self.wfile.write(payload)
+            self.wfile.write(b"\r\n")
+        self.wfile.write(b"0\r\n\r\n")
+        self.wfile.flush()
+
+        log.info(
+            "stub: %s %s from role=%s, auth headers seen: %s",
+            method, path, role or "-",
+            ", ".join(sorted(self._auth_header_names())) or "NONE",
+        )
+        self._record(
+            role, method, path, request_bytes, b"", 0, started, status=200, usage=None,
+        )
+
+    def _auth_header_names(self) -> set[str]:
+        """Which credential headers the client attached — names only, never values."""
+        return {
+            name.lower() for name in self.headers if name.lower() in SENSITIVE_HEADERS
+        }
 
     def _forward(self, method: str, path: str, body: bytes) -> http.client.HTTPResponse:
         """Open the upstream connection and send the request through unchanged."""
@@ -270,6 +349,7 @@ def serve(
     mode: CaptureMode = CaptureMode.METADATA,
     host: str = "127.0.0.1",
     use_tls: bool = True,
+    stub: bool = False,
 ) -> ThreadingHTTPServer:
     """
     Build a configured server. The caller owns `serve_forever`/`shutdown`.
@@ -280,7 +360,9 @@ def serve(
     `port=0` binds an ephemeral port; read it back from `server.server_address[1]`.
     """
     store.ensure_schema()
-    config = ProxyConfig(store=store, upstream=upstream, mode=mode, use_tls=use_tls)
+    config = ProxyConfig(
+        store=store, upstream=upstream, mode=mode, use_tls=use_tls, stub=stub
+    )
 
     handler = type("ConfiguredProxyHandler", (ProxyHandler,), {"config": config})
     return ThreadingHTTPServer((host, port), handler)
@@ -298,6 +380,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=CaptureMode.METADATA.value,
         help="metadata (default) records sizes/model/usage only; full also stores bodies",
     )
+    parser.add_argument(
+        "--stub", action="store_true",
+        help=(
+            "answer locally and never contact the upstream: records what a client sent "
+            "and which credential it attached, at zero cost. Use to verify wiring."
+        ),
+    )
     return parser
 
 
@@ -313,10 +402,13 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI entry 
         upstream=args.upstream,
         mode=CaptureMode(args.mode),
         host=args.host,
+        stub=args.stub,
     )
     log.info(
         "proxy listening on http://%s:%s -> %s (capture: %s)",
-        args.host, args.port, args.upstream, args.mode,
+        args.host, args.port,
+        "STUB (nothing is forwarded)" if args.stub else args.upstream,
+        args.mode,
     )
     log.info("point a role at http://%s:%s/kiln/<role>", args.host, args.port)
     try:
