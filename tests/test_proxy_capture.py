@@ -149,6 +149,26 @@ class TestExtractComposition:
     def test_a_non_object_body_yields_nothing(self):
         assert extract_composition("[1, 2, 3]") == {}
 
+    def test_sections_never_sum_to_more_than_the_request(self):
+        # The bug this pins: measuring with json.dumps defaults added `", "`/`": "` padding
+        # the client never sent, so the three sections summed past 100% of the body they
+        # were extracted from.
+        body = json.dumps(
+            {
+                "model": "claude-sonnet-5",
+                "tools": [{"name": "Read", "description": "x" * 100}],
+                "system": "y" * 50,
+                "messages": [{"role": "user", "content": "z" * 200}],
+            },
+            separators=(",", ":"),
+        )
+        assert sum(extract_composition(body).values()) <= len(body.encode("utf-8"))
+
+    def test_non_ascii_is_measured_as_utf8_bytes(self):
+        # Two bytes on the wire, not the six of an \\uXXXX escape.
+        composition = extract_composition(json.dumps({"system": "é"}, ensure_ascii=False))
+        assert composition["system"] == len('"é"'.encode())
+
 
 class TestExtractUsage:
     def test_reads_a_plain_json_response(self):

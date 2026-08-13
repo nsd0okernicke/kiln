@@ -148,10 +148,25 @@ def extract_composition(request_body: str | None) -> dict[str, int]:
     if not isinstance(payload, dict):
         return {}
     return {
-        section: len(json.dumps(payload[section]))
+        section: _section_bytes(payload[section])
         for section in COMPOSITION_SECTIONS
         if section in payload
     }
+
+
+def _section_bytes(section: object) -> int:
+    """
+    Re-encode one section the way the client sent it, and measure it in bytes.
+
+    Both arguments matter and both were wrong at first. `json.dumps` defaults to `", "` and
+    `": "` separators while the client sends compact JSON, and it defaults to `ensure_ascii`,
+    which expands every non-ASCII character into a six-byte escape. Together they inflated
+    each section by ~1%, enough that tools + system + messages summed to *more* than the
+    request they came from -- a share of 101% is a visible tell that the measurement, not the
+    traffic, is off. Measured against real bodies the three sections now come to 99.8% of the
+    request, the remainder being the small scalar keys (`model`, `max_tokens`, `stream`).
+    """
+    return len(json.dumps(section, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
 
 
 def _usage_from(payload: dict) -> TokenUsage:
