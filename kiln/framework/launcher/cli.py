@@ -22,6 +22,7 @@ from pathlib import Path
 from . import generate, scaffold, stop, workspace
 from .commands import (
     PROXY_CAPABLE_AGENTS,
+    PROXY_UPSTREAMS,
     build_agent_command,
     proxy_env,
     render_posix,
@@ -232,7 +233,21 @@ def _copy_root_settings(paths: KilnPaths) -> None:
 DEFAULT_PROXY_PORT = 8787
 
 
-def start_proxy(paths: KilnPaths, port: int, capture_mode: str) -> str:
+def proxy_routes(profile: Profile) -> list[str]:
+    """
+    `--route` arguments for every role whose backend is not the proxy's default upstream.
+
+    Roles, not backends, are what a path prefix identifies, so a mixed-backend swarm needs
+    one route per non-Anthropic role rather than a second proxy on another port.
+    """
+    return [
+        f"--route={role.role}={PROXY_UPSTREAMS[role.agent]}"
+        for role in profile.roles
+        if role.agent in PROXY_UPSTREAMS and role.agent in PROXY_CAPABLE_AGENTS
+    ]
+
+
+def start_proxy(paths: KilnPaths, port: int, capture_mode: str, profile: Profile) -> str:
     """
     Launch the capture proxy and return the base URL roles should be pointed at.
 
@@ -251,6 +266,7 @@ def start_proxy(paths: KilnPaths, port: int, capture_mode: str) -> str:
         "--db-path", str(paths.traffic_db),
         "--port", str(port),
         "--mode", capture_mode,
+        *proxy_routes(profile),
     ]
     environment = {
         **os.environ,
@@ -300,7 +316,7 @@ def run_launch(args: argparse.Namespace) -> int:
 
     proxy_url = None
     if args.proxy and not args.dry_run:
-        proxy_url = start_proxy(paths, args.proxy_port, args.capture)
+        proxy_url = start_proxy(paths, args.proxy_port, args.capture, profile)
         log.info("capture proxy: %s (%s) -> %s", proxy_url, args.capture, paths.traffic_db)
         routed = [role.role for role in profile.roles if proxy_env(role, proxy_url)]
         log.info("  routing: %s", ", ".join(routed) or "(no proxy-capable roles)")

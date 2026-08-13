@@ -25,7 +25,7 @@ from typing import ClassVar
 
 import pytest
 from proxy.capture import CaptureMode, TrafficStore
-from proxy.server import serve, split_role
+from proxy.server import Upstream, parse_routes, parse_upstream, serve, split_role
 from scheduler.adapters import TokenUsage
 
 pytestmark = pytest.mark.integration
@@ -68,6 +68,31 @@ class _FakeUpstream(BaseHTTPRequestHandler):
         self.wfile.flush()
         time.sleep(STREAM_GAP_SEC)
         self.wfile.write(_sse({"type": "message_delta", "usage": {"output_tokens": 42}}))
+        self.wfile.flush()
+
+
+class _SecondUpstream(BaseHTTPRequestHandler):
+    """A different vendor on a different host — what per-role routing has to reach."""
+
+    received: ClassVar[dict] = {}
+
+    def log_message(self, format, *args):
+        pass
+
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        self.rfile.read(length)
+        type(self).received = {"path": self.path}
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        self.wfile.write(_sse({
+            "type": "response.completed",
+            "response": {"usage": {
+                "input_tokens": 1_000, "output_tokens": 25,
+                "input_tokens_details": {"cached_tokens": 900},
+            }},
+        }))
         self.wfile.flush()
 
 
@@ -127,6 +152,80 @@ class TestSplitRole:
         assert split_role("/kiln/human-in-the-loop/v1/messages") == (
             "human-in-the-loop", "/v1/messages"
         )
+
+
+class TestParseUpstream:
+    def test_a_bare_host_has_no_base_path(self):
+        assert parse_upstream("api.anthropic.com") == Upstream("api.anthropic.com", "")
+
+    def test_a_base_path_is_kept_for_prepending(self):
+        # Codex sends `POST /responses`; upstream that must become
+        # `/backend-api/codex/responses` or every call 404s.
+        assert parse_upstream("chatgpt.com/backend-api/codex") == Upstream(
+            "chatgpt.com", "/backend-api/codex"
+        )
+
+    def test_the_base_path_is_prepended_to_the_client_path(self):
+        assert parse_upstream("chatgpt.com/backend-api/codex").target("/responses") == (
+            "/backend-api/codex/responses"
+        )
+
+    def test_a_bare_host_forwards_the_path_unchanged(self):
+        assert parse_upstream("api.anthropic.com").target("/v1/messages") == "/v1/messages"
+
+
+class TestParseRoutes:
+    def test_builds_a_role_to_upstream_map(self):
+        assert parse_routes(["architect=chatgpt.com/backend-api/codex"]) == {
+            "architect": Upstream("chatgpt.com", "/backend-api/codex")
+        }
+
+    def test_several_roles_can_target_several_backends(self):
+        routes = parse_routes(["coder=api.anthropic.com", "architect=chatgpt.com"])
+        assert set(routes) == {"coder", "architect"}
+
+    @pytest.mark.parametrize("value", ["no-equals-sign", "=chatgpt.com", "architect="])
+    def test_a_malformed_route_raises_rather_than_being_skipped(self, value):
+        # Silently dropping a route sends that role's credentialed traffic to the wrong
+        # vendor, surfacing as a 401 a long way from its cause.
+        with pytest.raises(ValueError):
+            parse_routes([value])
+
+
+class TestPerRoleUpstream:
+    def test_a_routed_role_reaches_its_own_upstream(self, tmp_path, upstream):
+        """
+        The reason this exists: Codex authenticates against chatgpt.com while Claude uses
+        api.anthropic.com, and one proxy serves both because the path prefix identifies a
+        *role*, not a backend.
+        """
+        other = ThreadingHTTPServer(("127.0.0.1", 0), _SecondUpstream)
+        thread = threading.Thread(target=other.serve_forever, daemon=True)
+        thread.start()
+        store = TrafficStore(tmp_path / "traffic.db")
+        server = serve(
+            store=store, port=0,
+            upstream="{}:{}".format(*upstream.server_address),
+            mode=CaptureMode.METADATA, use_tls=False,
+            routes={"architect": parse_upstream(
+                "{}:{}/backend-api/codex".format(*other.server_address)
+            )},
+        )
+        proxy_thread = threading.Thread(target=server.serve_forever, daemon=True)
+        proxy_thread.start()
+        try:
+            _post(server, "/kiln/architect/responses").getresponse().read()
+            _post(server, "/kiln/coder/v1/messages").getresponse().read()
+        finally:
+            server.shutdown()
+            server.server_close()
+            other.shutdown()
+            other.server_close()
+
+        # The routed role hit the second upstream, with its base path prepended.
+        assert _SecondUpstream.received["path"] == "/backend-api/codex/responses"
+        # The unrouted role still went to the default one, unchanged.
+        assert _FakeUpstream.received["path"] == "/v1/messages"
 
 
 class TestRelay:

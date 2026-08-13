@@ -36,8 +36,16 @@ log = logging.getLogger(__name__)
 #: because a session cookie is a bearer credential in every way that matters, and
 #: `proxy-authorization` because this *is* a proxy and it would be a special kind of failure
 #: to leak the credential for the hop we ourselves introduced.
+#:
+#: `chatgpt-account-id` and `x-codex-turn-metadata` were added after a live Codex capture:
+#: neither is a bearer credential, but the first is a stable real-account identifier and the
+#: second carries `installation_id` plus session/thread ids. A store that lives in the repo
+#: tree should not be the place those accumulate, and nothing in Kiln reads them.
 SENSITIVE_HEADERS = frozenset(
-    {"authorization", "x-api-key", "cookie", "set-cookie", "proxy-authorization"}
+    {
+        "authorization", "x-api-key", "cookie", "set-cookie", "proxy-authorization",
+        "chatgpt-account-id", "x-codex-turn-metadata",
+    }
 )
 
 #: Placeholder written in place of a dropped value, so a reader can tell "this header was
@@ -147,11 +155,48 @@ def extract_composition(request_body: str | None) -> dict[str, int]:
         return {}
     if not isinstance(payload, dict):
         return {}
+    if isinstance(payload.get("input"), list) and "messages" not in payload:
+        return _responses_composition(payload)
     return {
         section: _section_bytes(payload[section])
         for section in COMPOSITION_SECTIONS
         if section in payload
     }
+
+
+def _responses_composition(payload: dict) -> dict[str, int]:
+    """
+    The same three buckets, read out of an OpenAI Responses request.
+
+    Codex talks to `/responses`, not `/v1/messages`, and the shape shares no key names with
+    Anthropic's: there is no top-level `tools`, no `system` and no `messages`. Everything is
+    one flat `input` array whose items are distinguished by `type` and `role` -- tool
+    definitions arrive as an `additional_tools` item, instructions as `developer` messages,
+    the conversation as `user`/`assistant` ones.
+
+    They are mapped onto the existing columns rather than given their own, because the
+    question the dashboard asks -- how much of this request is tools, instructions,
+    conversation -- is the same question regardless of which vendor's spelling answers it.
+    Measured on a real Codex request: 23.3KB tools, 25.0KB instructions, 2.9KB conversation.
+    """
+    sizes = {"tools": 0, "system": 0, "messages": 0}
+    if isinstance(payload.get("tools"), list):
+        sizes["tools"] += _section_bytes(payload["tools"])
+    if payload.get("instructions"):
+        sizes["system"] += _section_bytes(payload["instructions"])
+
+    for item in payload["input"]:
+        if not isinstance(item, dict):
+            continue
+        # Type before role: an `additional_tools` item also carries `role: developer`, and
+        # counting 23KB of tool schemas as instructions would hide the largest section.
+        if item.get("type") == "additional_tools":
+            sizes["tools"] += _section_bytes(item)
+        elif item.get("role") == "developer":
+            sizes["system"] += _section_bytes(item)
+        else:
+            sizes["messages"] += _section_bytes(item)
+    return {name: size for name, size in sizes.items() if size}
 
 
 def _section_bytes(section: object) -> int:
@@ -183,6 +228,38 @@ def _usage_from(payload: dict) -> TokenUsage:
     )
 
 
+def _usage_from_responses(payload: dict) -> TokenUsage:
+    """
+    OpenAI's Responses usage object -> TokenUsage.
+
+    **The subtraction is the whole point.** Anthropic reports `input_tokens` as the *fresh*
+    input with cache reads counted separately; OpenAI reports `input_tokens` as the total
+    with `input_tokens_details.cached_tokens` as a subset of it. Storing OpenAI's number
+    as-is would double-count every cached token and make a Codex role's cache hit rate --
+    the dashboard column that matters most -- read as roughly half its real value.
+
+    `cache_write_tokens` sits in the same details object and is nested the same way, so it is
+    subtracted too. Its presence was a surprise -- the shape was written assuming this API
+    had no cache-write concept, and one live Codex call showed
+    `{"cached_tokens": 0, "cache_write_tokens": 0}` sitting there. Reading it costs nothing
+    and not reading it would have silently zeroed a column for every Codex role.
+    """
+    def count(value: object) -> int:
+        return int(value) if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    details = payload.get("input_tokens_details")
+    details = details if isinstance(details, dict) else {}
+    cached = count(details.get("cached_tokens"))
+    written = count(details.get("cache_write_tokens"))
+    total_input = count(payload.get("input_tokens"))
+    return TokenUsage(
+        input_tokens=max(total_input - cached - written, 0),
+        output_tokens=count(payload.get("output_tokens")),
+        cache_read_tokens=cached,
+        cache_creation_tokens=written,
+    )
+
+
 def extract_usage(response_body: str | None) -> TokenUsage | None:
     """
     Token usage from a response, whether it arrived as one JSON object or as an SSE stream.
@@ -205,50 +282,40 @@ def extract_usage(response_body: str | None) -> TokenUsage | None:
         except ValueError:
             return None
         usage = payload.get("usage") if isinstance(payload, dict) else None
-        return _usage_from(usage) if isinstance(usage, dict) else None
+        if not isinstance(usage, dict):
+            return None
+        return _usage_from_any(usage)
 
     return _usage_from_sse(response_body)
 
 
+def _usage_from_any(usage: dict) -> TokenUsage:
+    """
+    Dispatch a usage object to the right vendor reader.
+
+    `input_tokens_details` is the tell: only the Responses API nests its cache figure, and
+    only there does `input_tokens` include the cached portion. A Responses reply with no
+    cached tokens may omit the key entirely -- which is harmless, because with nothing to
+    subtract both readers produce the same answer.
+    """
+    if "input_tokens_details" in usage or "output_tokens_details" in usage:
+        return _usage_from_responses(usage)
+    return _usage_from(usage)
+
+
 def _usage_from_sse(body: str) -> TokenUsage | None:
-    """Merge usage across an SSE stream's `message_start` and `message_delta` events."""
-    started: TokenUsage | None = None
-    output_tokens = 0
+    """
+    Merge usage across an SSE stream, whichever vendor's events it carries.
 
-    for line in body.splitlines():
-        if not line.startswith("data:"):
-            continue
-        payload_text = line[len("data:"):].strip()
-        if not payload_text or payload_text == "[DONE]":
-            continue
-        try:
-            event = json.loads(payload_text)
-        except ValueError:
-            continue
-        if not isinstance(event, dict):
-            continue
-
-        kind = event.get("type")
-        if kind == "message_start":
-            message = event.get("message")
-            usage = message.get("usage") if isinstance(message, dict) else None
-            if isinstance(usage, dict):
-                started = _usage_from(usage)
-        elif kind == "message_delta":
-            usage = event.get("usage")
-            if isinstance(usage, dict) and isinstance(usage.get("output_tokens"), int):
-                # Cumulative, not incremental -- the last one is the total.
-                output_tokens = int(usage["output_tokens"])
-
-    if started is None and not output_tokens:
-        return None
-    base = started or TokenUsage()
-    return TokenUsage(
-        input_tokens=base.input_tokens,
-        output_tokens=output_tokens or base.output_tokens,
-        cache_read_tokens=base.cache_read_tokens,
-        cache_creation_tokens=base.cache_creation_tokens,
-    )
+    Delegates to `StreamingUsageTracker` rather than repeating its parser: the two used to
+    be separate implementations of the same state machine, which meant teaching the proxy a
+    second wire format would have meant changing it twice and getting it right twice.
+    """
+    tracker = StreamingUsageTracker()
+    # The trailing newline flushes the tracker's partial-line buffer, which exists for
+    # chunk boundaries and would otherwise swallow a final unterminated event.
+    tracker.feed((body + "\n").encode("utf-8"))
+    return tracker.usage
 
 
 class StreamingUsageTracker:
@@ -263,12 +330,20 @@ class StreamingUsageTracker:
 
     Constant memory also means an hour-long response costs the same as a short one, which
     matters because the expensive cycles are the long ones.
+
+    Two wire formats arrive here. Anthropic splits usage across `message_start` (input and
+    cache counts) and a running `message_delta` (cumulative output). The Responses API used
+    by Codex sends it once, complete, on `response.completed`. Both are recognised by event
+    name, so nothing has to know which backend a role runs before reading its stream.
     """
 
     def __init__(self) -> None:
         self._pending = ""
         self._started: TokenUsage | None = None
         self._output_tokens = 0
+        #: Set by a terminal Responses event, which reports everything at once and is
+        #: therefore authoritative on its own rather than merged with anything.
+        self._complete: TokenUsage | None = None
 
     def feed(self, chunk: bytes) -> None:
         """Consume one chunk. Partial trailing lines are held until completed."""
@@ -290,19 +365,30 @@ class StreamingUsageTracker:
         if not isinstance(event, dict):
             return
 
-        if event.get("type") == "message_start":
+        kind = event.get("type")
+        if kind == "message_start":
             message = event.get("message")
             usage = message.get("usage") if isinstance(message, dict) else None
             if isinstance(usage, dict):
                 self._started = _usage_from(usage)
-        elif event.get("type") == "message_delta":
+        elif kind == "message_delta":
             usage = event.get("usage")
             if isinstance(usage, dict) and isinstance(usage.get("output_tokens"), int):
                 self._output_tokens = int(usage["output_tokens"])
+        elif isinstance(kind, str) and kind.startswith("response."):
+            # Responses API. `response.completed` is the normal ending, but `.incomplete`
+            # and `.failed` also carry usage -- and a turn that burned tokens and then
+            # failed is exactly the one worth having a number for.
+            response = event.get("response")
+            usage = response.get("usage") if isinstance(response, dict) else None
+            if isinstance(usage, dict):
+                self._complete = _usage_from_responses(usage)
 
     @property
     def usage(self) -> TokenUsage | None:
         """Usage so far, or None when the stream reported none."""
+        if self._complete is not None:
+            return self._complete
         if self._started is None and not self._output_tokens:
             return None
         base = self._started or TokenUsage()

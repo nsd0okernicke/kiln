@@ -56,11 +56,17 @@ class TestProxyEnv:
     def test_no_proxy_means_no_env(self):
         assert proxy_env(RoleConfig(role="coder", agent="claude"), None) == {}
 
-    @pytest.mark.parametrize("agent", ["codex", "copilot", "grok"])
+    @pytest.mark.parametrize("agent", ["copilot", "grok"])
     def test_unverified_backends_are_left_alone(self, agent):
-        # Only claude's base-URL override has been verified live. Guessing at the others
-        # would either do nothing or break their auth, silently.
+        # claude and codex have both been verified live. Guessing at the rest would either
+        # do nothing or break their auth, silently.
         assert proxy_env(RoleConfig(role="coder", agent=agent), PROXY) == {}
+
+    def test_codex_gets_kilns_own_variable(self):
+        # Codex has no base-URL variable of its own, so Kiln carries the URL in one it owns
+        # and the adapter turns it into `-c` flags at call time.
+        env = proxy_env(RoleConfig(role="coder", agent="codex"), PROXY)
+        assert env == {"KILN_PROXY_BASE_URL": "http://127.0.0.1:8787/kiln/coder"}
 
 
 class TestProxyWiring:
@@ -73,6 +79,20 @@ class TestProxyWiring:
     def test_a_wrapper_role_gets_the_base_url(self, paths):
         command = build(paths, agent="claude", mode="manual", proxy_url=PROXY)
         assert command.env["ANTHROPIC_BASE_URL"] == f"{PROXY}/kiln/coder"
+
+    def test_a_codex_wrapper_pane_carries_the_overrides_on_its_argv(self, paths):
+        # Codex reads no base-URL env var, so the pane's own command needs the flags. The
+        # env var is set too, for the one-shot worker the scheduler spawns from this pane.
+        command = build(paths, agent="codex", mode="manual", proxy_url=PROXY)
+        argv = " ".join(command.argv)
+        assert f'base_url="{PROXY}/kiln/coder"' in argv
+        assert 'wire_api="responses"' in argv
+        assert command.env["KILN_PROXY_BASE_URL"] == f"{PROXY}/kiln/coder"
+
+    def test_a_codex_pane_is_untouched_without_the_proxy(self, paths):
+        command = build(paths, agent="codex", mode="manual")
+        assert not any(argument == "-c" for argument in command.argv)
+        assert "KILN_PROXY_BASE_URL" not in command.env
 
     def test_the_scheduler_keeps_its_own_env(self, paths):
         # with_env must add to PYTHONPATH/PYTHONIOENCODING, not replace them.

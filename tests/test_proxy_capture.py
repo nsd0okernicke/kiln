@@ -41,9 +41,23 @@ def _message_delta(output_tokens):
     return {"type": "message_delta", "usage": {"output_tokens": output_tokens}}
 
 
+def _response_completed(**usage):
+    """The Responses API's terminal event, as Codex receives it."""
+    return {"type": "response.completed", "response": {"usage": usage}}
+
+
 class TestRedactHeaders:
     def test_authorization_never_survives(self):
         assert redact_headers({"Authorization": "Bearer sk-secret"})["Authorization"] == REDACTED
+
+    def test_codex_identity_headers_are_withheld(self):
+        # Not bearer credentials, but a stable account identifier and an installation/session
+        # id block, found in a live Codex capture. Nothing in Kiln reads them.
+        headers = redact_headers({
+            "chatgpt-account-id": "9016869b-67b8-45fb-8441-75d7da2f1b06",
+            "x-codex-turn-metadata": '{"installation_id":"314c0fad"}',
+        })
+        assert set(headers.values()) == {REDACTED}
 
     def test_api_key_never_survives(self):
         assert redact_headers({"x-api-key": "sk-ant-secret"})["x-api-key"] == REDACTED
@@ -202,6 +216,121 @@ class TestExtractUsage:
         assert extract_usage("") is None
 
 
+class TestResponsesApiUsage:
+    """
+    Codex talks the OpenAI Responses API, whose usage object means something different from
+    Anthropic's despite sharing two key names. Verified against a live Codex call.
+    """
+
+    def test_the_live_codex_shape_reproduces_the_cli_s_own_total(self):
+        # Captured verbatim from a real `codex exec` through the proxy. Codex printed
+        # "tokens used 10.895"; input + output must come to exactly that.
+        usage = extract_usage(_sse(_response_completed(
+            input_tokens=10_890,
+            input_tokens_details={"cache_write_tokens": 0, "cached_tokens": 0},
+            output_tokens=5,
+            output_tokens_details={"reasoning_tokens": 0},
+            total_tokens=10_895,
+        )))
+        assert usage.total == 10_895
+
+    def test_cached_tokens_are_subtracted_from_the_input_total(self):
+        # OpenAI's `input_tokens` INCLUDES the cached portion; Anthropic's excludes it.
+        # Storing the raw number would double-count and halve the reported cache hit rate.
+        body = _sse(_response_completed(
+            input_tokens=10_000, output_tokens=50,
+            input_tokens_details={"cached_tokens": 9_000},
+        ))
+        assert extract_usage(body) == TokenUsage(
+            input_tokens=1_000, output_tokens=50, cache_read_tokens=9_000
+        )
+
+    def test_no_cache_detail_reads_the_input_total_unchanged(self):
+        body = _sse(_response_completed(input_tokens=120, output_tokens=8))
+        assert extract_usage(body) == TokenUsage(input_tokens=120, output_tokens=8)
+
+    def test_cache_writes_are_read_from_the_same_details_object(self):
+        # Found by a live Codex call, which sent
+        # `{"cached_tokens": 0, "cache_write_tokens": 0}` when this reader assumed the API
+        # had no cache-write concept at all.
+        body = _sse(_response_completed(
+            input_tokens=1_000, output_tokens=3,
+            input_tokens_details={"cached_tokens": 600, "cache_write_tokens": 300},
+        ))
+        assert extract_usage(body) == TokenUsage(
+            input_tokens=100, output_tokens=3,
+            cache_read_tokens=600, cache_creation_tokens=300,
+        )
+
+    def test_cache_creation_stays_zero_when_not_reported(self):
+        body = _sse(_response_completed(
+            input_tokens=500, input_tokens_details={"cached_tokens": 400}
+        ))
+        assert extract_usage(body).cache_creation_tokens == 0
+
+    def test_a_failed_turn_still_reports_what_it_burned(self):
+        body = _sse({"type": "response.failed", "response": {"usage": {"input_tokens": 77}}})
+        assert extract_usage(body) == TokenUsage(input_tokens=77)
+
+    def test_a_non_streamed_responses_reply_is_read_too(self):
+        body = json.dumps({
+            "object": "response",
+            "usage": {
+                "input_tokens": 300, "output_tokens": 12,
+                "input_tokens_details": {"cached_tokens": 250},
+            },
+        })
+        assert extract_usage(body) == TokenUsage(
+            input_tokens=50, output_tokens=12, cache_read_tokens=250
+        )
+
+    def test_anthropic_usage_is_still_read_the_anthropic_way(self):
+        # The dispatch must not regress the format that was working first.
+        body = json.dumps({"usage": {"input_tokens": 10, "cache_read_input_tokens": 90}})
+        assert extract_usage(body) == TokenUsage(input_tokens=10, cache_read_tokens=90)
+
+
+class TestResponsesApiComposition:
+    """
+    The same three buckets out of a request that shares no key names with Anthropic's:
+    no top-level `tools`, no `system`, no `messages` -- one flat `input` array instead.
+    """
+
+    def _request(self):
+        return json.dumps({
+            "model": "gpt-5.6-sol",
+            "input": [
+                {"type": "additional_tools", "role": "developer", "tools": ["x" * 500]},
+                {"type": "message", "role": "developer", "content": "i" * 200},
+                {"type": "message", "role": "user", "content": "u" * 50},
+            ],
+            "stream": True,
+        })
+
+    def test_each_bucket_is_measured(self):
+        composition = extract_composition(self._request())
+        assert set(composition) == {"tools", "system", "messages"}
+        assert composition["tools"] > composition["system"] > composition["messages"]
+
+    def test_additional_tools_counts_as_tools_not_instructions(self):
+        # It carries `role: developer` as well as its type. Bucketing it by role would hide
+        # the largest section of a Codex request inside the smallest.
+        composition = extract_composition(self._request())
+        assert composition["tools"] > 500
+
+    def test_top_level_instructions_count_as_system(self):
+        body = json.dumps({"instructions": "s" * 300, "input": []})
+        assert extract_composition(body)["system"] > 300
+
+    def test_an_anthropic_request_still_uses_the_anthropic_reader(self):
+        body = json.dumps({"messages": [{"role": "user", "content": "hi"}], "input": "ignored"})
+        assert set(extract_composition(body)) == {"messages"}
+
+    def test_empty_buckets_are_omitted_not_zero(self):
+        body = json.dumps({"input": [{"type": "message", "role": "user", "content": "hi"}]})
+        assert set(extract_composition(body)) == {"messages"}
+
+
 class TestStreamingUsageTracker:
     def test_parses_across_chunk_boundaries(self):
         # The whole point: a chunk can split a line anywhere, and the tracker must not
@@ -238,6 +367,26 @@ class TestStreamingUsageTracker:
         tracker = StreamingUsageTracker()
         tracker.feed(b"data: \xff\xfe garbage\n\n")
         assert tracker.usage is None
+
+    def test_a_responses_stream_is_parsed_across_chunk_boundaries_too(self):
+        body = _sse(_response_completed(
+            input_tokens=8_000, output_tokens=40,
+            input_tokens_details={"cached_tokens": 7_500},
+        ))
+        tracker = StreamingUsageTracker()
+        for index in range(0, len(body), 7):
+            tracker.feed(body[index:index + 7].encode("utf-8"))
+        assert tracker.usage == TokenUsage(
+            input_tokens=500, output_tokens=40, cache_read_tokens=7_500
+        )
+
+    def test_a_terminal_responses_event_wins_over_partial_anthropic_state(self):
+        # Defensive: the two formats never mix on a real connection, but a complete report
+        # is authoritative and must not be blended with a half-read one.
+        tracker = StreamingUsageTracker()
+        tracker.feed(_sse(_message_delta(999)).encode("utf-8"))
+        tracker.feed(_sse(_response_completed(input_tokens=5, output_tokens=2)).encode("utf-8"))
+        assert tracker.usage == TokenUsage(input_tokens=5, output_tokens=2)
 
 
 class TestTrafficRecord:

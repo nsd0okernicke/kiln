@@ -338,6 +338,39 @@ class TestProxyFlags:
             cli.build_parser().parse_args(["--capture", "everything"])
 
 
+class TestProxyRoutes:
+    """
+    One proxy, several vendors. Roles -- not backends -- are what the path prefix
+    identifies, so a mixed-backend swarm needs one route per non-default role rather than a
+    second proxy on another port.
+    """
+
+    def _profile(self, *agents):
+        from launcher.config import Profile, RoleConfig
+
+        roles = [RoleConfig(role=f"r{index}", agent=agent)
+                 for index, agent in enumerate(agents)]
+        return Profile(name="p", description="", roles=roles, layout={})
+
+    def test_a_claude_only_profile_needs_no_routes(self):
+        # Anthropic is the proxy's default upstream; naming it again would be noise.
+        assert cli.proxy_routes(self._profile("claude", "claude")) == []
+
+    def test_a_codex_role_is_routed_to_its_own_upstream(self):
+        assert cli.proxy_routes(self._profile("codex")) == [
+            "--route=r0=chatgpt.com/backend-api/codex"
+        ]
+
+    def test_only_the_non_default_roles_are_named(self):
+        routes = cli.proxy_routes(self._profile("claude", "codex", "claude"))
+        assert routes == ["--route=r1=chatgpt.com/backend-api/codex"]
+
+    def test_unroutable_backends_are_skipped(self):
+        # copilot and grok have no verified override, so they run unproxied rather than
+        # being pointed somewhere that would break their auth.
+        assert cli.proxy_routes(self._profile("copilot", "grok")) == []
+
+
 class TestCliParsing:
     def test_init_subcommand_is_recognised(self):
         args = cli.build_parser().parse_args(["init", "--working-dir", "x"])

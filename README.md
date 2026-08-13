@@ -483,10 +483,16 @@ every captured request is attributable to a role by its path prefix. That path i
 through the existing `AgentCommand.env` plumbing, which means one-shot workers inherit it from
 their pane.
 
-Only `claude` roles are routed today (`ANTHROPIC_BASE_URL`, verified live — the OAuth
-subscription token flows through it, so no API key is required). Roles on other backends run
-untouched and are simply absent from the capture; the launcher logs which roles it routed so
-an empty panel is never a mystery.
+`claude` and `codex` roles are routed today, **both verified live** — each CLI honours the
+override and still attaches its own subscription credential to a local host, so no API key is
+needed for either. They get there differently: Claude reads `ANTHROPIC_BASE_URL`, while Codex
+has no base-URL variable at all and receives `-c model_providers.…` overrides on its command
+line instead. Roles on `grok` or `copilot` run untouched and are simply absent from the
+capture; the launcher logs which roles it routed so an empty panel is never a mystery.
+
+One proxy serves both vendors. Because the path prefix identifies a *role* rather than a
+backend, each non-Anthropic role gets a `--route <role>=<host>/<base-path>` telling the proxy
+where that role's traffic actually belongs — the launcher derives these from the profile.
 
 `--proxy-port` moves it off 8787. `python -m proxy.server --stub` answers requests locally
 instead of forwarding, which makes the whole wiring dry-runnable without spending a token.
@@ -501,6 +507,14 @@ would wreck that.
 |---|---|
 | `metadata` (default) | timing, status, byte sizes, model, token usage, and the tools/system/messages split |
 | `full` | the above plus request and response bodies, capped at 256 KiB each |
+
+Both vendors' wire formats are read into the same columns. Anthropic sends `tools`/`system`/
+`messages` as top-level keys; the Responses API Codex uses has none of them and packs
+everything into one flat `input` array, so it is bucketed by item type instead. Token usage
+needs the same care in reverse — Anthropic reports `input_tokens` as the *fresh* remainder
+with cache reads counted separately, while OpenAI reports it as the total *including* them,
+so the cached portion is subtracted on the way in. Storing either number under the other's
+meaning would roughly halve the reported cache hit rate.
 
 `Authorization` and API-key header **values are never written** — header names are kept so you
 can see what was sent, values are replaced. Bodies in `full` mode contain the complete source
@@ -1544,6 +1558,7 @@ was run and seven defects fell out.
 - ✓ Swarm-wide live dashboard (`"scheduler": "dashboard"`) — role state, queue depth, cost/cycle/token totals, cache hit rate, recent activity and escalations in one pane
 - ✓ Per-role token accounting from every backend's own stream — input/output/cache-read/cache-write kept separately, never collapsed to one number, and omitted rather than reported as a misleading zero
 - ✓ Opt-in traffic capture proxy (`--proxy`) — per-role attribution by URL path, credential values never stored, metadata-only by default, and a dashboard panel splitting each request into tools/instructions/conversation
+- ✓ Two vendors through one proxy — `claude` and `codex` roles both routed and verified live, each keeping its own subscription auth, with per-role upstreams so a mixed-backend swarm needs no second proxy
 - ✓ Logbook tracking of all handoffs and agent actions
 - ✓ Wrapper + worker-subagent delegation for Claude `auto`-mode roles — persistent thin wrappers dispatch work to disposable worker subagents, keeping wrapper context at ~140 lines through unlimited cycles
 - ✓ Codex agent support, including worker-subagent delegation via Codex's own multi-agent spawn tools — generated `AGENTS.md` + `.codex/agents/<role>-worker.toml`, isolated per-role `CODEX_HOME` MCP config, `--dangerously-bypass-approvals-and-sandbox` launch flag
@@ -1591,16 +1606,19 @@ under **Deterministic Scheduler** above.
   as [nsd0okernicke/kiln#8](https://github.com/nsd0okernicke/kiln/issues/8). Copilot is parked
   out of every shipped profile's scheduler-mode rotation until this is resolved; it remains fine
   for wrapper-mode (interactive) roles, where this failure mode has never been observed.
-- **Traffic capture routes `claude` roles only.** `ANTHROPIC_BASE_URL` is verified live, OAuth
-  included. `grok` and `codex` may have equivalent overrides and need a spike; `copilot` talks
-  to GitHub's endpoints and is likely MITM-only, which is out of scope. Roles on unrouted
+- **Traffic capture routes `claude` and `codex` roles only.** Both verified live, subscription
+  auth included. `grok` may have an equivalent override and needs a spike; `copilot` talks to
+  GitHub's endpoints and is likely MITM-only, which is out of scope. Roles on unrouted
   backends run untouched and are simply absent from the capture — the launcher logs which
   roles it routed, so an empty panel is never a mystery.
-- **Codex and Copilot token parsers have never seen a real stream.** They are written from
-  those adapters' documented event shapes; every validated run so far has been all-Claude.
-  Both return "nothing reported" rather than a wrong number if the shape differs, so the
-  failure mode is a `-` in the dashboard, not a fabricated figure. Settle with one live call
-  per backend.
+- **The Copilot token parser has never seen a real stream.** It is written from that
+  adapter's documented event shape; no validated run has included Copilot. It returns
+  "nothing reported" rather than a wrong number if the shape differs, so the failure mode is
+  a `-` in the dashboard, not a fabricated figure. Copilot's own session store
+  (`~/.copilot/session-store.db`, table `assistant_usage_events`) uses
+  `input_tokens`/`output_tokens`/`cache_read_tokens`/`cache_write_tokens`, which suggests its
+  alias table is missing `cache_write` — the same gap a live capture found in the Codex
+  parser. Settle with one live call.
 - **`grok` has no wrapper-mode implementation.** Its scheduler adapter is real and live-verified,
   but there is no `loop-auto-grok.md`/wrapper dispatch path — a `grok` role must run `auto` +
   `"scheduler": "python"`; it cannot run `manual`.

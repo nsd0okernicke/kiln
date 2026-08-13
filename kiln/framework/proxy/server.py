@@ -29,6 +29,7 @@ import json
 import logging
 import ssl
 import time
+from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -50,6 +51,34 @@ log = logging.getLogger(__name__)
 
 DEFAULT_UPSTREAM = "api.anthropic.com"
 DEFAULT_PORT = 8787
+
+
+@dataclass(frozen=True)
+class Upstream:
+    """
+    Where one role's traffic goes, and what path prefix it needs on arrival.
+
+    A single `--upstream` host was enough while only Claude was routed. It stops being
+    enough the moment a second backend joins: Codex authenticates against
+    `chatgpt.com/backend-api/codex` while Claude uses `api.anthropic.com`, and one proxy
+    serves both because roles -- not backends -- are what the path prefix identifies.
+
+    `base_path` exists because the client's own path is relative to its configured base URL.
+    Codex sends `POST /responses`; upstream that has to become
+    `/backend-api/codex/responses`. Anthropic needs no prefix and gets an empty one.
+    """
+
+    host: str
+    base_path: str = ""
+
+    def target(self, path: str) -> str:
+        return f"{self.base_path}{path}"
+
+
+def parse_upstream(value: str) -> Upstream:
+    """`chatgpt.com/backend-api/codex` -> `Upstream("chatgpt.com", "/backend-api/codex")`."""
+    host, separator, rest = value.strip().strip("/").partition("/")
+    return Upstream(host=host, base_path=(separator + rest) if separator else "")
 
 #: Prefix that carries the role name, e.g. `/kiln/coder/v1/messages`.
 ROLE_PREFIX = "/kiln/"
@@ -136,9 +165,13 @@ class ProxyConfig:
         body_limit: int = DEFAULT_BODY_LIMIT_BYTES,
         use_tls: bool = True,
         stub: bool = False,
+        routes: dict[str, Upstream] | None = None,
     ) -> None:
         self.store = store
-        self.upstream = upstream
+        self.upstream = parse_upstream(upstream) if isinstance(upstream, str) else upstream
+        #: Per-role overrides. A role absent from here uses `upstream`, so adding a second
+        #: backend never changes where an existing role's traffic goes.
+        self.routes = routes or {}
         self.mode = mode
         self.body_limit = body_limit
         #: False reaches a plain-HTTP upstream — an internal gateway, or a fake one in
@@ -146,6 +179,9 @@ class ProxyConfig:
         self.use_tls = use_tls
         #: True answers locally and never contacts the vendor — see `_answer_with_stub`.
         self.stub = stub
+
+    def upstream_for(self, role: str | None) -> Upstream:
+        return self.routes.get(role or "", self.upstream)
 
 
 class ProxyHandler(BaseHTTPRequestHandler):
@@ -182,7 +218,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            response = self._forward(method, upstream_path, request_bytes)
+            response = self._forward(method, upstream_path, request_bytes, role)
         except (OSError, http.client.HTTPException) as exc:
             # A proxy failure must read as a proxy failure, not as the model refusing.
             log.error("upstream request failed: %s", exc)
@@ -242,14 +278,17 @@ class ProxyHandler(BaseHTTPRequestHandler):
             name.lower() for name in self.headers if name.lower() in SENSITIVE_HEADERS
         }
 
-    def _forward(self, method: str, path: str, body: bytes) -> http.client.HTTPResponse:
+    def _forward(
+        self, method: str, path: str, body: bytes, role: str | None = None
+    ) -> http.client.HTTPResponse:
         """Open the upstream connection and send the request through unchanged."""
+        upstream = self.config.upstream_for(role)
         if self.config.use_tls:
             connection: http.client.HTTPConnection = http.client.HTTPSConnection(
-                self.config.upstream, context=ssl.create_default_context(), timeout=600
+                upstream.host, context=ssl.create_default_context(), timeout=600
             )
         else:
-            connection = http.client.HTTPConnection(self.config.upstream, timeout=600)
+            connection = http.client.HTTPConnection(upstream.host, timeout=600)
 
         headers = {
             name: value
@@ -260,7 +299,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
         }
         # Credentials pass through untouched -- they are simply never *recorded*. Rewriting
         # or dropping them here would break the very auth this proxy must stay invisible to.
-        connection.request(method, path, body=body or None, headers=headers)
+        connection.request(method, upstream.target(path), body=body or None, headers=headers)
         return connection.getresponse()
 
     def _relay_response(
@@ -388,6 +427,7 @@ def serve(
     host: str = "127.0.0.1",
     use_tls: bool = True,
     stub: bool = False,
+    routes: dict[str, Upstream] | None = None,
 ) -> ThreadingHTTPServer:
     """
     Build a configured server. The caller owns `serve_forever`/`shutdown`.
@@ -399,7 +439,7 @@ def serve(
     """
     store.ensure_schema()
     config = ProxyConfig(
-        store=store, upstream=upstream, mode=mode, use_tls=use_tls, stub=stub
+        store=store, upstream=upstream, mode=mode, use_tls=use_tls, stub=stub, routes=routes
     )
 
     handler = type("ConfiguredProxyHandler", (ProxyHandler,), {"config": config})
@@ -412,6 +452,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--upstream", default=DEFAULT_UPSTREAM)
+    parser.add_argument(
+        "--route", action="append", default=[], metavar="ROLE=HOST[/BASE-PATH]",
+        help=(
+            "send one role's traffic to a different upstream, e.g. "
+            "--route architect=chatgpt.com/backend-api/codex. Repeatable. Roles not named "
+            "here use --upstream, so a mixed-backend swarm needs one --route per non-Claude "
+            "role rather than a second proxy."
+        ),
+    )
     parser.add_argument(
         "--mode",
         choices=[mode.value for mode in CaptureMode],
@@ -428,12 +477,33 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def parse_routes(values: list[str]) -> dict[str, Upstream]:
+    """
+    `["coder=chatgpt.com/backend-api/codex"]` -> `{"coder": Upstream(...)}`.
+
+    A malformed entry raises rather than being skipped: a silently ignored route sends a
+    role's credentialed traffic to the wrong vendor, which fails as a 401 far from its cause.
+    """
+    routes: dict[str, Upstream] = {}
+    for value in values:
+        role, separator, target = value.partition("=")
+        if not separator or not role.strip() or not target.strip():
+            raise ValueError(f"--route needs ROLE=HOST[/BASE-PATH], got {value!r}")
+        routes[role.strip()] = parse_upstream(target)
+    return routes
+
+
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI entry point
     args = build_parser().parse_args(argv)
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s [kiln-proxy/%(levelname)s] %(message)s",
         datefmt="%H:%M:%S",
     )
+    try:
+        routes = parse_routes(args.route)
+    except ValueError as exc:
+        log.error("%s", exc)
+        return 2
     server = serve(
         store=TrafficStore(Path(args.db_path)),
         port=args.port,
@@ -441,7 +511,10 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI entry 
         mode=CaptureMode(args.mode),
         host=args.host,
         stub=args.stub,
+        routes=routes,
     )
+    for role, upstream in sorted(routes.items()):
+        log.info("  route: %s -> %s%s", role, upstream.host, upstream.base_path)
     log.info(
         "proxy listening on http://%s:%s -> %s (capture: %s)",
         args.host, args.port,
