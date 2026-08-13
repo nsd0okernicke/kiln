@@ -173,6 +173,80 @@ class TestAgentsPayload:
         assert 'Use "quotes" and\nnewlines.' in payload["coder-worker"]["prompt"]
 
 
+class TestParseToolsList:
+    def test_splits_the_frontmatter_string(self):
+        assert worker_prompt.parse_tools_list("Read, Write, Edit") == ["Read", "Write", "Edit"]
+
+    def test_trims_whitespace(self):
+        assert worker_prompt.parse_tools_list("  Read ,Write  ") == ["Read", "Write"]
+
+    def test_ignores_empty_entries(self):
+        assert worker_prompt.parse_tools_list("Read,,Write,") == ["Read", "Write"]
+
+    def test_nothing_declared_is_an_empty_list(self):
+        assert worker_prompt.parse_tools_list(None) == []
+        assert worker_prompt.parse_tools_list("") == []
+
+
+class TestAgentsPayloadTools:
+    """
+    The declared tool list, honoured rather than dropped.
+
+    A proxy capture of one real cycle showed 30 tools going out per request while
+    `coder-worker.md` declared 10 — ~66KB of schema per request for tools the worker was
+    never granted, including `Agent` while its own task prompt forbids spawning agents.
+    """
+
+    def _definition(self):
+        return worker_prompt.parse_worker_definition(GENERATED_AGENT)
+
+    def test_the_tool_list_is_sent_when_asked_for(self):
+        payload = json.loads(
+            worker_prompt.build_agents_payload(self._definition(), include_tools=True)
+        )
+        assert payload["coder-worker"]["tools"][:3] == ["Read", "Write", "Edit"]
+
+    def test_it_is_a_json_array_not_a_string(self):
+        """
+        The failure mode this guards is silent and total.
+
+        Verified live against Claude Code: given a *string*, the CLI does not reject the
+        field — it discards the entire agent definition and reports
+        `--agent '<name>' not found`, so the worker loses its whole persona and falls back
+        to a default agent. Given an array, the same probe went from 28 tools/124KB per
+        request to 2 tools/8.3KB.
+        """
+        payload = json.loads(
+            worker_prompt.build_agents_payload(self._definition(), include_tools=True)
+        )
+        assert isinstance(payload["coder-worker"]["tools"], list)
+
+    def test_it_is_omitted_by_default(self):
+        # Shared with grok, whose CLI has not been checked for this key.
+        payload = json.loads(worker_prompt.build_agents_payload(self._definition()))
+        assert "tools" not in payload["coder-worker"]
+
+    def test_a_definition_declaring_no_tools_omits_the_key(self):
+        # An empty array might read as "no tools at all" rather than "unrestricted".
+        text = GENERATED_AGENT.replace(
+            "tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell, Skill, "
+            "NotebookEdit, TodoWrite\n",
+            "",
+        )
+        definition = worker_prompt.parse_worker_definition(text)
+        payload = json.loads(
+            worker_prompt.build_agents_payload(definition, include_tools=True)
+        )
+        assert "tools" not in payload["coder-worker"]
+
+    def test_the_prompt_and_description_still_travel(self):
+        payload = json.loads(
+            worker_prompt.build_agents_payload(self._definition(), include_tools=True)
+        )
+        assert "# Coder Role" in payload["coder-worker"]["prompt"]
+        assert payload["coder-worker"]["description"]
+
+
 class TestTaskPrompt:
     def _build(self, **overrides):
         args = {

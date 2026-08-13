@@ -302,7 +302,9 @@ def run_worker(
     unlike Copilot's own `--log-dir` which wants a directory.
     """
     command = build_command(
-        agents_json=build_agents_payload(definition),
+        # include_tools: the worker file's declared tool list is honoured rather than
+        # dropped -- see build_agents_payload. Verified live against Claude Code.
+        agents_json=build_agents_payload(definition, include_tools=True),
         agent_name=definition.name,
         prompt=prompt,
         model=model,

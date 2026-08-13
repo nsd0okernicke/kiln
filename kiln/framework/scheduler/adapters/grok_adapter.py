@@ -283,6 +283,11 @@ def run_worker(
     `--debug-file`/`--log-dir`-equivalent flag has been found in `grok`'s help output.
     """
     command = build_command(
+        # No `include_tools` here, unlike the Claude adapter: grok takes the same
+        # `--agents` shape but has not been checked for the `tools` key, and Claude Code's
+        # failure mode for a malformed one is to discard the whole agent definition without
+        # saying so. Not worth risking a silently persona-less worker for a size saving --
+        # spike grok first, then turn it on.
         agents_json=build_agents_payload(definition),
         agent_name=definition.name,
         prompt=prompt,

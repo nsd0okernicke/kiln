@@ -436,3 +436,34 @@ class TestRunWorker:
         )
         assert invocation.is_done is False
         assert invocation.result.sentinel_found is False
+
+
+class TestWorkerToolsAreHonoured:
+    """
+    The Claude adapter sends the worker's declared tool list; the grok adapter does not.
+
+    Guards a saving measured live (30 tools -> 10 for the coder) and, more importantly, a
+    silent failure: a malformed `tools` value makes Claude Code discard the whole agent
+    definition rather than complain, so the worker would lose its persona entirely.
+    """
+
+    RESTRICTED = WorkerDefinition(
+        name="coder-worker",
+        description="Does the coder work",
+        prompt="# Coder Role",
+        tools="Read, Grep",
+    )
+
+    def test_claude_sends_the_declared_tools_as_an_array(self):
+        payload = json.loads(
+            claude_adapter.build_agents_payload(self.RESTRICTED, include_tools=True)
+        )
+        assert payload["coder-worker"]["tools"] == ["Read", "Grep"]
+
+    def test_grok_does_not_until_its_cli_is_spiked(self):
+        # Same payload builder, unverified CLI: a wrong shape there would silently strip
+        # the persona rather than error, which is not worth a size saving.
+        from scheduler.adapters import grok_adapter
+
+        payload = json.loads(grok_adapter.build_agents_payload(self.RESTRICTED))
+        assert "tools" not in payload["coder-worker"]

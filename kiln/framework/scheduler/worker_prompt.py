@@ -109,21 +109,50 @@ def load_worker_definition(path: str | Path) -> WorkerDefinition:
     return parse_worker_definition(text)
 
 
-def build_agents_payload(definition: WorkerDefinition) -> str:
+def parse_tools_list(tools: str | None) -> list[str]:
+    """
+    `"Read, Write, Edit"` -> `["Read", "Write", "Edit"]`.
+
+    Generated worker files declare tools the way the file-based agent format does: one
+    comma-separated string in the frontmatter. The inline `--agents` JSON needs an array,
+    and the difference is not cosmetic -- see `build_agents_payload`.
+    """
+    if not tools:
+        return []
+    return [name.strip() for name in tools.split(",") if name.strip()]
+
+
+def build_agents_payload(definition: WorkerDefinition, include_tools: bool = False) -> str:
     """
     Render the `--agents` JSON that defines this worker for a one-shot Claude run.
 
     Verified live: the agent's prompt governs the response, which is what lets the
     scheduler hand a worker its role without an interactive session to delegate through.
+
+    `include_tools` sends the definition's declared tool list, which is otherwise parsed and
+    silently dropped. That drop was expensive: a proxy capture of one real cycle showed 30
+    tools going out per request when `coder-worker.md` declared 10, costing ~66KB of schema
+    for tools the worker was never granted -- including `Agent`, while its own task prompt
+    forbids spawning agents.
+
+    **The list must be a JSON array, never the frontmatter's comma-separated string.**
+    Verified live against Claude Code, and the failure mode is the dangerous kind: with a
+    string, the CLI does not complain about the field -- it discards the *entire* agent
+    definition and reports `--agent '<name>' not found`, so the worker would silently lose
+    its whole persona and fall back to a default agent. With an array, the same probe went
+    from 28 tools / 124KB per request to 2 tools / 8.3KB.
+
+    Off by default because the payload is shared with grok, whose CLI has not been checked
+    for this and where the same mistake would fail just as quietly.
     """
-    return json.dumps(
-        {
-            definition.name: {
-                "description": definition.description,
-                "prompt": definition.prompt,
-            }
-        }
-    )
+    body: dict[str, object] = {
+        "description": definition.description,
+        "prompt": definition.prompt,
+    }
+    tools = parse_tools_list(definition.tools) if include_tools else []
+    if tools:
+        body["tools"] = tools
+    return json.dumps({definition.name: body})
 
 
 def build_task_prompt(
