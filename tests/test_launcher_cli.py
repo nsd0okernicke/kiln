@@ -317,6 +317,69 @@ class TestStopMarkers:
         assert "channel.py" in KILN_PROCESS_MARKERS
 
 
+class TestReclaimingLeftoverProxies:
+    """
+    Closing the terminal window is a normal way to end a swarm and it never reaches the
+    proxy — that process is detached so it survives the launcher, and therefore the window.
+    Left alone, every close would leak a listener and each launch would climb to the next
+    port until `find_free_port` gave up and the launch failed.
+    """
+
+    def _processes(self, monkeypatch, rows):
+        from launcher import stop
+
+        monkeypatch.setattr(stop, "_windows_matches", lambda: rows)
+        monkeypatch.setattr(stop, "_posix_matches", lambda: rows)
+
+    def test_a_proxy_for_this_project_is_found(self, monkeypatch, tmp_path):
+        from launcher import stop
+
+        db = tmp_path / ".kiln" / "traffic.db"
+        self._processes(monkeypatch, [
+            (11, f"python -m proxy.server --db-path {db} --port 8787 --mode metadata"),
+        ])
+        assert [pid for pid, _ in stop.find_project_proxies(db)] == [11]
+
+    def test_another_project_s_proxy_is_left_alone(self, monkeypatch, tmp_path):
+        # Starting a swarm has no business killing another project's capture. `--stop` is
+        # machine-wide by design; this is not.
+        from launcher import stop
+
+        mine = tmp_path / "mine" / "traffic.db"
+        theirs = tmp_path / "theirs" / "traffic.db"
+        self._processes(monkeypatch, [
+            (22, f"python -m proxy.server --db-path {theirs} --port 8787 --mode metadata"),
+        ])
+        assert stop.find_project_proxies(mine) == []
+
+    def test_other_kiln_processes_are_not_mistaken_for_proxies(self, monkeypatch, tmp_path):
+        from launcher import stop
+
+        db = tmp_path / ".kiln" / "traffic.db"
+        self._processes(monkeypatch, [
+            (33, f"python -m scheduler.dashboard --traffic-db {db}"),
+        ])
+        assert stop.find_project_proxies(db) == []
+
+    def test_the_leftover_is_killed(self, monkeypatch, tmp_path):
+        from launcher import stop
+
+        db = tmp_path / ".kiln" / "traffic.db"
+        self._processes(monkeypatch, [
+            (44, f"python -m proxy.server --db-path {db} --port 8787 --mode metadata"),
+        ])
+        killed = []
+        monkeypatch.setattr(stop, "kill_process", lambda pid: killed.append(pid) or True)
+        assert stop.stop_project_proxies(db) == [44]
+        assert killed == [44]
+
+    def test_nothing_running_is_not_an_error(self, monkeypatch, tmp_path):
+        from launcher import stop
+
+        self._processes(monkeypatch, [])
+        assert stop.stop_project_proxies(tmp_path / "traffic.db") == []
+
+
 class TestProxyFlags:
     def test_the_proxy_is_on_by_default(self):
         # Flipped deliberately: metadata capture is cheap (~2.9KB a request) and it is what

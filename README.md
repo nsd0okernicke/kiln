@@ -1321,6 +1321,20 @@ Kills the processes this swarm started — schedulers, MCP servers, tmux session
 their command lines. **It does not touch your files, worktrees or branches**, and it does not
 close the terminal window itself; close that yourself, or its panes will sit at dead prompts.
 
+**Closing the window is not quite the same thing.** The panes die with it, but the capture
+proxy does not: it runs detached so it outlives the launcher, which means it outlives the
+window too. That leaves one background process still listening on its port.
+
+Nothing breaks if you close the window anyway — **the next launch of that project reclaims its
+own leftover proxy** before starting a new one, so ports do not creep and proxies do not pile
+up. `--stop` is still the tidy way to end a run, and the only one that also stops the proxy
+straight away. Note it is machine-wide by design: run in one project it stops *every* Kiln
+process, including another project's swarm. The launch-time reclaim is deliberately narrower —
+it only ever touches a proxy writing to the project you are launching.
+
+Prefer no background process at all? `--no-proxy` (see **Traffic Capture**) — you keep cost,
+token and cache reporting and lose only the prompt-weight panel.
+
 ### Full project reset (Windows only)
 
 ```powershell

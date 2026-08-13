@@ -262,7 +262,9 @@ def find_free_port(preferred: int, attempts: int = PROXY_PORT_ATTEMPTS) -> int:
                 continue
             return candidate
     raise LaunchError(
-        f"no free port for the capture proxy in {preferred}-{preferred + attempts - 1}"
+        f"no free port for the capture proxy in {preferred}-{preferred + attempts - 1}. "
+        "Leftover proxies from other projects may be holding them: `kiln --stop` clears "
+        "every Kiln process, or launch with --no-proxy."
     )
 
 
@@ -325,6 +327,13 @@ def start_proxy(
     """
     log_path = paths.logs_dir / "proxy.log"
     paths.logs_dir.mkdir(parents=True, exist_ok=True)
+
+    # Reclaim this project's own leftovers before looking for a port, so that closing the
+    # terminal window -- a normal way to end a swarm, and one that never reaches a detached
+    # process -- costs nothing more than a stale listener until the next launch. Restarted
+    # rather than reused: the new run may have asked for a different --capture mode or a
+    # different set of routes, and silently keeping the old ones would be a lie.
+    stop.stop_project_proxies(paths.traffic_db)
 
     port = port if port_is_explicit else find_free_port(port)
 
