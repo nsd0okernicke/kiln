@@ -10,9 +10,11 @@ pinning hardest.
 from __future__ import annotations
 
 import json
+import sqlite3
 
 import pytest
 from proxy.capture import (
+    BODY_BUDGET_CHECK_EVERY,
     DEFAULT_BODY_LIMIT_BYTES,
     REDACTED,
     TRUNCATION_MARKER,
@@ -580,3 +582,91 @@ class TestTrafficStore:
             )
         )
         assert secret not in (tmp_path / "traffic.db").read_bytes().decode("latin-1")
+
+
+class TestBodyBudget:
+    """
+    Retention for a proxy that now runs by default.
+
+    Bodies are what grows -- 98.3% of a real 107.6MB store -- and they are also the part a
+    row does not need to stay useful, because composition and usage are computed at capture
+    time. So the budget clears bodies rather than deleting rows.
+    """
+
+    def _store(self, tmp_path, budget):
+        store = TrafficStore(tmp_path / "traffic.db", body_budget=budget)
+        store.ensure_schema()
+        return store
+
+    def _record(self, store, body, role="coder"):
+        return store.record(TrafficRecord(
+            role=role, method="POST", path="/v1/messages",
+            composition={"tools": 10, "system": 20, "messages": 30},
+            tokens=TokenUsage(input_tokens=5, output_tokens=1),
+            request_body=body,
+        ))
+
+    def test_a_store_inside_its_budget_is_untouched(self, tmp_path):
+        store = self._store(tmp_path, budget=10_000)
+        self._record(store, "x" * 100)
+        assert store.enforce_body_budget() == 0
+
+    def test_the_oldest_bodies_go_first(self, tmp_path):
+        store = self._store(tmp_path, budget=250)
+        for _ in range(4):
+            self._record(store, "x" * 100)
+        store.enforce_body_budget()
+        with sqlite3.connect(tmp_path / "traffic.db") as conn:
+            kept = [row[0] for row in conn.execute(
+                "SELECT id FROM traffic WHERE request_body IS NOT NULL ORDER BY id"
+            )]
+        # 400 bytes stored against a 250 budget: the two oldest are cleared, not the newest.
+        assert kept == [3, 4]
+
+    def test_rows_are_degraded_never_deleted(self, tmp_path):
+        store = self._store(tmp_path, budget=50)
+        for _ in range(3):
+            self._record(store, "x" * 100)
+        store.enforce_body_budget()
+        with sqlite3.connect(tmp_path / "traffic.db") as conn:
+            assert conn.execute("SELECT COUNT(*) FROM traffic").fetchone()[0] == 3
+
+    def test_a_degraded_row_keeps_everything_the_dashboard_reads(self, tmp_path):
+        # The whole reason for clearing bodies instead of dropping rows.
+        store = self._store(tmp_path, budget=50)
+        for _ in range(3):
+            self._record(store, "x" * 100)
+        store.enforce_body_budget()
+        stats = store.request_stats_by_role()["coder"]
+        assert stats["requests"] == 3
+        assert stats["avg_tools"] == 10
+        assert stats["avg_messages"] == 30
+
+    def test_a_metadata_only_store_never_trips_it(self, tmp_path):
+        # It writes no bodies at all, so the sum stays at zero however long the run is.
+        store = self._store(tmp_path, budget=1)
+        for _ in range(5):
+            self._record(store, capture_body("SECRET", CaptureMode.METADATA))
+        assert store.enforce_body_budget() == 0
+
+    def test_a_disabled_budget_does_nothing(self, tmp_path):
+        store = self._store(tmp_path, budget=0)
+        self._record(store, "x" * 1000)
+        assert store.enforce_body_budget() == 0
+
+    def test_record_enforces_it_periodically_without_being_asked(self, tmp_path):
+        # A long run must stay bounded on its own; nothing else calls enforce_body_budget().
+        #
+        # The budget is a ceiling checked every BODY_BUDGET_CHECK_EVERY writes, not a hard
+        # cap applied to each one, so the store can sit one check-interval above it. That is
+        # the trade the interval buys: the check is a full-table SUM.
+        writes = BODY_BUDGET_CHECK_EVERY + 1
+        store = self._store(tmp_path, budget=500)
+        for _ in range(writes):
+            self._record(store, "x" * 100)
+        with sqlite3.connect(tmp_path / "traffic.db") as conn:
+            stored = conn.execute(
+                "SELECT COALESCE(SUM(length(coalesce(request_body,''))), 0) FROM traffic"
+            ).fetchone()[0]
+        assert stored < writes * 100  # unbounded growth would keep every one
+        assert stored <= 500 + BODY_BUDGET_CHECK_EVERY * 100

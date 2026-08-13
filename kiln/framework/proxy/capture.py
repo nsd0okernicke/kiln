@@ -60,6 +60,18 @@ DEFAULT_BODY_LIMIT_BYTES = 256 * 1024
 #: Appended to a truncated body so nobody measures a prompt against a clipped copy.
 TRUNCATION_MARKER = "\n…[truncated by kiln proxy]"
 
+#: Total stored body bytes before the oldest rows are degraded to metadata-only.
+#:
+#: Bodies are what actually grows: measured on a real store, 107.6MB across 676 requests was
+#: 98.3% bodies, at roughly 160KB per request. Metadata is ~2.9KB a row, so a metadata-only
+#: store would need some 370,000 requests to reach a gigabyte and never comes near this.
+#: The budget exists for `--capture full`, which reaches it in about 1,600 requests.
+DEFAULT_BODY_BUDGET_BYTES = 256 * 1024 * 1024
+
+#: Writes between budget checks. The check is a full-table SUM over the body columns, which
+#: is cheap but not free, and the budget is a ceiling rather than a precise line.
+BODY_BUDGET_CHECK_EVERY = 100
+
 
 class CaptureMode(StrEnum):
     """
@@ -477,8 +489,12 @@ class TrafficStore:
     pinned for the whole run.
     """
 
-    def __init__(self, db_path: str | Path) -> None:
+    def __init__(
+        self, db_path: str | Path, body_budget: int = DEFAULT_BODY_BUDGET_BYTES
+    ) -> None:
         self.db_path = Path(db_path)
+        self.body_budget = body_budget
+        self._writes_since_check = 0
 
     def ensure_schema(self) -> None:
         """Create the table if absent, then bring an existing one up to date."""
@@ -524,7 +540,61 @@ class TrafficStore:
                 ),
             )
             conn.commit()
-            return int(cursor.lastrowid or 0)
+            row_id = int(cursor.lastrowid or 0)
+
+        self._writes_since_check += 1
+        if self._writes_since_check >= BODY_BUDGET_CHECK_EVERY:
+            self._writes_since_check = 0
+            self.enforce_body_budget()
+        return row_id
+
+    def enforce_body_budget(self) -> int:
+        """
+        Drop the oldest stored bodies until the store is back inside its budget.
+
+        Returns the number of rows degraded.
+
+        **Bodies are cleared; rows are never deleted.** Composition and token usage are
+        computed at capture time, so a row keeps its full analytical value once its bodies
+        are gone -- the prompt-weight panel reads `tools_bytes`/`system_bytes`/
+        `messages_bytes`, not the request text. Deleting rows instead would throw away the
+        cheap history (~2.9KB each) to reclaim space the expensive columns were using.
+
+        Metadata-mode stores never trip this: they write no bodies, so the sum stays zero.
+        """
+        if self.body_budget <= 0:
+            return 0
+        size = "length(coalesce(request_body,'')) + length(coalesce(response_body,''))"
+        degraded = 0
+        with closing(sqlite3.connect(self.db_path)) as conn:
+            total = conn.execute(f"SELECT COALESCE(SUM({size}), 0) FROM traffic").fetchone()[0]
+            if total <= self.body_budget:
+                return 0
+            # Oldest first, accumulating until enough has been freed. Done row by row rather
+            # than with one bulk UPDATE because the cut-off depends on a running total.
+            excess = total - self.body_budget
+            freed = 0
+            rows = conn.execute(
+                f"SELECT id, {size} FROM traffic "
+                "WHERE request_body IS NOT NULL OR response_body IS NOT NULL ORDER BY id"
+            ).fetchall()
+            for row_id, row_size in rows:
+                if freed >= excess:
+                    break
+                conn.execute(
+                    "UPDATE traffic SET request_body = NULL, response_body = NULL WHERE id = ?",
+                    (row_id,),
+                )
+                freed += row_size
+                degraded += 1
+            conn.commit()
+        if degraded:
+            log.info(
+                "traffic store over its %d-byte body budget; kept metadata and dropped "
+                "bodies from the %d oldest rows",
+                self.body_budget, degraded,
+            )
+        return degraded
 
     def request_stats_by_role(self, since: str | None = None) -> dict[str, dict[str, int]]:
         """

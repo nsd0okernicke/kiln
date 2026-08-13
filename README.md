@@ -465,15 +465,24 @@ evidence after its pane is gone.
 
 Token counts tell you *that* a role is expensive. Only the request body tells you *why* — how
 much of it is tool schemas, how much is generated instructions, how much is conversation being
-re-sent. Kiln can route agent API traffic through a local capture proxy to answer that.
+re-sent. Kiln routes agent API traffic through a local capture proxy to answer that.
 
-**Off by default.** It is a separate process, it writes to a separate store, and nothing about
-a normal run changes when it is absent.
+**On by default, in metadata mode.** It records sizes, timings, model names and token counts —
+about 2.9 KB per request, roughly 650 KiB for a full swarm cycle. **It does not record prompt
+text**; that needs a second, explicit opt-in.
 
 ```powershell
-.\bin\kiln.ps1 -WorkingDir . --proxy                 # metadata only (default)
-.\bin\kiln.ps1 -WorkingDir . --proxy --capture full  # + request/response bodies
+.\bin\kiln.ps1 -WorkingDir .                         # metadata capture, on
+.\bin\kiln.ps1 -WorkingDir . --no-proxy              # no proxy process at all
+.\bin\kiln.ps1 -WorkingDir . --capture full          # + request/response bodies
 ```
+
+`--no-proxy` is worth knowing about for one reason beyond privacy: with the proxy on, every
+routed request passes through a local Python process, so if that process dies the routed roles
+lose their API access until the swarm is restarted. Nothing supervises it.
+
+Note what you *don't* lose by turning it off — `COST`, `TOKENS` and `CACHE` come from each
+adapter parsing its own CLI stream, not from the proxy. Only the prompt-weight panel needs it.
 
 ### How it routes
 
@@ -494,8 +503,15 @@ One proxy serves both vendors. Because the path prefix identifies a *role* rathe
 backend, each non-Anthropic role gets a `--route <role>=<host>/<base-path>` telling the proxy
 where that role's traffic actually belongs — the launcher derives these from the profile.
 
-`--proxy-port` moves it off 8787. `python -m proxy.server --stub` answers requests locally
-instead of forwarding, which makes the whole wiring dry-runnable without spending a token.
+The port defaults to 8787 and **probes upward if that is taken**, so two Kiln projects can run
+at once without colliding. The launcher then waits for the proxy to actually accept a
+connection and aborts the launch if it never does — a swarm pointed at a port that is silently
+serving *another* project would record its traffic into that project's store while everything
+appeared to work. `--proxy-port` pins an exact port instead, and fails rather than drifting if
+it is busy.
+
+`python -m proxy.server --stub` answers requests locally instead of forwarding, which makes
+the whole wiring dry-runnable without spending a token.
 
 ### What it stores
 
@@ -507,6 +523,12 @@ would wreck that.
 |---|---|
 | `metadata` (default) | timing, status, byte sizes, model, token usage, and the tools/system/messages split |
 | `full` | the above plus request and response bodies, capped at 256 KiB each |
+
+Bodies are also the only part that grows: measured on a real store, 107.6 MB across 676
+requests was **98.3% bodies**. So `full` mode carries a budget — once stored bodies pass
+256 MB, the oldest rows have their bodies cleared while the rows themselves stay. Composition
+and token counts are computed at capture time, so a degraded row still feeds every panel; only
+the prompt text goes. Metadata mode never reaches the budget, because it writes no bodies.
 
 Both vendors' wire formats are read into the same columns. Anthropic sends `tools`/`system`/
 `messages` as top-level keys; the Responses API Codex uses has none of them and packs
@@ -694,8 +716,8 @@ platforms in either spelling** — `-ProfileName mixed-backends`, `-Profile mixe
 | `--example <name>` | `-Example` | Seed the scaffold from `examples/<name>` |
 | `--no-git` | `-NoGit` | Skip git initialisation when scaffolding |
 | `--dry-run` | | Print what would launch, start nothing |
-| `--proxy` | | Route agent API traffic through the local capture proxy (off by default) |
-| `--proxy-port <n>` | | Port for the capture proxy (default: `8787`) |
+| `--no-proxy` | | Run without the local capture proxy (it is on by default) |
+| `--proxy-port <n>` | | Pin the capture proxy to an exact port (default: `8787`, probed upward if busy) |
 | `--capture <mode>` | | `metadata` (default) or `full` — capture depth, see "Traffic Capture" |
 | `--verbose` | `-Debug` | Verbose output |
 
@@ -1557,7 +1579,7 @@ was run and seven defects fell out.
 - ✓ Built-in communication health check (`/kiln-ping` skill, on request from `human-in-the-loop`)
 - ✓ Swarm-wide live dashboard (`"scheduler": "dashboard"`) — role state, queue depth, cost/cycle/token totals, cache hit rate, recent activity and escalations in one pane
 - ✓ Per-role token accounting from every backend's own stream — input/output/cache-read/cache-write kept separately, never collapsed to one number, and omitted rather than reported as a misleading zero
-- ✓ Opt-in traffic capture proxy (`--proxy`) — per-role attribution by URL path, credential values never stored, metadata-only by default, and a dashboard panel splitting each request into tools/instructions/conversation
+- ✓ Traffic capture proxy, on by default in metadata mode (`--no-proxy` to disable) — per-role attribution by URL path, credential values never stored, prompt text only with `--capture full`, port collision handled, retention budget, and a dashboard panel splitting each request into tools/instructions/conversation
 - ✓ Two vendors through one proxy — `claude` and `codex` roles both routed and verified live, each keeping its own subscription auth, with per-role upstreams so a mixed-backend swarm needs no second proxy
 - ✓ Logbook tracking of all handoffs and agent actions
 - ✓ Wrapper + worker-subagent delegation for Claude `auto`-mode roles — persistent thin wrappers dispatch work to disposable worker subagents, keeping wrapper context at ~140 lines through unlimited cycles
@@ -1574,12 +1596,15 @@ was run and seven defects fell out.
 
 This means agents can read/write/execute any file in their worktree without prompting. This is intentional for autonomous development workflows but should be understood as a security trade-off.
 
-**Traffic capture (`--proxy`):** off unless you ask for it, local-only, and never forwards
-anywhere but upstream. `Authorization` and API-key header values are never written to the
-store. But `--capture full` records request bodies, and a request body contains the complete
-source the agent read, in plaintext, in a directory symlinked into every worktree. Prefer the
-default `metadata` mode — it still answers the composition question — and treat a `full`
-`traffic.db` as sensitive as the repository it was captured from.
+**Traffic capture:** the proxy runs by default, local-only, and never forwards anywhere but
+upstream. `Authorization`, API-key, cookie and account-identifier header values are never
+written to the store.
+
+What runs unasked is **metadata only** — sizes, timings, model names, token counts. **No
+prompt text is recorded without `--capture full`**, and that remains a deliberate, separate
+opt-in for a reason: a request body contains the complete source the agent read, in plaintext,
+in a directory symlinked into every worktree. Treat a `full` `traffic.db` as sensitive as the
+repository it was captured from. `--no-proxy` disables capture entirely.
 
 **Risk mitigation:**
 

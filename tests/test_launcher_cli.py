@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import socket
 import subprocess
 from pathlib import Path
 from typing import ClassVar
@@ -317,12 +318,18 @@ class TestStopMarkers:
 
 
 class TestProxyFlags:
-    def test_the_proxy_is_off_by_default(self):
-        assert cli.build_parser().parse_args([]).proxy is False
+    def test_the_proxy_is_on_by_default(self):
+        # Flipped deliberately: metadata capture is cheap (~2.9KB a request) and it is what
+        # the dashboard's prompt-weight panel reads.
+        assert cli.build_parser().parse_args([]).proxy is True
+
+    def test_it_can_be_turned_off(self):
+        assert cli.build_parser().parse_args(["--no-proxy"]).proxy is False
 
     def test_capture_defaults_to_metadata(self):
-        # Bodies are a second, deliberate opt-in: a capture store holds whatever source the
-        # agent read, in plaintext.
+        # The line that did NOT move. Bodies hold whatever source the agent read, in
+        # plaintext, so they stay a second and deliberate opt-in even now that the proxy
+        # itself runs unasked.
         assert cli.build_parser().parse_args([]).capture == "metadata"
 
     def test_full_capture_is_opt_in(self):
@@ -336,6 +343,54 @@ class TestProxyFlags:
     def test_an_unknown_capture_mode_is_rejected(self):
         with pytest.raises(SystemExit):
             cli.build_parser().parse_args(["--capture", "everything"])
+
+
+class TestProxyPortSelection:
+    """
+    A fixed port was survivable while the proxy was opt-in. Once it runs by default, two
+    Kiln projects at once means the second proxy dies on bind — and its roles would still be
+    pointed at the first project's proxy, which forwards fine and records their traffic into
+    the wrong store. Nothing would surface that.
+    """
+
+    def test_the_preferred_port_is_used_when_free(self):
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            free = probe.getsockname()[1]
+        assert cli.find_free_port(free) == free
+
+    def test_a_taken_port_is_skipped(self):
+        with socket.socket() as taken:
+            taken.bind(("127.0.0.1", 0))
+            taken.listen(1)
+            port = taken.getsockname()[1]
+            assert cli.find_free_port(port) > port
+
+    def test_giving_up_is_an_error_not_a_random_port(self):
+        # A swarm whose proxy landed somewhere unpredictable is harder to reason about than
+        # one that refused to start.
+        with socket.socket() as taken:
+            taken.bind(("127.0.0.1", 0))
+            taken.listen(1)
+            port = taken.getsockname()[1]
+            with pytest.raises(cli.LaunchError):
+                cli.find_free_port(port, attempts=1)
+
+
+class TestProxyReadiness:
+    def test_a_listening_port_is_detected(self):
+        with socket.socket() as server:
+            server.bind(("127.0.0.1", 0))
+            server.listen(1)
+            assert cli.wait_until_listening(server.getsockname()[1], timeout=2.0) is True
+
+    def test_a_dead_proxy_is_reported_rather_than_assumed_working(self):
+        # Popen succeeding only means the process started; a failure to *bind* happens
+        # inside the child and lands in its log, where the launch would never look.
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        assert cli.wait_until_listening(port, timeout=0.5) is False
 
 
 class TestProxyRoutes:
