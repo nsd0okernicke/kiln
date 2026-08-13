@@ -261,16 +261,32 @@ def render_prompt_weight(stats: dict[str, dict[str, int]]) -> list[str]:
     """
     if not stats:
         return []
-    header = f"{'ROLE':<20} {'REQS':>6} {'AVG REQ':>9} {'MAX REQ':>9} {'TOTAL':>9}"
-    lines = ["", "Prompt weight (proxy)", header]
+    header = (
+        f"{'ROLE':<20} {'REQS':>6} {'AVG REQ':>9} {'MAX REQ':>9} "
+        f"{'TOOLS':>8} {'SYSTEM':>8} {'MSGS':>8} {'MSG%':>5}"
+    )
+    lines = ["", "Prompt weight (proxy)  \N{EM DASH} averages per request", header]
     for role, entry in sorted(stats.items()):
+        messages = entry.get("avg_messages")
+        share = (
+            f"{100 * messages / entry['avg_bytes']:.0f}%"
+            if messages and entry.get("avg_bytes")
+            else "-"
+        )
         lines.append(
             f"{role:<20} {entry['requests']:>6} "
             f"{_format_bytes(entry['avg_bytes']):>9} "
             f"{_format_bytes(entry['max_bytes']):>9} "
-            f"{_format_bytes(entry['total_bytes']):>9}"
+            f"{_section(entry.get('avg_tools')):>8} "
+            f"{_section(entry.get('avg_system')):>8} "
+            f"{_section(messages):>8} {share:>5}"
         )
     return lines
+
+
+def _section(value: int | None) -> str:
+    """A composition column: `-` when nothing recorded it, never a misleading 0."""
+    return "-" if value is None else _format_bytes(value)
 
 
 def _activity_line(row: dict, now_local: datetime) -> str:

@@ -40,6 +40,7 @@ from .capture import (
     TrafficRecord,
     TrafficStore,
     capture_body,
+    extract_composition,
     extract_model,
     extract_usage,
     redact_headers,
@@ -360,6 +361,11 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 request_bytes=len(request_bytes),
                 response_bytes=response_total or len(response_captured),
                 model=extract_model(request_text),
+                # Computed here, not at render time: the dashboard polls every couple of
+                # seconds and re-parsing hundreds of 100KB bodies per frame would be
+                # unusable. It also means composition survives metadata mode, where no
+                # body is stored at all.
+                composition=extract_composition(request_text),
                 # The streaming tracker is authoritative; the whole-body parse is the
                 # fallback for a non-streamed JSON reply, which has no SSE events at all.
                 tokens=usage or extract_usage(response_text),

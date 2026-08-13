@@ -257,9 +257,32 @@ class TestPromptWeight:
 
     def _stats(self, **overrides):
         stats = {"coder": {"requests": 12, "avg_bytes": 104_200,
-                           "max_bytes": 118_900, "total_bytes": 1_250_400}}
+                           "max_bytes": 118_900, "total_bytes": 1_250_400,
+                           "avg_tools": 33_300, "avg_system": 5_900,
+                           "avg_messages": 80_200}}
         stats.update(overrides)
         return stats
+
+    def test_shows_the_composition_split(self):
+        # The split is the actionable part: system (the worker instructions) is ~5% of a
+        # request while messages is 60-70%, which redirects where to optimise.
+        row = next(line for line in dashboard.render_prompt_weight(self._stats())
+                   if line.startswith("coder"))
+        assert "33.3k" in row and "5.9k" in row and "80.2k" in row
+
+    def test_shows_the_message_share(self):
+        row = next(line for line in dashboard.render_prompt_weight(self._stats())
+                   if line.startswith("coder"))
+        assert "77%" in row  # 80200 / 104200
+
+    def test_rows_without_composition_show_placeholders(self):
+        # Captured before the columns existed, or an unparseable body.
+        stats = {"coder": {"requests": 3, "avg_bytes": 1000, "max_bytes": 1000,
+                           "total_bytes": 3000, "avg_tools": None,
+                           "avg_system": None, "avg_messages": None}}
+        row = next(line for line in dashboard.render_prompt_weight(stats)
+                   if line.startswith("coder"))
+        assert row.count("-") >= 3
 
     def test_shows_a_row_per_role(self):
         lines = dashboard.render_prompt_weight(self._stats())
@@ -269,7 +292,7 @@ class TestPromptWeight:
         # Request sizes are read at a glance, not to the byte.
         row = next(line for line in dashboard.render_prompt_weight(self._stats())
                    if line.startswith("coder"))
-        assert "104.2k" in row and "118.9k" in row and "1.3M" in row
+        assert "104.2k" in row and "118.9k" in row
 
     def test_no_data_renders_no_panel(self):
         # The proxy is opt-in; an empty table would imply it ran and found nothing.

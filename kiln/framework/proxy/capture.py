@@ -18,6 +18,7 @@ can be tested without a socket and audited in one place. Three rules shape the m
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from contextlib import closing
 from dataclasses import dataclass, field
@@ -26,6 +27,8 @@ from enum import StrEnum
 from pathlib import Path
 
 from scheduler.adapters import TokenUsage
+
+log = logging.getLogger(__name__)
 
 #: Headers that must never be written to the store, lower-cased for comparison.
 #:
@@ -107,6 +110,48 @@ def extract_model(request_body: str | None) -> str | None:
         return None
     model = payload.get("model") if isinstance(payload, dict) else None
     return str(model) if isinstance(model, str) else None
+
+
+#: Top-level request sections worth measuring separately, mapped to their column names.
+#:
+#: These three are the whole optimization argument. Measured on a real cycle: `tools` was
+#: 28-34KB per request, `system` (the generated worker instructions) 5-6KB, and `messages`
+#: 30-92KB and growing with the conversation. Anyone reasoning about token spend needs the
+#: split, because the intuitive target -- the worker instructions -- turns out to be ~5% of
+#: a request while the conversation is 60-70%.
+COMPOSITION_SECTIONS = {
+    "tools": "tools_bytes",
+    "system": "system_bytes",
+    "messages": "messages_bytes",
+}
+
+
+def extract_composition(request_body: str | None) -> dict[str, int]:
+    """
+    Bytes per top-level section of an Anthropic request, or `{}` when unreadable.
+
+    Computed here, at capture time, rather than by whatever wants to display it. The
+    dashboard polls every couple of seconds and re-parsing hundreds of 100KB bodies on each
+    frame would make it unusable.
+
+    The second reason matters more: this works in `METADATA` mode, where no body is ever
+    written to disk. The most useful analysis the proxy offers therefore costs nothing in
+    stored prompt text -- you can measure composition without keeping anyone's source code.
+    """
+    if not request_body:
+        return {}
+    try:
+        payload = json.loads(request_body)
+    except (ValueError, TypeError):
+        # A truncated capture is not JSON. Better no numbers than wrong ones.
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    return {
+        section: len(json.dumps(payload[section]))
+        for section in COMPOSITION_SECTIONS
+        if section in payload
+    }
 
 
 def _usage_from(payload: dict) -> TokenUsage:
@@ -267,6 +312,9 @@ class TrafficRecord:
     response_bytes: int = 0
     model: str | None = None
     tokens: TokenUsage | None = None
+    #: Bytes per top-level request section — see `extract_composition`. Recorded even in
+    #: metadata mode, where the bodies themselves are never stored.
+    composition: dict[str, int] = field(default_factory=dict)
     request_body: str | None = None
     response_body: str | None = None
     request_headers: dict[str, str] = field(default_factory=dict)
@@ -296,6 +344,9 @@ CREATE TABLE IF NOT EXISTS traffic (
   output_tokens INTEGER,
   cache_read_tokens INTEGER,
   cache_creation_tokens INTEGER,
+  tools_bytes INTEGER,
+  system_bytes INTEGER,
+  messages_bytes INTEGER,
   request_headers TEXT,
   request_body TEXT,
   response_body TEXT
@@ -303,6 +354,17 @@ CREATE TABLE IF NOT EXISTS traffic (
 """
 
 INDEX_SQL = "CREATE INDEX IF NOT EXISTS idx_traffic_role_ts ON traffic(role, ts)"
+
+#: Columns added after the table shipped, applied to existing stores by `ensure_schema`.
+#:
+#: `CREATE TABLE IF NOT EXISTS` never alters an existing table, so a store created before
+#: these columns existed would silently keep the old shape and every insert naming them
+#: would fail. Same trap `scheduler.db.ensure_schema` documents for the message queue.
+MIGRATIONS = (
+    ("tools_bytes", "ALTER TABLE traffic ADD COLUMN tools_bytes INTEGER"),
+    ("system_bytes", "ALTER TABLE traffic ADD COLUMN system_bytes INTEGER"),
+    ("messages_bytes", "ALTER TABLE traffic ADD COLUMN messages_bytes INTEGER"),
+)
 
 
 class TrafficStore:
@@ -318,11 +380,17 @@ class TrafficStore:
         self.db_path = Path(db_path)
 
     def ensure_schema(self) -> None:
+        """Create the table if absent, then bring an existing one up to date."""
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with closing(sqlite3.connect(self.db_path)) as conn:
             conn.execute(SCHEMA_SQL)
             conn.execute(INDEX_SQL)
             conn.execute("PRAGMA journal_mode=WAL")
+            existing = {row[1] for row in conn.execute("PRAGMA table_info(traffic)")}
+            for column, statement in MIGRATIONS:
+                if column not in existing:
+                    conn.execute(statement)
+                    log.info("traffic store: added column %s", column)
             conn.commit()
 
     def record(self, entry: TrafficRecord) -> int:
@@ -335,8 +403,9 @@ class TrafficStore:
                   ts, role, method, path, model, status_code, duration_ms,
                   request_bytes, response_bytes,
                   input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
+                  tools_bytes, system_bytes, messages_bytes,
                   request_headers, request_body, response_body
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     entry.ts, entry.role, entry.method, entry.path, entry.model,
@@ -346,6 +415,9 @@ class TrafficStore:
                     tokens.output_tokens if tokens else None,
                     tokens.cache_read_tokens if tokens else None,
                     tokens.cache_creation_tokens if tokens else None,
+                    entry.composition.get("tools"),
+                    entry.composition.get("system"),
+                    entry.composition.get("messages"),
                     json.dumps(entry.request_headers) if entry.request_headers else None,
                     entry.request_body, entry.response_body,
                 ),
@@ -371,7 +443,8 @@ class TrafficStore:
                 rows = conn.execute(
                     """
                     SELECT role, COUNT(*), AVG(request_bytes), MAX(request_bytes),
-                           SUM(request_bytes)
+                           SUM(request_bytes),
+                           AVG(tools_bytes), AVG(system_bytes), AVG(messages_bytes)
                     FROM traffic WHERE role IS NOT NULL GROUP BY role ORDER BY role
                     """
                 ).fetchall()
@@ -385,6 +458,12 @@ class TrafficStore:
                 "avg_bytes": int(row[2] or 0),
                 "max_bytes": int(row[3] or 0),
                 "total_bytes": int(row[4] or 0),
+                # None (not 0) when nothing recorded it -- rows captured before these
+                # columns existed, or bodies that could not be parsed. The dashboard shows
+                # `-` rather than claiming a section was empty.
+                "avg_tools": int(row[5]) if row[5] is not None else None,
+                "avg_system": int(row[6]) if row[6] is not None else None,
+                "avg_messages": int(row[7]) if row[7] is not None else None,
             }
             for row in rows
         }
