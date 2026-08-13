@@ -325,6 +325,53 @@ class TestPromptWeight:
         assert any("Prompt weight" in line for line in lines)
 
 
+class TestPromptWeightScope:
+    """
+    The store outlives a run, so the panel must say which window it is showing.
+
+    Averaging across runs blends configurations that are not comparable: one role measured
+    at 220.8k was really 199k before a change and 118k after, and the mean describes
+    neither.
+    """
+
+    def _stats(self):
+        return {"coder": {"requests": 1, "avg_bytes": 1000, "max_bytes": 1000,
+                          "total_bytes": 1000, "avg_tools": None,
+                          "avg_system": None, "avg_messages": None}}
+
+    def test_the_default_scope_is_stated(self):
+        assert "this run" in dashboard.render_prompt_weight(self._stats())[1]
+
+    def test_an_alternative_scope_is_stated(self):
+        heading = dashboard.render_prompt_weight(self._stats(), scope="all history")[1]
+        assert "all history" in heading
+
+    def test_rows_older_than_the_window_are_excluded(self, tmp_path):
+        from proxy.capture import TrafficRecord, TrafficStore
+
+        store = TrafficStore(tmp_path / "traffic.db")
+        store.ensure_schema()
+        store.record(TrafficRecord(role="coder", method="POST", path="/v1/messages",
+                                   request_bytes=999_000, ts="2026-08-01T00:00:00Z"))
+        store.record(TrafficRecord(role="coder", method="POST", path="/v1/messages",
+                                   request_bytes=1_000, ts="2026-08-13T00:00:00Z"))
+
+        everything = store.request_stats_by_role()["coder"]
+        this_run = store.request_stats_by_role(since="2026-08-12T00:00:00Z")["coder"]
+        assert everything["requests"] == 2
+        assert this_run["requests"] == 1
+        assert this_run["avg_bytes"] == 1_000, "the older, much larger row must not skew it"
+
+    def test_a_window_matching_nothing_hides_the_panel(self, tmp_path):
+        from proxy.capture import TrafficRecord, TrafficStore
+
+        store = TrafficStore(tmp_path / "traffic.db")
+        store.ensure_schema()
+        store.record(TrafficRecord(role="coder", method="POST", path="/v1/messages",
+                                   ts="2026-08-01T00:00:00Z"))
+        assert store.request_stats_by_role(since="2026-08-13T00:00:00Z") == {}
+
+
 class TestReadRequestStats:
     def test_no_path_is_no_data(self):
         assert dashboard.read_request_stats(None) == {}

@@ -425,7 +425,7 @@ class TrafficStore:
             conn.commit()
             return int(cursor.lastrowid or 0)
 
-    def request_stats_by_role(self) -> dict[str, dict[str, int]]:
+    def request_stats_by_role(self, since: str | None = None) -> dict[str, dict[str, int]]:
         """
         Per-role request count and request-body sizes — the prompt-weight signal.
 
@@ -433,8 +433,14 @@ class TrafficStore:
         produce. A role whose every call carries a 100KB payload is re-sending context, and
         the average and the maximum together say whether that is every call or one outlier.
 
-        Returns `{}` when the store has no rows yet, so a caller can skip the section
-        rather than render an empty table.
+        `since` is an ISO-8601 UTC timestamp matching the `ts` column's own format; rows
+        older than it are excluded. The store outlives any one run, and averaging across
+        runs quietly blends configurations that are not comparable -- a role measured at
+        220.8k was really 199k before a change and 118k after, and the mean describes
+        neither. Lexicographic comparison is chronological for this format.
+
+        Returns `{}` when nothing matches, so a caller can skip the section rather than
+        render an empty table.
         """
         if not self.db_path.is_file():
             return {}
@@ -450,14 +456,17 @@ class TrafficStore:
                     name: (f"AVG({name})" if name in available else "NULL")
                     for name in ("tools_bytes", "system_bytes", "messages_bytes")
                 }
+                window = "AND ts >= ?" if since else ""
                 rows = conn.execute(
                     f"""
                     SELECT role, COUNT(*), AVG(request_bytes), MAX(request_bytes),
                            SUM(request_bytes),
                            {optional['tools_bytes']}, {optional['system_bytes']},
                            {optional['messages_bytes']}
-                    FROM traffic WHERE role IS NOT NULL GROUP BY role ORDER BY role
-                    """
+                    FROM traffic WHERE role IS NOT NULL {window}
+                    GROUP BY role ORDER BY role
+                    """,
+                    (since,) if since else (),
                 ).fetchall()
             except sqlite3.DatabaseError:
                 # Not a usable store at all: a half-created file, or something that is not

@@ -232,7 +232,9 @@ def _format_bytes(count: int) -> str:
     return f"{count / 1_000_000:.1f}M"
 
 
-def read_request_stats(traffic_db: Path | None) -> dict[str, dict[str, int]]:
+def read_request_stats(
+    traffic_db: Path | None, since: str | None = None
+) -> dict[str, dict[str, int]]:
     """
     Per-role prompt weight from the proxy's capture store, or `{}` when there is none.
 
@@ -245,13 +247,15 @@ def read_request_stats(traffic_db: Path | None) -> dict[str, dict[str, int]]:
     try:
         from proxy.capture import TrafficStore
 
-        return TrafficStore(traffic_db).request_stats_by_role()
+        return TrafficStore(traffic_db).request_stats_by_role(since=since)
     except Exception:  # pragma: no cover - optional panel, never fatal
         log.debug("could not read traffic store at %s", traffic_db, exc_info=True)
         return {}
 
 
-def render_prompt_weight(stats: dict[str, dict[str, int]]) -> list[str]:
+def render_prompt_weight(
+    stats: dict[str, dict[str, int]], scope: str = "this run"
+) -> list[str]:
     """
     What each role actually puts on the wire — the number Phase A cannot produce.
 
@@ -265,7 +269,9 @@ def render_prompt_weight(stats: dict[str, dict[str, int]]) -> list[str]:
         f"{'ROLE':<20} {'REQS':>6} {'AVG REQ':>9} {'MAX REQ':>9} "
         f"{'TOOLS':>8} {'SYSTEM':>8} {'MSGS':>8} {'MSG%':>5}"
     )
-    lines = ["", "Prompt weight (proxy)  \N{EM DASH} averages per request", header]
+    # The scope is stated, not implied: the store outlives a run, so "is this the current
+    # configuration or an average across every run in the file" must never be a guess.
+    lines = ["", f"Prompt weight (proxy)  \N{EM DASH} averages per request, {scope}", header]
     for role, entry in sorted(stats.items()):
         messages = entry.get("avg_messages")
         share = (
@@ -325,6 +331,7 @@ def render_dashboard(
     now_local: datetime,
     activity_limit: int = DEFAULT_ACTIVITY_LIMIT,
     request_stats: dict[str, dict[str, int]] | None = None,
+    request_scope: str = "this run",
 ) -> list[str]:
     """Pure: given one snapshot of the world, render every section. No I/O, no clock."""
     header = f"{ICON_TITLE} Kiln Dashboard \N{EM DASH} {project_name} ({branch})"
@@ -361,7 +368,7 @@ def render_dashboard(
             "  + partial: codex/copilot roles report tokens but no cost"
         )
 
-    lines += render_prompt_weight(request_stats or {})
+    lines += render_prompt_weight(request_stats or {}, scope=request_scope)
     lines += render_activity(messages, now_local, activity_limit)
     lines += render_escalations(messages, now_local)
     return lines
@@ -378,6 +385,10 @@ class DashboardContext:
     #: The proxy's capture store. None, or a path that does not exist, simply hides the
     #: prompt-weight panel — the proxy is opt-in and the dashboard works without it.
     traffic_db: Path | None = None
+    #: Ignore captured traffic older than this ISO-8601 UTC timestamp. Defaults to the
+    #: dashboard's own start, which is launched with the swarm and so approximates "this
+    #: run". None means every row in the store, however old.
+    traffic_since: str | None = None
 
 
 def snapshot(ctx: DashboardContext) -> list[str]:
@@ -403,7 +414,8 @@ def snapshot(ctx: DashboardContext) -> list[str]:
         now_utc=datetime.now(UTC),
         now_local=datetime.now(),
         activity_limit=ctx.activity_limit,
-        request_stats=read_request_stats(ctx.traffic_db),
+        request_stats=read_request_stats(ctx.traffic_db, since=ctx.traffic_since),
+        request_scope="this run" if ctx.traffic_since else "all history",
     )
 
 
@@ -424,6 +436,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--traffic-db", default=None,
         help="proxy capture store; the prompt-weight panel is hidden when absent",
     )
+    parser.add_argument(
+        "--traffic-all-history", action="store_true",
+        help=(
+            "include captured traffic from previous runs. Off by default: the store "
+            "outlives a run, and averaging across runs blends configurations that are not "
+            "comparable"
+        ),
+    )
     return parser
 
 
@@ -440,6 +460,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         project_name=args.project_name or Path.cwd().name,
         activity_limit=args.activity_limit,
         traffic_db=Path(args.traffic_db) if args.traffic_db else None,
+        # Stamped once at startup, not per frame: the window must not creep forward as the
+        # run proceeds, or early requests would silently drop out of the averages.
+        traffic_since=(
+            None if args.traffic_all_history
+            else datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        ),
     )
 
     while True:
