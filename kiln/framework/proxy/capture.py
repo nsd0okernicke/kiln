@@ -440,17 +440,28 @@ class TrafficStore:
             return {}
         with closing(sqlite3.connect(self.db_path)) as conn:
             try:
+                # Which optional columns this store actually has, asked before selecting
+                # them. Naming a missing column raises, and a blanket except would then
+                # drop the *entire* panel over one absent field -- observed live against a
+                # store written by a proxy that predated the composition columns. Degrading
+                # per column keeps the request-size figures, which need nothing new.
+                available = {row[1] for row in conn.execute("PRAGMA table_info(traffic)")}
+                optional = {
+                    name: (f"AVG({name})" if name in available else "NULL")
+                    for name in ("tools_bytes", "system_bytes", "messages_bytes")
+                }
                 rows = conn.execute(
-                    """
+                    f"""
                     SELECT role, COUNT(*), AVG(request_bytes), MAX(request_bytes),
                            SUM(request_bytes),
-                           AVG(tools_bytes), AVG(system_bytes), AVG(messages_bytes)
+                           {optional['tools_bytes']}, {optional['system_bytes']},
+                           {optional['messages_bytes']}
                     FROM traffic WHERE role IS NOT NULL GROUP BY role ORDER BY role
                     """
                 ).fetchall()
             except sqlite3.DatabaseError:
-                # A store written by an older/newer build, or a half-created file. The
-                # dashboard must not die over an optional panel.
+                # Not a usable store at all: a half-created file, or something that is not
+                # SQLite. The dashboard must not die over an optional panel.
                 return {}
         return {
             row[0]: {

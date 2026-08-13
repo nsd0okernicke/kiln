@@ -337,6 +337,32 @@ class TestTrafficStore:
     def test_request_stats_on_a_missing_store_are_empty(self, tmp_path):
         assert TrafficStore(tmp_path / "absent.db").request_stats_by_role() == {}
 
+    def test_a_store_without_the_composition_columns_still_reports_sizes(self, tmp_path):
+        """
+        Degrade per column, not per panel.
+
+        Observed live: naming `tools_bytes` against a store written by a proxy that
+        predated it raised, the blanket except swallowed it, and the entire prompt-weight
+        panel vanished from the dashboard -- taking the request-size figures with it, which
+        need nothing new.
+        """
+        import sqlite3
+        path = tmp_path / "traffic.db"
+        with sqlite3.connect(path) as conn:
+            conn.execute(
+                "CREATE TABLE traffic (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT,"
+                " role TEXT, method TEXT, path TEXT, request_bytes INTEGER)"
+            )
+            conn.execute(
+                "INSERT INTO traffic (ts, role, method, path, request_bytes) "
+                "VALUES ('2026-08-13T07:00:00Z', 'coder', 'POST', '/v1/messages', 1500)"
+            )
+
+        stats = TrafficStore(path).request_stats_by_role()["coder"]
+        assert stats["requests"] == 1
+        assert stats["avg_bytes"] == 1500      # still available
+        assert stats["avg_tools"] is None      # honestly absent
+
     def test_request_stats_on_an_unreadable_store_are_empty(self, tmp_path):
         # An optional panel must not be able to take the dashboard down.
         junk = tmp_path / "traffic.db"
