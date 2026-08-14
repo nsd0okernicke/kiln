@@ -1426,6 +1426,24 @@ proxy straight away. Note it is machine-wide by design: run in one project it st
 Kiln process, including another project's swarm. The launch-time reclaim is deliberately
 narrower — it only ever touches a proxy writing to the project you are launching.
 
+### What happens to work that was in flight
+
+A role marks its handoff `processing` while it works on it. Stopping a swarm mid-cycle — with
+`--stop`, by closing the window, or by a crash — leaves that message in a state nothing used to
+re-serve, so the work was silently dropped: not requeued, not counted in the dashboard's queue
+depth, not reported anywhere.
+
+**It is now picked back up automatically.** Each scheduler checks its own queue at startup and
+re-serves anything it left mid-cycle. No timeout is involved and none is needed: exactly one
+process serves a given role's queue, so at that role's own startup an in-flight message can only
+have been left by the process now starting. Another role's live cycle is never touched.
+
+**The cost is that the cycle is replayed against a worktree that may already hold partial work**
+— edited files, commits, a written `tmp/handoff-in.md` — so the role can redo work it already
+did. Nothing is lost (uncommitted work is swept into the next squash), but a non-idempotent step
+may run twice. Recovery is logged as a warning naming each message, so a handoff that appears to
+be processed twice has an explanation in `.kiln/logs/scheduler-<role>.log`.
+
 ### Full project reset (Windows only)
 
 ```powershell

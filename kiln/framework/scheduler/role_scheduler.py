@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import logging
+import sqlite3
 import subprocess
 import sys
 import time
@@ -825,9 +826,52 @@ def main(argv: Sequence[str] | None = None) -> int:
     # — including a crash. A region that outlives the process leaves the shell prompt
     # underneath it behaving strangely, long after the scheduler is gone.
     try:
+        # Inside the try, not before it: recovery touches the database, and a failure there
+        # must still release the scrolling region rather than leave the pane wedged.
+        recover_stale_messages(ctx)
         return _run_loop(ctx, state, args, bar)
     finally:
         bar.close()
+
+
+def recover_stale_messages(ctx: SchedulerContext) -> int:
+    """
+    Re-serve anything this role left `processing` when it was last killed. Returns the count.
+
+    Runs once at startup, before the poll loop. See `db.recover_stale_processing` for why a
+    row in that state is stale by definition and needs no timeout.
+
+    Logged at WARNING, individually, and loudly: recovery is not free. The killed cycle may
+    have left partial work in the worktree, so the worker can redo work it already did. An
+    operator who sees a handoff processed twice needs this line to explain it, and it must
+    outlive the pane -- which is why it goes through the log file rather than the status bar.
+
+    A database error here is reported and swallowed rather than raised. Recovery is a repair
+    on the way in, not a precondition for running: an unusable queue -- no table yet, or the
+    pre-`work_item` schema that `db.ensure_schema` deliberately does not migrate -- must
+    surface through the poll loop's existing retry-and-report path, which logs it with a
+    traceback and exits cleanly. Raising here would kill the role at startup instead, before
+    it ever reaches that machinery.
+    """
+    try:
+        recovered = db.recover_stale_processing(ctx.db_path, ctx.role, ctx.branch)
+    except sqlite3.Error as exc:
+        log.warning("could not check for messages left mid-cycle: %s", exc)
+        return 0
+    for row in recovered:
+        log.warning(
+            f"{ICON_RETRY} recovered message %s from %s (work item %s), left mid-cycle by a "
+            "killed scheduler; re-serving it",
+            str(row["id"])[:8], row["sender"] or "?", row["work_item"] or "-",
+        )
+    if recovered:
+        log.warning(
+            f"{ICON_BLOCKED} %d recovered message(s) will be replayed against the existing "
+            "worktree: partial work from the killed cycle is still there, so this role may "
+            "redo work it already did",
+            len(recovered),
+        )
+    return len(recovered)
 
 
 def _run_loop(

@@ -185,6 +185,68 @@ class TestStatusTransitions:
         assert stored["delivered_at"] and stored["processed_at"]
 
 
+class TestRecoverStaleProcessing:
+    """
+    A message marked `processing` when its scheduler is killed is stranded: `fetch_and_deliver`
+    re-serves `queued` and `delivered` but not `processing`, and every count filters on
+    `queued`, so it is neither re-served nor visible anywhere. The work is silently lost, and
+    stopping a swarm mid-cycle is the normal way to cause it.
+    """
+
+    def test_a_stranded_message_is_served_again(self, db_path, add_message):
+        message_id = add_message(target="coder", status=db.STATUS_PROCESSING)
+
+        db.recover_stale_processing(db_path, "coder", "main")
+
+        assert db.fetch_and_deliver(db_path, "coder", "main")["id"] == message_id
+
+    def test_it_reports_what_it_recovered(self, db_path, add_message):
+        # Returned rather than counted so the scheduler can log each one: an operator who
+        # sees a handoff processed twice needs to know which message was replayed.
+        add_message(target="coder", status=db.STATUS_PROCESSING,
+                    sender="specifier", work_item="add-login")
+
+        recovered = db.recover_stale_processing(db_path, "coder", "main")
+
+        assert [(r["sender"], r["work_item"]) for r in recovered] == [("specifier", "add-login")]
+
+    def test_it_leaves_a_live_role_alone(self, db_path, add_message, read_message):
+        # The scoping argument is the whole safety case: exactly one process serves a role's
+        # queue, so *this* role's processing rows are stale by definition. Another role's
+        # are not -- that scheduler is still running and still working the message.
+        mine = add_message(target="coder", status=db.STATUS_PROCESSING)
+        theirs = add_message(target="refactorer", status=db.STATUS_PROCESSING)
+
+        db.recover_stale_processing(db_path, "coder", "main")
+
+        assert read_message(mine)["status"] == db.STATUS_DELIVERED
+        assert read_message(theirs)["status"] == db.STATUS_PROCESSING
+
+    def test_it_is_scoped_to_the_branch(self, db_path, add_message, read_message):
+        other = add_message(target="coder", branch="feature-x", status=db.STATUS_PROCESSING)
+        db.recover_stale_processing(db_path, "coder", "main")
+        assert read_message(other)["status"] == db.STATUS_PROCESSING
+
+    @pytest.mark.parametrize(
+        "status", [db.STATUS_QUEUED, db.STATUS_DELIVERED, db.STATUS_PROCESSED]
+    )
+    def test_it_touches_nothing_else(self, db_path, add_message, read_message, status):
+        # Resurrecting a *processed* message would re-run finished work every restart.
+        message_id = add_message(target="coder", status=status)
+        assert db.recover_stale_processing(db_path, "coder", "main") == []
+        assert read_message(message_id)["status"] == status
+
+    def test_an_empty_queue_recovers_nothing(self, db_path):
+        assert db.recover_stale_processing(db_path, "coder", "main") == []
+
+    def test_recovery_is_idempotent(self, db_path, add_message):
+        # Restarting twice in a row must not report the same message again -- the second
+        # run finds it `delivered`, which is a normal state, not a stranded one.
+        add_message(target="coder", status=db.STATUS_PROCESSING)
+        assert len(db.recover_stale_processing(db_path, "coder", "main")) == 1
+        assert db.recover_stale_processing(db_path, "coder", "main") == []
+
+
 class TestInsertHandoff:
     def test_returns_a_usable_id(self, db_path, read_message):
         message_id = db.insert_handoff(db_path, "coder", "refactorer", "payload", "main")

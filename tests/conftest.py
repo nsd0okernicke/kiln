@@ -59,16 +59,21 @@ def add_message(db_path):
         status=db.STATUS_QUEUED,
         created_at="2026-01-01 00:00:00",
         message_id=None,
+        work_item=None,
     ):
         message_id = message_id or uuid.uuid4().hex
         with closing(db.connect(db_path)) as conn:
             conn.execute(
                 """
                 INSERT INTO messages
-                    (id, sender, target, priority, status, content, created_at, branch)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, sender, target, priority, status, content, created_at, branch,
+                     work_item)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (message_id, sender, target, priority, status, content, created_at, branch),
+                (
+                    message_id, sender, target, priority, status, content, created_at,
+                    branch, work_item,
+                ),
             )
             conn.commit()
         return message_id

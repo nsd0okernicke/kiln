@@ -137,6 +137,54 @@ def fetch_and_deliver(db_path: str | Path, role: str, branch: str) -> dict | Non
         return dict(row)
 
 
+def recover_stale_processing(db_path: str | Path, role: str, branch: str) -> list[dict]:
+    """
+    Reset this role's abandoned `processing` rows to `delivered`, returning what was reset.
+
+    `fetch_and_deliver` re-serves `queued` and `delivered` rows but not `processing` ones, so
+    a message flagged `processing` at the start of a cycle stays that way forever if the
+    scheduler is killed mid-cycle -- `kiln --stop`, a closed pane, a crash. It is never
+    re-served and never counted: `count_queued` and `count_queued_by_role` both filter on
+    `queued`, so the dashboard's queue depth does not show it either. The work is silently
+    lost, and stopping a swarm mid-cycle is routine.
+
+    **No staleness heuristic is needed, so none is used.** Messages are addressed to a role,
+    and exactly one scheduler process serves a given role's queue. At that role's own
+    startup, any `processing` row for `(target=role, branch=branch)` is stale by definition:
+    the only process that could have been working it is the one now starting. There is no
+    live sibling to race, and therefore no timeout to tune. Scoping to `(role, branch)` is
+    what makes that argument hold -- a table-wide reset would trample a *different* role's
+    live cycle.
+
+    Recovered rows re-enter through the existing `delivered` crash-recovery path rather than
+    a new status, so delivery semantics are unchanged.
+
+    **Caller must warn about replay.** A killed cycle may have left edited files, commits or
+    a written `tmp/handoff-in.md` behind, so re-serving replays the cycle against a dirty
+    worktree. That is survivable -- the squash anchor is recomputed each cycle and
+    uncommitted work is staged into the next squash rather than lost -- but the worker may
+    redo work it already did, which for a non-idempotent role is a real if mild hazard.
+    Returning the rows instead of a count exists so the caller can log each one.
+
+    (The inbox never marks `processing`, so this concerns scheduler roles only.)
+    """
+    with closing(connect(db_path)) as conn:
+        cur = conn.cursor()
+        # UPDATE ... RETURNING rather than SELECT-then-UPDATE: one statement, so there is no
+        # window in which a row is reported recovered but not reset, or vice versa.
+        cur.execute(
+            """
+            UPDATE messages SET status=?
+            WHERE target=? AND branch=? AND status=?
+            RETURNING id, sender, work_item, delivered_at
+            """,
+            (STATUS_DELIVERED, role, branch, STATUS_PROCESSING),
+        )
+        rows = [dict(row) for row in cur.fetchall()]
+        conn.commit()
+    return rows
+
+
 def count_queued(db_path: str | Path, role: str, branch: str) -> int:
     """Number of messages still waiting in a role's inbox."""
     with closing(connect(db_path)) as conn:

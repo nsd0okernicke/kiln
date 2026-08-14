@@ -131,6 +131,104 @@ class TestLoopSurvivesFailures:
         assert "Traceback" in written, "the stack trace must be preserved, not just the message"
 
 
+class TestStaleMessageRecovery:
+    """
+    Work left `processing` by a killed scheduler is silently lost today: never re-served,
+    never counted, never surfaced. Recovery happens once at startup, because that is the
+    moment the role's own queue is provably unattended.
+    """
+
+    def _stranded(self, tmp_path, **kwargs):
+        from scheduler import db
+
+        db.ensure_schema(tmp_path / "messages.db")
+        return db.insert_handoff(
+            tmp_path / "messages.db", kwargs.get("sender", "specifier"),
+            kwargs.get("target", "coder"), "payload", "main",
+            work_item=kwargs.get("work_item"),
+        )
+
+    def test_startup_re_serves_a_message_left_mid_cycle(
+        self, tmp_path, stub_context, monkeypatch, caplog
+    ):
+        from scheduler import db
+
+        message_id = self._stranded(tmp_path)
+        db.mark_processing(tmp_path / "messages.db", message_id)
+
+        def one_cycle(ctx, state):
+            state.halted = True
+            return CycleResult(role_scheduler.IDLE)
+
+        monkeypatch.setattr(role_scheduler, "run_once", one_cycle)
+        with caplog.at_level(logging.WARNING):
+            role_scheduler.main(_args(tmp_path))
+
+        served = db.fetch_and_deliver(tmp_path / "messages.db", "coder", "main")
+        assert served is not None and served["id"] == message_id
+
+    def test_each_recovered_message_is_logged(self, tmp_path, stub_context, caplog):
+        from scheduler import db
+
+        message_id = self._stranded(tmp_path, work_item="add-login")
+        db.mark_processing(tmp_path / "messages.db", message_id)
+        ctx = _context(tmp_path)
+
+        with caplog.at_level(logging.WARNING):
+            assert role_scheduler.recover_stale_messages(ctx) == 1
+
+        assert message_id[:8] in caplog.text
+        assert "add-login" in caplog.text
+
+    def test_the_replay_hazard_is_warned_about(self, tmp_path, stub_context, caplog):
+        # The cycle is replayed against a worktree that may still hold partial work, so the
+        # role can redo work it already did. An operator seeing that needs it explained.
+        from scheduler import db
+
+        db.mark_processing(tmp_path / "messages.db", self._stranded(tmp_path))
+
+        with caplog.at_level(logging.WARNING):
+            role_scheduler.recover_stale_messages(_context(tmp_path))
+
+        assert "redo work it already did" in caplog.text
+
+    def test_a_clean_start_says_nothing(self, tmp_path, stub_context, caplog):
+        # Recovery is an exception report. A warning on every ordinary start would train
+        # operators to ignore the one that matters.
+        self._stranded(tmp_path)
+        caplog.clear()
+
+        with caplog.at_level(logging.WARNING):
+            assert role_scheduler.recover_stale_messages(_context(tmp_path)) == 0
+
+        assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
+
+    def test_an_unusable_queue_does_not_kill_the_role_at_startup(self, tmp_path, caplog):
+        # Recovery is a repair on the way in, not a precondition. An unreadable queue -- no
+        # table yet, or the pre-work_item schema ensure_schema does not migrate -- has to
+        # surface through the poll loop, which reports it with a traceback and exits
+        # cleanly. Raising here would kill the role before it reached that machinery.
+        with caplog.at_level(logging.WARNING):
+            assert role_scheduler.recover_stale_messages(_context(tmp_path)) == 0
+
+        assert "could not check for messages left mid-cycle" in caplog.text
+
+
+def _context(tmp_path):
+    from scheduler.routing import parse_routing_table
+    from scheduler.worker_prompt import WorkerDefinition
+
+    return role_scheduler.SchedulerContext(
+        role="coder",
+        branch="main",
+        db_path=tmp_path / "messages.db",
+        worktree=tmp_path,
+        routing=parse_routing_table("| coder | refactorer |"),
+        definition=WorkerDefinition(name="coder-worker", description="d", prompt="b"),
+        run_worker=lambda **_kw: None,
+    )
+
+
 class TestLogFile:
     def test_writes_a_log_file_when_asked(self, tmp_path):
         target = tmp_path / "logs" / "scheduler-coder.log"
