@@ -179,6 +179,23 @@ class TestHappyPath:
         assert parsed.commit
         assert "done it" in queued_for(db_path, "refactorer")[0]["content"]
 
+    def test_the_work_item_column_carries_the_handoff_name(self, make_ctx, inbound, db_path):
+        # The name used to live only as prose inside `content` -- parsed, then dropped.
+        # As a column it can be grouped and counted, which is what per-feature cost and
+        # loop detection need.
+        inbound(name="order-intake")
+        role_scheduler.run_once(make_ctx(FakeWorker()), SchedulerState())
+        assert queued_for(db_path, "refactorer")[0]["work_item"] == "order-intake"
+
+    def test_the_stored_work_item_matches_the_name_in_the_message(
+        self, make_ctx, inbound, db_path
+    ):
+        # Two spellings of the same work item would split the group silently.
+        inbound(name="CAT-3 search by author")
+        role_scheduler.run_once(make_ctx(FakeWorker()), SchedulerState())
+        row = queued_for(db_path, "refactorer")[0]
+        assert row["work_item"] == handoff.parse_handoff(row["content"]).handoff
+
     def test_creates_one_role_prefixed_squash_commit(self, make_ctx, inbound, git_repo):
         inbound()
         fake = FakeWorker(worker(summary="implemented it"), edits_file=git_repo / "feature.py")
@@ -295,6 +312,14 @@ class TestRetryPolicy:
         assert "Kiln-Escalation: true" in content
         assert "still no" in content
         assert handoff.parse_handoff(content).sender == "coder"
+
+    def test_an_escalation_stays_attached_to_its_work_item(self, make_ctx, inbound, db_path):
+        # An escalation that lost the work item could not be counted against it, and a
+        # future resume would have nothing to re-attach to.
+        inbound(name="order-intake")
+        fake = FakeWorker(worker(STATUS_BLOCKED, "no"), worker(STATUS_BLOCKED, "still no"))
+        role_scheduler.run_once(make_ctx(fake), SchedulerState())
+        assert queued_for(db_path, "human-in-the-loop")[0]["work_item"] == "order-intake"
 
     def test_inbound_message_never_wedges_in_processing(self, make_ctx, inbound, read_message):
         message_id, _ = inbound()

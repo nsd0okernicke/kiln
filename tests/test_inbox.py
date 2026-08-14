@@ -292,6 +292,22 @@ class TestSend:
         assert parsed.sender == "human-in-the-loop"
         assert parsed.handoff == send.PENDING_HANDOFF
 
+    def test_a_new_request_has_no_work_item_yet(self, db_path):
+        # The specifier is what invents the name, so the intake hop legitimately has none.
+        # This is the one deliberate NULL; everything after it must carry a value.
+        send.send(
+            db_path=db_path, sender="human-in-the-loop", target="specifier",
+            summary="new idea", branch="main",
+        )
+        assert db.cycles_by_work_item(db_path, "main") == {}
+
+    def test_a_named_handoff_is_stored_as_the_work_item(self, db_path):
+        send.send(
+            db_path=db_path, sender="human-in-the-loop", target="coder",
+            summary="carry on", branch="main", handoff_name="CAT-3 search",
+        )
+        assert db.cycles_by_work_item(db_path, "main") == {"CAT-3 search": 1}
+
     def test_a_new_request_carries_no_commit_and_is_not_mergeable(self, db_path):
         # A human's opening request has nothing to merge; the receiver must not try.
         send.send(

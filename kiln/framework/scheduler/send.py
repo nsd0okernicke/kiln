@@ -74,7 +74,12 @@ def send(
         sender=sender, target=target, summary=summary, branch=branch,
         handoff_name=handoff_name, commit=commit, escalation=escalation,
     )
-    message_id = db.insert_handoff(db_path, sender, target, content, branch, priority)
+    # `pending` is the placeholder a human uses for a brand-new request: the specifier is
+    # what invents the real name, so there is nothing to group by yet and NULL is correct.
+    work_item = None if handoff_name == PENDING_HANDOFF else handoff_name
+    message_id = db.insert_handoff(
+        db_path, sender, target, content, branch, priority, work_item=work_item
+    )
     log.info("queued %s -> %s (id=%s)", sender, target, message_id[:8])
     return message_id
 

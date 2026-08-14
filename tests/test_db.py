@@ -244,3 +244,61 @@ class TestVerifyQueued:
         # The insert/verify pair from kiln-handoff/SKILL.md steps 4-5.
         message_id = db.insert_handoff(db_path, "coder", "refactorer", "payload", "main")
         assert db.verify_queued(db_path, "coder", "main") == message_id
+
+
+class TestWorkItem:
+    """
+    The grouping key the queue never had.
+
+    `branch` holds the *base* branch, shared by every role on a swarm, so it groups
+    everything into one bucket. Without a real key nothing can answer "what did this
+    feature cost" or "how many cycles has it been round", and loop detection has nothing
+    to count.
+    """
+
+    def test_the_column_and_its_index_exist(self, db_path):
+        with closing(db.connect(db_path)) as conn:
+            columns = {r[1] for r in conn.execute("PRAGMA table_info(messages)")}
+            indexes = {r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='index'"
+            )}
+        assert "work_item" in columns
+        assert "idx_work_item" in indexes
+
+    def test_it_is_stored_when_given(self, db_path, read_message):
+        message_id = db.insert_handoff(
+            db_path, "coder", "refactorer", "payload", "main", work_item="CAT-3 search"
+        )
+        assert read_message(message_id)["work_item"] == "CAT-3 search"
+
+    def test_it_is_null_when_absent(self, db_path, read_message):
+        # The intake hop legitimately has none: the specifier is what invents the name.
+        message_id = db.insert_handoff(db_path, "human-in-the-loop", "specifier", "x", "main")
+        assert read_message(message_id)["work_item"] is None
+
+    def test_an_empty_name_is_stored_as_null_not_empty_string(self, db_path, read_message):
+        # Two spellings of "no work item" would split the same group in a GROUP BY.
+        message_id = db.insert_handoff(db_path, "coder", "refactorer", "x", "main", work_item="")
+        assert read_message(message_id)["work_item"] is None
+
+
+class TestCyclesByWorkItem:
+    def test_counts_messages_per_work_item(self, db_path):
+        for _ in range(3):
+            db.insert_handoff(db_path, "coder", "refactorer", "x", "main", work_item="CAT-3")
+        db.insert_handoff(db_path, "coder", "refactorer", "x", "main", work_item="CAT-4")
+        assert db.cycles_by_work_item(db_path, "main") == {"CAT-3": 3, "CAT-4": 1}
+
+    def test_intake_messages_are_excluded(self, db_path):
+        # Not a cycle, and grouping it under a NULL key would invite counting it as one.
+        db.insert_handoff(db_path, "human-in-the-loop", "specifier", "x", "main")
+        db.insert_handoff(db_path, "specifier", "coder", "x", "main", work_item="CAT-3")
+        assert db.cycles_by_work_item(db_path, "main") == {"CAT-3": 1}
+
+    def test_other_branches_are_not_counted(self, db_path):
+        db.insert_handoff(db_path, "coder", "refactorer", "x", "main", work_item="CAT-3")
+        db.insert_handoff(db_path, "coder", "refactorer", "x", "other", work_item="CAT-3")
+        assert db.cycles_by_work_item(db_path, "main") == {"CAT-3": 1}
+
+    def test_an_empty_queue_is_empty_not_an_error(self, db_path):
+        assert db.cycles_by_work_item(db_path, "main") == {}

@@ -47,11 +47,22 @@ CREATE TABLE IF NOT EXISTS messages (
   acked_at TEXT,
   processed_at TEXT,
   error TEXT,
-  branch TEXT NOT NULL DEFAULT 'main'
+  branch TEXT NOT NULL DEFAULT 'main',
+  work_item TEXT
 )
 """
 
 INDEX_SQL = "CREATE INDEX IF NOT EXISTS idx_target_branch_status ON messages(target,branch,status)"
+
+#: Groups every message belonging to one piece of work, newest last.
+#:
+#: `branch` cannot do this job: it holds the *base* branch, which every role on a swarm
+#: shares, so grouping by it groups everything into one bucket. Without a real grouping key
+#: nothing can answer "what did this feature cost" or "how many cycles has it been round",
+#: and loop detection has nothing to count.
+WORK_ITEM_INDEX_SQL = (
+    "CREATE INDEX IF NOT EXISTS idx_work_item ON messages(work_item,created_at)"
+)
 
 
 def connect(db_path: str | Path) -> sqlite3.Connection:
@@ -69,11 +80,19 @@ def ensure_schema(db_path: str | Path) -> None:
     NOTE: the one-time repair for legacy tables whose `created_at` was NOT NULL without a
     default is intentionally NOT ported here — kiln.ps1 still owns that migration. Port it
     before this function replaces that inline script, or the repair is silently lost.
+
+    **This creates; it does not migrate.** `CREATE TABLE IF NOT EXISTS` leaves an existing
+    table exactly as it is, so a database created before `work_item` existed keeps the old
+    shape and every insert naming that column fails with "no such column". That is accepted
+    deliberately while Kiln is used only for test projects: delete `.kiln/messages.db` and
+    let it be recreated. Add an ordered-migrations step here before anyone runs a project
+    they cannot throw away.
     """
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     with closing(connect(db_path)) as conn:
         conn.execute(SCHEMA_SQL)
         conn.execute(INDEX_SQL)
+        conn.execute(WORK_ITEM_INDEX_SQL)
         conn.execute("PRAGMA journal_mode=WAL")
         conn.commit()
 
@@ -141,6 +160,28 @@ def count_queued_by_role(db_path: str | Path, branch: str) -> dict[str, int]:
         return {row["target"]: int(row["n"]) for row in cur.fetchall()}
 
 
+def cycles_by_work_item(db_path: str | Path, branch: str) -> dict[str, int]:
+    """
+    Message count per work item, newest-first by first appearance.
+
+    The question the column was added to answer: how many hops has one piece of work been
+    through. A swarm looping on the same feature shows up here as a count that keeps
+    climbing, which is what a max-cycles guard needs to read.
+
+    Messages with no work item are excluded rather than grouped under a NULL key -- the
+    intake hop is the only one that legitimately has none, and it is not a cycle.
+    """
+    with closing(connect(db_path)) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT work_item, COUNT(*) AS n FROM messages "
+            "WHERE branch=? AND work_item IS NOT NULL GROUP BY work_item "
+            "ORDER BY MIN(created_at) DESC",
+            (branch,),
+        )
+        return {row["work_item"]: int(row["n"]) for row in cur.fetchall()}
+
+
 def recent_messages(db_path: str | Path, branch: str, limit: int = 10) -> list[dict]:
     """The most recent messages on a branch, newest first -- the dashboard's activity feed."""
     with closing(connect(db_path)) as conn:
@@ -194,22 +235,31 @@ def insert_handoff(
     content: str,
     branch: str,
     priority: int = DEFAULT_PRIORITY,
+    work_item: str | None = None,
 ) -> str:
     """
     Queue a handoff message and return its generated id.
 
     Codifies step 4 of kiln/project/skills/kiln-handoff/SKILL.md. `created_at` is left to
     the same `datetime('now','localtime')` expression that skill specifies.
+
+    `work_item` is the specifier's stable `Handoff:` name, stored as a column rather than
+    left as prose inside `content` so it can be grouped and counted. **NULL is legitimate
+    for the intake message only** — the specifier is what invents the name, so the
+    human -> specifier hop has none yet, and per-work-item accounting starts at the
+    specifier's first outbound handoff. Every later message must carry one; anything
+    counting cycles per work item cannot count a NULL.
     """
     with closing(connect(db_path)) as conn:
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO messages (sender, target, priority, status, content, created_at, branch)
-            VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'), ?)
+            INSERT INTO messages
+              (sender, target, priority, status, content, created_at, branch, work_item)
+            VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'), ?, ?)
             RETURNING id
             """,
-            (sender, target, priority, STATUS_QUEUED, content, branch),
+            (sender, target, priority, STATUS_QUEUED, content, branch, work_item or None),
         )
         message_id = str(cur.fetchone()[0])
         conn.commit()

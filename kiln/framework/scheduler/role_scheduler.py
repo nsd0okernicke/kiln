@@ -362,7 +362,7 @@ def _hand_off(
         next_role=target,
         timestamp=ctx.timestamp(),
     )
-    _insert_verified(ctx, target, outbound)
+    _insert_verified(ctx, target, outbound, work_item=inbound.handoff)
     db.mark_processed(ctx.db_path, message_id)
 
     state.consecutive_escalations = 0  # a clean cycle re-arms the circuit breaker
@@ -404,7 +404,7 @@ def _forward_ping(
         ping=True,
         trail=trail,
     )
-    _insert_verified(ctx, target, outbound)
+    _insert_verified(ctx, target, outbound, work_item=inbound.handoff)
     db.mark_processed(ctx.db_path, message_id)
     ctx.set_status("idle")
     return CycleResult(PING_FORWARDED, message_id=message_id, target=target)
@@ -438,7 +438,7 @@ def _escalate(
         timestamp=ctx.timestamp(),
         escalation=True,
     )
-    _insert_verified(ctx, ESCALATION_TARGET, outbound)
+    _insert_verified(ctx, ESCALATION_TARGET, outbound, work_item=inbound.handoff)
     db.mark_processed(ctx.db_path, message_id)
 
     state.consecutive_escalations += 1
@@ -464,6 +464,7 @@ def _escalate(
                 timestamp=ctx.timestamp(),
                 escalation=True,
             ),
+            work_item=inbound.handoff,
         )
 
     return CycleResult(
@@ -477,7 +478,9 @@ def _escalate(
     )
 
 
-def _insert_verified(ctx: SchedulerContext, target: str, content: str) -> str | None:
+def _insert_verified(
+    ctx: SchedulerContext, target: str, content: str, work_item: str | None = None
+) -> str | None:
     """
     Insert a message and confirm it landed, retrying once.
 
@@ -485,7 +488,9 @@ def _insert_verified(ctx: SchedulerContext, target: str, content: str) -> str | 
     observed to fail silently.
     """
     for attempt in (1, 2):
-        message_id = db.insert_handoff(ctx.db_path, ctx.role, target, content, ctx.branch)
+        message_id = db.insert_handoff(
+            ctx.db_path, ctx.role, target, content, ctx.branch, work_item=work_item
+        )
         if db.verify_queued(ctx.db_path, ctx.role, ctx.branch):
             return message_id
         log.warning("handoff insert not visible after attempt %d; retrying", attempt)
