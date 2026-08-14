@@ -465,24 +465,25 @@ evidence after its pane is gone.
 
 Token counts tell you *that* a role is expensive. Only the request body tells you *why* — how
 much of it is tool schemas, how much is generated instructions, how much is conversation being
-re-sent. Kiln routes agent API traffic through a local capture proxy to answer that.
+re-sent. Kiln can route agent API traffic through a local capture proxy to answer that.
 
-**On by default, in metadata mode.** It records sizes, timings, model names and token counts —
-about 2.9 KB per request, roughly 650 KiB for a full swarm cycle. **It does not record prompt
-text**; that needs a second, explicit opt-in.
+**Off by default; `--proxy` turns it on.** Enabled, it records metadata only — sizes, timings,
+model names and token counts, about 2.9 KB per request. **It does not record prompt text**;
+that needs a second, explicit opt-in.
 
 ```powershell
-.\bin\kiln.ps1 -WorkingDir .                         # metadata capture, on
-.\bin\kiln.ps1 -WorkingDir . --no-proxy              # no proxy process at all
-.\bin\kiln.ps1 -WorkingDir . --capture full          # + request/response bodies
+.\bin\kiln.ps1 -WorkingDir .                         # no proxy, no capture store
+.\bin\kiln.ps1 -WorkingDir . --proxy                 # metadata capture
+.\bin\kiln.ps1 -WorkingDir . --proxy --capture full  # + request/response bodies
 ```
 
-`--no-proxy` is worth knowing about for one reason beyond privacy: with the proxy on, every
-routed request passes through a local Python process, so if that process dies the routed roles
-lose their API access until the swarm is restarted. Nothing supervises it.
+Note what you *don't* give up by leaving it off — `COST`, `TOKENS` and `CACHE` come from each
+adapter parsing its own CLI stream, not from the proxy. Only the prompt-weight panel below
+needs it.
 
-Note what you *don't* lose by turning it off — `COST`, `TOKENS` and `CACHE` come from each
-adapter parsing its own CLI stream, not from the proxy. Only the prompt-weight panel needs it.
+And what turning it on costs, beyond the store: every routed request then passes through a
+local Python process, so if that process dies the routed roles lose their API access until the
+swarm is restarted. Nothing supervises it.
 
 ### How it routes
 
@@ -716,7 +717,7 @@ platforms in either spelling** — `-ProfileName mixed-backends`, `-Profile mixe
 | `--example <name>` | `-Example` | Seed the scaffold from `examples/<name>` |
 | `--no-git` | `-NoGit` | Skip git initialisation when scaffolding |
 | `--dry-run` | | Print what would launch, start nothing |
-| `--no-proxy` | | Run without the local capture proxy (it is on by default) |
+| `--proxy` | | Route agent API traffic through the local capture proxy (off by default) |
 | `--proxy-port <n>` | | Pin the capture proxy to an exact port (default: `8787`, probed upward if busy) |
 | `--capture <mode>` | | `metadata` (default) or `full` — capture depth, see "Traffic Capture" |
 | `--verbose` | `-Debug` | Verbose output |
@@ -1321,19 +1322,16 @@ Kills the processes this swarm started — schedulers, MCP servers, tmux session
 their command lines. **It does not touch your files, worktrees or branches**, and it does not
 close the terminal window itself; close that yourself, or its panes will sit at dead prompts.
 
-**Closing the window is not quite the same thing.** The panes die with it, but the capture
-proxy does not: it runs detached so it outlives the launcher, which means it outlives the
-window too. That leaves one background process still listening on its port.
+Closing the window is enough for an ordinary run — the panes die with it. **The one exception
+is `--proxy`:** the capture proxy runs detached so it outlives the launcher, which means it
+outlives the window too, leaving a background process still listening on its port.
 
-Nothing breaks if you close the window anyway — **the next launch of that project reclaims its
-own leftover proxy** before starting a new one, so ports do not creep and proxies do not pile
-up. `--stop` is still the tidy way to end a run, and the only one that also stops the proxy
-straight away. Note it is machine-wide by design: run in one project it stops *every* Kiln
-process, including another project's swarm. The launch-time reclaim is deliberately narrower —
-it only ever touches a proxy writing to the project you are launching.
-
-Prefer no background process at all? `--no-proxy` (see **Traffic Capture**) — you keep cost,
-token and cache reporting and lose only the prompt-weight panel.
+Nothing breaks if you close the window anyway — **the next `--proxy` launch of that project
+reclaims its own leftover proxy** before starting a new one, so ports do not creep and proxies
+do not pile up. `--stop` is still the tidy way to end a run, and the only one that stops the
+proxy straight away. Note it is machine-wide by design: run in one project it stops *every*
+Kiln process, including another project's swarm. The launch-time reclaim is deliberately
+narrower — it only ever touches a proxy writing to the project you are launching.
 
 ### Full project reset (Windows only)
 
@@ -1593,7 +1591,7 @@ was run and seven defects fell out.
 - ✓ Built-in communication health check (`/kiln-ping` skill, on request from `human-in-the-loop`)
 - ✓ Swarm-wide live dashboard (`"scheduler": "dashboard"`) — role state, queue depth, cost/cycle/token totals, cache hit rate, recent activity and escalations in one pane
 - ✓ Per-role token accounting from every backend's own stream — input/output/cache-read/cache-write kept separately, never collapsed to one number, and omitted rather than reported as a misleading zero
-- ✓ Traffic capture proxy, on by default in metadata mode (`--no-proxy` to disable) — per-role attribution by URL path, credential values never stored, prompt text only with `--capture full`, port collision handled, retention budget, and a dashboard panel splitting each request into tools/instructions/conversation
+- ✓ Opt-in traffic capture proxy (`--proxy`) — per-role attribution by URL path, credential values never stored, metadata-only unless `--capture full`, port collision handled, retention budget, and a dashboard panel splitting each request into tools/instructions/conversation
 - ✓ Two vendors through one proxy — `claude` and `codex` roles both routed and verified live, each keeping its own subscription auth, with per-role upstreams so a mixed-backend swarm needs no second proxy
 - ✓ Logbook tracking of all handoffs and agent actions
 - ✓ Wrapper + worker-subagent delegation for Claude `auto`-mode roles — persistent thin wrappers dispatch work to disposable worker subagents, keeping wrapper context at ~140 lines through unlimited cycles
@@ -1610,15 +1608,15 @@ was run and seven defects fell out.
 
 This means agents can read/write/execute any file in their worktree without prompting. This is intentional for autonomous development workflows but should be understood as a security trade-off.
 
-**Traffic capture:** the proxy runs by default, local-only, and never forwards anywhere but
-upstream. `Authorization`, API-key, cookie and account-identifier header values are never
-written to the store.
+**Traffic capture (`--proxy`):** off unless you ask for it, local-only, and never forwards
+anywhere but upstream. `Authorization`, API-key, cookie and account-identifier header values
+are never written to the store.
 
-What runs unasked is **metadata only** — sizes, timings, model names, token counts. **No
-prompt text is recorded without `--capture full`**, and that remains a deliberate, separate
-opt-in for a reason: a request body contains the complete source the agent read, in plaintext,
-in a directory symlinked into every worktree. Treat a `full` `traffic.db` as sensitive as the
-repository it was captured from. `--no-proxy` disables capture entirely.
+Enabling it records **metadata only** — sizes, timings, model names, token counts. **No prompt
+text is recorded without `--capture full`**, and that remains a deliberate, separate opt-in for
+a reason: a request body contains the complete source the agent read, in plaintext, in a
+directory symlinked into every worktree. Treat a `full` `traffic.db` as sensitive as the
+repository it was captured from.
 
 **Risk mitigation:**
 

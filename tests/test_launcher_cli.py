@@ -381,18 +381,23 @@ class TestReclaimingLeftoverProxies:
 
 
 class TestProxyFlags:
-    def test_the_proxy_is_on_by_default(self):
-        # Flipped deliberately: metadata capture is cheap (~2.9KB a request) and it is what
-        # the dashboard's prompt-weight panel reads.
-        assert cli.build_parser().parse_args([]).proxy is True
+    def test_the_proxy_is_off_by_default(self):
+        # A plain `kiln` starts no extra process and writes no capture store. Everything the
+        # dashboard shows apart from the prompt-weight panel comes from the adapters, so the
+        # default costs nothing worth having.
+        assert cli.build_parser().parse_args([]).proxy is False
 
-    def test_it_can_be_turned_off(self):
+    def test_it_is_turned_on_by_the_flag(self):
+        assert cli.build_parser().parse_args(["--proxy"]).proxy is True
+
+    def test_off_can_still_be_stated_explicitly(self):
+        # `--no-proxy` outlives the spell when the default was on: a script that spelled the
+        # default out should not start failing because the default moved back.
         assert cli.build_parser().parse_args(["--no-proxy"]).proxy is False
 
     def test_capture_defaults_to_metadata(self):
-        # The line that did NOT move. Bodies hold whatever source the agent read, in
-        # plaintext, so they stay a second and deliberate opt-in even now that the proxy
-        # itself runs unasked.
+        # Bodies hold whatever source the agent read, in plaintext, so even with --proxy
+        # given they stay a second and deliberate opt-in.
         assert cli.build_parser().parse_args([]).capture == "metadata"
 
     def test_full_capture_is_opt_in(self):
@@ -410,10 +415,9 @@ class TestProxyFlags:
 
 class TestProxyPortSelection:
     """
-    A fixed port was survivable while the proxy was opt-in. Once it runs by default, two
-    Kiln projects at once means the second proxy dies on bind — and its roles would still be
-    pointed at the first project's proxy, which forwards fine and records their traffic into
-    the wrong store. Nothing would surface that.
+    A fixed port breaks as soon as two projects capture at once: the second proxy dies on
+    bind, and its roles are still pointed at the first project's proxy, which forwards fine
+    and records their traffic into the wrong store. Nothing would surface that.
     """
 
     def test_the_preferred_port_is_used_when_free(self):

@@ -119,9 +119,9 @@ def stop_project_proxies(traffic_db: Path) -> list[int]:
 
     Closing the terminal window is a normal way to end a swarm, and it does not reach the
     proxy: that process is deliberately detached so it survives the launcher, which means it
-    survives the window too. Without this, every window-close would leak one listener, each
-    launch would climb to the next port, and after `PROXY_PORT_ATTEMPTS` of them the launch
-    would fail outright.
+    survives the window too. Without this, every window-close during a `--proxy` run would
+    leak one listener, each subsequent launch would climb to the next port, and after
+    `PROXY_PORT_ATTEMPTS` of them the launch would fail outright.
 
     Scoped to this project's store on purpose. `--stop` is machine-wide by design; starting
     a swarm is not, and it has no business killing another project's capture.

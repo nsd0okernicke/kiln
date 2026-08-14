@@ -245,11 +245,11 @@ def find_free_port(preferred: int, attempts: int = PROXY_PORT_ATTEMPTS) -> int:
     """
     The first bindable port at or above `preferred`.
 
-    A fixed port was survivable while the proxy was opt-in. Once it runs by default, two
-    Kiln projects at once means the second one's proxy dies on bind — and its roles would
-    still be pointed at the first project's proxy, which forwards happily and records this
-    swarm's traffic into the other project's store. Agents keep working, so nothing surfaces
-    the mistake.
+    A fixed port breaks as soon as two projects capture at once: the second proxy dies on
+    bind, and its roles are still pointed at the first project's proxy, which forwards
+    happily and records this swarm's traffic into the other project's store. Agents keep
+    working, so nothing surfaces the mistake. Observed live with a proxy left over from an
+    earlier session still holding the default port.
 
     Raises LaunchError rather than falling back to an ephemeral port: a swarm whose proxy
     landed somewhere unpredictable is harder to reason about than one that refused to start.
@@ -331,7 +331,7 @@ def start_proxy(
     # Reclaim this project's own leftovers before looking for a port, so that closing the
     # terminal window -- a normal way to end a swarm, and one that never reaches a detached
     # process -- costs nothing more than a stale listener until the next launch. Restarted
-    # rather than reused: the new run may have asked for a different --capture mode or a
+    # rather than reused: this run may have asked for a different --capture mode or a
     # different set of routes, and silently keeping the old ones would be a lie.
     stop.stop_project_proxies(paths.traffic_db)
 
@@ -402,10 +402,7 @@ def run_launch(args: argparse.Namespace) -> int:
             paths, args.proxy_port, args.capture, profile,
             port_is_explicit=args.proxy_port != DEFAULT_PROXY_PORT,
         )
-        # Stated rather than silent: capture now runs unless asked not to, so the operator
-        # should be able to see from the launch output that it is on and where it writes.
         log.info("capture proxy: %s (%s) -> %s", proxy_url, args.capture, paths.traffic_db)
-        log.info("  turn it off with --no-proxy")
         routed = [role.role for role in profile.roles if proxy_env(role, proxy_url)]
         log.info("  routing: %s", ", ".join(routed) or "(no proxy-capable roles)")
         unrouted = [
@@ -523,10 +520,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", dest="dry_run", action="store_true",
                         help="show what would be launched without starting anything")
     parser.add_argument("--proxy", "-Proxy", dest="proxy",
-                        action=argparse.BooleanOptionalAction, default=True,
+                        action=argparse.BooleanOptionalAction, default=False,
                         help="route agent API traffic through the local capture proxy "
-                             "(claude and codex roles). On by default; --no-proxy disables "
-                             "it. Only metadata is recorded unless --capture full is given")
+                             "(claude and codex roles). Off by default. Only metadata is "
+                             "recorded unless --capture full is also given")
     parser.add_argument("--proxy-port", dest="proxy_port", type=int,
                         default=DEFAULT_PROXY_PORT,
                         help=f"port for the capture proxy (default: {DEFAULT_PROXY_PORT})")

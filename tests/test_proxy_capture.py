@@ -586,7 +586,7 @@ class TestTrafficStore:
 
 class TestBodyBudget:
     """
-    Retention for a proxy that now runs by default.
+    Retention, so a long capture run cannot silently fill the disk.
 
     Bodies are what grows -- 98.3% of a real 107.6MB store -- and they are also the part a
     row does not need to stay useful, because composition and usage are computed at capture
