@@ -15,6 +15,8 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from scheduler.routing import RoutingTable, parse_profile_routing
+
 #: System-wide profile location, per platform. The two shell originals disagreed — the
 #: PowerShell one looked in ProgramData, the shell one in /etc — and the first Python port
 #: kept only the Windows path, silently dropping the documented Unix location.
@@ -160,6 +162,13 @@ class Profile:
     description: str = ""
     roles: tuple[RoleConfig, ...] = ()
     layout: dict = field(default_factory=dict)
+    #: This profile's own handoff routing, replacing constitution/workflow.md's table.
+    #:
+    #: Empty means "use workflow.md", which is what every role-complete profile does. A
+    #: profile with a different *shape* needs its own, because there is only one table in
+    #: the file and two shapes cannot both define the same role's default row — see
+    #: `scheduler.routing.parse_profile_routing`.
+    routing: RoutingTable = field(default_factory=RoutingTable)
 
     def role(self, name: str) -> RoleConfig | None:
         return next((r for r in self.roles if r.role == name), None)
@@ -304,12 +313,44 @@ def parse_profile(config: dict, name: str) -> Profile:
         seen.add(parsed.role)
         roles.append(parsed)
 
+    try:
+        routing = parse_profile_routing(selected.get("routing"))
+    except ValueError as exc:
+        raise ProfileError(f"profile {name!r}: {exc}") from exc
+    _validate_routing(routing, seen, name)
+
     return Profile(
         name=name,
         description=str(selected.get("description") or ""),
         roles=tuple(roles),
         layout=selected.get("layout") or {},
+        routing=routing,
     )
+
+
+def _validate_routing(routing: RoutingTable, roles: set[str], profile_name: str) -> None:
+    """
+    Every role named in a profile's routing must exist in that profile.
+
+    A route to a role the profile never launches resolves to a target whose queue nobody
+    polls: the handoff inserts, the cycle reports success, and the work stops dead with no
+    error anywhere. That is the same silent class as a `watches` naming a missing role, and
+    it is worth catching at load rather than three cycles into a run.
+    """
+    for rule in routing.rules:
+        for field_name, value in (("role", rule.role), ("target", rule.target)):
+            if value not in roles:
+                known = ", ".join(sorted(roles))
+                raise ProfileError(
+                    f"profile {profile_name!r}: routing {field_name} {value!r} is not a role "
+                    f"in this profile. Roles: {known}"
+                )
+        if rule.when_sender is not None and rule.when_sender not in roles:
+            known = ", ".join(sorted(roles))
+            raise ProfileError(
+                f"profile {profile_name!r}: routing condition 'when sender is "
+                f"{rule.when_sender!r}' names no role in this profile. Roles: {known}"
+            )
 
 
 def load_profile(

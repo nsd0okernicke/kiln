@@ -17,8 +17,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from scheduler.adapters import codex_adapter
+from scheduler.routing import format_routing_rules
 
-from .config import RoleConfig
+from .config import Profile, RoleConfig
 from .paths import KilnPaths, python_command
 
 #: Opening prompt handed to an interactive wrapper session.
@@ -135,7 +136,9 @@ def _proxy_base_url(role: RoleConfig, proxy_url: str | None) -> str | None:
     return proxy_env(role, proxy_url).get(PROXY_BASE_URL_VARS.get(role.agent, ""))
 
 
-def _scheduler_command(role: RoleConfig, paths: KilnPaths, branch: str) -> AgentCommand:
+def _scheduler_command(
+    role: RoleConfig, paths: KilnPaths, branch: str, profile: Profile | None = None
+) -> AgentCommand:
     """
     Launch the deterministic scheduler instead of an LLM wrapper session.
 
@@ -154,6 +157,14 @@ def _scheduler_command(role: RoleConfig, paths: KilnPaths, branch: str) -> Agent
         "--worker-agent", str(paths.worker_agent_file(role.role, role.agent)),
         "--agent", role.agent,
     ]
+    # A profile that declares its own routing replaces workflow.md's table -- the scheduler
+    # runs in its own process and cannot read the launcher's parsed profile, so the resolved
+    # rules travel as arguments. `--workflow` stays either way: a profile with no routing of
+    # its own keeps reading the file, which is what every role-complete profile does.
+    if profile is not None and profile.routing.rules:
+        for rule in format_routing_rules(profile.routing):
+            argv += ["--route", rule]
+
     model = role.worker_model or role.model
     if model:
         argv += ["--model", model]
@@ -241,7 +252,11 @@ def _worktree_for(role: RoleConfig, paths: KilnPaths) -> Path:
 
 
 def build_agent_command(
-    role: RoleConfig, paths: KilnPaths, branch: str, proxy_url: str | None = None
+    role: RoleConfig,
+    paths: KilnPaths,
+    branch: str,
+    proxy_url: str | None = None,
+    profile: Profile | None = None,
 ) -> AgentCommand:
     """
     Build the pane command for one role.
@@ -260,7 +275,9 @@ def build_agent_command(
         return _dashboard_command(role, paths, branch)
 
     if role.uses_scheduler:
-        return _scheduler_command(role, paths, branch).with_env(**proxy_env(role, proxy_url))
+        return _scheduler_command(role, paths, branch, profile).with_env(
+            **proxy_env(role, proxy_url)
+        )
 
     if role.agent == "claude":
         return _claude_command(role, paths).with_env(**proxy_env(role, proxy_url))

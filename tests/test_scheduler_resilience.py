@@ -240,13 +240,20 @@ class TestShippedRoutingTable:
         ]
 
 
-def _shipped_profile(name: str = "default"):
+def _shipped_profile(name: str | None = None):
+    """
+    The shipped profile of that name, or whichever one is currently the default.
+
+    Follows the top-level `default` key rather than hardcoding a profile name, so renaming
+    the default (`default` -> `full` when profiles became workflow-shaped) does not break
+    every test that just wanted "the one a plain `kiln` launches".
+    """
     import json
     from pathlib import Path
 
     repo = Path(__file__).resolve().parents[1]
     config = json.loads((repo / "kiln" / "framework" / "profiles.json").read_text("utf-8"))
-    return parse_profile(config, name)
+    return parse_profile(config, name or config["default"])
 
 
 def test_default_profile_still_parses():

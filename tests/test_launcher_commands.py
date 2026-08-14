@@ -490,3 +490,57 @@ class TestPosixRendering:
         )
         assert "export PYTHONPATH=" in rendered
         assert f"{python_command()} -m scheduler.role_scheduler" in rendered
+
+
+class TestProfileRoutingReachesTheScheduler:
+    """
+    The scheduler is a separate process and cannot read the launcher's parsed profile, so a
+    profile's own routing has to travel to it as arguments.
+    """
+
+    def _profile(self, routing=None):
+        from launcher.config import Profile, RoleConfig
+        from scheduler.routing import parse_profile_routing
+
+        roles = (
+            RoleConfig(role="coder", scheduler="python", mode="auto"),
+            RoleConfig(role="architect", scheduler="python", mode="auto"),
+            RoleConfig(role="human-in-the-loop"),
+        )
+        return Profile(
+            name="p", description="", roles=roles, layout={},
+            routing=parse_profile_routing(routing),
+        )
+
+    def test_declared_routing_becomes_route_arguments(self, paths):
+        profile = self._profile({"architect": "human-in-the-loop"})
+        command = build_agent_command(
+            profile.role("architect"), paths, "main", profile=profile
+        )
+        assert "--route" in command.argv
+        assert "architect=human-in-the-loop" in command.argv
+
+    def test_no_declared_routing_passes_no_route_arguments(self, paths):
+        # A profile with no routing of its own keeps reading --workflow, which is what
+        # every role-complete profile does.
+        command = build_agent_command(
+            self._profile().role("coder"), paths, "main", profile=self._profile()
+        )
+        assert "--route" not in command.argv
+
+    def test_the_workflow_path_is_still_passed_either_way(self, paths):
+        # The scheduler needs it for the no-routing case, and dropping it would make the
+        # two paths diverge in a way nothing else would catch.
+        profile = self._profile({"architect": "human-in-the-loop"})
+        command = build_agent_command(
+            profile.role("architect"), paths, "main", profile=profile
+        )
+        assert "--workflow" in command.argv
+
+    def test_a_scheduler_role_still_launches_without_a_profile(self, paths):
+        # build_agent_command's profile argument is optional; callers that predate it must
+        # keep working rather than raising.
+        command = build_agent_command(
+            self._profile().role("coder"), paths, "main"
+        )
+        assert "scheduler.role_scheduler" in " ".join(command.argv)

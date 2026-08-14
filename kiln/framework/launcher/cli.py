@@ -160,7 +160,9 @@ def build_panes(
     panes: list[PaneSpec] = []
     for role in profile.roles:
         worktree = workspace.worktree_for(role, paths)
-        command = build_agent_command(role, paths, branch, proxy_url=proxy_url)
+        command = build_agent_command(
+            role, paths, branch, proxy_url=proxy_url, profile=profile
+        )
         panes.append(
             PaneSpec(
                 role=role.role,

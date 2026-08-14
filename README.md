@@ -446,7 +446,7 @@ as such rather than quietly under-reporting.
 Run it standalone against any project with `python -m scheduler.dashboard --once ...` (see
 `--help` for the required paths), or just launch a profile that includes it.
 
-**Try it:** the shipped `default` profile runs all four `auto` roles on the scheduler, keeps
+**Try it:** the shipped `full` profile runs all four `auto` roles on the scheduler, keeps
 `human-in-the-loop` as an interactive session, puts an inbox strip beneath it in the same tab,
 and gives the dashboard its own dedicated tab.
 
@@ -670,8 +670,8 @@ By default, **all projects use the framework's `kiln/framework/profiles.json`**,
 **To customize profiles for a specific project**, create `kiln.profiles.json` at the project root.
 
 > ⚠️ That file **replaces** the framework's profile set rather than extending it. There is no
-> `extends` mechanism: once `kiln.profiles.json` exists, `default`, `codex-only`,
-> `mixed-backends` and the rest are no longer available unless you copy the ones you want into
+> `extends` mechanism: once `kiln.profiles.json` exists, `full`, `fix`, `spike`, `harden`,
+> `dry-run` and the rest are no longer available unless you copy the ones you want into
 > it. Start by copying `kiln/framework/profiles.json` and editing, rather than writing a file
 > with a single profile in it.
 
@@ -730,7 +730,7 @@ The cycle flows: **specifier → coder → refactorer → architect → specifie
 
 > **Optional role:** `reviewer` is an alternative to `refactorer` with a focus on batch processing and review pipelines. Add it to your profile in `kiln/framework/profiles.json` to use it instead. See `kiln/project/roles/reviewer.md`.
 >
-> **Optional role:** `human-in-the-loop` is a human-facing intake and approval checkpoint ahead of the cycle, for profiles where `specifier` itself runs in `auto` mode with no user present. The framework's **`default` profile** (`kiln/framework/profiles.json`) pairs it with an autonomous specifier: `human-in-the-loop` (manual, `@current`) gathers and confirms a request with the user, hands it to `specifier` (now `auto`, its own worktree), which runs its normal Gherkin workflow non-interactively and forwards the eventual architect completion report back to `human-in-the-loop` for the user to see. See `kiln/project/roles/human-in-the-loop.md` and `kiln/project/roles/specifier.md` → "Auto-Mode Worker Entry Point".
+> **Optional role:** `human-in-the-loop` is a human-facing intake and approval checkpoint ahead of the cycle, for profiles where `specifier` itself runs in `auto` mode with no user present. The framework's **`full` profile** (`kiln/framework/profiles.json`) pairs it with an autonomous specifier: `human-in-the-loop` (manual, `@current`) gathers and confirms a request with the user, hands it to `specifier` (now `auto`, its own worktree), which runs its normal Gherkin workflow non-interactively and forwards the eventual architect completion report back to `human-in-the-loop` for the user to see. See `kiln/project/roles/human-in-the-loop.md` and `kiln/project/roles/specifier.md` → "Auto-Mode Worker Entry Point".
 
 ---
 
@@ -744,8 +744,8 @@ The cycle flows: **specifier → coder → refactorer → architect → specifie
 | **Unix/macOS** | `./bin/kiln.sh .` |
 
 Both shims forward every argument to the same Python CLI, so **all flags work on both
-platforms in either spelling** — `-ProfileName mixed-backends`, `-Profile mixed-backends` and
-`--profile mixed-backends` are the same flag.
+platforms in either spelling** — `-ProfileName harden`, `-Profile harden` and
+`--profile harden` are the same flag.
 
 | Flag | Aliases | Effect |
 |---|---|---|
@@ -796,11 +796,12 @@ command line and working directory for every role without spawning a terminal.
    Optional profile and terminal control:
 
    ```powershell
-   # Run the default 'default' profile (human-in-the-loop intake feeding an autonomous specifier -> coder -> refactorer -> architect cycle)
+   # Run the default 'full' profile (human-in-the-loop intake feeding an autonomous specifier -> coder -> refactorer -> architect cycle)
    .\bin\kiln.ps1 -WorkingDir .
 
-   # Run a different profile (e.g., 'mixed-backends' to validate multiple agent backends at once)
-   .\bin\kiln.ps1 -WorkingDir . -ProfileName mixed-backends
+   # Run a different kind of job (see 'Other Bundled Profiles' for all five)
+   .\bin\kiln.ps1 -WorkingDir . -ProfileName fix
+   .\bin\kiln.ps1 -WorkingDir . -ProfileName harden
 
    # Use Windows Terminal instead of WezTerm (default)
    .\bin\kiln.ps1 -WorkingDir . -Terminal wt
@@ -865,9 +866,9 @@ Kiln uses JSON profiles to define swarm topology. The default profile is `defaul
 
 **To customize profiles for a specific project**, create `kiln.profiles.json` at your project root. Kiln will use your custom profiles instead of the framework defaults.
 
-### Framework Default Profile
+### The `full` Profile (the default)
 
-The framework's `default` profile pairs a human-facing intake role with a fully autonomous specifier → coder → refactorer → architect cycle: `human-in-the-loop` runs `manual` in the main directory (`@current`) to gather and confirm the request with you, with a live `inbox` strip beneath it for escalations, then the other four roles run `auto` **on the deterministic scheduler** in their own worktrees with no human input needed, and a dedicated `dashboard` tab gives a swarm-wide view. Each `auto` role's scheduler pane and worker both run on Sonnet by default — see "Decoupling wrapper and worker models" below if you want to split a role's pane onto a cheaper/faster model than its worker:
+The framework's `full` profile pairs a human-facing intake role with a fully autonomous specifier → coder → refactorer → architect cycle: `human-in-the-loop` runs `manual` in the main directory (`@current`) to gather and confirm the request with you, with a live `inbox` strip beneath it for escalations, then the other four roles run `auto` **on the deterministic scheduler** in their own worktrees with no human input needed, and a dedicated `dashboard` tab gives a swarm-wide view. Each `auto` role's scheduler pane and worker both run on Sonnet by default — see "Decoupling wrapper and worker models" below if you want to split a role's pane onto a cheaper/faster model than its worker:
 
 ![Default profile topology: human-in-the-loop gathers and confirms a request, hands it to an autonomous specifier → coder → refactorer → architect cycle, which reports completion back](docs/images/agentic_coding_topology_human_left_v3.svg)
 
@@ -965,12 +966,63 @@ The framework's `default` profile pairs a human-facing intake role with a fully 
 
 ### Other Bundled Profiles
 
-`kiln/framework/profiles.json` also ships two variants of the same topology, each swapping which backend runs the agent-bearing roles:
+**Profiles are named for the kind of work they do, not for a vendor.** Picking one should
+answer "what am I about to do?" — the backend is a separate axis, set per role with `agent`.
 
-- **`codex-only`** — every agent-bearing role, including `human-in-the-loop`, runs on Codex instead of Claude. Validates codex end-to-end, wrapper mode and scheduler mode together.
-- **`mixed-backends`** — validates multiple backends at once: `specifier` and `refactorer` run on Codex, everything else on Claude. Copilot is currently parked out of scheduler-mode rotation — see [Known Limitations & Future Work](#known-limitations--future-work) below.
+| Profile | Roles | For |
+|---|---|---|
+| **`full`** (default) | HITL + inbox + specifier → coder → refactorer → architect + dashboard | A new feature, spec-first |
+| **`fix`** | HITL + inbox + coder → architect + dashboard | Bugs and small changes. No Gherkin ceremony, but the architect still reviews |
+| **`spike`** | HITL + inbox + coder + dashboard | Throwaway exploration. No gates — the output is knowledge, not code you keep |
+| **`harden`** | HITL + inbox + refactorer → architect + dashboard | Point it at code that already exists: coverage, CRAP, mutation, boundaries. No new behaviour |
+| **`dry-run`** | same shape as `full`, every role `manual` | Learning or demoing the flow with a human approving each hop |
 
-Switch to either of these with `-ProfileName <name>` (Windows) or `--profile <name>` (Unix).
+`harden` is the one worth knowing about: it needs no specifier, so it is the only profile that
+offers something on a codebase Kiln did not write.
+
+Two test fixtures also ship. They are for validating Kiln itself, not for production use:
+
+- **`codex-only`** — every agent-bearing role runs on Codex. Exercises codex end to end, wrapper and scheduler mode together.
+- **`mixed-backends`** — `specifier` and `refactorer` on Codex, the rest on Claude. Copilot is parked out of scheduler-mode rotation — see [Known Limitations & Future Work](#known-limitations--future-work).
+
+Switch to any of these with `-ProfileName <name>` (Windows) or `--profile <name>` (Unix).
+
+#### Profiles that reshape the cycle carry their own routing
+
+There is one `## Handoff Routing` table in `constitution/workflow.md`, and it **refuses to
+load** if two rows compete for the same role. `full` needs `architect → specifier`; `harden`
+has no specifier and needs `architect → human-in-the-loop`. Both are the architect's *default*
+row, so one shared table cannot express both — and the clash is not a quiet misroute, it is a
+parse failure that takes down every profile at once.
+
+So a profile can declare its own `routing`, which **replaces** the file's table rather than
+adding to it:
+
+```json
+"harden": {
+  "terminals": [ ... ],
+  "routing": {
+    "human-in-the-loop": "refactorer",
+    "refactorer": "architect",
+    "architect": "human-in-the-loop"
+  }
+}
+```
+
+Replacement rather than overlay is deliberate: with an overlay, answering "where does the
+architect hand off in this profile" would mean reading two files and knowing which wins. A
+profile that omits `routing` keeps using `workflow.md`, which is what `full` and `dry-run` do.
+
+Sender-conditional rows use the nested form, where the keys are sender names and `default` is
+the blank `When Sender` row:
+
+```json
+"routing": { "specifier": { "default": "coder", "architect": "human-in-the-loop" } }
+```
+
+Every role named in a profile's routing must exist in that profile — a route to a role the
+profile never launches inserts a handoff into a queue nobody polls, and the run stops dead with
+no error anywhere. That is checked at load, not three cycles in.
 
 **Terminal fields:**
 
@@ -995,7 +1047,7 @@ Switch to either of these with `-ProfileName <name>` (Windows) or `--profile <na
 }
 ```
 
-This is wired via Claude Code's subagent `model:` frontmatter field: `write_worker_file()` in `kiln/framework/launcher/generate.py` writes `model: <workerModel>` into the generated `.claude/agents/<role>-worker.md` file when `workerModel` is set. In scheduler mode the same field is read back by `worker_prompt.py` to pick the one-shot worker's model. Claude Code resolves a dispatched subagent's model from its own frontmatter, independent of the parent session's model — so a Haiku-pinned wrapper genuinely dispatches a Sonnet worker, not Haiku. The framework's `default` profile (`kiln/framework/profiles.json`) currently runs both wrapper and worker on Sonnet for every role (`workerModel` omitted, so the worker just inherits the wrapper's model) — set `workerModel` explicitly per role if you want this cheaper/faster split instead.
+This is wired via Claude Code's subagent `model:` frontmatter field: `write_worker_file()` in `kiln/framework/launcher/generate.py` writes `model: <workerModel>` into the generated `.claude/agents/<role>-worker.md` file when `workerModel` is set. In scheduler mode the same field is read back by `worker_prompt.py` to pick the one-shot worker's model. Claude Code resolves a dispatched subagent's model from its own frontmatter, independent of the parent session's model — so a Haiku-pinned wrapper genuinely dispatches a Sonnet worker, not Haiku. The framework's `full` profile (`kiln/framework/profiles.json`) currently runs both wrapper and worker on Sonnet for every role (`workerModel` omitted, so the worker just inherits the wrapper's model) — set `workerModel` explicitly per role if you want this cheaper/faster split instead.
 
 ### Layout Configurations
 
@@ -1136,7 +1188,7 @@ Launch a specific profile with the `-ProfileName` (Windows) or `--profile` (Unix
 ./kiln.sh . --profile staging
 ```
 
-If no profile is specified, the framework's `default` profile is used. The working directory argument is required.
+If no profile is specified, the framework's `full` profile is used. The working directory argument is required.
 
 ### Gitflow-Aware Branch Naming
 
@@ -1311,7 +1363,7 @@ with the agent command sent via `send-keys`. Attach to one with `tmux attach -t 
 every role is always its own independent session, one `tmux new-session` per role, regardless
 of what the profile specifies. If you want roles visually grouped together the way the
 `layout` config describes (e.g. the `human-in-the-loop` + `inbox` pane pairing in the
-`default` profile), install WezTerm instead — it runs natively on Linux/macOS and reads the
+`full` profile), install WezTerm instead — it runs natively on Linux/macOS and reads the
 same `layout` config Windows does; there is no Unix-specific limitation on that path, only on
 this one.
 
@@ -1491,7 +1543,7 @@ the same routing rules real work uses — not a separate, parallel test path.
 ### Requirements
 
 Any profile with a `manual`, `@current` role at the front of the chain works — the framework's
-`default` profile already qualifies, so there's nothing to configure.
+`full` profile already qualifies, so there's nothing to configure.
 
 ### Inspection
 
@@ -1729,7 +1781,7 @@ under **Deterministic Scheduler** above.
 ### Recommended Next Steps
 
 1. **Validate the full scheduler loop across every backend at once** — the all-Claude
-   `default` profile has now completed one uninterrupted
+   `full` profile has now completed one uninterrupted
    human-in-the-loop → specifier → coder → refactorer → architect → human-in-the-loop cycle
    (see **Live validation status**), so what remains here is the same run on
    `mixed-backends`, plus genuine concurrent SQLite contention: every cycle so far has been

@@ -374,3 +374,105 @@ class TestShippedProfiles:
             (repo_root / "kiln" / "framework" / "profiles.json").read_text(encoding="utf-8")
         )
         assert config["default"] in config["profiles"]
+
+
+def _profile_with_routing(routing, terminals=None):
+    return {
+        "profiles": {
+            "p": {
+                "terminals": terminals or [
+                    {"role": "human-in-the-loop"}, {"role": "coder"}, {"role": "architect"}
+                ],
+                "routing": routing,
+            }
+        }
+    }
+
+
+class TestProfileRouting:
+    def test_a_profile_without_routing_defers_to_workflow_md(self):
+        assert parse_profile(CONFIG, "compact").routing.rules == ()
+
+    def test_declared_routing_is_parsed(self):
+        profile = parse_profile(_profile_with_routing({"coder": "architect"}), "p")
+        assert profile.routing.resolve("coder") == "architect"
+
+    def test_a_target_outside_the_profile_is_rejected(self):
+        # A route to a role this profile never launches inserts a handoff into a queue
+        # nobody polls: the cycle reports success and the work stops dead, with no error.
+        with pytest.raises(ProfileError, match="specifier"):
+            parse_profile(_profile_with_routing({"coder": "specifier"}), "p")
+
+    def test_a_source_role_outside_the_profile_is_rejected(self):
+        with pytest.raises(ProfileError, match="refactorer"):
+            parse_profile(_profile_with_routing({"refactorer": "architect"}), "p")
+
+    def test_a_sender_condition_outside_the_profile_is_rejected(self):
+        with pytest.raises(ProfileError, match="specifier"):
+            parse_profile(
+                _profile_with_routing({"coder": {"specifier": "architect"}}), "p"
+            )
+
+    def test_the_error_names_the_roles_that_do_exist(self):
+        with pytest.raises(ProfileError, match="coder"):
+            parse_profile(_profile_with_routing({"coder": "nope"}), "p")
+
+    def test_a_malformed_routing_block_fails_the_profile_not_the_parser(self):
+        with pytest.raises(ProfileError):
+            parse_profile(_profile_with_routing("not-an-object"), "p")
+
+
+class TestWorkflowShapedProfiles:
+    """
+    The profiles users actually pick from. They are named for the KIND OF WORK they do,
+    which is the change: before, all three shipped profiles were the same seven roles
+    differing only in which vendor ran them.
+    """
+
+    @pytest.fixture
+    def shipped(self):
+        from pathlib import Path
+
+        repo_root = Path(__file__).resolve().parents[1]
+        path = repo_root / "kiln" / "framework" / "profiles.json"
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    @pytest.mark.parametrize("name", ["full", "fix", "spike", "harden", "dry-run"])
+    def test_each_workflow_profile_parses(self, shipped, name):
+        assert parse_profile(shipped, name).roles
+
+    def test_the_default_is_the_full_workflow(self, shipped):
+        assert shipped["default"] == "full"
+
+    def test_every_profile_has_a_human_entry_point(self, shipped):
+        for name in shipped["profiles"]:
+            roles = {r.role for r in parse_profile(shipped, name).roles}
+            assert "human-in-the-loop" in roles, name
+
+    def test_harden_needs_no_specifier(self, shipped):
+        # The shape that forced routing into the profile: no specifier means the architect
+        # cannot hand back to one.
+        roles = {r.role for r in parse_profile(shipped, "harden").roles}
+        assert "specifier" not in roles
+
+    def test_the_architect_row_that_could_not_coexist(self, shipped):
+        # `full` reads workflow.md (architect -> specifier); `harden` overrides it. In one
+        # shared table these are the same (role, when_sender) key and the second is a hard
+        # parse failure, not a misroute.
+        assert parse_profile(shipped, "full").routing.rules == ()
+        assert parse_profile(shipped, "harden").routing.resolve("architect") == (
+            "human-in-the-loop"
+        )
+
+    @pytest.mark.parametrize("name", ["fix", "spike", "harden"])
+    def test_a_reshaped_profile_routes_back_to_the_human(self, shipped, name):
+        # Every shortened cycle must terminate somewhere a human is looking, or the run
+        # simply stops with nothing to read.
+        profile = parse_profile(shipped, name)
+        targets = {rule.target for rule in profile.routing.rules}
+        assert "human-in-the-loop" in targets
+
+    def test_dry_run_puts_every_agent_role_in_manual_mode(self, shipped):
+        for role in parse_profile(shipped, "dry-run").roles:
+            if not role.is_passive:
+                assert role.mode == "manual", role.role

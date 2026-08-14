@@ -25,7 +25,7 @@ from pathlib import Path
 
 from . import db, git_ops, handoff, pane_status
 from .adapters import TokenUsage, WorkerInvocation
-from .routing import RoutingTable, load_routing_table
+from .routing import RoutingTable, load_routing_table, parse_routing_arguments
 from .worker_prompt import WorkerDefinition, build_task_prompt, load_worker_definition
 
 log = logging.getLogger(__name__)
@@ -658,7 +658,13 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
         branch=args.branch,
         db_path=Path(args.db_path),
         worktree=Path(args.worktree),
-        routing=load_routing_table(args.workflow),
+        # A profile with its own routing sends it as --route arguments and replaces
+        # workflow.md's table outright; without them the file stays the source.
+        routing=(
+            parse_routing_arguments(args.route)
+            if args.route
+            else load_routing_table(args.workflow)
+        ),
         definition=definition,
         run_worker=run_worker,
         set_status=make_status_writer(args.role, args.status_script),
@@ -675,6 +681,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--worker-agent", required=True, help="generated worker agent file")
     parser.add_argument(
         "--agent", default="claude", choices=["claude", "copilot", "codex", "grok"]
+    )
+    parser.add_argument(
+        "--route", action="append", default=[], metavar="ROLE=TARGET[:WHEN_SENDER]",
+        help=(
+            "one handoff routing rule from the profile, repeatable. Given at all, "
+            "these replace the --workflow table entirely rather than adding to it."
+        ),
     )
     parser.add_argument("--model", default="")
     parser.add_argument("--status-script", default=None)

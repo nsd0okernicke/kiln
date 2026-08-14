@@ -717,3 +717,55 @@ class TestEnsureIgnored:
 
         monkeypatch.setattr(git_ops.Path, "write_text", boom)
         git_ops.ensure_ignored("tmp/", git_repo)  # must not raise
+
+
+class TestRouteOverride:
+    """
+    A profile that declares its own routing replaces workflow.md's table outright. Partial
+    overlay would mean answering "where does this role hand off" requires reading two files
+    and knowing which wins.
+    """
+
+    def _args(self, tmp_path, *routes):
+        worker_file = tmp_path / "coder-worker.md"
+        worker_file.write_text(WORKER_FILE, encoding="utf-8")
+        workflow = tmp_path / "workflow.md"
+        workflow.write_text("| coder | refactorer |\n", encoding="utf-8")
+        argv = [
+            "--role", "coder",
+            "--branch", "main",
+            "--db-path", str(tmp_path / "messages.db"),
+            "--worktree", str(tmp_path),
+            "--workflow", str(workflow),
+            "--worker-agent", str(worker_file),
+        ]
+        for route in routes:
+            argv += ["--route", route]
+        return argv
+
+    def test_without_routes_the_workflow_file_is_used(self, tmp_path):
+        ctx = role_scheduler.build_context(role_scheduler.parse_args(self._args(tmp_path)))
+        assert ctx.routing.resolve("coder") == "refactorer"
+
+    def test_routes_replace_the_file_entirely(self, tmp_path):
+        ctx = role_scheduler.build_context(
+            role_scheduler.parse_args(self._args(tmp_path, "coder=architect"))
+        )
+        assert ctx.routing.resolve("coder") == "architect"
+
+    def test_a_role_only_in_the_file_is_gone_once_routes_are_given(self, tmp_path):
+        # Replacement, not overlay: the file's `coder -> refactorer` must not survive
+        # alongside a profile that never launches a refactorer.
+        ctx = role_scheduler.build_context(
+            role_scheduler.parse_args(self._args(tmp_path, "architect=human-in-the-loop"))
+        )
+        assert ctx.routing.resolve("coder") is None
+
+    def test_a_conditional_route_survives_the_command_line(self, tmp_path):
+        ctx = role_scheduler.build_context(
+            role_scheduler.parse_args(
+                self._args(tmp_path, "coder=architect", "coder=human-in-the-loop:architect")
+            )
+        )
+        assert ctx.routing.resolve("coder") == "architect"
+        assert ctx.routing.resolve("coder", "architect") == "human-in-the-loop"

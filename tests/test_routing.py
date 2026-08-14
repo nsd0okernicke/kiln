@@ -236,3 +236,86 @@ class TestFileLoading:
         table = routing.load_routing_table(workflow)
         assert table.resolve("coder") == "refactorer"
         assert table.resolve("human-in-the-loop") == "specifier"
+
+
+class TestProfileRouting:
+    """
+    Routing that a profile carries itself, replacing workflow.md's table.
+
+    There is one `## Handoff Routing` table and `parse_routing_table` raises on a duplicate
+    `(role, when_sender)` pair. So one file cannot serve two workflow shapes: `full` needs
+    `architect -> specifier` and `harden` needs `architect -> human-in-the-loop`, both as the
+    architect's *default* row. The clash is not a misroute, it is a parse failure that takes
+    down every profile at once.
+    """
+
+    def test_nothing_declared_is_an_empty_table(self):
+        assert routing.parse_profile_routing(None).rules == ()
+        assert routing.parse_profile_routing({}).rules == ()
+
+    def test_a_plain_target_becomes_a_default_rule(self):
+        table = routing.parse_profile_routing({"architect": "human-in-the-loop"})
+        assert table.resolve("architect") == "human-in-the-loop"
+        assert table.rules[0].when_sender is None
+
+    def test_sender_conditions_are_expressible(self):
+        table = routing.parse_profile_routing(
+            {"specifier": {"default": "coder", "architect": "human-in-the-loop"}}
+        )
+        assert table.resolve("specifier") == "coder"
+        assert table.resolve("specifier", "architect") == "human-in-the-loop"
+
+    def test_the_two_shapes_that_could_not_coexist_now_can(self):
+        # The whole reason this exists.
+        full = routing.parse_profile_routing({"architect": "specifier"})
+        harden = routing.parse_profile_routing({"architect": "human-in-the-loop"})
+        assert full.resolve("architect") == "specifier"
+        assert harden.resolve("architect") == "human-in-the-loop"
+
+    def test_role_names_are_normalised_like_the_table_parser(self):
+        table = routing.parse_profile_routing({"  Architect  ": "human-in-the-loop"})
+        assert table.resolve("architect") == "human-in-the-loop"
+
+    @pytest.mark.parametrize("bad", ["not-an-object", ["a"], 42])
+    def test_a_non_object_routing_block_is_rejected(self, bad):
+        with pytest.raises(ValueError):
+            routing.parse_profile_routing(bad)
+
+    @pytest.mark.parametrize("bad", [{"architect": 7}, {"architect": {"default": ""}}])
+    def test_a_missing_or_non_string_target_is_rejected(self, bad):
+        with pytest.raises(ValueError):
+            routing.parse_profile_routing(bad)
+
+
+class TestRoutingArgumentRoundTrip:
+    """
+    The scheduler is a separate process and cannot read the launcher's parsed profile, so
+    resolved rules travel to it as command-line arguments.
+    """
+
+    def test_a_default_rule_round_trips(self):
+        table = routing.parse_profile_routing({"architect": "human-in-the-loop"})
+        assert routing.parse_routing_arguments(
+            routing.format_routing_rules(table)
+        ).rules == table.rules
+
+    def test_a_conditional_rule_round_trips(self):
+        table = routing.parse_profile_routing(
+            {"specifier": {"default": "coder", "architect": "human-in-the-loop"}}
+        )
+        assert routing.parse_routing_arguments(
+            routing.format_routing_rules(table)
+        ).rules == table.rules
+
+    def test_the_wire_format_is_readable(self):
+        table = routing.parse_profile_routing({"specifier": {"architect": "human-in-the-loop"}})
+        assert routing.format_routing_rules(table) == [
+            "specifier=human-in-the-loop:architect"
+        ]
+
+    @pytest.mark.parametrize("bad", ["no-equals", "=target", "role="])
+    def test_a_malformed_argument_raises_rather_than_being_skipped(self, bad):
+        # A dropped rule sends a role's handoff somewhere nobody polls, and the work stops
+        # dead with no error anywhere.
+        with pytest.raises(ValueError):
+            routing.parse_routing_arguments([bad])

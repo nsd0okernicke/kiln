@@ -192,3 +192,85 @@ def load_routing_table(path: str | Path) -> RoutingTable:
     if not file_path.is_file():
         return RoutingTable()
     return parse_routing_table(file_path.read_text(encoding="utf-8"))
+
+
+def parse_profile_routing(entries: object) -> RoutingTable:
+    """
+    Build a routing table from a profile's own `routing` block.
+
+    There is exactly one `## Handoff Routing` table in workflow.md, and
+    `parse_routing_table` raises on a duplicate `(role, when_sender)` pair -- deliberately,
+    so a swarm cannot be silently misrouted. That makes one shared table unable to serve
+    two workflow shapes at once: `full` needs `architect -> specifier`, while `harden` has
+    no specifier and needs `architect -> human-in-the-loop`. Both are the architect's
+    *default* row, so they collide, and the collision is not a misroute -- it is a parse
+    failure that takes down every profile at the same time.
+
+    A profile that declares `routing` therefore **replaces** the file's table outright
+    rather than overlaying it. Partial overlay would mean answering "where does the
+    architect hand off in this profile" requires reading two files and knowing which wins.
+    A profile that declares nothing keeps using workflow.md, so the default is unchanged.
+
+    Accepted shapes, per role:
+
+        "routing": {
+          "architect": "human-in-the-loop",
+          "specifier": {"default": "coder", "architect": "human-in-the-loop"}
+        }
+
+    The nested form's keys are sender names; `default` is the blank `When Sender` row.
+    """
+    if not entries:
+        return RoutingTable()
+    if not isinstance(entries, dict):
+        raise ValueError("profile routing must be an object mapping role -> target")
+
+    rules: list[RoutingRule] = []
+    for role, value in entries.items():
+        if isinstance(value, str):
+            rules.append(RoutingRule(role=_normalise(role), target=value.strip()))
+            continue
+        if not isinstance(value, dict):
+            raise ValueError(
+                f"routing for {role!r} must be a target name or an object of sender -> target"
+            )
+        for sender, target in value.items():
+            if not isinstance(target, str) or not target.strip():
+                raise ValueError(f"routing target for {role!r} must be a non-empty role name")
+            when = None if _normalise(sender) == "default" else _normalise(sender)
+            rules.append(
+                RoutingRule(role=_normalise(role), target=target.strip(), when_sender=when)
+            )
+    return RoutingTable(rules=tuple(rules))
+
+
+def format_routing_rules(table: RoutingTable) -> list[str]:
+    """
+    Rules as `role=target` / `role=target:when_sender` strings, for a command line.
+
+    The scheduler runs in its own process and cannot read the launcher's parsed profile,
+    so the resolved rules travel to it as arguments. Round-trips through
+    `parse_routing_arguments`.
+    """
+    return [
+        f"{rule.role}={rule.target}" + (f":{rule.when_sender}" if rule.when_sender else "")
+        for rule in table.rules
+    ]
+
+
+def parse_routing_arguments(values: list[str]) -> RoutingTable:
+    """`["architect=human-in-the-loop"]` -> a RoutingTable. Inverse of `format_routing_rules`."""
+    rules: list[RoutingRule] = []
+    for value in values:
+        role, separator, rest = value.partition("=")
+        if not separator or not role.strip() or not rest.strip():
+            raise ValueError(f"--route needs ROLE=TARGET[:WHEN_SENDER], got {value!r}")
+        target, _, when = rest.partition(":")
+        rules.append(
+            RoutingRule(
+                role=_normalise(role),
+                target=target.strip(),
+                when_sender=_normalise(when) if when.strip() else None,
+            )
+        )
+    return RoutingTable(rules=tuple(rules))

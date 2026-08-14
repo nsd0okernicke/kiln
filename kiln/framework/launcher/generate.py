@@ -80,9 +80,20 @@ def instruction_file_for(role: RoleConfig, worktree: Path) -> Path:
 
 
 def build_substitutions(
-    role: RoleConfig, paths: KilnPaths, branch: str, worktree: Path
+    role: RoleConfig,
+    paths: KilnPaths,
+    branch: str,
+    worktree: Path,
+    profile: Profile | None = None,
 ) -> dict[str, str]:
-    routing = load_routing_table(paths.workflow_md)
+    # A profile with its own routing replaces workflow.md's table, so the instructions a
+    # wrapper role is handed must name that profile's target. Rendering the file's answer
+    # here would tell the agent to hand off to a role its own profile never launches.
+    routing = (
+        profile.routing
+        if profile is not None and profile.routing.rules
+        else load_routing_table(paths.workflow_md)
+    )
     target = routing.resolve(role.role) or DEFAULT_HANDOFF_TARGET
     return {
         "{{ROLE}}": role.role,
@@ -146,7 +157,7 @@ def render_instructions(
             workflow,
         ]
 
-    substitutions = build_substitutions(role, paths, branch, worktree)
+    substitutions = build_substitutions(role, paths, branch, worktree, profile)
     return generated_header(_now()) + join_blocks(blocks, substitutions)
 
 
