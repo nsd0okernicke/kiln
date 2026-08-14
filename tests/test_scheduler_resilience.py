@@ -191,7 +191,7 @@ class TestUntrackedKilnWarning:
 
 class TestShippedRoutingTable:
     """
-    The framework's own constitution must describe a cycle that can *terminate*.
+    The framework's own default profile must describe a cycle that can *terminate*.
 
     Found live: the shipped table routed every specifier handoff to `coder`, and the one
     exception — an architect's completed-cycle report goes back to the human, not around
@@ -203,12 +203,12 @@ class TestShippedRoutingTable:
 
     @pytest.fixture
     def table(self):
-        from pathlib import Path
-
-        from scheduler.routing import load_routing_table
-
-        repo = Path(__file__).resolve().parents[1]
-        return load_routing_table(repo / "kiln" / "project" / "constitution" / "workflow.md")
+        # Routing moved out of workflow.md and into the profile: the file is injected
+        # verbatim into wrapper-mode instructions, so a table written there and a profile
+        # that declares its own were two sources that could disagree. The file now carries
+        # a {{ROUTING_TABLE}} placeholder rendered from whichever profile is running, and
+        # the shipped default profile is the thing this class is really about.
+        return _shipped_profile().routing
 
     def test_an_architect_report_returns_to_the_human(self, table):
         assert table.resolve("specifier", "architect") == "human-in-the-loop"

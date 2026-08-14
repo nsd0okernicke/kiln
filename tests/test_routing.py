@@ -227,15 +227,22 @@ class TestFileLoading:
     def test_directory_path_yields_an_empty_table(self, tmp_path):
         assert routing.load_routing_table(tmp_path).rules == ()
 
-    def test_shipped_workflow_md_parses(self):
-        # Guards against the real constitution drifting out of the parser's grammar.
+    def _shipped_workflow(self):
         from pathlib import Path
 
         repo_root = Path(__file__).resolve().parents[1]
-        workflow = repo_root / "kiln" / "project" / "constitution" / "workflow.md"
-        table = routing.load_routing_table(workflow)
-        assert table.resolve("coder") == "refactorer"
-        assert table.resolve("human-in-the-loop") == "specifier"
+        path = repo_root / "kiln" / "project" / "constitution" / "workflow.md"
+        return path.read_text(encoding="utf-8")
+
+    def test_shipped_workflow_md_carries_the_placeholder(self):
+        # The file is injected verbatim into wrapper-mode instructions, so its table is
+        # rendered from the profile actually running rather than written by hand.
+        assert "{{ROUTING_TABLE}}" in self._shipped_workflow()
+
+    def test_shipped_workflow_md_hardcodes_no_routing_rows(self):
+        # The invariant that keeps the two halves of routing from drifting: if someone
+        # re-adds a table here, agents start reading rules the scheduler does not follow.
+        assert routing.parse_routing_table(self._shipped_workflow()).rules == ()
 
 
 class TestProfileRouting:
@@ -319,3 +326,52 @@ class TestRoutingArgumentRoundTrip:
         # dead with no error anywhere.
         with pytest.raises(ValueError):
             routing.parse_routing_arguments([bad])
+
+
+class TestRenderRoutingTable:
+    """
+    workflow.md carries a placeholder instead of a hand-written table, because the file is
+    injected verbatim into wrapper-mode instructions and a second copy can drift.
+    """
+
+    def test_renders_a_markdown_table_with_a_header(self):
+        rendered = routing.render_routing_table(
+            routing.parse_profile_routing({"coder": "architect"})
+        )
+        lines = rendered.splitlines()
+        assert lines[0].startswith("| Role |")
+        assert lines[1].startswith("| ----")
+        assert "| coder | architect |" in rendered
+
+    def test_a_default_row_leaves_the_condition_cell_blank(self):
+        rendered = routing.render_routing_table(
+            routing.parse_profile_routing({"coder": "architect"})
+        )
+        assert rendered.strip().endswith("|  |")
+
+    def test_a_conditional_row_carries_its_sender(self):
+        rendered = routing.render_routing_table(
+            routing.parse_profile_routing({"specifier": {"architect": "human-in-the-loop"}})
+        )
+        assert "| specifier | human-in-the-loop | architect |" in rendered
+
+    def test_an_empty_table_still_renders_something_readable(self):
+        # An agent handed a bare header would read it as "no rows here yet" rather than as
+        # a rendering failure; say so instead.
+        assert "no routing configured" in routing.render_routing_table(routing.RoutingTable())
+
+    def test_it_round_trips_through_the_markdown_parser(self):
+        # The rendered table has to be the same grammar the file parser accepts, or the two
+        # halves of routing would silently diverge.
+        table = routing.parse_profile_routing(
+            {
+                "coder": "architect",
+                "specifier": {"default": "coder", "architect": "human-in-the-loop"},
+            }
+        )
+        reparsed = routing.parse_routing_table(
+            "## Handoff Routing\n\n" + routing.render_routing_table(table)
+        )
+        assert reparsed.resolve("coder") == "architect"
+        assert reparsed.resolve("specifier") == "coder"
+        assert reparsed.resolve("specifier", "architect") == "human-in-the-loop"

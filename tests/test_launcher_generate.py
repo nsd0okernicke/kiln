@@ -366,3 +366,76 @@ class TestGenerateAll:
         assert len(written["workers"]) == 2
         assert len(written["instructions"]) == 1
         assert written["instructions"][0].name == "CLAUDE.md"
+
+
+class TestRoutingTableInjection:
+    """
+    workflow.md is injected verbatim into wrapper-mode instructions, routing table included.
+    A table hand-written there and a profile that declares its own routing are two sources
+    that can disagree -- and the agent obeys the one in front of it. So the file carries a
+    placeholder and the launcher fills it from the profile actually running.
+    """
+
+    def _profile(self, routing):
+        from launcher.config import Profile, RoleConfig
+        from scheduler.routing import parse_profile_routing
+
+        return Profile(
+            name="p",
+            description="",
+            roles=(
+                RoleConfig(role="coder", mode="manual"),
+                RoleConfig(role="architect", mode="manual"),
+                RoleConfig(role="human-in-the-loop", mode="manual"),
+            ),
+            layout={},
+            routing=parse_profile_routing(routing),
+        )
+
+    def _workflow_with_placeholder(self, paths):
+        (paths.constitution_dir / "workflow.md").write_text(
+            "# Workflow Rules\n\n## Handoff Routing\n\n{{ROUTING_TABLE}}\n", encoding="utf-8"
+        )
+
+    def test_the_placeholder_is_replaced(self, paths):
+        from launcher.config import RoleConfig
+
+        self._workflow_with_placeholder(paths)
+        content = generate.render_instructions(
+            RoleConfig(role="coder", mode="manual"), paths, "main", paths.project_root,
+            self._profile({"coder": "architect", "architect": "human-in-the-loop"}),
+        )
+        assert "{{ROUTING_TABLE}}" not in content
+
+    def test_the_agent_sees_its_own_profile_s_routing(self, paths):
+        from launcher.config import RoleConfig
+
+        self._workflow_with_placeholder(paths)
+        content = generate.render_instructions(
+            RoleConfig(role="coder", mode="manual"), paths, "main", paths.project_root,
+            self._profile({"coder": "architect", "architect": "human-in-the-loop"}),
+        )
+        assert "| coder | architect |" in content
+        assert "| architect | human-in-the-loop |" in content
+
+    def test_it_never_shows_a_route_the_profile_does_not_have(self, paths):
+        # The trap this closes: instructions telling a wrapper role to hand off to a role
+        # its own swarm never launches.
+        from launcher.config import RoleConfig
+
+        self._workflow_with_placeholder(paths)
+        content = generate.render_instructions(
+            RoleConfig(role="coder", mode="manual"), paths, "main", paths.project_root,
+            self._profile({"coder": "human-in-the-loop"}),
+        )
+        assert "refactorer" not in content
+
+    def test_a_conditional_row_survives_into_the_instructions(self, paths):
+        from launcher.config import RoleConfig
+
+        self._workflow_with_placeholder(paths)
+        content = generate.render_instructions(
+            RoleConfig(role="coder", mode="manual"), paths, "main", paths.project_root,
+            self._profile({"coder": {"default": "architect", "architect": "human-in-the-loop"}}),
+        )
+        assert "| coder | human-in-the-loop | architect |" in content

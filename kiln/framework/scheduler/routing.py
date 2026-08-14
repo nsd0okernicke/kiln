@@ -258,6 +258,24 @@ def format_routing_rules(table: RoutingTable) -> list[str]:
     ]
 
 
+def render_routing_table(table: RoutingTable) -> str:
+    """
+    A RoutingTable as the markdown table workflow.md used to carry by hand.
+
+    The table is injected verbatim into every wrapper-mode agent's instructions, so a
+    hand-written one and a profile that overrides routing are two sources that can disagree
+    -- and the agent follows the one in its instructions. Rendering it from the profile
+    means an agent is never told to hand off somewhere its own swarm does not route.
+    """
+    header = ["| Role | Sends to | When Sender |", "| ---- | -------- | ----------- |"]
+    rows = [
+        f"| {rule.role} | {rule.target} | {rule.when_sender or ''} |" for rule in table.rules
+    ]
+    if not rows:
+        return "\n".join([*header, "| _(no routing configured)_ | | |"])
+    return "\n".join([*header, *rows])
+
+
 def parse_routing_arguments(values: list[str]) -> RoutingTable:
     """`["architect=human-in-the-loop"]` -> a RoutingTable. Inverse of `format_routing_rules`."""
     rules: list[RoutingRule] = []

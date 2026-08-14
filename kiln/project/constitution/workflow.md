@@ -57,14 +57,12 @@ When you have nothing to merge (a human's opening request, a ping), leave `Commi
 
 ## Handoff Routing
 
-| Role | Sends to | When Sender |
-| ---- | -------- | ----------- |
-| human-in-the-loop | specifier | |
-| specifier | coder | |
-| specifier | human-in-the-loop | architect |
-| coder | refactorer | |
-| refactorer | architect | |
-| architect | specifier | |
+**This table is generated from the profile you are running.** It is not hand-written, and it
+describes *this* swarm rather than swarms in general — a profile with no specifier routes the
+architect somewhere else, and you will see that here. The rules live in
+`kiln/framework/profiles.json` under the profile's `routing` key.
+
+{{ROUTING_TABLE}}
 
 The optional third column makes routing depend on who sent the inbound handoff. A row whose
 `When Sender` matches wins; the row with a blank `When Sender` is the role's default.

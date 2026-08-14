@@ -66,6 +66,16 @@
           "scheduler": "dashboard"
         }
       ],
+      "routing": {
+        "human-in-the-loop": "specifier",
+        "specifier": {
+          "default": "coder",
+          "architect": "human-in-the-loop"
+        },
+        "coder": "refactorer",
+        "refactorer": "architect",
+        "architect": "specifier"
+      },
       "layout": {
         "tabs": [
           {
@@ -418,6 +428,16 @@
           "scheduler": "dashboard"
         }
       ],
+      "routing": {
+        "human-in-the-loop": "specifier",
+        "specifier": {
+          "default": "coder",
+          "architect": "human-in-the-loop"
+        },
+        "coder": "refactorer",
+        "refactorer": "architect",
+        "architect": "specifier"
+      },
       "layout": {
         "tabs": [
           {
@@ -521,6 +541,16 @@
           "scheduler": "dashboard"
         }
       ],
+      "routing": {
+        "human-in-the-loop": "specifier",
+        "specifier": {
+          "default": "coder",
+          "architect": "human-in-the-loop"
+        },
+        "coder": "refactorer",
+        "refactorer": "architect",
+        "architect": "specifier"
+      },
       "layout": {
         "tabs": [
           {
@@ -631,6 +661,16 @@
           "scheduler": "dashboard"
         }
       ],
+      "routing": {
+        "human-in-the-loop": "specifier",
+        "specifier": {
+          "default": "coder",
+          "architect": "human-in-the-loop"
+        },
+        "coder": "refactorer",
+        "refactorer": "architect",
+        "architect": "specifier"
+      },
       "layout": {
         "tabs": [
           {

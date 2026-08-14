@@ -34,7 +34,7 @@ from .templates import (
 
 # scheduler/ is a sibling package under kiln/framework.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from scheduler.routing import load_routing_table
+from scheduler.routing import load_routing_table, render_routing_table
 from scheduler.status_contract import WORKER_STATUS_INSTRUCTION
 
 #: The interpreter `.mcp.json` names for kiln-channel. Deliberately the bare command rather
@@ -96,6 +96,11 @@ def build_substitutions(
     )
     target = routing.resolve(role.role) or DEFAULT_HANDOFF_TARGET
     return {
+        # workflow.md carries a placeholder rather than a hand-written table: the file is
+        # injected verbatim into wrapper-mode instructions, so a table written there and a
+        # profile that overrides routing are two sources that can disagree -- and the agent
+        # obeys the one in front of it.
+        "{{ROUTING_TABLE}}": render_routing_table(routing),
         "{{ROLE}}": role.role,
         "{{ROLE_UPPER}}": role.role.upper(),
         "{{MODE}}": role.mode,

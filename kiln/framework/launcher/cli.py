@@ -30,7 +30,7 @@ from .commands import (
     render_posix,
     render_powershell,
 )
-from .config import Profile, ProfileError, list_profiles, load_profile
+from .config import Profile, ProfileError, check_launchable, list_profiles, load_profile
 from .generate import CHANNEL_IMPORT_PROBE, MCP_PYTHON
 from .paths import KilnPaths, python_command
 from .templates import TemplateError, check_project_scaffolding, resolve_framework_root
@@ -389,6 +389,7 @@ def run_launch(args: argparse.Namespace) -> int:
     check_dependencies()
 
     profile = load_profile(paths.project_root, paths.framework_root, args.profile)
+    check_launchable(profile)
     log.info("profile: %s (%d roles)", profile.name, len(profile.roles))
     warn_if_channel_unavailable(profile)
 

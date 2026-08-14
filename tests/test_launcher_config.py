@@ -390,8 +390,35 @@ def _profile_with_routing(routing, terminals=None):
 
 
 class TestProfileRouting:
-    def test_a_profile_without_routing_defers_to_workflow_md(self):
+    def test_parsing_a_profile_without_routing_yields_an_empty_table(self):
+        # Parsing stays permissive; a *launch* is where routing has to exist.
         assert parse_profile(CONFIG, "compact").routing.rules == ()
+
+    def test_launching_a_profile_without_routing_is_refused(self):
+        from launcher.config import check_launchable
+
+        with pytest.raises(ProfileError, match="routing"):
+            check_launchable(parse_profile(CONFIG, "compact"))
+
+    def test_a_passive_only_profile_needs_no_routing(self):
+        from launcher.config import check_launchable
+
+        passive = {"profiles": {"p": {"terminals": [
+            {"role": "dashboard", "scheduler": "dashboard", "worktree": "@current"},
+        ]}}}
+        check_launchable(parse_profile(passive, "p"))  # must not raise
+
+    def test_every_shipped_profile_is_launchable(self):
+        from pathlib import Path
+
+        from launcher.config import check_launchable
+
+        repo_root = Path(__file__).resolve().parents[1]
+        config = json.loads(
+            (repo_root / "kiln" / "framework" / "profiles.json").read_text(encoding="utf-8")
+        )
+        for name in config["profiles"]:
+            check_launchable(parse_profile(config, name))
 
     def test_declared_routing_is_parsed(self):
         profile = parse_profile(_profile_with_routing({"coder": "architect"}), "p")
@@ -456,13 +483,24 @@ class TestWorkflowShapedProfiles:
         assert "specifier" not in roles
 
     def test_the_architect_row_that_could_not_coexist(self, shipped):
-        # `full` reads workflow.md (architect -> specifier); `harden` overrides it. In one
-        # shared table these are the same (role, when_sender) key and the second is a hard
-        # parse failure, not a misroute.
-        assert parse_profile(shipped, "full").routing.rules == ()
+        # In one shared table these are the same (role, when_sender) key, and the second is
+        # a hard parse failure that takes down every profile -- not a quiet misroute.
+        assert parse_profile(shipped, "full").routing.resolve("architect") == "specifier"
         assert parse_profile(shipped, "harden").routing.resolve("architect") == (
             "human-in-the-loop"
         )
+
+    def test_every_profile_declares_its_own_routing(self, shipped):
+        # No inheritance and no fallback: the profile is the only place routing lives.
+        for name in shipped["profiles"]:
+            assert parse_profile(shipped, name).routing.rules, name
+
+    def test_the_full_cycle_still_closes_back_to_the_human(self, shipped):
+        # The conditional row that stops an architect's completed-cycle report looping
+        # round to the coder forever.
+        routing = parse_profile(shipped, "full").routing
+        assert routing.resolve("specifier") == "coder"
+        assert routing.resolve("specifier", "architect") == "human-in-the-loop"
 
     @pytest.mark.parametrize("name", ["fix", "spike", "harden"])
     def test_a_reshaped_profile_routes_back_to_the_human(self, shipped, name):

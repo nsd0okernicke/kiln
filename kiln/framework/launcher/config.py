@@ -328,6 +328,29 @@ def parse_profile(config: dict, name: str) -> Profile:
     )
 
 
+def check_launchable(profile: Profile) -> None:
+    """
+    Refuse to launch a profile that describes no workflow. Raises ProfileError.
+
+    Separate from `parse_profile` on purpose. Parsing has many callers that build a profile
+    to exercise something unrelated -- worktrees, skills, pane commands -- and forcing every
+    one of them to declare routing it does not use would add noise to the fixtures without
+    catching anything. A *launch* is the moment routing has to exist.
+
+    It has to exist because constitution/workflow.md renders its table from here now, so
+    there is no file left to fall back on. Without this check the swarm starts, runs one
+    cycle and escalates NO_ROUTE -- a worse place to learn it than the launch that caused it.
+    """
+    if profile.routing.rules:
+        return
+    if all(role.is_passive for role in profile.roles):
+        return  # nothing that hands off; an inbox/dashboard-only profile needs no routes
+    raise ProfileError(
+        f"profile {profile.name!r} declares no 'routing'. Every profile owns its own handoff "
+        f"routing; add a 'routing' block mapping each role to the role it hands off to."
+    )
+
+
 def _validate_routing(routing: RoutingTable, roles: set[str], profile_name: str) -> None:
     """
     Every role named in a profile's routing must exist in that profile.
