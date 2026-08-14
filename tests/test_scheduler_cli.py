@@ -391,6 +391,30 @@ class TestStartupBanner:
         assert "--db-path" not in self._banner(tmp_path)
 
 
+class TestTuningFlags:
+    """
+    `max_attempts` and `escalation_limit` were `SchedulerContext` dataclass defaults with no
+    CLI flag at all -- changeable only from code, despite being the two numbers that decide
+    how an unattended swarm gives up.
+    """
+
+    _args = TestCli._args
+
+    def test_defaults_match_the_dataclass(self, tmp_path):
+        args = role_scheduler.parse_args(self._args(tmp_path))
+        assert args.max_attempts == role_scheduler.SchedulerContext.max_attempts
+        assert args.escalation_limit == role_scheduler.SchedulerContext.escalation_limit
+
+    def test_they_reach_the_context(self, tmp_path):
+        db.ensure_schema(tmp_path / "messages.db")
+        args = role_scheduler.parse_args(
+            [*self._args(tmp_path), "--max-attempts", "5", "--escalation-limit", "1"]
+        )
+        ctx = role_scheduler.build_context(args)
+        assert ctx.max_attempts == 5
+        assert ctx.escalation_limit == 1
+
+
 class TestCliLoop:
     _args = TestCli._args
 

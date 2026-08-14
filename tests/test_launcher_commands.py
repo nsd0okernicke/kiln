@@ -235,6 +235,25 @@ class TestScheduler:
         argv = self._scheduler(paths, verify_timeout=120).argv
         assert "--verify-timeout" not in argv
 
+    def test_profile_knobs_reach_the_scheduler(self, paths):
+        argv = self._scheduler(
+            paths, poll_interval=5, worker_timeout=60, max_attempts=4, escalation_limit=2
+        ).argv
+        assert argv[argv.index("--poll-interval") + 1] == "5"
+        assert argv[argv.index("--worker-timeout") + 1] == "60"
+        assert argv[argv.index("--max-attempts") + 1] == "4"
+        assert argv[argv.index("--escalation-limit") + 1] == "2"
+
+    def test_a_fractional_poll_interval_is_not_rendered_in_scientific_notation(self, paths):
+        argv = self._scheduler(paths, poll_interval=0.5).argv
+        assert argv[argv.index("--poll-interval") + 1] == "0.5"
+
+    def test_unset_knobs_are_not_passed_so_the_module_default_applies(self, paths):
+        argv = self._scheduler(paths).argv
+        for flag in ("--poll-interval", "--worker-timeout", "--max-attempts",
+                     "--escalation-limit"):
+            assert flag not in argv
+
     def test_unset_guards_are_not_passed_at_all(self, paths):
         # So the scheduler's own "no ceiling" default applies, rather than a number chosen
         # here leaking in as a de facto policy.
@@ -307,6 +326,15 @@ class TestInboxPane:
         argv = self._command(paths).argv
         assert argv[argv.index("--branch") + 1] == "main"
 
+    def test_its_knobs_are_reachable_from_the_profile(self, paths):
+        # The inbox accepted --poll-interval and --no-bell all along; nothing could set them.
+        argv = self._command(paths, poll_interval=5, bell=False).argv
+        assert argv[argv.index("--poll-interval") + 1] == "5"
+        assert "--no-bell" in argv
+
+    def test_the_bell_rings_by_default(self, paths):
+        assert "--no-bell" not in self._command(paths).argv
+
     def test_forces_utf8_so_the_glyphs_cannot_crash_it(self, paths):
         assert self._command(paths).env["PYTHONIOENCODING"] == "utf-8"
 
@@ -323,18 +351,24 @@ class TestInboxPane:
 class TestDashboardPane:
     """A cross-role aggregate view, not an agent -- see scheduler/dashboard.py."""
 
-    def _command(self, paths):
+    def _command(self, paths, **overrides):
         from launcher.commands import build_agent_command
         from launcher.config import RoleConfig
 
         role = RoleConfig(
-            role="dashboard", worktree="@current", mode="manual", scheduler="dashboard"
+            role="dashboard", worktree="@current", mode="manual", scheduler="dashboard",
+            **overrides,
         )
         return build_agent_command(role, paths, "main")
 
     def test_runs_the_dashboard_module(self, paths):
         argv = self._command(paths).argv
         assert argv[:3] == [python_command(), "-m", "scheduler.dashboard"]
+
+    def test_its_knobs_are_reachable_from_the_profile(self, paths):
+        argv = self._command(paths, poll_interval=5, activity_limit=20).argv
+        assert argv[argv.index("--poll-interval") + 1] == "5"
+        assert argv[argv.index("--activity-limit") + 1] == "20"
 
     def test_is_scoped_to_the_launch_branch(self, paths):
         argv = self._command(paths).argv

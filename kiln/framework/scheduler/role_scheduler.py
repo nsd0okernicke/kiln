@@ -959,6 +959,8 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
         set_status=make_status_writer(
             args.role, args.status_script, worker_timeout=args.worker_timeout
         ),
+        max_attempts=args.max_attempts,
+        escalation_limit=args.escalation_limit,
         max_cycles=args.max_cycles,
         max_budget_usd=args.max_budget_usd,
         run_verify=(
@@ -1002,6 +1004,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "escalate instead of working once one work item has reached this role more than "
             "N times; unbounded by default"
         ),
+    )
+    parser.add_argument(
+        "--max-attempts", type=int, default=SchedulerContext.max_attempts,
+        help="worker attempts per handoff before escalating",
+    )
+    parser.add_argument(
+        "--escalation-limit", type=int, default=SchedulerContext.escalation_limit,
+        help="consecutive escalations before this role stops taking new work",
     )
     parser.add_argument(
         "--verify", default="",

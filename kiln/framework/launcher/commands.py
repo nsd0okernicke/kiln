@@ -180,6 +180,12 @@ def _scheduler_command(
         argv += ["--verify", role.verify]
         if role.verify_timeout is not None:
             argv += ["--verify-timeout", str(role.verify_timeout)]
+    argv += _tuning_args(role, {
+        "--poll-interval": role.poll_interval,
+        "--worker-timeout": role.worker_timeout,
+        "--max-attempts": role.max_attempts,
+        "--escalation-limit": role.escalation_limit,
+    })
 
     status_script = paths.state_tools_dir / "set-status.py"
     argv += ["--status-script", str(status_script)]
@@ -200,6 +206,23 @@ def _scheduler_command(
     )
 
 
+def _tuning_args(role: RoleConfig, knobs: dict[str, object]) -> list[str]:
+    """
+    Flags for the knobs this role actually set, skipping the ones it left alone.
+
+    Passing only what was configured means an unset knob keeps the *module's* default rather
+    than a copy of that default written here -- two places to change one number is how they
+    drift. Every one of these flags already existed on the scheduler, inbox and dashboard;
+    what was missing was any way to reach them from a profile, so `"pollInterval": 10` was
+    accepted and ignored.
+    """
+    argv: list[str] = []
+    for flag, value in knobs.items():
+        if value is not None:
+            argv += [flag, f"{value:g}" if isinstance(value, float) else str(value)]
+    return argv
+
+
 def _inbox_command(role: RoleConfig, paths: KilnPaths, branch: str) -> AgentCommand:
     """
     Launch the human's notification pane.
@@ -218,6 +241,9 @@ def _inbox_command(role: RoleConfig, paths: KilnPaths, branch: str) -> AgentComm
         "--worktree", str(_worktree_for(role, paths)),
         "--log-file", str(paths.scheduler_log(role.role)),
     ]
+    argv += _tuning_args(role, {"--poll-interval": role.poll_interval})
+    if not role.bell:
+        argv.append("--no-bell")
     return AgentCommand(
         argv=argv,
         env={
@@ -248,6 +274,10 @@ def _dashboard_command(role: RoleConfig, paths: KilnPaths, branch: str) -> Agent
         # swarm launched without the proxy is not a different dashboard.
         "--traffic-db", str(paths.traffic_db),
     ]
+    argv += _tuning_args(role, {
+        "--poll-interval": role.poll_interval,
+        "--activity-limit": role.activity_limit,
+    })
     return AgentCommand(
         argv=argv,
         env={

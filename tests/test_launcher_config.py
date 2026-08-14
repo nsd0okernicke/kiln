@@ -293,6 +293,131 @@ class TestTerminationGuards:
         assert self._role(agent="codex", maxCycles=3).max_cycles == 3
 
 
+class TestProfileKnobs:
+    """
+    `--poll-interval`, `--worker-timeout` and the rest existed on every module; nothing could
+    reach them from a profile, so they were compiled-in defaults for every role. `maxAttempts`
+    and `escalationLimit` were worse -- dataclass defaults with no CLI flag at all, despite
+    being the two numbers that decide how an unattended swarm gives up.
+    """
+
+    def _role(self, **entry):
+        config = {"profiles": {"p": {"terminals": [{"role": "coder", **entry}]}}}
+        return parse_profile(config, "p").roles[0]
+
+    def test_every_knob_parses(self):
+        role = self._role(
+            pollInterval=10, workerTimeout=60, maxAttempts=5, escalationLimit=2,
+            activityLimit=20, bell=False,
+        )
+        assert role.poll_interval == 10
+        assert role.worker_timeout == 60
+        assert role.max_attempts == 5
+        assert role.escalation_limit == 2
+        assert role.activity_limit == 20
+        assert role.bell is False
+
+    def test_unset_knobs_stay_none_so_the_module_default_applies(self):
+        # None, not a copy of the default: two places holding one number is how they drift.
+        role = self._role()
+        assert role.poll_interval is None
+        assert role.worker_timeout is None
+        assert role.max_attempts is None
+        assert role.escalation_limit is None
+        assert role.bell is True
+
+    def test_a_fractional_poll_interval_is_allowed(self):
+        # Unlike cycle counts -- half a second between polls is a perfectly good number.
+        assert self._role(pollInterval=0.5).poll_interval == 0.5
+
+    def test_a_non_positive_knob_is_rejected(self):
+        with pytest.raises(ProfileError, match="greater than zero"):
+            self._role(maxAttempts=0)
+
+
+class TestUnknownKeys:
+    """
+    `_parse_role` read exactly ten keys and dropped the rest without a word, so
+    `"maxAttempts": 5` was *accepted and ignored* -- the config appeared to work.
+    """
+
+    def test_an_unknown_terminal_key_fails_the_launch(self):
+        config = {"profiles": {"p": {"terminals": [{"role": "coder", "nonsense": 1}]}}}
+        with pytest.raises(ProfileError, match="nonsense"):
+            parse_profile(config, "p")
+
+    def test_the_error_names_the_role(self):
+        config = {"profiles": {"p": {"terminals": [{"role": "coder", "nonsense": 1}]}}}
+        with pytest.raises(ProfileError, match="role 'coder'"):
+            parse_profile(config, "p")
+
+    def test_a_near_miss_suggests_the_real_key(self):
+        # A bare "unknown key" on a profile that worked yesterday is a bad upgrade
+        # experience; the message has to do the diagnosis.
+        config = {"profiles": {"p": {"terminals": [{"role": "coder", "maxAttemps": 3}]}}}
+        with pytest.raises(ProfileError, match="did you mean 'maxAttempts'"):
+            parse_profile(config, "p")
+
+    def test_an_unknown_profile_key_fails_too(self):
+        config = {"profiles": {"p": {"terminls": [{"role": "coder"}]}}}
+        with pytest.raises(ProfileError, match="terminls"):
+            parse_profile(config, "p")
+
+    def test_a_typoed_terminals_names_the_typo_not_the_symptom(self):
+        # It used to report "defines no terminals" -- the symptom, not the cause.
+        config = {"profiles": {"p": {"terminls": [{"role": "coder"}]}}}
+        with pytest.raises(ProfileError, match="did you mean 'terminals'"):
+            parse_profile(config, "p")
+
+    def test_every_shipped_profile_still_loads(self):
+        # The rejection is a breaking change; it must not break what ships with it.
+        import json
+        from pathlib import Path
+
+        repo = Path(__file__).resolve().parents[1]
+        config = json.loads(
+            (repo / "kiln" / "framework" / "profiles.json").read_text("utf-8")
+        )
+        for name in config["profiles"]:
+            assert parse_profile(config, name).roles
+
+
+class TestCrossReferences:
+    def test_watching_a_role_that_does_not_exist_fails(self):
+        # `watched_role` falls back to the pane's own name, so a typo silently makes the
+        # inbox watch its own queue -- empty forever, and indistinguishable from working.
+        config = {"profiles": {"p": {"terminals": [
+            {"role": "inbox", "scheduler": "inbox", "watches": "hooman"},
+            {"role": "human-in-the-loop"},
+        ]}}}
+        with pytest.raises(ProfileError, match="watches 'hooman'"):
+            parse_profile(config, "p")
+
+    def test_watching_a_real_role_is_fine(self):
+        config = {"profiles": {"p": {"terminals": [
+            {"role": "inbox", "scheduler": "inbox", "watches": "human-in-the-loop"},
+            {"role": "human-in-the-loop"},
+        ]}}}
+        assert parse_profile(config, "p").role("inbox").watched_role == "human-in-the-loop"
+
+    def test_a_layout_referencing_an_unknown_role_fails(self):
+        # The WezTerm Lua matches panes by name and skips a miss silently, so a typo here
+        # produced a launch simply missing a pane, with no error anywhere.
+        config = {"profiles": {"p": {
+            "terminals": [{"role": "coder"}],
+            "layout": {"tabs": [{"panes": [{"role": "codr"}]}]},
+        }}}
+        with pytest.raises(ProfileError, match="layout references role 'codr'"):
+            parse_profile(config, "p")
+
+    def test_a_layout_referencing_real_roles_is_fine(self):
+        config = {"profiles": {"p": {
+            "terminals": [{"role": "coder"}],
+            "layout": {"tabs": [{"panes": [{"role": "coder"}]}]},
+        }}}
+        assert parse_profile(config, "p").layout["tabs"]
+
+
 class TestProfileQueries:
     def test_finds_the_current_dir_role(self):
         assert parse_profile(CONFIG, "compact").current_dir_role.role == "specifier"

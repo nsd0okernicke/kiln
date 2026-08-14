@@ -10,6 +10,7 @@ three places. Here a profile parses straight into dataclasses.
 
 from __future__ import annotations
 
+import difflib
 import json
 import os
 from dataclasses import dataclass, field
@@ -103,6 +104,21 @@ class RoleConfig:
     verify: str = ""
     #: Seconds before `verify` is killed and treated as a failure.
     verify_timeout: int | None = None
+    #: Seconds between polls of this role's queue. Applies to scheduler, inbox and dashboard
+    #: panes alike -- all three poll, and all three had the flag with no way to set it.
+    poll_interval: float | None = None
+    #: Seconds before one worker invocation is abandoned.
+    worker_timeout: int | None = None
+    #: Worker attempts per handoff before escalating. Was a `SchedulerContext` dataclass
+    #: default with no CLI flag at all -- changeable only from code, despite being one of the
+    #: two numbers that decide how an unattended swarm gives up.
+    max_attempts: int | None = None
+    #: Consecutive escalations before this role stops taking new work. The other one.
+    escalation_limit: int | None = None
+    #: Dashboard panes only: how many recent messages the activity list shows.
+    activity_limit: int | None = None
+    #: Inbox panes only: ring the terminal bell on arrival. True is the shipped behaviour.
+    bell: bool = True
 
     @property
     def uses_current_dir(self) -> bool:
@@ -265,10 +281,47 @@ def default_profile_name(
     return str(config.get("default") or fallback)
 
 
+#: Every key a terminal entry may carry. Anything else is a typo or a key from a version of
+#: Kiln this one is not -- either way the profile does not mean what its author thinks, and
+#: silently dropping it is how `"maxAttempts": 5` came to be *accepted and ignored*.
+TERMINAL_KEYS = frozenset({
+    "role", "agent", "worktree", "title", "mode", "model", "workerModel", "scheduler",
+    "watches", "workerDebug", "maxCycles", "maxBudgetUsd", "verify", "verifyTimeout",
+    "pollInterval", "workerTimeout", "maxAttempts", "escalationLimit", "activityLimit",
+    "bell",
+})
+
+#: Same, one level up.
+PROFILE_KEYS = frozenset({"description", "terminals", "layout", "routing"})
+
+
+def _reject_unknown_keys(entry: dict, allowed: frozenset[str], context: str) -> None:
+    """
+    Fail on a key nothing reads, naming it, where it is, and the nearest thing that is real.
+
+    A bare "unknown key" on a profile that worked yesterday is a bad upgrade experience, so
+    the message has to do the diagnosis: `"maxAttemps"` is only a useful error if it also
+    says `did you mean 'maxAttempts'?`.
+    """
+    unknown = sorted(set(entry) - allowed)
+    if not unknown:
+        return
+    hints = []
+    for key in unknown:
+        close = difflib.get_close_matches(key, sorted(allowed), n=1, cutoff=0.6)
+        hints.append(f"{key!r}" + (f" (did you mean {close[0]!r}?)" if close else ""))
+    raise ProfileError(
+        f"{context}: unrecognised key(s) {', '.join(hints)}. "
+        f"Valid keys: {', '.join(sorted(allowed))}"
+    )
+
+
 def _parse_role(entry: dict) -> RoleConfig:
     role = str(entry.get("role") or "").strip()
     if not role:
         raise ProfileError("profile contains a terminal entry with no 'role'")
+
+    _reject_unknown_keys(entry, TERMINAL_KEYS, f"role {role!r}")
 
     agent = str(entry.get("agent") or "claude").strip()
     if agent not in VALID_AGENTS:
@@ -326,6 +379,18 @@ def _parse_role(entry: dict) -> RoleConfig:
         verify_timeout=_positive_int_or_none(
             entry.get("verifyTimeout"), "verifyTimeout", role
         ),
+        poll_interval=_positive_or_none(entry.get("pollInterval"), "pollInterval", role),
+        worker_timeout=_positive_int_or_none(
+            entry.get("workerTimeout"), "workerTimeout", role
+        ),
+        max_attempts=_positive_int_or_none(entry.get("maxAttempts"), "maxAttempts", role),
+        escalation_limit=_positive_int_or_none(
+            entry.get("escalationLimit"), "escalationLimit", role
+        ),
+        activity_limit=_positive_int_or_none(
+            entry.get("activityLimit"), "activityLimit", role
+        ),
+        bell=bool(entry.get("bell", True)),
     )
 
 
@@ -363,6 +428,10 @@ def parse_profile(config: dict, name: str) -> Profile:
         raise ProfileError(f"profile {name!r} not found. Available profiles: {available}")
 
     selected = profiles[name] or {}
+    # Before the "defines no terminals" check: a typo'd `terminls` otherwise reports the
+    # symptom ("no terminals") instead of the cause.
+    _reject_unknown_keys(selected, PROFILE_KEYS, f"profile {name!r}")
+
     entries = selected.get("terminals") or []
     if not entries:
         raise ProfileError(f"profile {name!r} defines no terminals")
@@ -376,6 +445,10 @@ def parse_profile(config: dict, name: str) -> Profile:
         seen.add(parsed.role)
         roles.append(parsed)
 
+    _validate_watches(roles, seen, name)
+    layout = selected.get("layout") or {}
+    _validate_layout(layout, seen, name)
+
     try:
         routing = parse_profile_routing(selected.get("routing"))
     except ValueError as exc:
@@ -386,9 +459,43 @@ def parse_profile(config: dict, name: str) -> Profile:
         name=name,
         description=str(selected.get("description") or ""),
         roles=tuple(roles),
-        layout=selected.get("layout") or {},
+        layout=layout,
         routing=routing,
     )
+
+
+def _validate_watches(roles: list[RoleConfig], known: set[str], profile_name: str) -> None:
+    """
+    An inbox must watch a role that exists.
+
+    `watched_role` falls back to the pane's own name when `watches` is unset -- so a *typo*
+    silently makes the inbox watch its own queue, which is empty forever and looks exactly
+    like a working one.
+    """
+    for role in roles:
+        if role.watches and role.watches not in known:
+            raise ProfileError(
+                f"profile {profile_name!r}: role {role.role!r} watches {role.watches!r}, "
+                f"which is not a role in this profile. Known roles: {', '.join(sorted(known))}"
+            )
+
+
+def _validate_layout(layout: dict, known: set[str], profile_name: str) -> None:
+    """
+    Every pane in the layout must name a real role.
+
+    The WezTerm Lua matches panes to roles by name and skips a miss silently, so a typo here
+    produces a launch that is simply missing a pane -- no error anywhere, and nothing to
+    connect the missing agent to the character that caused it.
+    """
+    for tab in layout.get("tabs") or []:
+        for pane in (tab or {}).get("panes") or []:
+            name = str((pane or {}).get("role") or "").strip()
+            if name and name not in known:
+                raise ProfileError(
+                    f"profile {profile_name!r}: layout references role {name!r}, which is "
+                    f"not in this profile. Known roles: {', '.join(sorted(known))}"
+                )
 
 
 def check_launchable(profile: Profile) -> None:

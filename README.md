@@ -1049,6 +1049,20 @@ Every role named in a profile's routing must exist in that profile — a route t
 profile never launches inserts a handoff into a queue nobody polls, and the run stops dead with
 no error anywhere. That is checked at load, not three cycles in.
 
+**Unrecognised keys fail the launch.** A terminal entry used to be read for exactly ten keys and
+everything else was dropped without a word, so `"maxAttempts": 5` was *accepted and ignored* —
+the config appeared to work. The error names the key, the role, and the nearest valid key:
+
+```text
+Error: role 'coder': unrecognised key(s) 'maxAttemps' (did you mean 'maxAttempts'?).
+```
+
+The same check runs at profile level (a typo'd `terminls` now says so, instead of reporting
+"defines no terminals"), and two cross-references are validated in the same pass: a `watches`
+naming a role the profile does not launch, and a `layout` pane naming one. Both used to fail
+silently — the inbox would watch its own permanently-empty queue, and the missing pane simply
+would not open.
+
 **Terminal fields:**
 
 - **role** — maps to `kiln/project/roles/<role>.md` (must exist)
@@ -1059,6 +1073,12 @@ no error anywhere. That is checked at load, not three cycles in.
 - **model** — (Claude agents only) which Claude model to use, e.g., `claude-haiku-4-5-20251001`, `claude-sonnet-5`, `claude-opus-5`
 - **workerModel** — (Claude agents only, `mode: "auto"` roles only, optional) pins the `<role>-worker` subagent this wrapper dispatches each cycle to a different model than the wrapper itself. If omitted, the worker subagent inherits the wrapper's model (Claude Code's default behavior for subagents with no `model` frontmatter).
 
+- **pollInterval** — (scheduler, inbox and dashboard panes) seconds between polls. Defaults to 2.
+- **workerTimeout** — (scheduler roles) seconds before one worker invocation is abandoned. Defaults to 900.
+- **maxAttempts** — (scheduler roles) worker attempts per handoff before escalating. Defaults to 2.
+- **escalationLimit** — (scheduler roles) consecutive escalations before the role stops taking new work and parks for `kiln retry`. Defaults to 3.
+- **activityLimit** — (dashboard panes) how many recent messages the activity list shows. Defaults to 8.
+- **bell** — (inbox panes) ring the terminal bell on arrival. `true` by default.
 - **verify** — (scheduler roles, optional) shell command run in this role's worktree after the worker reports done and before the handoff. A non-zero exit costs an attempt. Empty by default — see below.
 - **verifyTimeout** — (scheduler roles, optional) seconds before `verify` is killed and treated as a failure. Defaults to 300.
 - **maxCycles** — (scheduler roles, optional) how many times one work item may reach this role before it escalates instead of running. Unbounded by default.
