@@ -35,6 +35,12 @@ log = logging.getLogger(__name__)
 DEFAULT_TIMEOUT_SEC = 900  # 15 minutes; a hang is indistinguishable from a blocked worker
 DEFAULT_PERMISSION_MODE = "bypassPermissions"
 
+#: This CLI accepts `--max-budget-usd`, so the scheduler can enforce a cost cap *inside* the
+#: invocation as well as by its own running tally. Read via getattr, so an adapter without
+#: the flag simply does not declare it -- grok reports cost but has no such option, and
+#: copilot/codex report no cost at all.
+SUPPORTS_BUDGET_FLAG = True
+
 # Glyphs for the streamed worker output. Rendering them needs UTF-8 stdout, which
 # role_scheduler.enable_unicode_output() guarantees.
 ICON_SESSION = "\N{HIGH VOLTAGE SIGN}"

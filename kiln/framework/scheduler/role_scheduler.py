@@ -39,9 +39,17 @@ ESCALATED = "escalated"
 MERGE_FAILED = "merge_failed"
 NO_ROUTE = "no_route"
 HALTED = "halted"
+NO_OP = "no_op"
+MAX_CYCLES = "max_cycles"
+COST_CAP = "cost_cap"
 
 ESCALATION_TARGET = "human-in-the-loop"
 DEFAULT_POLL_INTERVAL_SEC = 2.0
+
+#: Priority for messages a human should see but need not act on -- workflow.md's "100+:
+#: informational". A terminated chain is reported at this level so it lands in the inbox
+#: without competing with real work for attention.
+INFORMATIONAL_PRIORITY = 100
 
 # The scheduler pane is the operator's only window into work that used to be a visible chat
 # session, so each state transition gets a glyph to make the cycle scannable at a glance.
@@ -120,6 +128,14 @@ class SchedulerContext:
     max_attempts: int = 2
     #: Consecutive escalations before this role stops polling entirely.
     escalation_limit: int = 3
+    #: How many times one work item may reach this role before the cycle escalates instead
+    #: of running. None means no ceiling — the shipped default, since an unbounded loop is
+    #: only expensive, not wrong, and a badly-chosen ceiling stops real work.
+    max_cycles: int | None = None
+    #: Dollars this role may spend on one work item before escalating. Also handed to the
+    #: worker CLI as a per-invocation ceiling, minus what has already been spent, on backends
+    #: whose adapter supports the flag. None means no ceiling.
+    max_budget_usd: float | None = None
 
     def timestamp(self) -> str:
         return self.clock().strftime("%Y-%m-%d %H:%M:%S")
@@ -131,6 +147,19 @@ class SchedulerState:
 
     consecutive_escalations: int = 0
     halted: bool = False
+    #: Dollars this process has spent per work item. In memory, like
+    #: `consecutive_escalations`: the queue stores no per-message cost, so persisting this
+    #: would mean a schema change. The consequence is worth knowing -- a restarted scheduler
+    #: starts the tally at zero, so the cap bounds one process's spend on one work item, not
+    #: the work item's lifetime spend.
+    spend_by_work_item: dict[str, float] = field(default_factory=dict)
+
+    def spend_on(self, work_item: str | None) -> float:
+        return self.spend_by_work_item.get(work_item or "", 0.0)
+
+    def record_spend(self, work_item: str | None, cost: float) -> None:
+        key = work_item or ""
+        self.spend_by_work_item[key] = self.spend_by_work_item.get(key, 0.0) + cost
 
 
 @dataclass(frozen=True)
@@ -224,6 +253,16 @@ def run_once(ctx: SchedulerContext, state: SchedulerState) -> CycleResult:
     if inbound.is_ping:
         return _forward_ping(ctx, message_id, inbound, target)
 
+    breach = _cycle_limit_breach(ctx, inbound)
+    if breach:
+        log.error(breach)
+        return _escalate(ctx, state, message_id, inbound, breach, MAX_CYCLES)
+
+    breach = _budget_breach(ctx, state, inbound)
+    if breach:
+        log.error(breach)
+        return _escalate(ctx, state, message_id, inbound, breach, COST_CAP)
+
     if inbound.is_mergeable:
         log.info(f"{ICON_MERGE} merging %s from %s", inbound.commit[:8], inbound.branch or "?")
         merged = git_ops.merge_commit(
@@ -235,7 +274,7 @@ def run_once(ctx: SchedulerContext, state: SchedulerState) -> CycleResult:
             return _escalate(ctx, state, message_id, inbound, detail, MERGE_FAILED)
 
     anchor = git_ops.squash_anchor(ctx.worktree)
-    attempts = _delegate(ctx, inbound)
+    attempts = _delegate(ctx, state, inbound)
 
     if not attempts.last.is_done:
         detail = f"worker blocked after {len(attempts.invocations)} attempt(s): " + (
@@ -301,8 +340,16 @@ def _persist_worker_debug(
         log.warning("could not save worker debug output: %s", exc)
 
 
-def _delegate(ctx: SchedulerContext, inbound: handoff.InboundHandoff) -> _Attempts:
-    """Invoke the worker, retrying once with the failure report folded in."""
+def _delegate(
+    ctx: SchedulerContext, state: SchedulerState, inbound: handoff.InboundHandoff
+) -> _Attempts:
+    """
+    Invoke the worker, retrying once with the failure report folded in.
+
+    Spend is recorded here rather than at each call site because this is where it is
+    incurred -- every outcome downstream (handoff, no-op, escalation) has already paid for
+    the attempts, so recording per-outcome would mean four places to forget.
+    """
     attempts = _Attempts()
     retry_of: str | None = None
 
@@ -319,9 +366,21 @@ def _delegate(ctx: SchedulerContext, inbound: handoff.InboundHandoff) -> _Attemp
             f"{ICON_DELEGATE} delegating to %s (attempt %d/%d)",
             ctx.definition.name, len(attempts.invocations) + 1, ctx.max_attempts,
         )
+        kwargs: dict[str, object] = {}
+        if ctx.max_budget_usd is not None:
+            # The *remaining* budget, not the whole cap: a retry after a $4 first attempt
+            # under a $5 cap must not be handed $5 again. Passed only when configured, so
+            # adapters without the flag are unaffected.
+            # `state` already includes this cycle's earlier attempts -- record_spend runs
+            # after every invocation below -- so subtracting attempts.cost as well would
+            # charge the retry twice.
+            remaining = ctx.max_budget_usd - state.spend_on(inbound.handoff)
+            kwargs["max_budget_usd"] = max(remaining, 0.0)
+
         attempts.invocations.append(
-            ctx.run_worker(prompt=prompt, attempt=len(attempts.invocations) + 1)
+            ctx.run_worker(prompt=prompt, attempt=len(attempts.invocations) + 1, **kwargs)
         )
+        state.record_spend(inbound.handoff, attempts.last.cost_usd)
         if not attempts.last.is_done:
             _persist_worker_debug(ctx, attempts.last, len(attempts.invocations))
 
@@ -343,6 +402,10 @@ def _hand_off(
     ctx.set_status("handing-off")
     summary = attempts.last.result.summary or "completed cycle"
     log.info(f"{ICON_DONE} worker done: %s", summary)
+
+    if not _produced_work(ctx, anchor):
+        return _no_op(ctx, message_id, inbound, summary, attempts)
+
     log.info(f"{ICON_SQUASH} squashing work since %s", anchor[:8] if anchor else "(root)")
 
     squashed = git_ops.squash_since(anchor, f"{commit_prefix(ctx.role)} {summary}", ctx.worktree)
@@ -373,6 +436,131 @@ def _hand_off(
         HANDED_OFF,
         message_id=message_id,
         target=target,
+        detail=summary,
+        cost_usd=attempts.cost,
+        attempts=len(attempts.invocations),
+        tokens=attempts.tokens,
+    )
+
+
+def _cycle_limit_breach(ctx: SchedulerContext, inbound: handoff.InboundHandoff) -> str:
+    """
+    The reason this work item has gone round too many times, or "" when it has not.
+
+    Checked before delegating, so a swarm that has lost the plot stops *before* paying for
+    another worker run rather than after. Escalating rather than hard-stopping is deliberate:
+    a hard stop leaves the human a dead swarm and nothing addressable, while an escalation
+    puts the reason in the inbox attached to the work item it is about.
+
+    A work item with no name is not counted. Only the human -> specifier intake hop is
+    legitimately unnamed (the specifier invents the name), so there is nothing there to loop
+    on -- and counting NULLs would pool every unrelated intake into one bucket.
+    """
+    if ctx.max_cycles is None or not inbound.handoff:
+        return ""
+
+    arrivals = db.count_work_item_arrivals(
+        ctx.db_path, inbound.handoff, ctx.branch, ctx.role
+    )
+    if arrivals <= ctx.max_cycles:
+        return ""
+    return (
+        f"work item {inbound.handoff!r} has reached {ctx.role} {arrivals} times, over the "
+        f"limit of {ctx.max_cycles}; stopping instead of running another cycle"
+    )
+
+
+def _budget_breach(
+    ctx: SchedulerContext, state: SchedulerState, inbound: handoff.InboundHandoff
+) -> str:
+    """
+    The reason this work item has cost too much, or "" when it has not.
+
+    Checked before delegating, like the cycle limit, so the run that would breach the cap
+    never starts. Escalates rather than hard-stopping, for the same reason.
+
+    **This is only as good as the backend's cost reporting.** Copilot and Codex always report
+    $0.00, so the tally never moves and the cap never fires -- which is why `parse_role`
+    refuses `maxBudgetUsd` on those agents outright rather than leaving a guard that appears
+    to be enforcing.
+    """
+    if ctx.max_budget_usd is None:
+        return ""
+
+    spent = state.spend_on(inbound.handoff)
+    if spent < ctx.max_budget_usd:
+        return ""
+    return (
+        f"work item {inbound.handoff or '(unnamed)'!r} has cost ${spent:.2f} at {ctx.role}, "
+        f"at or over the ${ctx.max_budget_usd:.2f} cap; stopping instead of spending more"
+    )
+
+
+def _produced_work(ctx: SchedulerContext, anchor: str) -> bool:
+    """
+    Did this cycle actually change anything since the anchor?
+
+    Deliberately the *same* pair of predicates `git_ops.squash_since` uses to recognise
+    "nothing to squash", so NO_OP fires in exactly the cases that branch would have caught --
+    where it quietly returned the existing HEAD and let the caller hand off a commit
+    containing none of its own work. Any other rule here would make the two disagree about
+    what an empty cycle is.
+    """
+    return git_ops.has_commits_since(anchor, ctx.worktree) or git_ops.has_pending_changes(
+        ctx.worktree
+    )
+
+
+def _no_op(
+    ctx: SchedulerContext,
+    message_id: str,
+    inbound: handoff.InboundHandoff,
+    summary: str,
+    attempts: _Attempts,
+) -> CycleResult:
+    """
+    End the chain: the worker finished and produced nothing, so there is nothing to forward.
+
+    `roles/architect.md` has always said "do not hand off changes if the handoff contains no
+    changes", and the scheduler did not honour it -- `squash_since` treats an empty range as
+    success and returns the current HEAD, so the role forwarded a commit containing none of
+    its own work and the swarm kept spending on a cycle that had already concluded.
+
+    **The chain stopping is the point, but a silent stop is indistinguishable from a crash.**
+    So one informational message goes to the human (priority 100+, not an escalation): the run
+    ended correctly, it just ended. Nothing is queued for the routed target, which is what
+    actually breaks the loop.
+
+    The circuit breaker is not touched, matching `_forward_ping`: this is neither a failure to
+    count nor a productive cycle to re-arm on.
+    """
+    log.info(
+        f"{ICON_HALT} nothing to hand off -- %s produced no changes; chain ends here", ctx.role
+    )
+    _insert_verified(
+        ctx,
+        ESCALATION_TARGET,
+        handoff.format_handoff(
+            sender=ctx.role,
+            handoff=inbound.handoff,
+            branch=ctx.branch,
+            commit=git_ops.head_commit(ctx.worktree) or inbound.commit,
+            summary=(
+                f"Chain ended at {ctx.role}: the cycle produced no changes, so nothing was "
+                f"handed off. Worker reported: {summary}"
+            ),
+            next_role=ESCALATION_TARGET,
+            timestamp=ctx.timestamp(),
+        ),
+        work_item=inbound.handoff,
+        priority=INFORMATIONAL_PRIORITY,
+    )
+    db.mark_processed(ctx.db_path, message_id)
+    ctx.set_status("idle")
+    return CycleResult(
+        NO_OP,
+        message_id=message_id,
+        target=ESCALATION_TARGET,
         detail=summary,
         cost_usd=attempts.cost,
         attempts=len(attempts.invocations),
@@ -480,7 +668,11 @@ def _escalate(
 
 
 def _insert_verified(
-    ctx: SchedulerContext, target: str, content: str, work_item: str | None = None
+    ctx: SchedulerContext,
+    target: str,
+    content: str,
+    work_item: str | None = None,
+    priority: int = db.DEFAULT_PRIORITY,
 ) -> str | None:
     """
     Insert a message and confirm it landed, retrying once.
@@ -490,7 +682,8 @@ def _insert_verified(
     """
     for attempt in (1, 2):
         message_id = db.insert_handoff(
-            ctx.db_path, ctx.role, target, content, ctx.branch, work_item=work_item
+            ctx.db_path, ctx.role, target, content, ctx.branch,
+            priority=priority, work_item=work_item,
         )
         if db.verify_queued(ctx.db_path, ctx.role, ctx.branch):
             return message_id
@@ -639,11 +832,19 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
     model = resolve_model(args, definition)
     emit_worker_output = _make_worker_output_emitter()
 
-    def run_worker(*, prompt: str, attempt: int = 1) -> WorkerInvocation:
+    def run_worker(
+        *, prompt: str, attempt: int = 1, max_budget_usd: float | None = None
+    ) -> WorkerInvocation:
         debug_base = None
         if args.worker_debug:
             logs_dir = Path(args.db_path).parent / "logs"
             debug_base = logs_dir / f"agent-debug-{args.role}-attempt{attempt}"
+        # Only Claude's CLI takes a budget flag today; its adapter advertises that rather
+        # than this function hardcoding a backend name. Grok reports cost but has no such
+        # flag, so its cap is enforced by the scheduler's own tally alone.
+        budget: dict[str, object] = {}
+        if max_budget_usd is not None and getattr(adapter, "SUPPORTS_BUDGET_FLAG", False):
+            budget["max_budget_usd"] = max_budget_usd
         return adapter.run_worker(
             definition=definition,
             prompt=prompt,
@@ -652,6 +853,7 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
             timeout=args.worker_timeout,
             on_output=emit_worker_output,
             debug_base=debug_base,
+            **budget,
         )
 
     return SchedulerContext(
@@ -669,6 +871,8 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
         definition=definition,
         run_worker=run_worker,
         set_status=make_status_writer(args.role, args.status_script),
+        max_cycles=args.max_cycles,
+        max_budget_usd=args.max_budget_usd,
     )
 
 
@@ -699,6 +903,20 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--poll-interval", type=float, default=DEFAULT_POLL_INTERVAL_SEC)
     parser.add_argument("--worker-timeout", type=int, default=900)
     parser.add_argument("--once", action="store_true", help="run a single cycle and exit")
+    parser.add_argument(
+        "--max-cycles", type=int, default=None,
+        help=(
+            "escalate instead of working once one work item has reached this role more than "
+            "N times; unbounded by default"
+        ),
+    )
+    parser.add_argument(
+        "--max-budget-usd", type=float, default=None,
+        help=(
+            "escalate instead of working once this role has spent N dollars on one work "
+            "item; only meaningful on a backend that reports cost (claude, grok)"
+        ),
+    )
     parser.add_argument(
         "--worker-debug", action="store_true",
         help=(

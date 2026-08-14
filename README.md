@@ -1034,6 +1034,43 @@ no error anywhere. That is checked at load, not three cycles in.
 - **model** — (Claude agents only) which Claude model to use, e.g., `claude-haiku-4-5-20251001`, `claude-sonnet-5`, `claude-opus-5`
 - **workerModel** — (Claude agents only, `mode: "auto"` roles only, optional) pins the `<role>-worker` subagent this wrapper dispatches each cycle to a different model than the wrapper itself. If omitted, the worker subagent inherits the wrapper's model (Claude Code's default behavior for subagents with no `model` frontmatter).
 
+- **maxCycles** — (scheduler roles, optional) how many times one work item may reach this role before it escalates instead of running. Unbounded by default.
+- **maxBudgetUsd** — (scheduler roles, optional) dollars this role may spend on one work item before it escalates. Unbounded by default. **Only accepted on `claude` and `grok`** — see below.
+
+### Bounding an autonomous run
+
+The scheduler has always stopped on *failure*: three consecutive escalations trip the circuit
+breaker, five crashed cycles end the role. Nothing stopped **expensive success** — a swarm
+ping-ponging a work item between two roles, each cycle succeeding, forever. Three guards close
+that, and all three are off unless you configure them.
+
+**A cycle that changes nothing ends the chain.** `roles/architect.md` has always said "do not
+hand off changes if the handoff contains no changes"; the scheduler now honours it. A worker
+that reports done having touched no files produces no handoff, and the run concludes. This one
+needs no configuration — it is always on. Because a swarm that simply goes quiet looks exactly
+like one that died, an informational message (priority 100+, *not* an escalation) goes to
+`human-in-the-loop` saying which role ended the chain and why.
+
+**`maxCycles`** counts how many times one work item has been addressed to this role — the number
+of laps, which is why it counts arrivals at a single role rather than total messages. Otherwise
+the same number would mean different things in `full` (four scheduled roles) and `fix` (two).
+
+**`maxBudgetUsd`** caps what this role spends on one work item, and is also handed to the worker
+CLI as a per-invocation ceiling — minus what has already been spent, so a retry after an
+expensive first attempt does not get the full budget again. The tally lives in the scheduler
+process, so restarting a role restarts its count: this bounds one process's spend on one work
+item, not the item's lifetime spend.
+
+**A cost cap on Copilot or Codex fails the launch.** Their adapters report `$0.00` by design —
+Codex's output carries no dollar figure at all — so the tally would never move and the cap would
+never fire. A guard that appears to be enforcing is worse than no guard, so this is an error at
+load rather than a surprise later. `maxCycles` works on every backend, since counting laps needs
+no cost reporting.
+
+Both guards **escalate rather than hard-stop**: a hard stop leaves you a dead swarm and nothing
+to act on, while an escalation puts the reason in the inbox attached to the work item it is
+about. The escalation counts toward the circuit breaker like any other.
+
 **Decoupling wrapper and worker models:** In Phase 6 (Wrapper + Worker-Subagent Delegation), the persistent wrapper only does `LISTEN → DELEGATE → SEND` — it never reasons about the actual task, that's entirely the worker subagent's job. This means the wrapper can run on a cheap/fast model (e.g. Haiku) while the worker that does the real TDD/implementation work runs on a stronger model (e.g. Sonnet):
 
 ```json

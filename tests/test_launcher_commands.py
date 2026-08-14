@@ -217,6 +217,21 @@ class TestScheduler:
         argv = self._scheduler(paths, worktree="@current").argv
         assert argv[argv.index("--worktree") + 1] == str(paths.project_root)
 
+    def test_termination_guards_reach_the_scheduler(self, paths):
+        # A guard configured in a profile and never passed through is a guard that does not
+        # exist -- which is exactly what happened to claude_adapter's --max-budget-usd, fully
+        # implemented and unit-tested with no caller.
+        argv = self._scheduler(paths, max_cycles=6, max_budget_usd=12.5).argv
+        assert argv[argv.index("--max-cycles") + 1] == "6"
+        assert argv[argv.index("--max-budget-usd") + 1] == "12.5"
+
+    def test_unset_guards_are_not_passed_at_all(self, paths):
+        # So the scheduler's own "no ceiling" default applies, rather than a number chosen
+        # here leaking in as a de facto policy.
+        argv = self._scheduler(paths).argv
+        assert "--max-cycles" not in argv
+        assert "--max-budget-usd" not in argv
+
     def test_prefers_the_worker_model(self, paths):
         argv = self._scheduler(paths, model="opus", worker_model="sonnet").argv
         assert argv[argv.index("--model") + 1] == "sonnet"

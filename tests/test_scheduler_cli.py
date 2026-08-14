@@ -79,7 +79,10 @@ class TestSquashFailureEscalates:
 
         ctx = SchedulerContext(
             role="coder", branch="main", db_path=db_path, worktree=git_repo,
-            routing=ROUTING, definition=DEFINITION, run_worker=FakeWorker(worker()),
+            routing=ROUTING, definition=DEFINITION,
+            # The worker must genuinely change something, or the cycle ends as a no-op
+            # before it ever reaches the squash this test is about.
+            run_worker=FakeWorker(worker(), edits_file=git_repo / "work.txt"),
             clock=lambda: datetime(2026, 8, 7, 14, 0, 0),
         )
         result = role_scheduler.run_once(ctx, SchedulerState())

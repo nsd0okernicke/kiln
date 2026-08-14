@@ -52,17 +52,34 @@ def worker(status=STATUS_DONE, summary="did the work", **kwargs):
 
 
 class FakeWorker:
-    """Returns queued outcomes in order, recording the prompts it was given."""
+    """
+    Returns queued outcomes in order, recording the prompts it was given.
 
-    def __init__(self, *outcomes, edits_file=None):
+    Writes a file by default, because a worker that reports `done` having changed nothing is
+    now the *exceptional* case: the scheduler treats it as a terminated chain and hands off
+    nothing (`NO_OP`). Pass `produces_work=False` to exercise that path deliberately; pass an
+    explicit `edits_file` when the test cares which file was touched.
+    """
+
+    def __init__(self, *outcomes, edits_file=None, produces_work=True):
         self.outcomes = list(outcomes)
         self.prompts = []
+        self.budgets = []
         self.edits_file = edits_file
+        self.produces_work = produces_work
 
-    def __call__(self, *, prompt, attempt=1):
+    def bind_worktree(self, worktree):
+        """Give an unconfigured worker somewhere to write, once the worktree is known."""
+        if self.produces_work and self.edits_file is None:
+            self.edits_file = worktree / "worker-output.txt"
+
+    def __call__(self, *, prompt, attempt=1, **kwargs):
+        # kwargs, not a named parameter: the scheduler passes `max_budget_usd` only when a
+        # cap is configured, and `budgets` records exactly what a real adapter would see.
         self.prompts.append(prompt)
+        self.budgets.append(kwargs.get("max_budget_usd"))
         if self.edits_file:
-            self.edits_file.write_text("worker output\n", encoding="utf-8")
+            self.edits_file.write_text(f"worker output {len(self.prompts)}\n", encoding="utf-8")
         return self.outcomes.pop(0) if self.outcomes else worker()
 
     @property
@@ -73,6 +90,8 @@ class FakeWorker:
 @pytest.fixture
 def make_ctx(db_path, git_repo):
     def _make(run_worker, role="coder", **overrides):
+        if isinstance(run_worker, FakeWorker):
+            run_worker.bind_worktree(overrides.get("worktree", git_repo))
         args = {
             "role": role,
             "branch": "main",
@@ -207,19 +226,12 @@ class TestHappyPath:
         ).stdout.splitlines()
         assert subjects == ["[Coder] implemented it"]
 
-    def test_worker_that_changes_nothing_still_hands_off(self, make_ctx, inbound, db_path):
-        # Legitimate outcome: an architect can validate and find nothing to change.
-        inbound()
-        result = role_scheduler.run_once(make_ctx(FakeWorker(worker())), SchedulerState())
-        assert result.outcome == role_scheduler.HANDED_OFF
-        assert handoff.parse_handoff(queued_for(db_path, "refactorer")[0]["content"]).commit
-
     def test_commits_work_the_worker_left_uncommitted(self, make_ctx, inbound, git_repo):
         inbound()
         fake = FakeWorker(worker(), edits_file=git_repo / "feature.py")
         role_scheduler.run_once(make_ctx(fake), SchedulerState())
         assert git_ops.has_pending_changes(git_repo) is False
-        assert (git_repo / "feature.py").read_text(encoding="utf-8") == "worker output\n"
+        assert (git_repo / "feature.py").read_text(encoding="utf-8") == "worker output 1\n"
 
     def test_merges_the_senders_commit(self, make_ctx, inbound, git_repo):
         inbound(sender="specifier")
@@ -453,6 +465,256 @@ class TestPing:
         parsed = handoff.parse_handoff(queued_for(db_path, "refactorer")[0]["content"])
         assert parsed.is_ping is True
         assert parsed.trail == ("human-in-the-loop (main)", "coder (main)")
+
+
+class TestNoOpCycle:
+    """
+    `roles/architect.md`: "Do not hand off changes if the handoff contains no changes." The
+    scheduler did not honour it -- `squash_since` treats an empty range as success and returns
+    the current HEAD, so the role forwarded a commit containing none of its own work and the
+    swarm kept spending on a cycle that had already concluded.
+    """
+
+    def _no_op_cycle(self, make_ctx, inbound, **kwargs):
+        inbound()
+        fake = FakeWorker(worker(summary="nothing to change"), produces_work=False)
+        return role_scheduler.run_once(make_ctx(fake, **kwargs), SchedulerState())
+
+    def test_a_cycle_that_changes_nothing_forwards_nothing(self, make_ctx, inbound, db_path):
+        result = self._no_op_cycle(make_ctx, inbound)
+
+        assert result.outcome == role_scheduler.NO_OP
+        assert queued_for(db_path, "refactorer") == [], "the chain must stop, not continue"
+
+    def test_the_human_is_told_the_chain_ended(self, make_ctx, inbound, db_path):
+        # A swarm that simply goes quiet is indistinguishable from one that died.
+        self._no_op_cycle(make_ctx, inbound)
+
+        messages = queued_for(db_path, "human-in-the-loop")
+        assert len(messages) == 1
+        assert "produced no changes" in messages[0]["content"]
+
+    def test_that_message_is_informational_not_an_escalation(self, make_ctx, inbound, db_path):
+        # The run concluded correctly; it just concluded. Flagging it as an escalation would
+        # put a non-problem in front of a human at the same weight as a blocked worker.
+        self._no_op_cycle(make_ctx, inbound)
+
+        message = queued_for(db_path, "human-in-the-loop")[0]
+        assert message["priority"] >= role_scheduler.INFORMATIONAL_PRIORITY
+        assert handoff.is_escalation(message["content"]) is False
+
+    def test_the_inbound_message_is_still_marked_processed(
+        self, make_ctx, inbound, read_message
+    ):
+        # Otherwise it sits in `processing` forever and startup recovery replays it.
+        result = self._no_op_cycle(make_ctx, inbound)
+        assert read_message(result.message_id)["status"] == db.STATUS_PROCESSED
+
+    def test_it_does_not_trip_the_circuit_breaker(self, make_ctx, inbound):
+        # Not a failure to count -- matching _forward_ping, which also leaves it alone.
+        inbound()
+        state = SchedulerState()
+        fake = FakeWorker(worker(), produces_work=False)
+
+        role_scheduler.run_once(make_ctx(fake), state)
+
+        assert state.consecutive_escalations == 0
+        assert state.halted is False
+
+    def test_a_blocked_worker_still_escalates_rather_than_no_ops(self, make_ctx, inbound):
+        # Both leave the worktree untouched. Only one of them means "there was nothing to do".
+        inbound()
+        fake = FakeWorker(
+            worker(STATUS_BLOCKED, "no"), worker(STATUS_BLOCKED, "no"), produces_work=False
+        )
+
+        result = role_scheduler.run_once(make_ctx(fake), SchedulerState())
+
+        assert result.outcome == role_scheduler.ESCALATED
+
+    def test_a_ping_is_unaffected(self, make_ctx, inbound, db_path):
+        # Pings legitimately change nothing, and route through _forward_ping long before the
+        # no-op check. If this ever regressed, /kiln-ping would stop reaching the far end.
+        inbound(ping=True)
+        result = role_scheduler.run_once(
+            make_ctx(FakeWorker(produces_work=False)), SchedulerState()
+        )
+        assert result.outcome == role_scheduler.PING_FORWARDED
+        assert len(queued_for(db_path, "refactorer")) == 1
+
+
+class TestMaxCyclesPerWorkItem:
+    """
+    The existing stop conditions all catch *failure*. None catches expensive success, so
+    spec<->code ping-pong ran until a human noticed. A ceiling on how many times one work
+    item may reach a role gives that a bound.
+    """
+
+    def _arrive(self, db_path, name, times, target="coder"):
+        """
+        Earlier laps of one work item, left exactly as finished laps look: processed.
+
+        Processed rather than queued deliberately -- a queued leftover would be picked up by
+        `fetch_and_deliver` ahead of the message under test, and the count has to include
+        laps that are already done or a swarm could loop forever without ever tripping it.
+        """
+        for _ in range(times):
+            message_id = db.insert_handoff(
+                db_path, "specifier", target, "old", "main", work_item=name
+            )
+            db.mark_processed(db_path, message_id)
+
+    def test_under_the_limit_the_cycle_runs_normally(self, make_ctx, inbound, db_path):
+        inbound(name="loopy")
+        result = role_scheduler.run_once(
+            make_ctx(FakeWorker(), max_cycles=5), SchedulerState()
+        )
+        assert result.outcome == role_scheduler.HANDED_OFF
+
+    def test_over_the_limit_it_escalates_instead(self, make_ctx, inbound, db_path):
+        self._arrive(db_path, "loopy", 3)
+        inbound(name="loopy")
+
+        result = role_scheduler.run_once(
+            make_ctx(FakeWorker(), max_cycles=2), SchedulerState()
+        )
+
+        assert result.outcome == role_scheduler.MAX_CYCLES
+        assert result.target == "human-in-the-loop"
+
+    def test_it_stops_before_paying_for_another_worker_run(self, make_ctx, inbound, db_path):
+        # The whole point is not spending. Checking after delegation would bound the count
+        # but not the bill.
+        self._arrive(db_path, "loopy", 3)
+        inbound(name="loopy")
+        fake = FakeWorker()
+
+        role_scheduler.run_once(make_ctx(fake, max_cycles=2), SchedulerState())
+
+        assert fake.calls == 0
+
+    def test_the_escalation_names_the_work_item_and_the_count(self, make_ctx, inbound, db_path):
+        self._arrive(db_path, "loopy", 3)
+        inbound(name="loopy")
+
+        role_scheduler.run_once(make_ctx(FakeWorker(), max_cycles=2), SchedulerState())
+
+        message = queued_for(db_path, "human-in-the-loop")[0]["content"]
+        assert "loopy" in message and "limit of 2" in message
+
+    def test_another_work_item_is_counted_separately(self, make_ctx, inbound, db_path):
+        # A shared counter would let one busy feature stop an unrelated one.
+        self._arrive(db_path, "loopy", 9)
+        inbound(name="innocent")
+
+        result = role_scheduler.run_once(
+            make_ctx(FakeWorker(), max_cycles=2), SchedulerState()
+        )
+
+        assert result.outcome == role_scheduler.HANDED_OFF
+
+    def test_another_role_is_counted_separately(self, make_ctx, inbound, db_path):
+        # Counting every message for the item would mix lap *length* into the number, so the
+        # same ceiling would mean different things in a 4-role profile and a 2-role one.
+        self._arrive(db_path, "loopy", 9, target="refactorer")
+        inbound(name="loopy")
+
+        result = role_scheduler.run_once(
+            make_ctx(FakeWorker(), max_cycles=2), SchedulerState()
+        )
+
+        assert result.outcome == role_scheduler.HANDED_OFF
+
+    def test_no_limit_is_the_default(self, make_ctx, inbound, db_path):
+        self._arrive(db_path, "loopy", 50)
+        inbound(name="loopy")
+        result = role_scheduler.run_once(make_ctx(FakeWorker()), SchedulerState())
+        assert result.outcome == role_scheduler.HANDED_OFF
+
+
+class TestCostCap:
+    def _spent(self, state, work_item, amount):
+        state.record_spend(work_item, amount)
+        return state
+
+    def test_under_the_cap_the_cycle_runs(self, make_ctx, inbound):
+        inbound(name="pricey")
+        state = self._spent(SchedulerState(), "pricey", 1.0)
+
+        result = role_scheduler.run_once(make_ctx(FakeWorker(), max_budget_usd=5.0), state)
+
+        assert result.outcome == role_scheduler.HANDED_OFF
+
+    def test_at_the_cap_it_escalates(self, make_ctx, inbound):
+        inbound(name="pricey")
+        state = self._spent(SchedulerState(), "pricey", 5.0)
+
+        result = role_scheduler.run_once(make_ctx(FakeWorker(), max_budget_usd=5.0), state)
+
+        assert result.outcome == role_scheduler.COST_CAP
+
+    def test_it_stops_before_spending_more(self, make_ctx, inbound):
+        inbound(name="pricey")
+        fake = FakeWorker()
+        state = self._spent(SchedulerState(), "pricey", 5.0)
+
+        role_scheduler.run_once(make_ctx(fake, max_budget_usd=5.0), state)
+
+        assert fake.calls == 0
+
+    def test_spend_accumulates_across_cycles(self, make_ctx, inbound):
+        # The tally is what the cap reads; a cycle that does not add to it makes the cap
+        # unreachable no matter how much the swarm spends.
+        inbound(name="pricey")
+        state = SchedulerState()
+
+        role_scheduler.run_once(
+            make_ctx(FakeWorker(worker(cost_usd=2.5)), max_budget_usd=99.0), state
+        )
+
+        assert state.spend_on("pricey") == pytest.approx(2.5)
+
+    def test_retries_are_charged_too(self, make_ctx, inbound):
+        # A retried cycle costs the sum of its attempts. Counting only the last one would
+        # make the expensive cycles look like the cheap ones.
+        inbound(name="pricey")
+        fake = FakeWorker(
+            worker(STATUS_BLOCKED, "no", cost_usd=1.0), worker(summary="ok", cost_usd=2.0)
+        )
+        state = SchedulerState()
+
+        role_scheduler.run_once(make_ctx(fake, max_budget_usd=99.0), state)
+
+        assert state.spend_on("pricey") == pytest.approx(3.0)
+
+    def test_the_worker_is_given_the_remaining_budget_not_the_whole_cap(
+        self, make_ctx, inbound
+    ):
+        # A retry after a $4 first attempt under a $5 cap must not be handed $5 again.
+        inbound(name="pricey")
+        fake = FakeWorker(
+            worker(STATUS_BLOCKED, "no", cost_usd=4.0), worker(summary="ok", cost_usd=0.5)
+        )
+
+        role_scheduler.run_once(make_ctx(fake, max_budget_usd=5.0), SchedulerState())
+
+        assert fake.budgets == [pytest.approx(5.0), pytest.approx(1.0)]
+
+    def test_the_remaining_budget_never_goes_negative(self, make_ctx, inbound):
+        # An overspending first attempt would otherwise hand the CLI a negative ceiling.
+        inbound(name="pricey")
+        fake = FakeWorker(worker(STATUS_BLOCKED, "no", cost_usd=9.0), worker(summary="ok"))
+
+        role_scheduler.run_once(make_ctx(fake, max_budget_usd=5.0), SchedulerState())
+
+        assert fake.budgets[1] == 0.0
+
+    def test_no_cap_means_the_worker_is_told_nothing(self, make_ctx, inbound):
+        # Passed only when configured, so adapters without the flag are unaffected.
+        inbound(name="pricey")
+        fake = FakeWorker()
+        role_scheduler.run_once(make_ctx(fake), SchedulerState())
+        assert fake.budgets == [None]
 
 
 class TestCircuitBreaker:

@@ -37,6 +37,13 @@ VALID_MODES = ("auto", "manual")
 #: of this set until it has one too (same path `grok` followed here).
 SCHEDULER_CAPABLE_AGENTS = ("claude", "copilot", "codex", "grok")
 
+#: Backends whose CLI reports a real dollar figure (`total_cost_usd`). Copilot and Codex do
+#: not -- their adapters leave `cost_usd` at the dataclass default of 0.0, and Codex's output
+#: contains no dollar amount at all, only token usage. A cost cap on those roles could never
+#: fire, which is the worst kind of guard: one that appears to be enforcing. So configuring
+#: `maxBudgetUsd` on them fails the launch instead of being silently useless.
+COST_REPORTING_AGENTS = ("claude", "grok")
+
 #: Worktree names that mean "work in the project root on the current branch".
 CURRENT_DIR_ALIASES = ("@current", "none", "master")
 
@@ -80,6 +87,14 @@ class RoleConfig:
     #: Off by default -- it's substantial volume for a healthy run, worth paying for only
     #: while actively diagnosing a failure like the copilot "permission denied" investigation.
     worker_debug: bool = False
+    #: Scheduler-mode only. How many times one work item may reach this role before it
+    #: escalates instead of working. None means no ceiling, which is the shipped default --
+    #: the existing stop conditions all catch failure, and this is the one that catches
+    #: expensive success (spec<->code ping-pong runs until a human notices).
+    max_cycles: int | None = None
+    #: Scheduler-mode only. Dollar ceiling handed to the worker CLI per invocation.
+    #: **Only meaningful on a backend that reports cost** -- see `COST_REPORTING_AGENTS`.
+    max_budget_usd: float | None = None
 
     @property
     def uses_current_dir(self) -> bool:
@@ -278,6 +293,14 @@ def _parse_role(entry: dict) -> RoleConfig:
                 + ", ".join(repr(name) for name in SCHEDULER_CAPABLE_AGENTS)
             )
 
+    budget = _positive_or_none(entry.get("maxBudgetUsd"), "maxBudgetUsd", role)
+    if budget is not None and agent not in COST_REPORTING_AGENTS:
+        raise ProfileError(
+            f"role {role!r} sets maxBudgetUsd but agent {agent!r} reports no cost -- its "
+            f"adapter always returns $0.00, so the cap could never fire. Cost caps work on: "
+            + ", ".join(COST_REPORTING_AGENTS)
+        )
+
     return RoleConfig(
         role=role,
         agent=agent,
@@ -289,7 +312,35 @@ def _parse_role(entry: dict) -> RoleConfig:
         scheduler=scheduler,
         watches=str(entry.get("watches") or "").strip(),
         worker_debug=bool(entry.get("workerDebug", False)),
+        max_cycles=_positive_int_or_none(entry.get("maxCycles"), "maxCycles", role),
+        max_budget_usd=budget,
     )
+
+
+def _positive_int_or_none(value: object, key: str, role: str) -> int | None:
+    """As `_positive_or_none`, but a whole number -- 2.5 cycles is not a thing."""
+    number = _positive_or_none(value, key, role)
+    if number is None:
+        return None
+    if number != int(number):
+        raise ProfileError(f"role {role!r}: {key} must be a whole number, got {value!r}")
+    return int(number)
+
+
+def _positive_or_none(value: object, key: str, role: str) -> float | None:
+    """
+    A ceiling, or None for "no ceiling". Zero and negatives are rejected, not normalised.
+
+    A `maxCycles: 0` that quietly meant "unlimited" would be the worst possible reading of an
+    obvious typo -- the operator asked for the tightest possible bound and would get none.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ProfileError(f"role {role!r}: {key} must be a number, got {value!r}")
+    if value <= 0:
+        raise ProfileError(f"role {role!r}: {key} must be greater than zero, got {value!r}")
+    return value
 
 
 def parse_profile(config: dict, name: str) -> Profile:

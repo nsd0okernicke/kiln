@@ -170,6 +170,12 @@ def _scheduler_command(
         argv += ["--model", model]
     if role.worker_debug:
         argv += ["--worker-debug"]
+    # Termination guards. Passed only when configured, so an unset knob leaves the
+    # scheduler's own "no ceiling" default rather than encoding a number here.
+    if role.max_cycles is not None:
+        argv += ["--max-cycles", str(role.max_cycles)]
+    if role.max_budget_usd is not None:
+        argv += ["--max-budget-usd", str(role.max_budget_usd)]
 
     status_script = paths.state_tools_dir / "set-status.py"
     argv += ["--status-script", str(status_script)]

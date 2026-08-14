@@ -247,6 +247,38 @@ class TestRecoverStaleProcessing:
         assert db.recover_stale_processing(db_path, "coder", "main") == []
 
 
+class TestCountWorkItemArrivals:
+    """
+    The unit behind the max-cycles guard: how many times one work item has reached one role.
+    That is the number of laps, independent of how many roles a profile happens to have.
+    """
+
+    def test_counts_arrivals_for_one_role(self, db_path, add_message):
+        for _ in range(3):
+            add_message(target="coder", work_item="add-login")
+        assert db.count_work_item_arrivals(db_path, "add-login", "main", "coder") == 3
+
+    def test_a_different_work_item_is_a_different_count(self, db_path, add_message):
+        add_message(target="coder", work_item="add-login")
+        add_message(target="coder", work_item="fix-search")
+        assert db.count_work_item_arrivals(db_path, "add-login", "main", "coder") == 1
+
+    def test_a_different_role_is_a_different_count(self, db_path, add_message):
+        # Counting every message for the item would fold lap *length* into the number, so one
+        # ceiling would mean different things in a 4-role profile and a 2-role one.
+        add_message(target="refactorer", work_item="add-login")
+        assert db.count_work_item_arrivals(db_path, "add-login", "main", "coder") == 0
+
+    def test_processed_laps_still_count(self, db_path, add_message):
+        # Only counting live messages would let a swarm loop forever without tripping.
+        add_message(target="coder", work_item="add-login", status=db.STATUS_PROCESSED)
+        assert db.count_work_item_arrivals(db_path, "add-login", "main", "coder") == 1
+
+    def test_it_is_scoped_to_the_branch(self, db_path, add_message):
+        add_message(target="coder", work_item="add-login", branch="feature-x")
+        assert db.count_work_item_arrivals(db_path, "add-login", "main", "coder") == 0
+
+
 class TestInsertHandoff:
     def test_returns_a_usable_id(self, db_path, read_message):
         message_id = db.insert_handoff(db_path, "coder", "refactorer", "payload", "main")

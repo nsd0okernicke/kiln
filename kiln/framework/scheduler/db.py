@@ -230,6 +230,30 @@ def cycles_by_work_item(db_path: str | Path, branch: str) -> dict[str, int]:
         return {row["work_item"]: int(row["n"]) for row in cur.fetchall()}
 
 
+def count_work_item_arrivals(
+    db_path: str | Path, work_item: str, branch: str, target: str
+) -> int:
+    """
+    How many times this work item has been addressed to `target`.
+
+    That is the honest unit for "how many cycles has this been round": a full loop hands the
+    item to each role exactly once, so the count of messages a *single* role has received for
+    one work item is the number of laps. Counting all messages for the item instead would mix
+    lap length into the number and make the same ceiling mean different things in `full` (four
+    scheduled roles) and `fix` (two).
+
+    Counts every status, not just queued: a lap that has already been processed still
+    happened, and only counting live messages would let a swarm loop forever.
+    """
+    with closing(connect(db_path)) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT COUNT(*) FROM messages WHERE work_item=? AND branch=? AND target=?",
+            (work_item, branch, target),
+        )
+        return int(cur.fetchone()[0])
+
+
 def recent_messages(db_path: str | Path, branch: str, limit: int = 10) -> list[dict]:
     """The most recent messages on a branch, newest first -- the dashboard's activity feed."""
     with closing(connect(db_path)) as conn:

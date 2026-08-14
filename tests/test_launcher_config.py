@@ -229,6 +229,57 @@ class TestParsing:
             parse_profile({"profiles": {"p": {"terminals": []}}}, "p")
 
 
+class TestTerminationGuards:
+    """
+    Both guards default to "no ceiling", so an unconfigured profile behaves exactly as it did.
+    What matters is that a *configured* one cannot be quietly meaningless.
+    """
+
+    def _role(self, **entry):
+        config = {"profiles": {"p": {"terminals": [{"role": "coder", **entry}]}}}
+        return parse_profile(config, "p").roles[0]
+
+    def test_unset_means_unbounded(self):
+        role = self._role()
+        assert role.max_cycles is None
+        assert role.max_budget_usd is None
+
+    def test_both_knobs_parse(self):
+        role = self._role(maxCycles=6, maxBudgetUsd=12.5)
+        assert role.max_cycles == 6
+        assert role.max_budget_usd == 12.5
+
+    @pytest.mark.parametrize("value", [0, -1])
+    def test_a_non_positive_ceiling_is_rejected(self, value):
+        # `maxCycles: 0` meaning "unlimited" would be the worst reading of an obvious typo:
+        # the operator asked for the tightest possible bound and would get none.
+        with pytest.raises(ProfileError, match="greater than zero"):
+            self._role(maxCycles=value)
+
+    def test_a_fractional_cycle_count_is_rejected(self):
+        with pytest.raises(ProfileError, match="whole number"):
+            self._role(maxCycles=2.5)
+
+    def test_a_non_numeric_ceiling_is_rejected(self):
+        with pytest.raises(ProfileError, match="must be a number"):
+            self._role(maxBudgetUsd="lots")
+
+    @pytest.mark.parametrize("agent", ["copilot", "codex"])
+    def test_a_cost_cap_on_a_backend_that_reports_no_cost_fails_the_launch(self, agent):
+        # The worst kind of guard is one that appears to be enforcing. These adapters always
+        # report $0.00, so the tally never moves and the cap could never fire.
+        with pytest.raises(ProfileError, match="reports no cost"):
+            self._role(agent=agent, maxBudgetUsd=5.0)
+
+    @pytest.mark.parametrize("agent", ["claude", "grok"])
+    def test_a_cost_cap_is_allowed_where_cost_is_reported(self, agent):
+        assert self._role(agent=agent, maxBudgetUsd=5.0).max_budget_usd == 5.0
+
+    def test_a_cycle_limit_is_allowed_on_every_backend(self):
+        # Counting laps needs no cost reporting, so this one works everywhere.
+        assert self._role(agent="codex", maxCycles=3).max_cycles == 3
+
+
 class TestProfileQueries:
     def test_finds_the_current_dir_role(self):
         assert parse_profile(CONFIG, "compact").current_dir_role.role == "specifier"
