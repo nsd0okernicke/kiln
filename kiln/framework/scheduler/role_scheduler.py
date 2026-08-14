@@ -20,11 +20,11 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 
-from . import db, git_ops, handoff, pane_status
+from . import db, git_ops, handoff, pane_status, status_contract, verify
 from .adapters import TokenUsage, WorkerInvocation
 from .routing import RoutingTable, load_routing_table, parse_routing_arguments
 from .worker_prompt import WorkerDefinition, build_task_prompt, load_worker_definition
@@ -136,6 +136,9 @@ class SchedulerContext:
     #: worker CLI as a per-invocation ceiling, minus what has already been spent, on backends
     #: whose adapter supports the flag. None means no ceiling.
     max_budget_usd: float | None = None
+    #: Runs the role's `verify` command, or None when it declares none. Injected like
+    #: `run_worker` so the cycle stays testable without spawning a real test suite.
+    run_verify: Callable[[], verify.VerifyResult] | None = None
 
     def timestamp(self) -> str:
         return self.clock().strftime("%Y-%m-%d %H:%M:%S")
@@ -409,6 +412,7 @@ def _delegate(
             ctx.run_worker(prompt=prompt, attempt=len(attempts.invocations) + 1, **kwargs)
         )
         state.record_spend(inbound.handoff, attempts.last.cost_usd)
+        _apply_verification(ctx, attempts)
         if not attempts.last.is_done:
             _persist_worker_debug(ctx, attempts.last, len(attempts.invocations))
 
@@ -468,6 +472,43 @@ def _hand_off(
         cost_usd=attempts.cost,
         attempts=len(attempts.invocations),
         tokens=attempts.tokens,
+    )
+
+
+def _apply_verification(ctx: SchedulerContext, attempts: _Attempts) -> None:
+    """
+    Run the role's verify command and, if it fails, rewrite the attempt as a failed one.
+
+    **Folded into `_delegate`'s loop rather than sitting between `_delegate` and `_hand_off`.**
+    That loop already owns the attempt counter, the retry prompt and `should_retry`; a verify
+    step outside it would be a second retry mechanism that has to agree with `max_attempts` --
+    exactly the duplication `should_retry` was extracted to prevent. Demoting the invocation
+    instead means one rule governs "the worker said it was blocked" and "the worker said it
+    was done but the tests disagree", and escalation counting stays in one place.
+
+    Cost and tokens are preserved: that work was really performed and really billed, whatever
+    the gate then concluded about it. Only the verdict changes.
+    """
+    if ctx.run_verify is None or not attempts.last.is_done:
+        return
+
+    ctx.set_status("verifying")
+    result = ctx.run_verify()
+    if result.ok:
+        log.info(f"{ICON_DONE} %s", result.summary)
+        return
+
+    log.warning(f"{ICON_BLOCKED} %s", result.summary)
+    failed = attempts.last
+    attempts.invocations[-1] = replace(
+        failed,
+        result=status_contract.WorkerResult(
+            status=status_contract.STATUS_BLOCKED,
+            summary=f"{result.summary}\n\n{result.output}",
+            # The worker did report; the gate overruled it. Recording otherwise would send
+            # someone hunting for a missing sentinel that was there all along.
+            sentinel_found=failed.result.sentinel_found,
+        ),
     )
 
 
@@ -920,6 +961,11 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
         ),
         max_cycles=args.max_cycles,
         max_budget_usd=args.max_budget_usd,
+        run_verify=(
+            (lambda: verify.run(args.verify, args.worktree, timeout=args.verify_timeout))
+            if args.verify
+            else None
+        ),
     )
 
 
@@ -956,6 +1002,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "escalate instead of working once one work item has reached this role more than "
             "N times; unbounded by default"
         ),
+    )
+    parser.add_argument(
+        "--verify", default="",
+        help=(
+            "shell command run in this role's worktree after the worker reports done; a "
+            "non-zero exit costs an attempt and its output goes into the retry"
+        ),
+    )
+    parser.add_argument(
+        "--verify-timeout", type=int, default=verify.DEFAULT_VERIFY_TIMEOUT_SEC,
+        help="seconds before the verify command is killed and treated as a failure",
     )
     parser.add_argument(
         "--max-budget-usd", type=float, default=None,

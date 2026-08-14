@@ -176,6 +176,10 @@ def _scheduler_command(
         argv += ["--max-cycles", str(role.max_cycles)]
     if role.max_budget_usd is not None:
         argv += ["--max-budget-usd", str(role.max_budget_usd)]
+    if role.verify:
+        argv += ["--verify", role.verify]
+        if role.verify_timeout is not None:
+            argv += ["--verify-timeout", str(role.verify_timeout)]
 
     status_script = paths.state_tools_dir / "set-status.py"
     argv += ["--status-script", str(status_script)]

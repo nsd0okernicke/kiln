@@ -225,6 +225,16 @@ class TestScheduler:
         assert argv[argv.index("--max-cycles") + 1] == "6"
         assert argv[argv.index("--max-budget-usd") + 1] == "12.5"
 
+    def test_a_verify_command_reaches_the_scheduler(self, paths):
+        argv = self._scheduler(paths, verify="pytest -q", verify_timeout=120).argv
+        assert argv[argv.index("--verify") + 1] == "pytest -q"
+        assert argv[argv.index("--verify-timeout") + 1] == "120"
+
+    def test_a_verify_timeout_without_a_command_is_not_passed(self, paths):
+        # A timeout for a gate that does not exist would be meaningless on the command line.
+        argv = self._scheduler(paths, verify_timeout=120).argv
+        assert "--verify-timeout" not in argv
+
     def test_unset_guards_are_not_passed_at_all(self, paths):
         # So the scheduler's own "no ceiling" default applies, rather than a number chosen
         # here leaking in as a de facto policy.

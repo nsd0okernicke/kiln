@@ -95,6 +95,14 @@ class RoleConfig:
     #: Scheduler-mode only. Dollar ceiling handed to the worker CLI per invocation.
     #: **Only meaningful on a backend that reports cost** -- see `COST_REPORTING_AGENTS`.
     max_budget_usd: float | None = None
+    #: Scheduler-mode only. Shell command run in this role's worktree after the worker
+    #: reports done and before the handoff. A non-zero exit costs an attempt. Empty means
+    #: the role is trusted on its own word, which is the behaviour every role had before.
+    #: **This is arbitrary code from the profile, run with the scheduler's privileges** --
+    #: the same trust the profile already carries by choosing which agent binaries run.
+    verify: str = ""
+    #: Seconds before `verify` is killed and treated as a failure.
+    verify_timeout: int | None = None
 
     @property
     def uses_current_dir(self) -> bool:
@@ -314,6 +322,10 @@ def _parse_role(entry: dict) -> RoleConfig:
         worker_debug=bool(entry.get("workerDebug", False)),
         max_cycles=_positive_int_or_none(entry.get("maxCycles"), "maxCycles", role),
         max_budget_usd=budget,
+        verify=str(entry.get("verify") or "").strip(),
+        verify_timeout=_positive_int_or_none(
+            entry.get("verifyTimeout"), "verifyTimeout", role
+        ),
     )
 
 

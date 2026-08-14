@@ -81,6 +81,9 @@ STATE_COLORS_HEX = {
     "receiving": "#7aadff",
     "working": "#2fbf9f",
     "delegating": "#2fbf9f",
+    # Same family as working -- still busy, just on the role's own quality gate rather than
+    # on the worker.
+    "verifying": "#2fbf9f",
     "approval": "#ffdd6a",
     "retrying": "#ffdd6a",
     "handoff": "#ac9aff",

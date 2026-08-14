@@ -14,7 +14,7 @@ import subprocess
 from datetime import datetime
 
 import pytest
-from scheduler import db, git_ops, handoff, role_scheduler
+from scheduler import db, git_ops, handoff, role_scheduler, verify
 from scheduler.adapters import TokenUsage
 from scheduler.adapters.claude_adapter import WorkerInvocation
 from scheduler.role_scheduler import CycleResult, SchedulerContext, SchedulerState
@@ -763,6 +763,147 @@ class TestCircuitBreaker:
 
         assert state.consecutive_escalations == 0
         assert state.halted is False
+
+
+class TestVerificationGate:
+    """
+    The quality gates were prose. In scheduler mode the only thing checked before a handoff
+    was that the worker's last line said `done` -- so a worker that skipped every gate and
+    claimed success was believed, in exactly the mode designed to run unattended.
+    """
+
+    def _verifier(self, *results):
+        """A verify callable returning canned outcomes, recording how often it ran."""
+
+        class Verifier:
+            def __init__(self):
+                self.calls = 0
+
+            def __call__(self):
+                self.calls += 1
+                index = min(self.calls - 1, len(results) - 1)
+                return results[index]
+
+        return Verifier()
+
+    def _pass(self):
+        return verify.VerifyResult(ok=True, output="")
+
+    def _fail(self, output="2 tests failed"):
+        return verify.VerifyResult(ok=False, output=output)
+
+    def test_no_verify_command_behaves_exactly_as_before(self, make_ctx, inbound, db_path):
+        inbound()
+        result = role_scheduler.run_once(make_ctx(FakeWorker()), SchedulerState())
+        assert result.outcome == role_scheduler.HANDED_OFF
+        assert len(queued_for(db_path, "refactorer")) == 1
+
+    def test_a_passing_verify_hands_off_normally(self, make_ctx, inbound, db_path):
+        inbound()
+        verifier = self._verifier(self._pass())
+
+        result = role_scheduler.run_once(
+            make_ctx(FakeWorker(), run_verify=verifier), SchedulerState()
+        )
+
+        assert result.outcome == role_scheduler.HANDED_OFF
+        assert verifier.calls == 1
+
+    def test_a_failing_verify_costs_an_attempt_and_retries(self, make_ctx, inbound):
+        inbound()
+        fake = FakeWorker()
+        verifier = self._verifier(self._fail(), self._pass())
+
+        result = role_scheduler.run_once(
+            make_ctx(fake, run_verify=verifier), SchedulerState()
+        )
+
+        assert fake.calls == 2, "a failed gate must consume an attempt, like a blocked worker"
+        assert result.outcome == role_scheduler.HANDED_OFF
+
+    def test_the_worker_is_told_what_failed(self, make_ctx, inbound):
+        inbound()
+        fake = FakeWorker()
+        verifier = self._verifier(
+            self._fail("FAILED tests/test_orders.py::test_total"), self._pass()
+        )
+
+        role_scheduler.run_once(make_ctx(fake, run_verify=verifier), SchedulerState())
+
+        assert "test_orders.py::test_total" in fake.prompts[1]
+        assert "Previous attempt failed" in fake.prompts[1]
+
+    def test_failing_twice_escalates_and_does_not_hand_off(self, make_ctx, inbound, db_path):
+        inbound()
+        verifier = self._verifier(self._fail())
+
+        result = role_scheduler.run_once(
+            make_ctx(FakeWorker(), run_verify=verifier), SchedulerState()
+        )
+
+        assert result.outcome == role_scheduler.ESCALATED
+        assert queued_for(db_path, "refactorer") == [], "unverified work must never be forwarded"
+        assert len(queued_for(db_path, "human-in-the-loop")) == 1
+
+    def test_the_escalation_carries_the_verify_output(self, make_ctx, inbound, db_path):
+        inbound()
+        verifier = self._verifier(self._fail("3 failed, 41 passed"))
+
+        role_scheduler.run_once(make_ctx(FakeWorker(), run_verify=verifier), SchedulerState())
+
+        assert "3 failed, 41 passed" in queued_for(db_path, "human-in-the-loop")[0]["content"]
+
+    def test_it_does_not_run_when_the_worker_was_already_blocked(self, make_ctx, inbound):
+        # Nothing to verify: the worker never claimed to have finished. Running the suite
+        # anyway would burn the timeout to confirm what the worker already reported.
+        inbound()
+        verifier = self._verifier(self._pass())
+        fake = FakeWorker(worker(STATUS_BLOCKED, "no"), worker(STATUS_BLOCKED, "no"))
+
+        role_scheduler.run_once(make_ctx(fake, run_verify=verifier), SchedulerState())
+
+        assert verifier.calls == 0
+
+    def test_cost_and_tokens_survive_a_failed_gate(self, make_ctx, inbound):
+        # That work was really performed and really billed, whatever the gate concluded.
+        inbound()
+        usage = TokenUsage(input_tokens=100)
+        fake = FakeWorker(
+            worker(summary="done", cost_usd=1.5, tokens=usage),
+            worker(summary="done", cost_usd=0.5, tokens=usage),
+        )
+        verifier = self._verifier(self._fail(), self._pass())
+
+        result = role_scheduler.run_once(
+            make_ctx(fake, run_verify=verifier), SchedulerState()
+        )
+
+        assert result.cost_usd == pytest.approx(2.0)
+        assert result.tokens.input_tokens == 200
+
+    def test_a_timed_out_gate_is_a_failure_not_a_crash(self, make_ctx, inbound):
+        inbound()
+        timeout = verify.VerifyResult(ok=False, output="", timed_out=True)
+        verifier = self._verifier(timeout)
+
+        result = role_scheduler.run_once(
+            make_ctx(FakeWorker(), run_verify=verifier), SchedulerState()
+        )
+
+        assert result.outcome == role_scheduler.ESCALATED
+
+    def test_the_pane_reports_that_it_is_verifying(self, make_ctx, inbound):
+        inbound()
+        seen = []
+        ctx = make_ctx(
+            FakeWorker(),
+            run_verify=self._verifier(self._pass()),
+            set_status=lambda state, **_kw: seen.append(state),
+        )
+
+        role_scheduler.run_once(ctx, SchedulerState())
+
+        assert "verifying" in seen
 
 
 class TestEscalationResume:

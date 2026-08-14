@@ -275,6 +275,19 @@ class TestTerminationGuards:
     def test_a_cost_cap_is_allowed_where_cost_is_reported(self, agent):
         assert self._role(agent=agent, maxBudgetUsd=5.0).max_budget_usd == 5.0
 
+    def test_a_verify_command_parses(self):
+        role = self._role(verify="pytest -q", verifyTimeout=120)
+        assert role.verify == "pytest -q"
+        assert role.verify_timeout == 120
+
+    def test_no_verify_command_is_the_default(self):
+        # Every role was trusted on its own word before this existed; that stays the default.
+        assert self._role().verify == ""
+
+    def test_a_non_positive_verify_timeout_is_rejected(self):
+        with pytest.raises(ProfileError, match="greater than zero"):
+            self._role(verify="pytest", verifyTimeout=0)
+
     def test_a_cycle_limit_is_allowed_on_every_backend(self):
         # Counting laps needs no cost reporting, so this one works everywhere.
         assert self._role(agent="codex", maxCycles=3).max_cycles == 3

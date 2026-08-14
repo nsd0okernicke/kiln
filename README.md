@@ -242,6 +242,7 @@ kiln/
 │       │   ├── dashboard.py              # Swarm-wide live view (`"scheduler": "dashboard"`)
 │       │   ├── send.py                   # Queue a handoff from the CLI (`kiln send`)
 │       │   ├── retry.py                  # Resume an escalated role (`kiln retry`)
+│       │   ├── verify.py                 # Optional per-role quality gate before a handoff
 │       │   └── adapters/                 # One module per backend: claude, codex, copilot, grok
 │       │
 │       ├── proxy/                    # Opt-in traffic capture (`--proxy`, see "Traffic Capture")
@@ -1058,8 +1059,47 @@ no error anywhere. That is checked at load, not three cycles in.
 - **model** — (Claude agents only) which Claude model to use, e.g., `claude-haiku-4-5-20251001`, `claude-sonnet-5`, `claude-opus-5`
 - **workerModel** — (Claude agents only, `mode: "auto"` roles only, optional) pins the `<role>-worker` subagent this wrapper dispatches each cycle to a different model than the wrapper itself. If omitted, the worker subagent inherits the wrapper's model (Claude Code's default behavior for subagents with no `model` frontmatter).
 
+- **verify** — (scheduler roles, optional) shell command run in this role's worktree after the worker reports done and before the handoff. A non-zero exit costs an attempt. Empty by default — see below.
+- **verifyTimeout** — (scheduler roles, optional) seconds before `verify` is killed and treated as a failure. Defaults to 300.
 - **maxCycles** — (scheduler roles, optional) how many times one work item may reach this role before it escalates instead of running. Unbounded by default.
 - **maxBudgetUsd** — (scheduler roles, optional) dollars this role may spend on one work item before it escalates. Unbounded by default. **Only accepted on `claude` and `grok`** — see below.
+
+### Making a quality gate an actual gate (`verify`)
+
+Kiln's quality gates — CRAP ≤ 6, ≤ 100 mutation sites, the ≥ 80% Gherkin kill rate — live in
+role files and `constitution/skill-orchestration.md`. They are **prose**. In scheduler mode the
+only thing checked before a handoff is that the worker's last line said `KILN-STATUS: done`.
+A worker that skipped every gate and claimed success was believed — in exactly the mode
+designed to run unattended.
+
+```jsonc
+{ "role": "coder", "verify": "pytest -q", "verifyTimeout": 180 }
+```
+
+The command runs in that role's own worktree after the worker reports done and before the
+squash. Only the exit code is inspected, so nothing language-specific enters the framework —
+`npm test`, `mvn -q verify`, `./gradlew check` and `cargo test` all work the same way.
+
+**A failed gate is a failed attempt**, not a separate mechanism. It goes through the same
+retry loop a blocked worker does: the output (tail-truncated) becomes the worker's retry brief,
+`maxAttempts` governs both, and a second failure escalates with the output attached rather than
+handing off. So there is one place where "this cycle did not succeed" is decided, and one
+counter feeding the circuit breaker.
+
+Details worth knowing:
+
+- **Its own timeout**, defaulting to 300s — not the 900s worker timeout, which is sized for a
+  whole LLM session. A hung test suite must not consume the budget meant for the work.
+- **Output is tail-truncated** (40 lines / 4000 chars) before it reaches the next prompt. Test
+  runners put their summary at the bottom, and a failing suite can emit megabytes.
+- **A hang or a typo is a failure, not a crash.** A role must not die over its own gate.
+- **`*_BASE_URL` is stripped from its environment.** A worker may have left one pointing at the
+  capture proxy; verification is not an agent call and has no business inheriting it.
+- **This is arbitrary code from the profile**, running with the scheduler's privileges. That is
+  the same trust the profile already carries by choosing which agent binaries run — worth
+  stating rather than leaving implicit.
+
+No role ships with a `verify` today, so every profile behaves exactly as it did.
 
 ### Bounding an autonomous run
 

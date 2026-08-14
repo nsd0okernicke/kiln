@@ -28,6 +28,7 @@ STATE_EMOJIS = {
     "receiving": "📥",
     "working": "🚀",
     "delegating": "🔀",
+    "verifying": "🧪",
     "approval": "👁️",
     "retrying": "🔁",
     "handoff": "📤",
