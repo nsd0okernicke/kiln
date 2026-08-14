@@ -4,14 +4,20 @@
     "fontFamily": "Segoe UI, system-ui, sans-serif",
     "fontSize": "16px",
     "git0": "#52514e",
-    "git1": "#eb6834",
-    "git2": "#1baf7a",
+    "git1": "#1baf7a",
+    "git2": "#eb6834",
+    "git3": "#7a5cd6",
+    "git4": "#184f95",
     "gitInv0": "#ffffff",
     "gitInv1": "#ffffff",
     "gitInv2": "#ffffff",
+    "gitInv3": "#ffffff",
+    "gitInv4": "#ffffff",
     "gitBranchLabel0": "#ffffff",
     "gitBranchLabel1": "#ffffff",
     "gitBranchLabel2": "#ffffff",
+    "gitBranchLabel3": "#ffffff",
+    "gitBranchLabel4": "#ffffff",
     "commitLabelColor": "#0b0b0b",
     "commitLabelBackground": "#fcfcfb",
     "tagLabelColor": "#ffffff",
@@ -19,18 +25,44 @@
     "tagLabelBorder": "#0d366b"
   }
 }}%%
+%% One work item through the `full` profile. Every scheduled role owns a worktree on its own
+%% sub-branch, named <base>-<worktree> (config.py `branch_name`). A handoff is a commit hash:
+%% the receiving role merges the *sender's commit* into its own branch with --no-ff, and that
+%% merge commit is the anchor its next squash resets to. Work therefore travels branch to
+%% branch, never through main. `main` is the human's branch (`@current`) and the only sink.
+%% Sub-branches are never pushed -- PRE_PUSH_HOOK blocks it (workspace.py).
+%%
+%% The last step is drawn as a plain commit on main on purpose: the human's inbox uses
+%% `git merge --squash`, which stages the diff with no MERGE_HEAD and no second parent, so
+%% what lands on the human's real branch is one ordinary commit rather than a merge. Every
+%% *scheduled* role does the opposite -- --no-ff, because squash_anchor needs a merge commit
+%% to exist (git_ops.py `merge_commit` / `squash_merge`).
 gitGraph
-    commit id: "main: feature start"
-    branch feature/agent-coder
-    checkout feature/agent-coder
-    commit id: "coder: red"
-    commit id: "coder: green"
-    commit id: "coder: refactor"
+    commit id: "main: work item starts"
+    branch main-specifier
+    branch main-coder
+    branch main-refactorer
+    branch main-architect
+
+    checkout main-specifier
+    commit id: "specifier: gherkin" tag: "handoff"
+
+    checkout main-coder
+    merge main-specifier id: "coder: merge sender"
+    commit id: "coder: slices (squashed)" tag: "handoff"
+
+    checkout main-refactorer
+    merge main-coder id: "refactorer: merge sender"
+    commit id: "refactorer: gates (squashed)" tag: "handoff"
+
+    checkout main-architect
+    merge main-refactorer id: "architect: merge sender"
+    commit id: "architect: verified (squashed)" tag: "handoff"
+
+    checkout main-specifier
+    merge main-architect id: "specifier: merge sender"
+    commit id: "specifier: cycle report" tag: "handoff"
+
     checkout main
-    branch feature/agent-review
-    checkout feature/agent-review
-    commit id: "architect: review notes"
-    checkout main
-    merge feature/agent-coder id: "squash: coder work" tag: "handoff"
-    merge feature/agent-review id: "squash: review" tag: "handoff"
-    commit id: "next cycle"
+    commit id: "inbox: squash-merge of specifier's commit" tag: "no merge commit"
+    commit id: "main: next work item"

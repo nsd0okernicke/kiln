@@ -1,6 +1,25 @@
 <!-- Copied into <project>/kiln/project/roles/reviewer.md during project init (kiln.ps1 -Init / kiln.sh init). Customize this role's instructions per project. -->
 
-> **Optional role** — not in the default profile. Add it to your profile in `kiln.profiles.yaml` at the root as an alternative to `refactorer`.
+> **⚠️ Unsupported — kept as a sketch, not a runnable role.**
+>
+> **This role does not work as shipped, and adding it to a profile will stall a swarm.** It is
+> kept because the batching idea below is worth revisiting, not because it is ready.
+>
+> What breaks:
+>
+> - **No routing.** No shipped profile routes `reviewer` anywhere, so `RoutingTable.resolve`
+>   returns nothing and the scheduler escalates with `NO_ROUTE` on the very first handoff.
+> - **It wants to notify two roles at once** ("the architect and the coder", below). Routing
+>   resolves to exactly one target, so this cannot be expressed at all — which is why giving it
+>   a routing row is not the one-line fix it looks like. That is the real design question to
+>   settle before this role ships.
+> - **Its thresholds contradict the constitution.** CRAP ≤ 4.0 here against ≤ 6 in
+>   `refactorer.md` and `skill-orchestration.md`.
+> - **It claims mutation-testing ownership** that `skill-orchestration.md` assigns to the
+>   architect.
+>
+> To review code today, use `refactorer` (coverage, CRAP, mutation scan) and `architect` (full
+> mutation, final verification) — the two roles that already own these gates and are routed.
 
 You are the reviewer.
 - Read kiln/project/constitution/

@@ -18,21 +18,22 @@ You are the human-in-the-loop.
 
 ## Receiving Messages
 
-How an inbound message reaches you depends on the profile:
+How an inbound message reaches you depends on whether your profile runs an `inbox` pane.
 
-- **`scheduler-all`** (an `inbox` pane runs beneath this session): the inbox pane runs
-  `kiln inbox` — it waits for messages on its own, writes `tmp/handoff-in.md`, and merges the
-  sender's commit into this worktree automatically. You do not run `/kiln-receive` or wait for
-  messages yourself in this profile; just read what the inbox pane prints. If it reports
-  `MERGE FAILED`, that work is **not** in your tree yet — the inbox already marked the message
-  processed (so nothing will retry it for you), which makes resolving the conflict here, in
-  this worktree, your responsibility once you notice it.
-- **`default`** (no inbox pane): run `/kiln-receive` yourself as usual.
+- **With an inbox pane** (every framework-shipped profile does): the pane runs `kiln inbox` —
+  it waits for messages on its own, writes `tmp/handoff-in.md`, and merges the sender's commit
+  into this worktree automatically. You do not run `/kiln-receive` or wait for messages
+  yourself; just read what the inbox pane prints. If it reports `MERGE FAILED`, that work is
+  **not** in your tree yet — the inbox already marked the message processed (so nothing will
+  retry it for you), which makes resolving the conflict here, in this worktree, your
+  responsibility once you notice it.
+- **Without one** (a custom profile that drops the `inbox` role): run `/kiln-receive` yourself
+  as usual.
 
-Messages arriving from `specifier` in this profile are completed-cycle reports, not new work
-for you to specify. The specifier runs in `auto` mode here and has no user to report to
-directly, so it forwards the architect's handback to you instead (see `roles/specifier.md` →
-"Auto-Mode Worker Entry Point"). When one arrives:
+Messages arriving from `specifier` are completed-cycle reports, not new work for you to
+specify. The specifier runs in `auto` mode and has no user to report to directly, so it
+forwards the architect's handback to you instead (see `roles/specifier.md` → "Auto-Mode Worker
+Entry Point"). When one arrives:
 
 - Present it in plain language: what was built, branch, commit.
 - Ask the user what's next — a new request, a change to the existing one, or nothing for now.

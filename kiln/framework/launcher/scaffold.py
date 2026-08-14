@@ -22,7 +22,17 @@ from .paths import KilnPaths
 
 log = logging.getLogger(__name__)
 
-CONSTITUTION_FILES = ("engineering.md", "workflow.md", "project.md")
+#: Every file under kiln/project/constitution/ that a scaffolded project gets. This is a
+#: literal list rather than a directory walk so a stray file cannot become constitution by
+#: accident -- but it must stay complete: `skill-orchestration.md` was missing from it, so no
+#: scaffolded project had the document that defines which role owns which quality gate.
+#: `tests/test_docs_consistency.py` pins the list against the bundled directory.
+CONSTITUTION_FILES = (
+    "engineering.md",
+    "workflow.md",
+    "project.md",
+    "skill-orchestration.md",
+)
 
 
 class ScaffoldError(Exception):

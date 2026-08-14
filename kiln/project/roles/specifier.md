@@ -27,7 +27,7 @@ Follow the `gherkin-spec-workflow` skill for each feature:
 ## Auto-Mode Worker Entry Point
 
 Applies only when specifier runs in `auto` mode (dispatched as `specifier-worker`, e.g. the
-`default` profile) — no live user is present in this context. Human approval happens
+`full` profile) — no live user is present in this context. Human approval happens
 upstream, in the `human-in-the-loop` role's conversation, before the request ever reaches you.
 
 - **Inbound handoff `Sender: human-in-the-loop`** — a new, human-approved request. Run all four phases
