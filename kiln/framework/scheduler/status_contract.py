@@ -18,14 +18,39 @@ rather than restating the wording.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from dataclasses import dataclass
 
 SENTINEL_PREFIX = "KILN-STATUS:"
 
+#: Optional second sentinel: the stable name for the piece of work this cycle is about.
+#:
+#: It exists because in scheduler mode the *scheduler* composes the outbound handoff, copying
+#: `Handoff:` from the inbound message verbatim -- so a worker had no channel to name anything,
+#: and `roles/specifier.md`'s instruction to "invent the handoff name, replacing the `pending`
+#: placeholder" was unimplementable. The placeholder propagated through every hop of every
+#: cycle, and every message in the queue ended up in one `work_item` bucket called `pending`.
+#:
+#: That is not cosmetic: `count_work_item_arrivals` backs the max-cycles guard and
+#: `spend_by_work_item` backs the cost cap, so one shared bucket makes both of them count
+#: across unrelated features.
+HANDOFF_PREFIX = "KILN-HANDOFF:"
+
 STATUS_DONE = "done"
 STATUS_BLOCKED = "blocked"
 VALID_STATUSES = frozenset({STATUS_DONE, STATUS_BLOCKED})
+
+#: The placeholder a human puts in their opening request. The specifier replaces it; every
+#: later role carries the real name through unchanged. Kept here rather than imported from
+#: `send.py` because both the parser and the scheduler need it and neither should depend on
+#: the CLI module.
+PENDING_HANDOFF = "pending"
+
+#: Characters allowed in a work-item name. A name becomes a database grouping key and appears
+#: in log lines and commit subjects, so a worker that answers with a sentence -- or with
+#: something containing a quote -- must not become the key everything is grouped by.
+_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._/-]{0,79}$")
 
 #: Used when the worker never emitted a sentinel at all — truncated output, a crash, or
 #: an agent that ignored the instruction. Treated as `blocked` (never as a scheduler
@@ -46,6 +71,24 @@ Rules:
 - Use `blocked` for any outcome you could not complete, for any reason.
 - Emit the sentinel exactly once, and keep it on a single line.
 - Write nothing after the sentinel line.
+
+## Naming the work (only when the inbound handoff says `pending`)
+
+If — and only if — the inbound handoff's `Handoff:` field is the placeholder `pending`, you
+are the role that names this piece of work. Emit one extra line immediately BEFORE the status
+sentinel:
+
+    KILN-HANDOFF: <short stable name for this work>
+
+The name is what ties every later message, cost figure and cycle count back to this one piece
+of work, so choose it once and choose it well:
+
+- Short and descriptive, like a branch name: `cat-3-search-by-author`, `fix-isbn-validation`.
+- Letters, digits, spaces, `-`, `_`, `.` and `/` only; 80 characters at most.
+- Never the word `pending` — that is the placeholder you are replacing.
+
+If the inbound `Handoff:` already names the work, **do not emit this line**. Carrying the
+existing name through unchanged is what makes the grouping mean anything.
 """
 
 
@@ -59,6 +102,9 @@ class WorkerResult:
     #: scheduler logs and escalation messages distinguish "worker reported blocked" from
     #: "worker never reported", which are different things to debug.
     sentinel_found: bool
+    #: The name this worker gave the piece of work, or '' when it named none. Only ever
+    #: honoured for the hop that names a work item -- see `parse_handoff_name`.
+    handoff_name: str = ""
 
     @property
     def is_done(self) -> bool:
@@ -96,7 +142,14 @@ def parse_worker_report(stdout: str) -> WorkerResult:
         summary = rest.strip()
 
         if status in VALID_STATUSES:
-            return WorkerResult(status=status, summary=summary, sentinel_found=True)
+            return WorkerResult(
+                status=status,
+                summary=summary,
+                sentinel_found=True,
+                # Only a completed cycle can name work: a blocked one produced none, and its
+                # escalation carries the inbound name so the human can find what failed.
+                handoff_name=parse_handoff_name(stdout) if status == STATUS_DONE else "",
+            )
 
         detail = f"unrecognised status {word!r}; treated as blocked"
         if summary:
@@ -108,6 +161,30 @@ def parse_worker_report(stdout: str) -> WorkerResult:
         summary=MISSING_SENTINEL_SUMMARY,
         sentinel_found=False,
     )
+
+
+def parse_handoff_name(stdout: str) -> str:
+    """
+    Extract the optional `KILN-HANDOFF:` sentinel, or '' when there is none.
+
+    Scanned from the end like the status sentinel, and validated rather than trusted: the
+    value becomes a database grouping key, so a worker that answers with a paragraph, an
+    empty string, or the `pending` placeholder it was supposed to replace contributes
+    nothing instead of poisoning the key everything is grouped by.
+
+    Rejecting silently is deliberate. The caller falls back to the inbound name, which is
+    the behaviour that existed before this sentinel — a malformed name must not fail a cycle
+    whose actual work succeeded.
+    """
+    for line in reversed(stdout.splitlines()):
+        candidate = line.strip()
+        if candidate[: len(HANDOFF_PREFIX)].upper() != HANDOFF_PREFIX:
+            continue
+        name = candidate[len(HANDOFF_PREFIX) :].strip().strip("\"'")
+        if name.lower() == PENDING_HANDOFF or not _NAME_RE.match(name):
+            return ""
+        return name
+    return ""
 
 
 def _main(argv: list[str] | None = None) -> int:

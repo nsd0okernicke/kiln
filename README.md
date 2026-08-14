@@ -1084,6 +1084,37 @@ would not open.
 - **maxCycles** — (scheduler roles, optional) how many times one work item may reach this role before it escalates instead of running. Unbounded by default.
 - **maxBudgetUsd** — (scheduler roles, optional) dollars this role may spend on one work item before it escalates. Unbounded by default. **Only accepted on `claude` and `grok`** — see below.
 
+### Work items: how a piece of work keeps one identity
+
+Every message carries a `Handoff:` name, and it is stored as a `work_item` column. That name is
+what ties a feature's cost, cycle count and history together — `maxCycles` and `maxBudgetUsd`
+both count per work item, and the dashboard groups by it.
+
+A human's opening request uses the placeholder **`pending`**, because the role that accepts the
+request is what names the work. In scheduler mode that role reports the name it chose alongside
+its status sentinel:
+
+```text
+KILN-HANDOFF: cat-3-search-by-author
+KILN-STATUS: done Wrote acceptance criteria for author search
+```
+
+**Only the hop whose inbound name is `pending` may name the work.** Every role after that
+carries the same name through unchanged — that restriction is what makes a work item an
+identity rather than a label, and the scheduler enforces it rather than trusting each worker to
+behave.
+
+`pending` itself is never stored: it is not a work item, it is the absence of one. The column
+stays `NULL` until something names the work.
+
+> **This was broken until now, and visibly so.** In scheduler mode the *scheduler* composes the
+> outbound message and copied `Handoff:` from the inbound verbatim, so a worker had no channel
+> to name anything — the placeholder propagated through every hop of every cycle. A real project
+> ended up with every row in its queue grouped under `pending`, which meant `maxCycles` and the
+> cost cap were counting across features that had nothing to do with each other. If you have a
+> database from before this fix, its `work_item` values are all `pending` and are worth
+> discarding.
+
 ### Making a quality gate an actual gate (`verify`)
 
 Kiln's quality gates — CRAP ≤ 6, ≤ 100 mutation sites, the ≥ 80% Gherkin kill rate — live in

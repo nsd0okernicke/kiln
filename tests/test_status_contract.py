@@ -122,6 +122,72 @@ class TestResultType:
             result.status = sc.STATUS_BLOCKED  # type: ignore[misc]
 
 
+class TestHandoffName:
+    """
+    The `KILN-HANDOFF:` sentinel exists because in scheduler mode the *scheduler* composes the
+    outbound message, copying `Handoff:` from the inbound verbatim -- so the specifier had no
+    channel to name anything, and every message in a live project's queue ended up grouped
+    under the `pending` placeholder it was supposed to replace.
+    """
+
+    def test_a_name_is_read_from_the_sentinel(self):
+        stdout = "KILN-HANDOFF: cat-3-search\nKILN-STATUS: done wrote the spec"
+        assert sc.parse_worker_report(stdout).handoff_name == "cat-3-search"
+
+    def test_no_sentinel_means_no_name(self):
+        assert sc.parse_worker_report("KILN-STATUS: done ok").handoff_name == ""
+
+    def test_the_prefix_is_case_insensitive(self):
+        # Same leniency the status sentinel already grants; a successful cycle must not be
+        # thrown away over capitalisation.
+        stdout = "kiln-handoff: fix-isbn\nKILN-STATUS: done ok"
+        assert sc.parse_worker_report(stdout).handoff_name == "fix-isbn"
+
+    def test_quotes_are_stripped(self):
+        stdout = 'KILN-HANDOFF: "cat-3-search"\nKILN-STATUS: done ok'
+        assert sc.parse_worker_report(stdout).handoff_name == "cat-3-search"
+
+    def test_the_last_one_wins(self):
+        # Matching the status sentinel's rule: a worker quoting the contract earlier in its
+        # narrative must not shadow its real answer.
+        stdout = "KILN-HANDOFF: draft\nKILN-HANDOFF: final-name\nKILN-STATUS: done ok"
+        assert sc.parse_worker_report(stdout).handoff_name == "final-name"
+
+    def test_the_placeholder_itself_is_rejected(self):
+        # Answering `pending` is answering nothing; storing it is the bug being fixed.
+        stdout = "KILN-HANDOFF: pending\nKILN-STATUS: done ok"
+        assert sc.parse_worker_report(stdout).handoff_name == ""
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "",
+            "-leading-dash",
+            "has'a quote",
+            "semi;colon",
+            "a name that is far too long " + "x" * 80,
+            "I have named this work the author search feature; see the spec for details",
+        ],
+    )
+    def test_a_name_that_could_poison_the_grouping_key_is_rejected(self, value):
+        # It becomes a database grouping key and appears in log lines and commit subjects,
+        # so a worker answering with a sentence must contribute nothing rather than become
+        # the key everything is grouped by.
+        stdout = f"KILN-HANDOFF: {value}\nKILN-STATUS: done ok"
+        assert sc.parse_worker_report(stdout).handoff_name == ""
+
+    def test_a_blocked_worker_names_nothing(self):
+        # There is no work to name; the cycle did not produce any.
+        stdout = "KILN-HANDOFF: cat-3-search\nKILN-STATUS: blocked no fixtures"
+        assert sc.parse_worker_report(stdout).handoff_name == ""
+
+    def test_it_does_not_disturb_the_status_sentinel(self):
+        stdout = "KILN-HANDOFF: cat-3-search\nKILN-STATUS: done wrote the spec"
+        result = sc.parse_worker_report(stdout)
+        assert result.status == sc.STATUS_DONE
+        assert result.summary == "wrote the spec"
+
+
 class TestInstructionText:
     def test_instruction_documents_both_statuses(self):
         text = sc.WORKER_STATUS_INSTRUCTION
@@ -139,6 +205,28 @@ class TestInstructionText:
         assert len(examples) == 2
         statuses = {sc.parse_worker_report(line).status for line in examples}
         assert statuses == {sc.STATUS_DONE, sc.STATUS_BLOCKED}
+
+    def test_the_instruction_documents_the_handoff_sentinel(self):
+        assert sc.HANDOFF_PREFIX in sc.WORKER_STATUS_INSTRUCTION
+
+    def test_the_instructions_example_name_survives_its_own_parser(self):
+        # The drift guard that matters here: workers are shown example names, and an example
+        # the validator would reject would teach every worker to be silently ignored.
+        examples = [
+            line.strip()
+            for line in sc.WORKER_STATUS_INSTRUCTION.splitlines()
+            if line.strip().upper().startswith(sc.HANDOFF_PREFIX)
+        ]
+        assert examples, "the instruction must show at least one example"
+        for line in examples:
+            if "<" in line:
+                continue  # the placeholder form, not a real name
+            assert sc.parse_handoff_name(line), f"{line!r} would be rejected"
+
+    def test_every_name_the_instruction_recommends_is_accepted(self):
+        for name in ("cat-3-search-by-author", "fix-isbn-validation"):
+            assert name in sc.WORKER_STATUS_INSTRUCTION
+            assert sc.parse_handoff_name(f"{sc.HANDOFF_PREFIX} {name}") == name
 
     def test_cli_prints_instruction(self, capsys):
         assert sc._main(["--instruction"]) == 0

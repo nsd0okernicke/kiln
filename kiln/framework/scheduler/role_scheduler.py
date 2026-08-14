@@ -405,13 +405,13 @@ def _delegate(
             # `state` already includes this cycle's earlier attempts -- record_spend runs
             # after every invocation below -- so subtracting attempts.cost as well would
             # charge the retry twice.
-            remaining = ctx.max_budget_usd - state.spend_on(inbound.handoff)
+            remaining = ctx.max_budget_usd - state.spend_on(work_item_of(inbound.handoff))
             kwargs["max_budget_usd"] = max(remaining, 0.0)
 
         attempts.invocations.append(
             ctx.run_worker(prompt=prompt, attempt=len(attempts.invocations) + 1, **kwargs)
         )
-        state.record_spend(inbound.handoff, attempts.last.cost_usd)
+        state.record_spend(work_item_of(inbound.handoff), attempts.last.cost_usd)
         _apply_verification(ctx, attempts)
         if not attempts.last.is_done:
             _persist_worker_debug(ctx, attempts.last, len(attempts.invocations))
@@ -435,6 +435,10 @@ def _hand_off(
     summary = attempts.last.result.summary or "completed cycle"
     log.info(f"{ICON_DONE} worker done: %s", summary)
 
+    work_item = resolve_work_item(inbound.handoff, attempts.last.result.handoff_name)
+    if work_item != inbound.handoff:
+        log.info(f"{ICON_HANDOFF} work item named: %s", work_item)
+
     if not _produced_work(ctx, anchor):
         return _no_op(ctx, message_id, inbound, summary, attempts)
 
@@ -451,14 +455,17 @@ def _hand_off(
 
     outbound = handoff.format_handoff(
         sender=ctx.role,
-        handoff=inbound.handoff,
+        handoff=work_item,
         branch=ctx.branch,
         commit=squashed.stdout,
         summary=summary,
         next_role=target,
         timestamp=ctx.timestamp(),
     )
-    _insert_verified(ctx, target, outbound, work_item=inbound.handoff)
+    # The message header and the column are filled from the same value, deliberately: they
+    # are the same fact, and the whole point of the column is that it can be trusted to
+    # match what a human reads in the message.
+    _insert_verified(ctx, target, outbound, work_item=work_item_of(work_item))
     db.mark_processed(ctx.db_path, message_id)
 
     state.consecutive_escalations = 0  # a clean cycle re-arms the circuit breaker
@@ -473,6 +480,47 @@ def _hand_off(
         attempts=len(attempts.invocations),
         tokens=attempts.tokens,
     )
+
+
+def resolve_work_item(inbound_name: str, reported_name: str) -> str:
+    """
+    The name this cycle's outbound handoff carries.
+
+    A worker may only name the work when the inbound handoff is still the `pending`
+    placeholder. That single restriction is what makes a work item an identity rather than a
+    label: the role that first accepts a request chooses the name, and every role after it
+    carries the same one, so grouping by it groups one piece of work.
+
+    Why a worker can name anything at all: in scheduler mode the *scheduler* composes the
+    outbound message, copying `Handoff:` from the inbound verbatim, and the worker's only
+    output channel was the status sentinel. So `roles/specifier.md`'s instruction to "invent
+    the handoff name, replacing the `pending` placeholder" could not be carried out, and every
+    message in a project's queue ended up grouped under `pending` -- which
+    `count_work_item_arrivals` and `spend_by_work_item` then counted across unrelated features.
+
+    Falls back to the inbound name whenever there is nothing valid to replace it with, so a
+    worker that ignores or fumbles the sentinel behaves exactly as before rather than failing
+    a cycle whose actual work succeeded.
+    """
+    if not is_pending(inbound_name):
+        return inbound_name
+    return reported_name or inbound_name
+
+
+def is_pending(name: str) -> bool:
+    """True for the placeholder a human puts in an opening request."""
+    return name.strip().lower() == status_contract.PENDING_HANDOFF
+
+
+def work_item_of(name: str) -> str | None:
+    """
+    The grouping key for a handoff name, or None when it names nothing yet.
+
+    The `pending` placeholder must never reach the column. It is not a work item, it is the
+    absence of one, and storing it makes every unrelated intake share a bucket -- which is
+    precisely the state the live database was found in.
+    """
+    return None if not name or is_pending(name) else name
 
 
 def _apply_verification(ctx: SchedulerContext, attempts: _Attempts) -> None:
@@ -521,20 +569,20 @@ def _cycle_limit_breach(ctx: SchedulerContext, inbound: handoff.InboundHandoff) 
     a hard stop leaves the human a dead swarm and nothing addressable, while an escalation
     puts the reason in the inbox attached to the work item it is about.
 
-    A work item with no name is not counted. Only the human -> specifier intake hop is
-    legitimately unnamed (the specifier invents the name), so there is nothing there to loop
-    on -- and counting NULLs would pool every unrelated intake into one bucket.
+    A work item with no name is not counted, and the `pending` placeholder counts as no name.
+    Only the intake hop is legitimately unnamed, so there is nothing there to loop on -- while
+    counting the placeholder would pool every unrelated feature's intake into one bucket and
+    trip this guard on a swarm that is not looping at all.
     """
-    if ctx.max_cycles is None or not inbound.handoff:
+    work_item = work_item_of(inbound.handoff)
+    if ctx.max_cycles is None or not work_item:
         return ""
 
-    arrivals = db.count_work_item_arrivals(
-        ctx.db_path, inbound.handoff, ctx.branch, ctx.role
-    )
+    arrivals = db.count_work_item_arrivals(ctx.db_path, work_item, ctx.branch, ctx.role)
     if arrivals <= ctx.max_cycles:
         return ""
     return (
-        f"work item {inbound.handoff!r} has reached {ctx.role} {arrivals} times, over the "
+        f"work item {work_item!r} has reached {ctx.role} {arrivals} times, over the "
         f"limit of {ctx.max_cycles}; stopping instead of running another cycle"
     )
 
@@ -556,11 +604,12 @@ def _budget_breach(
     if ctx.max_budget_usd is None:
         return ""
 
-    spent = state.spend_on(inbound.handoff)
+    work_item = work_item_of(inbound.handoff)
+    spent = state.spend_on(work_item)
     if spent < ctx.max_budget_usd:
         return ""
     return (
-        f"work item {inbound.handoff or '(unnamed)'!r} has cost ${spent:.2f} at {ctx.role}, "
+        f"work item {work_item or '(unnamed)'!r} has cost ${spent:.2f} at {ctx.role}, "
         f"at or over the ${ctx.max_budget_usd:.2f} cap; stopping instead of spending more"
     )
 
@@ -621,7 +670,7 @@ def _no_op(
             next_role=ESCALATION_TARGET,
             timestamp=ctx.timestamp(),
         ),
-        work_item=inbound.handoff,
+        work_item=work_item_of(inbound.handoff),
         priority=INFORMATIONAL_PRIORITY,
     )
     db.mark_processed(ctx.db_path, message_id)
@@ -662,7 +711,7 @@ def _forward_ping(
         ping=True,
         trail=trail,
     )
-    _insert_verified(ctx, target, outbound, work_item=inbound.handoff)
+    _insert_verified(ctx, target, outbound, work_item=work_item_of(inbound.handoff))
     db.mark_processed(ctx.db_path, message_id)
     ctx.set_status("idle")
     return CycleResult(PING_FORWARDED, message_id=message_id, target=target)
@@ -696,7 +745,9 @@ def _escalate(
         timestamp=ctx.timestamp(),
         escalation=True,
     )
-    _insert_verified(ctx, ESCALATION_TARGET, outbound, work_item=inbound.handoff)
+    _insert_verified(
+        ctx, ESCALATION_TARGET, outbound, work_item=work_item_of(inbound.handoff)
+    )
     # `failed`, not `processed`: the escalated message stays addressable, with its reason in
     # the `error` column, so `kiln retry` can send this exact row back rather than the human
     # having to start a new work item carrying none of the failed cycle's context. It is
@@ -727,7 +778,7 @@ def _escalate(
                 timestamp=ctx.timestamp(),
                 escalation=True,
             ),
-            work_item=inbound.handoff,
+            work_item=work_item_of(inbound.handoff),
         )
 
     return CycleResult(

@@ -32,13 +32,31 @@ upstream, in the `human-in-the-loop` role's conversation, before the request eve
 
 - **Inbound handoff `Sender: human-in-the-loop`** — a new, human-approved request. Run all four phases
   of the `gherkin-spec-workflow` skill, but skip Phase 4's interactive approval question — the
-  human-in-the-loop's handoff already carries that approval. Invent the specifier handoff name here
-  (replacing the `pending` placeholder the human-in-the-loop used), commit, and hand off to `coder` as
-  usual.
+  human-in-the-loop's handoff already carries that approval. **Name the work here** (see below),
+  commit, and hand off to `coder` as usual.
 - **Inbound handoff `Sender: architect`** — a completed-cycle report, not a new request. Do not
   run the Gherkin workflow. Forward the message as-is to `human-in-the-loop` via `/kiln-handoff`
   (overriding the normal `coder` target for this message only), so the human sees the completed
   cycle and can decide what's next.
+
+### Naming the work
+
+You are the role that turns a request into a named piece of work, and the name you choose is
+what every later message, cost figure and cycle count is grouped by. **How you report it depends
+on which mode you are running in**, because the two modes compose the outbound message
+differently:
+
+- **Scheduler mode** (`specifier-worker`, dispatched one shot per handoff): you do *not* write
+  the handoff message — the scheduler does, and it copies the inbound `Handoff:` field. Report
+  the name with a `KILN-HANDOFF:` line immediately before your `KILN-STATUS:` sentinel, exactly
+  as your "Required final output line" section describes. Emit it **only** when the inbound
+  `Handoff:` is `pending`; if the work is already named, carrying that name through unchanged
+  is the whole point.
+- **Wrapper mode**: you write the message yourself, so put the name straight into the `Handoff:`
+  field, replacing the `pending` placeholder.
+
+A good name reads like a branch name — `cat-3-search-by-author`, `fix-isbn-validation`. Never
+leave it as `pending`.
 
 ## Non-Ownership
 

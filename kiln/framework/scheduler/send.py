@@ -25,12 +25,11 @@ from datetime import datetime
 from pathlib import Path
 
 from . import db, handoff
+from .status_contract import PENDING_HANDOFF
 
 log = logging.getLogger(__name__)
 
-#: What the specifier replaces with a real handoff name once it accepts the request. Matches
-#: the placeholder the human-in-the-loop role file tells a person to use.
-PENDING_HANDOFF = "pending"
+__all__ = ["PENDING_HANDOFF", "build_message", "build_parser", "main", "send"]
 
 
 def build_message(
@@ -76,7 +75,9 @@ def send(
     )
     # `pending` is the placeholder a human uses for a brand-new request: the specifier is
     # what invents the real name, so there is nothing to group by yet and NULL is correct.
-    work_item = None if handoff_name == PENDING_HANDOFF else handoff_name
+    # Case-insensitively, matching `role_scheduler.is_pending` -- a human typing `Pending`
+    # must not create a second, indistinguishable placeholder bucket.
+    work_item = None if handoff_name.strip().lower() == PENDING_HANDOFF else handoff_name
     message_id = db.insert_handoff(
         db_path, sender, target, content, branch, priority, work_item=work_item
     )

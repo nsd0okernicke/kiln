@@ -43,11 +43,20 @@ DEFINITION = WorkerDefinition(name="coder-worker", description="d", prompt="body
 FIXED_NOW = datetime(2026, 8, 7, 14, 3, 11)
 
 
-def worker(status=STATUS_DONE, summary="did the work", **kwargs):
-    """Build a canned worker outcome."""
+def worker(status=STATUS_DONE, summary="did the work", handoff_name="", **kwargs):
+    """
+    Build a canned worker outcome.
+
+    `handoff_name` is what a real adapter would have got from `parse_worker_report` reading a
+    `KILN-HANDOFF:` line; the parsing itself is covered in test_status_contract.py, so these
+    tests set the parsed field directly rather than round-tripping through stdout.
+    """
     kwargs.setdefault("raw_output", f"KILN-STATUS: {status} {summary}")
     return WorkerInvocation(
-        result=WorkerResult(status=status, summary=summary, sentinel_found=True), **kwargs
+        result=WorkerResult(
+            status=status, summary=summary, sentinel_found=True, handoff_name=handoff_name
+        ),
+        **kwargs,
     )
 
 
@@ -763,6 +772,108 @@ class TestCircuitBreaker:
 
         assert state.consecutive_escalations == 0
         assert state.halted is False
+
+
+class TestNamingTheWorkItem:
+    """
+    Found live, after two clean cycles in a real project: **every** row in the queue had
+    `work_item = 'pending'`.
+
+    In scheduler mode the scheduler composes the outbound message, copying `Handoff:` from the
+    inbound verbatim, and the worker's only channel was the status sentinel -- so
+    `roles/specifier.md`'s instruction to "invent the handoff name, replacing the `pending`
+    placeholder" could not be carried out by anything. The placeholder propagated through every
+    hop of every cycle, and `count_work_item_arrivals` and `spend_by_work_item` -- the max-cycles
+    guard and the cost cap -- were both counting across unrelated features as a result.
+    """
+
+    def test_the_specifier_can_name_a_pending_work_item(self, make_ctx, inbound, db_path):
+        inbound(target="specifier", sender="human-in-the-loop", name="pending")
+        fake = FakeWorker(
+            worker(summary="wrote the spec", handoff_name="cat-3-search-by-author")
+        )
+
+        role_scheduler.run_once(make_ctx(fake, role="specifier"), SchedulerState())
+
+        row = queued_for(db_path, "coder")[0]
+        assert row["work_item"] == "cat-3-search-by-author"
+
+    def test_the_message_header_carries_the_same_name_as_the_column(
+        self, make_ctx, inbound, db_path
+    ):
+        # The column is only trustworthy if it matches what a human reads in the message.
+        inbound(target="specifier", sender="human-in-the-loop", name="pending")
+        fake = FakeWorker(worker(handoff_name="cat-3"))
+
+        role_scheduler.run_once(make_ctx(fake, role="specifier"), SchedulerState())
+
+        row = queued_for(db_path, "coder")[0]
+        assert handoff.parse_handoff(row["content"]).handoff == row["work_item"] == "cat-3"
+
+    def test_a_later_role_cannot_rename_the_work(self, make_ctx, inbound, db_path):
+        # The one restriction that makes a work item an identity rather than a label: whoever
+        # accepts the request names it, and everyone after carries that name unchanged.
+        inbound(name="cat-3-search")
+        fake = FakeWorker(worker(handoff_name="something-else"))
+
+        role_scheduler.run_once(make_ctx(fake), SchedulerState())
+
+        assert queued_for(db_path, "refactorer")[0]["work_item"] == "cat-3-search"
+
+    def test_an_unnamed_cycle_stores_null_not_the_placeholder(
+        self, make_ctx, inbound, db_path
+    ):
+        # `pending` is not a work item, it is the absence of one. Storing it is what put every
+        # unrelated request in the live database into a single group.
+        inbound(target="specifier", sender="human-in-the-loop", name="pending")
+
+        role_scheduler.run_once(make_ctx(FakeWorker(), role="specifier"), SchedulerState())
+
+        assert queued_for(db_path, "coder")[0]["work_item"] is None
+
+    def test_the_placeholder_is_carried_in_the_header_when_nobody_names_it(
+        self, make_ctx, inbound, db_path
+    ):
+        # The header keeps `pending` so the next role still knows it may name the work; only
+        # the *column* goes NULL. They answer different questions.
+        inbound(target="specifier", sender="human-in-the-loop", name="pending")
+
+        role_scheduler.run_once(make_ctx(FakeWorker(), role="specifier"), SchedulerState())
+
+        content = queued_for(db_path, "coder")[0]["content"]
+        assert handoff.parse_handoff(content).handoff == "pending"
+
+    def test_a_named_escalation_still_groups(self, make_ctx, inbound, db_path):
+        inbound(name="cat-3-search")
+        fake = FakeWorker(worker(STATUS_BLOCKED, "no"), worker(STATUS_BLOCKED, "no"))
+
+        role_scheduler.run_once(make_ctx(fake), SchedulerState())
+
+        assert queued_for(db_path, "human-in-the-loop")[0]["work_item"] == "cat-3-search"
+
+    def test_an_unnamed_escalation_stores_null(self, make_ctx, inbound, db_path):
+        inbound(target="specifier", sender="human-in-the-loop", name="pending")
+        fake = FakeWorker(worker(STATUS_BLOCKED, "no"), worker(STATUS_BLOCKED, "no"))
+
+        role_scheduler.run_once(make_ctx(fake, role="specifier"), SchedulerState())
+
+        assert queued_for(db_path, "human-in-the-loop")[0]["work_item"] is None
+
+    def test_the_cycle_guard_ignores_the_placeholder(self, make_ctx, inbound, db_path):
+        # Otherwise every unrelated feature's intake shares one bucket, and maxCycles trips
+        # on a swarm that is not looping at all.
+        for _ in range(9):
+            message_id = db.insert_handoff(
+                db_path, "human-in-the-loop", "specifier", "old", "main", work_item="pending"
+            )
+            db.mark_processed(db_path, message_id)
+        inbound(target="specifier", sender="human-in-the-loop", name="pending")
+
+        result = role_scheduler.run_once(
+            make_ctx(FakeWorker(), role="specifier", max_cycles=2), SchedulerState()
+        )
+
+        assert result.outcome == role_scheduler.HANDED_OFF
 
 
 class TestVerificationGate:

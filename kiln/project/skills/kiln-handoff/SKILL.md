@@ -76,8 +76,24 @@ It is what groups every message belonging to one piece of work, so cost, cycle c
 detection can be answered per feature. Copy it from the inbound message; never invent a new one
 and never leave it out.
 
-The only message with no `work_item` is the very first one, from the human to the specifier —
-the specifier is what invents the name, so there is nothing to carry yet.
+**One exception, and it matters: if the handoff name is `pending`, write SQL `NULL` instead** —
+unquoted, not the string `'pending'`:
+
+```sql
+  ...
+  '<your branch>',
+  NULL
+)
+```
+
+`pending` is the placeholder a human puts in an opening request; the specifier replaces it with
+a real name. It is not a work item, it is the *absence* of one, and storing it as a value makes
+every unrelated request in the project share a single group called `pending`. That is not
+cosmetic — the max-cycles guard and the cost cap both count per work item, so one shared bucket
+makes them count across features that have nothing to do with each other.
+
+So the human's opening request is the only message with no `work_item`, because the specifier
+is what invents the name and there is nothing to carry yet.
 
 ### Step 5 — Verify (and retry if needed)
 
