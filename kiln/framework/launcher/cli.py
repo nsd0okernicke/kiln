@@ -15,15 +15,24 @@ import argparse
 import logging
 import os
 import shutil
+import socket
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from . import generate, scaffold, stop, workspace
-from .commands import build_agent_command, render_posix, render_powershell
+from .commands import (
+    PROXY_CAPABLE_AGENTS,
+    PROXY_UPSTREAMS,
+    build_agent_command,
+    proxy_env,
+    render_posix,
+    render_powershell,
+)
 from .config import Profile, ProfileError, list_profiles, load_profile
 from .generate import CHANNEL_IMPORT_PROBE, MCP_PYTHON
-from .paths import KilnPaths
+from .paths import KilnPaths, python_command
 from .templates import TemplateError, check_project_scaffolding, resolve_framework_root
 from .terminals import TMUX, WEZTERM, WINDOWS_TERMINAL, PaneSpec, TerminalError, detect_backend
 from .terminals import launch as launch_terminal
@@ -133,7 +142,13 @@ def _hosts_posix_shell(backend: str) -> bool:
     return os.name != "nt"
 
 
-def build_panes(profile: Profile, paths: KilnPaths, branch: str, backend: str) -> list[PaneSpec]:
+def build_panes(
+    profile: Profile,
+    paths: KilnPaths,
+    branch: str,
+    backend: str,
+    proxy_url: str | None = None,
+) -> list[PaneSpec]:
     """
     Resolve every role into a launch-ready pane.
 
@@ -145,7 +160,7 @@ def build_panes(profile: Profile, paths: KilnPaths, branch: str, backend: str) -
     panes: list[PaneSpec] = []
     for role in profile.roles:
         worktree = workspace.worktree_for(role, paths)
-        command = build_agent_command(role, paths, branch)
+        command = build_agent_command(role, paths, branch, proxy_url=proxy_url)
         panes.append(
             PaneSpec(
                 role=role.role,
@@ -216,6 +231,153 @@ def _copy_root_settings(paths: KilnPaths) -> None:
     workspace.write_directory_gitignore(target)
 
 
+#: Where the capture proxy prefers to listen. Probed upward if taken — see `find_free_port`.
+DEFAULT_PROXY_PORT = 8787
+
+#: How many ports above the preferred one to try before giving up.
+PROXY_PORT_ATTEMPTS = 20
+
+#: How long to wait for the proxy to accept a connection before calling the launch failed.
+PROXY_READY_TIMEOUT_SEC = 10.0
+
+
+def find_free_port(preferred: int, attempts: int = PROXY_PORT_ATTEMPTS) -> int:
+    """
+    The first bindable port at or above `preferred`.
+
+    A fixed port breaks as soon as two projects capture at once: the second proxy dies on
+    bind, and its roles are still pointed at the first project's proxy, which forwards
+    happily and records this swarm's traffic into the other project's store. Agents keep
+    working, so nothing surfaces the mistake. Observed live with a proxy left over from an
+    earlier session still holding the default port.
+
+    Raises LaunchError rather than falling back to an ephemeral port: a swarm whose proxy
+    landed somewhere unpredictable is harder to reason about than one that refused to start.
+    """
+    for candidate in range(preferred, preferred + attempts):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            try:
+                probe.bind(("127.0.0.1", candidate))
+            except OSError:
+                continue
+            return candidate
+    raise LaunchError(
+        f"no free port for the capture proxy in {preferred}-{preferred + attempts - 1}. "
+        "Leftover proxies from other projects may be holding them: `kiln --stop` clears "
+        "every Kiln process, or launch with --no-proxy."
+    )
+
+
+def wait_until_listening(
+    port: int, timeout: float = PROXY_READY_TIMEOUT_SEC, host: str = "127.0.0.1"
+) -> bool:
+    """
+    Poll-connect until something answers on `port`, or give up.
+
+    The proxy is spawned detached, so `Popen` returning successfully only means the process
+    started — a failure to *bind* happens inside the child and lands in its log. Without this
+    check the launch continues and every routed role fails at its first API call, a long way
+    from the cause.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection((host, port), timeout=0.5):
+                return True
+        except OSError:
+            time.sleep(0.1)
+    return False
+
+
+def proxy_routes(profile: Profile) -> list[str]:
+    """
+    `--route` arguments for every role whose backend is not the proxy's default upstream.
+
+    Roles, not backends, are what a path prefix identifies, so a mixed-backend swarm needs
+    one route per non-Anthropic role rather than a second proxy on another port.
+    """
+    return [
+        f"--route={role.role}={PROXY_UPSTREAMS[role.agent]}"
+        for role in profile.roles
+        if role.agent in PROXY_UPSTREAMS and role.agent in PROXY_CAPABLE_AGENTS
+    ]
+
+
+def start_proxy(
+    paths: KilnPaths,
+    port: int,
+    capture_mode: str,
+    profile: Profile,
+    port_is_explicit: bool = False,
+) -> str:
+    """
+    Launch the capture proxy and return the base URL roles should be pointed at.
+
+    Started as a detached background process rather than a pane: it produces no output worth
+    watching, and giving it a pane would change every profile's layout.
+    `kiln --stop` finds it by command line, like every other Kiln process.
+
+    Raises LaunchError if it cannot start *or* never begins listening — a swarm that silently
+    ran unproxied would produce an empty capture and no explanation, and one pointed at
+    somebody else's proxy is worse than that.
+
+    `port_is_explicit` distinguishes `--proxy-port 9000` from the default. An explicitly
+    requested port that is busy fails rather than silently drifting to the next one; the
+    default probes upward so two projects can run at once without any flag at all.
+    """
+    log_path = paths.logs_dir / "proxy.log"
+    paths.logs_dir.mkdir(parents=True, exist_ok=True)
+
+    # Reclaim this project's own leftovers before looking for a port, so that closing the
+    # terminal window -- a normal way to end a swarm, and one that never reaches a detached
+    # process -- costs nothing more than a stale listener until the next launch. Restarted
+    # rather than reused: this run may have asked for a different --capture mode or a
+    # different set of routes, and silently keeping the old ones would be a lie.
+    stop.stop_project_proxies(paths.traffic_db)
+
+    port = port if port_is_explicit else find_free_port(port)
+
+    command = [
+        python_command(), "-m", "proxy.server",
+        "--db-path", str(paths.traffic_db),
+        "--port", str(port),
+        "--mode", capture_mode,
+        *proxy_routes(profile),
+    ]
+    environment = {
+        **os.environ,
+        "PYTHONPATH": str(paths.python_package_root),
+        "PYTHONIOENCODING": "utf-8",
+    }
+    # Detached, so the proxy outlives the launcher process that spawned it.
+    creation_flags = 0
+    if os.name == "nt":
+        creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+
+    try:
+        with log_path.open("ab") as log_file:
+            subprocess.Popen(
+                command,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+                env=environment,
+                cwd=str(paths.project_root),
+                creationflags=creation_flags,
+                start_new_session=os.name != "nt",
+            )
+    except OSError as exc:
+        raise LaunchError(f"could not start the capture proxy: {exc}") from exc
+
+    if not wait_until_listening(port):
+        raise LaunchError(
+            f"the capture proxy did not start listening on port {port}; "
+            f"see {log_path}. Launch with --no-proxy to run without capture."
+        )
+
+    return f"http://127.0.0.1:{port}"
+
+
 def run_launch(args: argparse.Namespace) -> int:
     project_root = Path(args.working_dir).expanduser().resolve()
     if not project_root.is_dir():
@@ -234,7 +396,30 @@ def run_launch(args: argparse.Namespace) -> int:
     branch = prepare(profile, paths)
     log.info("branch: %s", branch)
 
-    panes = build_panes(profile, paths, branch, backend)
+    proxy_url = None
+    if args.proxy and not args.dry_run:
+        proxy_url = start_proxy(
+            paths, args.proxy_port, args.capture, profile,
+            port_is_explicit=args.proxy_port != DEFAULT_PROXY_PORT,
+        )
+        log.info("capture proxy: %s (%s) -> %s", proxy_url, args.capture, paths.traffic_db)
+        routed = [role.role for role in profile.roles if proxy_env(role, proxy_url)]
+        log.info("  routing: %s", ", ".join(routed) or "(no proxy-capable roles)")
+        unrouted = [
+            role.role
+            for role in profile.roles
+            if not role.is_passive and role.agent not in PROXY_CAPABLE_AGENTS
+        ]
+        if unrouted:
+            # Silence here would look like a capture bug later.
+            log.warning(
+                "  not routed (no verified base-URL override): %s", ", ".join(unrouted)
+            )
+    elif args.proxy and args.dry_run:
+        proxy_url = f"http://127.0.0.1:{args.proxy_port}"
+        log.info("capture proxy: would start on %s", proxy_url)
+
+    panes = build_panes(profile, paths, branch, backend, proxy_url=proxy_url)
     for role in profile.roles:
         if role.is_inbox:
             kind = f"inbox -> {role.watched_role}"  # runs no agent at all
@@ -334,6 +519,18 @@ def build_parser() -> argparse.ArgumentParser:
                         action="store_true", help="list available profiles and exit")
     parser.add_argument("--dry-run", dest="dry_run", action="store_true",
                         help="show what would be launched without starting anything")
+    parser.add_argument("--proxy", "-Proxy", dest="proxy",
+                        action=argparse.BooleanOptionalAction, default=False,
+                        help="route agent API traffic through the local capture proxy "
+                             "(claude and codex roles). Off by default. Only metadata is "
+                             "recorded unless --capture full is also given")
+    parser.add_argument("--proxy-port", dest="proxy_port", type=int,
+                        default=DEFAULT_PROXY_PORT,
+                        help=f"port for the capture proxy (default: {DEFAULT_PROXY_PORT})")
+    parser.add_argument("--capture", dest="capture", choices=["metadata", "full"],
+                        default="metadata",
+                        help="proxy capture depth: 'metadata' records sizes/model/usage, "
+                             "'full' also stores request and response bodies")
     parser.add_argument("--verbose", "-Debug", dest="verbose", action="store_true")
     return parser
 

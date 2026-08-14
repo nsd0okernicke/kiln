@@ -24,7 +24,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import db, git_ops, handoff, pane_status
-from .adapters import WorkerInvocation
+from .adapters import TokenUsage, WorkerInvocation
 from .routing import RoutingTable, load_routing_table
 from .worker_prompt import WorkerDefinition, build_task_prompt, load_worker_definition
 
@@ -140,6 +140,7 @@ class CycleResult:
     detail: str = ""
     cost_usd: float = 0.0
     attempts: int = 0
+    tokens: TokenUsage = field(default_factory=TokenUsage)
 
 
 @dataclass
@@ -155,6 +156,26 @@ class _Attempts:
     @property
     def cost(self) -> float:
         return sum(inv.cost_usd for inv in self.invocations)
+
+    @property
+    def tokens(self) -> TokenUsage:
+        """
+        Usage across every attempt, retries included, kept broken down by kind.
+
+        A retried cycle costs the sum of its attempts, not the last one -- reporting only
+        the successful attempt would make the expensive cycles look like the cheap ones.
+        Invocations reporting no usage (`tokens is None`) contribute nothing rather than
+        being counted as zero-token successes.
+
+        Summed field-wise via `TokenUsage.__add__` rather than collapsed to a total,
+        because which *kind* of token a role burns is the actionable part -- see
+        `PaneStatus.tokens`.
+        """
+        total = TokenUsage()
+        for invocation in self.invocations:
+            if invocation.tokens is not None:
+                total = total + invocation.tokens
+        return total
 
 
 def should_retry(invocations: Sequence[WorkerInvocation], max_attempts: int) -> bool:
@@ -221,7 +242,7 @@ def run_once(ctx: SchedulerContext, state: SchedulerState) -> CycleResult:
         )
         return _escalate(
             ctx, state, message_id, inbound, detail, ESCALATED,
-            cost=attempts.cost, attempts=len(attempts.invocations),
+            cost=attempts.cost, attempts=len(attempts.invocations), tokens=attempts.tokens,
         )
 
     return _hand_off(ctx, state, message_id, inbound, target, anchor, attempts)
@@ -329,7 +350,7 @@ def _hand_off(
         log.error(detail)
         return _escalate(
             ctx, state, message_id, inbound, detail, ESCALATED,
-            cost=attempts.cost, attempts=len(attempts.invocations),
+            cost=attempts.cost, attempts=len(attempts.invocations), tokens=attempts.tokens,
         )
 
     outbound = handoff.format_handoff(
@@ -354,6 +375,7 @@ def _hand_off(
         detail=summary,
         cost_usd=attempts.cost,
         attempts=len(attempts.invocations),
+        tokens=attempts.tokens,
     )
 
 
@@ -397,6 +419,7 @@ def _escalate(
     outcome: str,
     cost: float = 0.0,
     attempts: int = 0,
+    tokens: TokenUsage | None = None,
 ) -> CycleResult:
     """
     Route a failed cycle to a human instead of forwarding it as if it succeeded.
@@ -450,6 +473,7 @@ def _escalate(
         detail=detail,
         cost_usd=cost,
         attempts=attempts,
+        tokens=tokens or TokenUsage(),
     )
 
 
@@ -475,21 +499,37 @@ def make_status_writer(
     """
     Status writer that shells out to set-status.py, or a no-op when it is absent.
 
-    `cycles`/`cost_usd` are optional and forwarded as `--cycles=`/`--cost=` flags -- the
-    dashboard's swarm-wide totals read these straight out of the JSON set-status.py writes.
-    Omitted (not passed as 0) when the caller doesn't have them, matching set-status.py's own
-    build_status(): a role that never tracks cost must not have its status file claim
-    "$0.00 spent" as if that were a measured fact.
+    `cycles`/`cost_usd`/`tokens` are optional and forwarded as `--cycles=`/`--cost=`/
+    `--tokens-*=` flags -- the dashboard's swarm-wide totals read these straight out of the
+    JSON set-status.py writes. Omitted (not passed as 0) when the caller doesn't have them,
+    matching set-status.py's own build_status(): a role that never tracks cost must not have
+    its status file claim "$0.00 spent" as if that were a measured fact.
     """
     if not script or not Path(script).is_file():
         return lambda _state, **_kwargs: None
 
-    def _write(state: str, *, cycles: int | None = None, cost_usd: float | None = None) -> None:
+    def _write(
+        state: str,
+        *,
+        cycles: int | None = None,
+        cost_usd: float | None = None,
+        tokens: TokenUsage | None = None,
+    ) -> None:
         command = [sys.executable, str(script), role, state]
         if cycles is not None:
             command.append(f"--cycles={cycles}")
         if cost_usd is not None:
             command.append(f"--cost={cost_usd}")
+        if tokens is not None:
+            # Each kind as its own flag rather than one total: set-status.py is copied
+            # verbatim into every worktree and cannot import TokenUsage to unpack a
+            # structured value, so the breakdown has to survive as flat scalars.
+            command += [
+                f"--tokens-in={tokens.input_tokens}",
+                f"--tokens-out={tokens.output_tokens}",
+                f"--tokens-cache-read={tokens.cache_read_tokens}",
+                f"--tokens-cache-write={tokens.cache_creation_tokens}",
+            ]
         try:
             subprocess.run(
                 command,
@@ -678,10 +718,15 @@ def attach_status_bar(ctx: SchedulerContext, args: argparse.Namespace) -> pane_s
     write_status = ctx.set_status
 
     def set_status(state: str) -> None:
-        # bar.status.cycles/cost_usd are already tracked (see _record_cycle) -- this just
-        # threads the current totals one hop further, into the JSON file the dashboard reads,
-        # rather than tracking them a second time.
-        write_status(state, cycles=bar.status.cycles, cost_usd=bar.status.cost_usd)
+        # bar.status.cycles/cost_usd/tokens are already tracked (see _record_cycle) -- this
+        # just threads the current totals one hop further, into the JSON file the dashboard
+        # reads, rather than tracking them a second time.
+        write_status(
+            state,
+            cycles=bar.status.cycles,
+            cost_usd=bar.status.cost_usd,
+            tokens=bar.status.tokens,
+        )
         bar.update(state=state)
 
     ctx.set_status = set_status
@@ -698,6 +743,9 @@ def _record_cycle(bar: pane_status.StatusBar, result: CycleResult) -> None:
     bar.update(
         cycles=bar.status.cycles + 1,
         cost_usd=bar.status.cost_usd + result.cost_usd,
+        # Field-wise accumulation, so the running totals keep their input/output/cache
+        # split across the whole run rather than only within one cycle.
+        tokens=bar.status.tokens + result.tokens,
         target=result.target or bar.status.target,
         detail=detail,
     )

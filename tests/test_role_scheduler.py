@@ -15,6 +15,7 @@ from datetime import datetime
 
 import pytest
 from scheduler import db, git_ops, handoff, role_scheduler
+from scheduler.adapters import TokenUsage
 from scheduler.adapters.claude_adapter import WorkerInvocation
 from scheduler.role_scheduler import CycleResult, SchedulerContext, SchedulerState
 from scheduler.routing import parse_routing_table
@@ -558,6 +559,46 @@ class TestCycleResult:
         result = role_scheduler.run_once(make_ctx(fake), SchedulerState())
         assert result.attempts == 2
         assert result.cost_usd == pytest.approx(0.05)
+
+    def test_tokens_are_summed_across_retries(self, make_ctx, inbound):
+        # A retried cycle costs the sum of its attempts. Reporting only the successful one
+        # would make the expensive cycles look like the cheap ones -- the opposite of what
+        # token accounting exists for.
+        inbound()
+        fake = FakeWorker(
+            worker(STATUS_BLOCKED, "no", tokens=TokenUsage(input_tokens=100, output_tokens=20)),
+            worker(summary="ok", tokens=TokenUsage(input_tokens=200, output_tokens=30)),
+        )
+        result = role_scheduler.run_once(make_ctx(fake), SchedulerState())
+        assert result.tokens.total == 350
+
+    def test_the_breakdown_survives_the_sum(self, make_ctx, inbound):
+        # Summed field-wise, not collapsed: which kind of token a role burns is the
+        # actionable part, and a total alone cannot distinguish cache reads from bloat.
+        inbound()
+        fake = FakeWorker(
+            worker(STATUS_BLOCKED, "no", tokens=TokenUsage(input_tokens=10, cache_read_tokens=90)),
+            worker(summary="ok", tokens=TokenUsage(input_tokens=5, cache_read_tokens=400)),
+        )
+        result = role_scheduler.run_once(make_ctx(fake), SchedulerState())
+        assert result.tokens == TokenUsage(input_tokens=15, cache_read_tokens=490)
+
+    def test_an_attempt_reporting_no_usage_contributes_nothing(self, make_ctx, inbound):
+        # `tokens=None` means the backend said nothing, which must not be counted as a
+        # zero-token attempt nor crash the sum.
+        inbound()
+        fake = FakeWorker(
+            worker(STATUS_BLOCKED, "no", tokens=None),
+            worker(summary="ok", tokens=TokenUsage(input_tokens=42)),
+        )
+        result = role_scheduler.run_once(make_ctx(fake), SchedulerState())
+        assert result.tokens == TokenUsage(input_tokens=42)
+
+    def test_tokens_default_to_empty_when_no_backend_reports_them(self, make_ctx, inbound):
+        inbound()
+        result = role_scheduler.run_once(make_ctx(FakeWorker(worker())), SchedulerState())
+        assert result.tokens == TokenUsage()
+        assert result.tokens.total == 0
 
     def test_result_is_immutable(self):
         with pytest.raises(AttributeError):

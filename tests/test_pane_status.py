@@ -15,7 +15,14 @@ from pathlib import Path
 
 import pytest
 from scheduler import pane_status
-from scheduler.pane_status import PaneStatus, StatusBar, format_bar, paint
+from scheduler.adapters import TokenUsage
+from scheduler.pane_status import (
+    PaneStatus,
+    StatusBar,
+    format_bar,
+    format_tokens,
+    paint,
+)
 
 
 class FakeTty(io.StringIO):
@@ -67,13 +74,43 @@ class TestBarText:
         assert "refactorer" in rendered
 
     def test_a_fresh_scheduler_shows_no_empty_counters(self):
-        # 'cycle 0  $0.00' is noise before anything has happened.
+        # 'cycle 0  $0.00  0 tok' is noise before anything has happened.
         rendered = format_bar(PaneStatus(role="coder"), 60)
         assert "cycle" not in rendered
         assert "$" not in rendered
+        assert "tok" not in rendered
+
+    def test_tokens_appear_once_there_are_some(self):
+        status = PaneStatus(role="coder", tokens=TokenUsage(input_tokens=12_345))
+        assert "12.3k tok" in format_bar(status, 90)
+
+    def test_the_bar_shows_the_total_across_kinds(self):
+        # The bar has one row, so it shows the sum; the breakdown is the dashboard's job.
+        status = PaneStatus(
+            role="coder", tokens=TokenUsage(input_tokens=1_000, cache_read_tokens=11_345)
+        )
+        assert "12.3k tok" in format_bar(status, 90)
 
     def test_zero_width_does_not_raise(self):
         assert format_bar(PaneStatus(role="coder"), 0) == ""
+
+
+class TestFormatTokens:
+    def test_small_counts_are_exact(self):
+        assert format_tokens(850) == "850 tok"
+
+    def test_thousands_are_abbreviated(self):
+        # A raw count is up to seven digits and would crowd out the target and detail,
+        # which are what an operator is actually watching.
+        assert format_tokens(12_345) == "12.3k tok"
+
+    def test_millions_are_abbreviated(self):
+        assert format_tokens(2_400_000) == "2.4M tok"
+
+    def test_zero_is_still_formatted(self):
+        # The bar hides a zero rather than formatting it, but the dashboard's totals row
+        # prints whatever this returns.
+        assert format_tokens(0) == "0 tok"
 
 
 class TestColours:

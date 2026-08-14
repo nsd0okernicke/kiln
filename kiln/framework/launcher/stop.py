@@ -12,13 +12,34 @@ import logging
 import os
 import shutil
 import subprocess
+from pathlib import Path
 
 log = logging.getLogger(__name__)
 
 #: Command-line fragments identifying a process this swarm started.
+#:
+#: Every python-backed pane type must appear here. `scheduler.inbox` and
+#: `scheduler.dashboard` were missing, so both survived `kiln --stop` and kept polling the
+#: database after the swarm was supposedly down (issue #18) -- which also made the
+#: stuck-in-`processing` bug (#19) easy to hit, since stopping mid-cycle is routine.
+#:
+#: `proxy.server` is a detached background process rather than a pane, but it is started by
+#: the same launch and must end with it: a capture proxy left listening would keep relaying
+#: traffic for whatever ran next.
+#:
+#: Note `channel.py` is not a pane at all -- it is the MCP channel server an agent CLI
+#: spawns -- so an enumeration over pane types will not produce it. It stays here
+#: deliberately.
+#:
+#: Interactive agent-CLI panes (claude/codex/copilot) are absent on purpose: they are not
+#: python processes, `_windows_matches` only ever considers python, and a wrapper session
+#: dies with its window.
 KILN_PROCESS_MARKERS = (
     "channel.py",
     "scheduler.role_scheduler",
+    "scheduler.inbox",
+    "scheduler.dashboard",
+    "proxy.server",
 )
 
 
@@ -71,6 +92,46 @@ def find_kiln_processes() -> list[tuple[int, str]]:
         for pid, command in candidates
         if any(marker in command for marker in KILN_PROCESS_MARKERS)
     ]
+
+
+def find_project_proxies(traffic_db: Path) -> list[tuple[int, str]]:
+    """
+    Capture proxies already writing to *this* project's store.
+
+    Matched on the `--db-path` argument rather than on the port, because the port is the
+    thing that drifts: a leaked proxy holds 8787, the next launch takes 8788, and the store
+    it writes to is the only stable identity either of them has.
+    """
+    wanted = str(traffic_db)
+    if os.name == "nt":
+        wanted = wanted.casefold()
+    matches = []
+    for pid, command in _windows_matches() if os.name == "nt" else _posix_matches():
+        haystack = command.casefold() if os.name == "nt" else command
+        if "proxy.server" in command and wanted in haystack:
+            matches.append((pid, command))
+    return matches
+
+
+def stop_project_proxies(traffic_db: Path) -> list[int]:
+    """
+    Stop any proxy left over from a previous run of this project. Returns the pids killed.
+
+    Closing the terminal window is a normal way to end a swarm, and it does not reach the
+    proxy: that process is deliberately detached so it survives the launcher, which means it
+    survives the window too. Without this, every window-close during a `--proxy` run would
+    leak one listener, each subsequent launch would climb to the next port, and after
+    `PROXY_PORT_ATTEMPTS` of them the launch would fail outright.
+
+    Scoped to this project's store on purpose. `--stop` is machine-wide by design; starting
+    a swarm is not, and it has no business killing another project's capture.
+    """
+    stopped = []
+    for pid, command in find_project_proxies(traffic_db):
+        log.info("reclaiming leftover capture proxy pid %s: %s", pid, command[:100])
+        if kill_process(pid):
+            stopped.append(pid)
+    return stopped
 
 
 def kill_process(pid: int) -> bool:

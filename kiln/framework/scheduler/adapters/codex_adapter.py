@@ -28,8 +28,9 @@ the same methodology claude_adapter.py's own flags were verified with. The non-o
   this -- don't "fix" it into isolation by default, that reintroduces the 401.
 - `--dangerously-bypass-approvals-and-sandbox`: matches the flag the wrapper-mode
   `_codex_command` in `launcher/commands.py` already uses.
-- No dollar cost anywhere in the output -- only token usage (`turn.completed.usage`).
-  `cost_usd` is left at its dataclass default (`0.0`), same rationale as the Copilot adapter.
+- No dollar cost anywhere in the output -- only token usage (`turn.completed.usage`, now
+  verified live; see `_USAGE_ALIASES`). `cost_usd` is left at its dataclass default (`0.0`),
+  same rationale as the Copilot adapter.
 - stdin is redirected from devnull, same reasoning as the Claude adapter.
 - The resolved binary is looked up with `shutil.which` before `Popen` rather than handed the
   bare `"codex"` string, same as the Copilot adapter -- `codex.exe` happens to be a native
@@ -51,7 +52,7 @@ from pathlib import Path
 
 from ..status_contract import STATUS_BLOCKED, WorkerResult, parse_worker_report
 from ..worker_prompt import WorkerDefinition
-from . import WorkerInvocation
+from . import TokenUsage, WorkerInvocation
 
 log = logging.getLogger(__name__)
 
@@ -73,7 +74,51 @@ def build_full_prompt(definition: WorkerDefinition, task_prompt: str) -> str:
     return f"{definition.prompt}\n\n---\n\n{task_prompt}"
 
 
-def build_command(*, prompt: str, output_file: str | Path, model: str = "") -> list[str]:
+#: Env var Kiln sets on a pane to route that role through the capture proxy.
+#:
+#: Codex has no base-URL environment variable of its own -- unlike Claude's
+#: `ANTHROPIC_BASE_URL` -- so the override has to arrive as `-c` flags on the command line.
+#: Kiln therefore carries the URL in its own variable and each Codex call translates it,
+#: which keeps the transport mechanism uniform (pane environment, inherited by the one-shot
+#: worker subprocess) while the CLI-specific spelling stays in the adapter, alongside every
+#: other Codex accommodation.
+PROXY_BASE_URL_ENV = "KILN_PROXY_BASE_URL"
+
+#: Name of the synthetic provider the overrides define. Arbitrary, but it appears in Codex's
+#: own startup banner as `provider: kiln`, which makes a routed pane obvious at a glance.
+PROXY_PROVIDER = "kiln"
+
+
+def proxy_config_args(base_url: str | None) -> list[str]:
+    """
+    The `-c` overrides that point one Codex call at the capture proxy, or nothing.
+
+    Verified live: the ChatGPT OAuth token is attached even when the base URL is a local
+    host, so a subscription user needs no API key for this to work. `wire_api = "responses"`
+    matters -- Codex speaks the Responses API, and letting it default to the chat shape
+    produces a stream neither side can parse.
+
+    Defined as `-c` rather than in a config file because the one-shot worker call passes
+    `--ignore-user-config`, so anything written to `config.toml` would be skipped.
+    """
+    if not base_url:
+        return []
+    provider = f"model_providers.{PROXY_PROVIDER}"
+    return [
+        "-c", f"model_provider={PROXY_PROVIDER}",
+        "-c", f'{provider}.name="{PROXY_PROVIDER}"',
+        "-c", f'{provider}.base_url="{base_url.rstrip("/")}"',
+        "-c", f'{provider}.wire_api="responses"',
+    ]
+
+
+def build_command(
+    *,
+    prompt: str,
+    output_file: str | Path,
+    model: str = "",
+    proxy_base_url: str | None = None,
+) -> list[str]:
     """Construct the one-shot argv. Pure -- spawns nothing."""
     command = [
         "codex",
@@ -86,7 +131,7 @@ def build_command(*, prompt: str, output_file: str | Path, model: str = "") -> l
     ]
     if model:
         command += ["-m", model]
-    return command
+    return command + proxy_config_args(proxy_base_url)
 
 
 def _condense(value: object) -> str:
@@ -157,6 +202,101 @@ def find_turn_failure(stdout: str) -> str | None:
     return None
 
 
+#: Candidate wire names per TokenUsage field, tried in order.
+#:
+#: **Confirmed against a real `codex exec --json` stream**, which reports:
+#:
+#:     {"input_tokens": 13781, "cached_input_tokens": 11008,
+#:      "cache_write_input_tokens": 0, "output_tokens": 5, "reasoning_output_tokens": 0}
+#:
+#: The first spelling in each tuple is the verified one; the rest are kept as a cheap hedge
+#: against a CLI rename, on the same principle as before -- a miss degrades to "no data",
+#: which the dashboard renders as `-`, rather than to a confidently wrong number.
+#:
+#: `cache_write_input_tokens` was missing entirely until that capture, so every Codex cycle
+#: silently reported zero cache writes.
+_USAGE_ALIASES = {
+    "input_tokens": ("input_tokens", "prompt_tokens"),
+    "output_tokens": ("output_tokens", "completion_tokens"),
+    "cache_read_tokens": ("cached_input_tokens", "cache_read_input_tokens", "cached_tokens"),
+    "cache_creation_tokens": ("cache_write_input_tokens", "cache_creation_input_tokens"),
+}
+
+
+def _as_int(value: object) -> int | None:
+    """A usage count, or None when absent or not a number (`bool` excluded — it is an int)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value)
+
+
+def _usage_from(payload: dict) -> TokenUsage | None:
+    """
+    Codex's usage object -> TokenUsage, with the cached portion taken back out of the input.
+
+    **The subtraction is not cosmetic.** Codex renames the OpenAI Responses API's usage
+    field for field -- `input_tokens_details.cached_tokens` becomes `cached_input_tokens`,
+    `input_tokens_details.cache_write_tokens` becomes `cache_write_input_tokens` -- and
+    keeps its semantics: `input_tokens` is the *total*, of which the cached and written
+    counts are subsets. Anthropic's `input_tokens` means the opposite, the fresh remainder.
+
+    Storing Codex's number as-is under Anthropic's meaning double-counts every cached token:
+    the run that produced the numbers above would have reported 24,789 input tokens instead
+    of 13,781, and its cache hit rate at roughly half the truth. Verified by capturing the
+    same turn twice -- once from the CLI stream, once off the wire through the proxy -- and
+    confirming the two are the same object under different key names.
+    """
+    values = {}
+    for field_name, wire_names in _USAGE_ALIASES.items():
+        for wire_name in wire_names:
+            count = _as_int(payload.get(wire_name))
+            if count is not None:
+                values[field_name] = count
+                break
+    if not values:
+        return None
+    values["input_tokens"] = max(
+        values.get("input_tokens", 0)
+        - values.get("cache_read_tokens", 0)
+        - values.get("cache_creation_tokens", 0),
+        0,
+    )
+    return TokenUsage(**values)
+
+
+def find_usage(stdout: str) -> TokenUsage | None:
+    """
+    Scan a captured JSONL stream for the turn's token usage, or None when it reports none.
+
+    A scan rather than a field read, because `run_worker` never parses an envelope for
+    Codex the way the other adapters do -- it takes the final message from the `-o` output
+    file, so the usage event would otherwise go past unread. Shaped exactly like
+    `find_turn_failure` for that reason.
+
+    The last `turn.completed` wins: a stream carrying more than one reports the final state.
+    """
+    usage: TokenUsage | None = None
+    for line in stdout.splitlines():
+        candidate = line.strip()
+        if not candidate.startswith("{"):
+            continue
+        try:
+            event = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if event.get("type") != "turn.completed":
+            continue
+        # Both nestings are accepted for the same reason the key names are: the exact
+        # envelope shape is documented, not verified.
+        for payload in (event.get("usage"), (event.get("turn") or {}).get("usage")):
+            if isinstance(payload, dict):
+                found = _usage_from(payload)
+                if found is not None:
+                    usage = found
+                    break
+    return usage
+
+
 def _blocked(summary: str, raw: str, **kwargs) -> WorkerInvocation:
     return WorkerInvocation(
         result=WorkerResult(status=STATUS_BLOCKED, summary=summary, sentinel_found=False),
@@ -202,7 +342,15 @@ def run_worker(
     os.close(output_fd)
     output_file = Path(output_path)
 
-    command = build_command(prompt=full_prompt, output_file=output_file, model=model)
+    command = build_command(
+        prompt=full_prompt,
+        output_file=output_file,
+        model=model,
+        # Read from the environment rather than taken as an argument: the pane already
+        # carries it and this worker is that pane's subprocess, so the scheduler never has
+        # to know whether the proxy is on.
+        proxy_base_url=os.environ.get(PROXY_BASE_URL_ENV),
+    )
     resolved = shutil.which(command[0])
     if resolved:
         command[0] = resolved
@@ -261,28 +409,32 @@ def run_worker(
             return _blocked(f"worker timed out after {timeout}s", stdout, timed_out=True)
 
         stderr = (process.stderr.read() if process.stderr else "") or ""
+        # Read once, up front: every path below this point ends in a WorkerInvocation, and a
+        # turn that failed or produced no message still burned tokens worth counting.
+        tokens = find_usage(stdout)
 
         failure = find_turn_failure(stdout)
         if failure:
             log.error("worker %s reported a failed turn: %s", definition.name, failure)
-            return _blocked(failure, stdout, is_error=True)
+            return _blocked(failure, stdout, is_error=True, tokens=tokens)
 
         if process.returncode != 0:
             detail = stderr.strip() or f"codex exited {process.returncode}"
             log.error("worker %s failed: %s", definition.name, detail)
-            return _blocked(detail, stdout, is_error=True)
+            return _blocked(detail, stdout, is_error=True, tokens=tokens)
 
         text = output_file.read_text(encoding="utf-8").strip() if output_file.is_file() else ""
         if not text:
             detail = stderr.strip() or "codex produced no output message"
             log.error("worker %s produced no output message: %s", definition.name, detail)
-            return _blocked(detail, stdout, is_error=True)
+            return _blocked(detail, stdout, is_error=True, tokens=tokens)
 
         result = parse_worker_report(text)
         log.info(
-            "worker %s finished: status=%s sentinel=%s",
+            "worker %s finished: status=%s sentinel=%s tokens=%s",
             definition.name, result.status, result.sentinel_found,
+            tokens.total if tokens else "-",
         )
-        return WorkerInvocation(result=result, raw_output=text)
+        return WorkerInvocation(result=result, raw_output=text, tokens=tokens)
     finally:
         output_file.unlink(missing_ok=True)

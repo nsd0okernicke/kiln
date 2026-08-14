@@ -16,6 +16,8 @@ import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from scheduler.adapters import codex_adapter
+
 from .config import RoleConfig
 from .paths import KilnPaths, python_command
 
@@ -24,6 +26,52 @@ START_PROMPT = "Start your role session."
 
 #: Fallback when a Claude role omits `model` in its profile entry.
 DEFAULT_CLAUDE_MODEL = "sonnet"
+
+#: Backends whose traffic can be routed through the local proxy.
+#:
+#: Both entries are *verified live*, not assumed: each CLI honours the override and still
+#: attaches its own subscription credential to a local, non-vendor host — Claude via OAuth,
+#: Codex via its ChatGPT token. `grok` is unspiked and `copilot` talks to GitHub's endpoints
+#: with no override anyone has found, so routing either would be a guess that silently does
+#: nothing or breaks their auth.
+PROXY_CAPABLE_AGENTS = frozenset({"claude", "codex"})
+
+#: Env var each proxy-capable backend reads for its API base URL.
+#:
+#: Codex is the odd one: it has no base-URL variable of its own and needs `-c` overrides on
+#: the command line instead. Kiln carries the URL in its own variable and each Codex call
+#: translates it (`codex_adapter.proxy_config_args`), so the transport stays uniform —
+#: pane environment, inherited by the one-shot worker — while the CLI-specific spelling
+#: lives with the adapter.
+PROXY_BASE_URL_VARS = {
+    "claude": "ANTHROPIC_BASE_URL",
+    "codex": codex_adapter.PROXY_BASE_URL_ENV,
+}
+
+#: Upstream each routed backend's traffic must actually reach, as `host[/base-path]`.
+#:
+#: The proxy defaults to Anthropic, so only the exception is listed. Codex sends
+#: `POST /responses` relative to its base URL; upstream that has to become
+#: `/backend-api/codex/responses`, which is what the base path supplies.
+PROXY_UPSTREAMS = {"codex": "chatgpt.com/backend-api/codex"}
+
+
+def proxy_env(role: RoleConfig, proxy_url: str | None) -> dict[str, str]:
+    """
+    The base-URL override for one role, or nothing.
+
+    The URL carries the role name as a path prefix (`/kiln/<role>`) because a proxy sees
+    HTTP requests, not roles — without it the capture is an undifferentiated blob that
+    cannot answer "what did the refactorer cost". `proxy.server.split_role` strips the
+    prefix again before forwarding.
+
+    Returns `{}` for a backend with no verified override, so enabling the proxy on a mixed
+    profile routes what it can and leaves the rest untouched rather than failing the launch.
+    """
+    if not proxy_url or role.agent not in PROXY_CAPABLE_AGENTS:
+        return {}
+    variable = PROXY_BASE_URL_VARS[role.agent]
+    return {variable: f"{proxy_url.rstrip('/')}/kiln/{role.role}"}
 
 
 @dataclass(frozen=True)
@@ -64,13 +112,27 @@ def _copilot_command(role: RoleConfig) -> AgentCommand:
     return AgentCommand(argv=argv, banner=role.display_name)
 
 
-def _codex_command(role: RoleConfig, paths: KilnPaths) -> AgentCommand:
+def _codex_command(
+    role: RoleConfig, paths: KilnPaths, proxy_url: str | None = None
+) -> AgentCommand:
     # CODEX_HOME relocates Codex's whole config dir, so each role gets isolated trust and
     # MCP settings without touching the user's real ~/.codex/config.toml.
+    #
+    # The proxy overrides go on the argv rather than in that config, because the same flags
+    # then read identically here and in the one-shot worker call, which cannot use a config
+    # file at all (it passes --ignore-user-config).
+    argv = ["codex", "--dangerously-bypass-approvals-and-sandbox"]
+    argv += codex_adapter.proxy_config_args(_proxy_base_url(role, proxy_url))
+    argv.append(START_PROMPT)
     return AgentCommand(
-        argv=["codex", "--dangerously-bypass-approvals-and-sandbox", START_PROMPT],
+        argv=argv,
         env={"CODEX_HOME": str(paths.codex_home(role.role))},
     )
+
+
+def _proxy_base_url(role: RoleConfig, proxy_url: str | None) -> str | None:
+    """The role's proxy URL, or None when this role is not routed."""
+    return proxy_env(role, proxy_url).get(PROXY_BASE_URL_VARS.get(role.agent, ""))
 
 
 def _scheduler_command(role: RoleConfig, paths: KilnPaths, branch: str) -> AgentCommand:
@@ -160,6 +222,10 @@ def _dashboard_command(role: RoleConfig, paths: KilnPaths, branch: str) -> Agent
         "--sessions-file", str(paths.sessions_file),
         "--project-name", paths.project_root.name,
         "--log-file", str(paths.scheduler_log(role.role)),
+        # Always passed, never conditional on the proxy being enabled: the dashboard hides
+        # the panel when the store is absent, so one code path covers both cases and a
+        # swarm launched without the proxy is not a different dashboard.
+        "--traffic-db", str(paths.traffic_db),
     ]
     return AgentCommand(
         argv=argv,
@@ -174,12 +240,18 @@ def _worktree_for(role: RoleConfig, paths: KilnPaths) -> Path:
     return paths.project_root if role.uses_current_dir else paths.worktree_path(role.worktree)
 
 
-def build_agent_command(role: RoleConfig, paths: KilnPaths, branch: str) -> AgentCommand:
+def build_agent_command(
+    role: RoleConfig, paths: KilnPaths, branch: str, proxy_url: str | None = None
+) -> AgentCommand:
     """
     Build the pane command for one role.
 
     Scheduler-enabled roles bypass the agent CLI entirely — the scheduler invokes the worker
     itself, one shot per handoff.
+
+    `proxy_url` routes this role's API traffic through the local capture proxy. It is applied
+    to both scheduler and wrapper roles: a scheduler-mode worker is a subprocess of its pane
+    and inherits the pane's environment, so setting it once on the pane covers both.
     """
     if role.is_inbox:
         return _inbox_command(role, paths, branch)
@@ -188,14 +260,14 @@ def build_agent_command(role: RoleConfig, paths: KilnPaths, branch: str) -> Agen
         return _dashboard_command(role, paths, branch)
 
     if role.uses_scheduler:
-        return _scheduler_command(role, paths, branch)
+        return _scheduler_command(role, paths, branch).with_env(**proxy_env(role, proxy_url))
 
     if role.agent == "claude":
-        return _claude_command(role, paths)
+        return _claude_command(role, paths).with_env(**proxy_env(role, proxy_url))
     if role.agent == "copilot":
         return _copilot_command(role)
     if role.agent == "codex":
-        return _codex_command(role, paths)
+        return _codex_command(role, paths, proxy_url).with_env(**proxy_env(role, proxy_url))
 
     # `grok` is configurable but has no launch implementation; say so in the pane rather
     # than failing the whole swarm launch.

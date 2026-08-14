@@ -28,7 +28,7 @@ from pathlib import Path
 
 from ..status_contract import STATUS_BLOCKED, WorkerResult, parse_worker_report
 from ..worker_prompt import WorkerDefinition, build_agents_payload
-from . import WorkerInvocation
+from . import TokenUsage, WorkerInvocation
 
 log = logging.getLogger(__name__)
 
@@ -219,6 +219,49 @@ def parse_cli_output(stdout: str) -> dict:
     raise ValueError("no JSON envelope found in claude output")
 
 
+#: Anthropic wire-format usage keys -> TokenUsage fields. The cache keys are spelled
+#: `cache_*_input_tokens` on the wire but kept separate from `input_tokens` here, because
+#: they are priced differently -- see TokenUsage's own note.
+_USAGE_FIELDS = {
+    "input_tokens": "input_tokens",
+    "output_tokens": "output_tokens",
+    "cache_read_input_tokens": "cache_read_tokens",
+    "cache_creation_input_tokens": "cache_creation_tokens",
+}
+
+
+def _as_int(value: object) -> int | None:
+    """A usage count, or None when the field is absent or not a number.
+
+    `bool` is excluded deliberately: it is a subclass of `int`, so a JSON `true` would
+    otherwise silently become a token count of 1.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value)
+
+
+def parse_usage(envelope: dict) -> TokenUsage | None:
+    """
+    Extract token counts from a `result` event, or None when it reports none.
+
+    None rather than a zeroed TokenUsage: "this backend told us nothing" and "this call used
+    no tokens" are different facts, and only the second one is safe to display. Unrecognised
+    or non-numeric fields are skipped rather than defaulted, so a wire-format change degrades
+    to a missing number instead of a wrong one.
+    """
+    usage = envelope.get("usage")
+    if not isinstance(usage, dict):
+        return None
+
+    values = {}
+    for wire_name, field_name in _USAGE_FIELDS.items():
+        count = _as_int(usage.get(wire_name))
+        if count is not None:
+            values[field_name] = count
+    return TokenUsage(**values) if values else None
+
+
 def _blocked(summary: str, raw: str, **kwargs) -> WorkerInvocation:
     return WorkerInvocation(
         result=WorkerResult(status=STATUS_BLOCKED, summary=summary, sentinel_found=False),
@@ -259,7 +302,9 @@ def run_worker(
     unlike Copilot's own `--log-dir` which wants a directory.
     """
     command = build_command(
-        agents_json=build_agents_payload(definition),
+        # include_tools: the worker file's declared tool list is honoured rather than
+        # dropped -- see build_agents_payload. Verified live against Claude Code.
+        agents_json=build_agents_payload(definition, include_tools=True),
         agent_name=definition.name,
         prompt=prompt,
         model=model,
@@ -330,14 +375,22 @@ def run_worker(
 
     text = str(envelope.get("result", ""))
     cost = float(envelope.get("total_cost_usd") or 0.0)
+    # A failed turn still burned tokens, so usage is read before the error branch rather
+    # than only on the success path -- otherwise the most expensive cycles (the ones that
+    # retry) would be the ones missing from the totals.
+    tokens = parse_usage(envelope)
 
     if envelope.get("is_error"):
         log.error("worker %s reported an error: %s", definition.name, text)
-        return _blocked(text or "claude reported is_error", text, cost_usd=cost, is_error=True)
+        return _blocked(
+            text or "claude reported is_error", text,
+            cost_usd=cost, is_error=True, tokens=tokens,
+        )
 
     result = parse_worker_report(text)
     log.info(
-        "worker %s finished: status=%s sentinel=%s cost=$%.4f",
+        "worker %s finished: status=%s sentinel=%s cost=$%.4f tokens=%s",
         definition.name, result.status, result.sentinel_found, cost,
+        tokens.total if tokens else "-",
     )
-    return WorkerInvocation(result=result, raw_output=text, cost_usd=cost)
+    return WorkerInvocation(result=result, raw_output=text, cost_usd=cost, tokens=tokens)

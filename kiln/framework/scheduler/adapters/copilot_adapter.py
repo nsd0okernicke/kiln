@@ -44,7 +44,7 @@ from pathlib import Path
 
 from ..status_contract import STATUS_BLOCKED, WorkerResult, parse_worker_report
 from ..worker_prompt import WorkerDefinition
-from . import WorkerInvocation
+from . import TokenUsage, WorkerInvocation
 
 log = logging.getLogger(__name__)
 
@@ -166,6 +166,72 @@ def parse_cli_output(stdout: str) -> dict:
     raise ValueError("no assistant.message with content found in copilot output")
 
 
+#: Candidate wire names per TokenUsage field, tried in order. Tolerant for the same reason
+#: codex_adapter's table is: Copilot's usage payload is known here only from this module's
+#: docstring (`usage.premiumRequests`/token counts on the final `result` event) and has not
+#: been checked against a captured stream. camelCase is listed first because every other
+#: Copilot field this adapter reads is camelCase (`toolName`, `premiumRequests`).
+#:
+#: A total miss yields None, which renders as `-`. Confirm against a real
+#: `copilot --output-format json` stream and then narrow this table.
+_USAGE_ALIASES = {
+    "input_tokens": ("inputTokens", "input_tokens", "promptTokens", "prompt_tokens"),
+    "output_tokens": ("outputTokens", "output_tokens", "completionTokens", "completion_tokens"),
+    "cache_read_tokens": ("cachedTokens", "cached_tokens", "cacheReadTokens"),
+}
+
+
+def _as_int(value: object) -> int | None:
+    """A usage count, or None when absent or not a number (`bool` excluded — it is an int)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value)
+
+
+def _usage_from(payload: dict) -> TokenUsage | None:
+    values = {}
+    for field_name, wire_names in _USAGE_ALIASES.items():
+        for wire_name in wire_names:
+            count = _as_int(payload.get(wire_name))
+            if count is not None:
+                values[field_name] = count
+                break
+    return TokenUsage(**values) if values else None
+
+
+def find_usage(stdout: str) -> TokenUsage | None:
+    """
+    Scan a captured JSONL stream for the final `result` event's usage, or None.
+
+    A separate scan rather than a read off `parse_cli_output`'s return value, because that
+    function deliberately returns the last non-empty `assistant.message` -- a *different*
+    event from the one carrying usage. Reading usage off it would always find nothing.
+
+    The last `result` event wins.
+    """
+    usage: TokenUsage | None = None
+    for line in stdout.splitlines():
+        candidate = line.strip()
+        if not candidate.startswith("{"):
+            continue
+        try:
+            event = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if event.get("type") != "result":
+            continue
+        # Copilot nests event payloads under `data`; the bare form is accepted too, since
+        # the exact shape here is documented rather than verified.
+        data = event.get("data") or {}
+        for payload in (data.get("usage"), event.get("usage"), data):
+            if isinstance(payload, dict):
+                found = _usage_from(payload)
+                if found is not None:
+                    usage = found
+                    break
+    return usage
+
+
 def _blocked(summary: str, raw: str, **kwargs) -> WorkerInvocation:
     return WorkerInvocation(
         result=WorkerResult(status=STATUS_BLOCKED, summary=summary, sentinel_found=False),
@@ -266,11 +332,14 @@ def run_worker(
         return _blocked(f"worker timed out after {timeout}s", stdout, timed_out=True)
 
     stderr = (process.stderr.read() if process.stderr else "") or ""
+    # Read once, up front: a session that exits nonzero or never produces a final reply
+    # still burned tokens, and those are exactly the sessions worth accounting for.
+    tokens = find_usage(stdout)
 
     if process.returncode != 0:
         detail = stderr.strip() or f"copilot exited {process.returncode}"
         log.error("worker %s failed: %s", definition.name, detail)
-        return _blocked(detail, stdout, is_error=True)
+        return _blocked(detail, stdout, is_error=True, tokens=tokens)
 
     try:
         envelope = parse_cli_output(stdout)
@@ -286,12 +355,13 @@ def run_worker(
         if stats:
             detail += f" -- its own summary: {stats}"
         log.error("worker %s produced no result event: %s", definition.name, detail)
-        return _blocked(detail, stdout, is_error=True)
+        return _blocked(detail, stdout, is_error=True, tokens=tokens)
 
     text = str((envelope.get("data") or {}).get("content", ""))
     result = parse_worker_report(text)
     log.info(
-        "worker %s finished: status=%s sentinel=%s",
+        "worker %s finished: status=%s sentinel=%s tokens=%s",
         definition.name, result.status, result.sentinel_found,
+        tokens.total if tokens else "-",
     )
-    return WorkerInvocation(result=result, raw_output=text)
+    return WorkerInvocation(result=result, raw_output=text, tokens=tokens)

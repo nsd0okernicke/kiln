@@ -67,6 +67,48 @@ class TestBuildCommand:
         assert "-m" not in self._cmd()
         assert self._cmd(model="o3")[self._cmd(model="o3").index("-m") + 1] == "o3"
 
+    def test_no_proxy_flags_unless_a_base_url_is_given(self):
+        assert "-c" not in self._cmd()
+
+
+class TestProxyConfigArgs:
+    """
+    Codex has no base-URL environment variable, so routing it needs `-c` overrides. Verified
+    live: the ChatGPT OAuth token is still attached when the base URL is a local host, so a
+    subscription user needs no API key for this.
+    """
+
+    def test_nothing_without_a_url(self):
+        assert codex_adapter.proxy_config_args(None) == []
+        assert codex_adapter.proxy_config_args("") == []
+
+    def test_selects_the_synthetic_provider(self):
+        args = codex_adapter.proxy_config_args("http://127.0.0.1:8787/kiln/coder")
+        assert f"model_provider={codex_adapter.PROXY_PROVIDER}" in args
+
+    def test_carries_the_role_prefixed_base_url(self):
+        args = codex_adapter.proxy_config_args("http://127.0.0.1:8787/kiln/coder")
+        assert any('base_url="http://127.0.0.1:8787/kiln/coder"' in arg for arg in args)
+
+    def test_pins_the_responses_wire_api(self):
+        # Letting Codex default to the chat shape produces a stream neither side can parse.
+        args = codex_adapter.proxy_config_args("http://127.0.0.1:8787/kiln/coder")
+        assert any('wire_api="responses"' in arg for arg in args)
+
+    def test_a_trailing_slash_does_not_double_up(self):
+        args = codex_adapter.proxy_config_args("http://127.0.0.1:8787/kiln/coder/")
+        assert any(arg.endswith('base_url="http://127.0.0.1:8787/kiln/coder"') for arg in args)
+
+    def test_every_override_is_introduced_by_its_own_flag(self):
+        args = codex_adapter.proxy_config_args("http://x/kiln/coder")
+        assert args[0::2] == ["-c"] * (len(args) // 2)
+
+    def test_build_command_appends_them(self):
+        command = codex_adapter.build_command(
+            prompt="p", output_file="/tmp/o.txt", proxy_base_url="http://x/kiln/coder"
+        )
+        assert command[-4:] == codex_adapter.proxy_config_args("http://x/kiln/coder")[-4:]
+
 
 class TestFindTurnFailure:
     def test_finds_a_failed_turn(self):

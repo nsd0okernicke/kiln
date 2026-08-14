@@ -121,6 +121,7 @@ my-project/
 │   ├── messages.db              # SQLite message queue
 │   ├── logs/                    # Agent logs
 │   ├── status/                  # Live per-role state (<role>.json), read by the WezTerm status bar
+│   ├── traffic.db               # Captured API traffic — only with --proxy, see "Traffic Capture"
 │   └── ...
 ├── .worktrees/                   # Git worktrees (gitignored)
 │   ├── coder/
@@ -240,7 +241,11 @@ kiln/
 │       │   ├── inbox.py                  # The human's notification pane (`kiln inbox`)
 │       │   ├── dashboard.py              # Swarm-wide live view (`"scheduler": "dashboard"`)
 │       │   ├── send.py                   # Queue a handoff from the CLI (`kiln send`)
-│       │   └── adapters/claude_adapter.py  # One-shot `claude -p` invocation
+│       │   └── adapters/                 # One module per backend: claude, codex, copilot, grok
+│       │
+│       ├── proxy/                    # Opt-in traffic capture (`--proxy`, see "Traffic Capture")
+│       │   ├── server.py                 # Forwarding proxy; streams through, never buffers
+│       │   └── capture.py                # Redaction, composition split, traffic.db schema
 │       │
 │       ├── profiles.json             # Default configuration profiles
 │       ├── templates/                # Loop/runtime templates for wrapper-mode roles
@@ -270,6 +275,7 @@ kiln/
 - **Backend Selection Per Role** — Each role can launch `claude`, `copilot`, `codex`, or `grok` via the `agent` field in profiles.
 - **Two Execution Modes Per Role** — a role's cycle is driven either by an LLM following prose (**wrapper mode**) or by a Python state machine (**scheduler mode**). See below.
 - **Observable Swarm** — Watch all agents in one window. Each scheduler pane carries a colour-coded status bar pinned to its bottom row, and on WezTerm a live status badge per role appears in the tab bar regardless of which tab or pane is focused.
+- **Measurable Token Spend** — Per-role token and cache accounting in the dashboard, and an opt-in local capture proxy (`--proxy`) that records what each role actually puts on the wire, split into tools/instructions/conversation.
 - **Cross-Platform** — One Python implementation on Windows, macOS and Linux. Only terminal backends differ.
 
 ---
@@ -336,7 +342,10 @@ fresh every handoff with no memory of the last one, so anything it must remember
 the handoff, the repo, or the constitution. All four adapters
 (`kiln/framework/scheduler/adapters/{claude,copilot,codex,grok}_adapter.py`) are one-shot,
 subprocess-based invocations, verified live against each CLI's actual non-interactive flags —
-`copilot`/`codex` report no dollar cost (only token/request counts), `claude`/`grok` do.
+`copilot`/`codex` report no dollar cost (only token/request counts), `claude`/`grok` do. Every
+adapter parses token usage out of the stream it is already reading, so a role that reports no
+dollars still reports tokens — and the dashboard marks the cost total partial rather than
+letting a missing role look like a cheap one.
 
 Each CLI needed one accommodation, all of them in the adapter rather than in the scheduler:
 `copilot` reads MCP config from `~/.copilot/mcp-config.json` rather than a per-call flag, so its
@@ -393,16 +402,20 @@ a full frame — unlike the inbox and the pane status bar, which deliberately pr
 scrollback, there is nothing here worth scrolling back through:
 
 ```text
-Kiln Dashboard — library-hub-testrun5 (run1)                    17:42:11
-──────────────────────────────────────────────────────────────────────
-ROLE                 STATE            SINCE      QUEUE  CYCLES     COST
-human-in-the-loop    ● waiting        2m ago         0       -       -
-specifier            ● working       12s ago         1       4   $0.82
-coder                ● working        3s ago         2       7   $3.41
-refactorer           ● idle           1m ago         0       5   $1.15
-architect            ● idle           4m ago         0       3   $0.94
-──────────────────────────────────────────────────────────────────────
-TOTAL COST: $6.32        TOTAL CYCLES: 19        ESCALATIONS: 1
+📊 Kiln Dashboard — library-hub-testrun (main)                     13:36:57
+────────────────────────────────────────────────────────────────────────────────────────
+ROLE                 STATE            SINCE      QUEUE  CYCLES     COST    TOKENS  CACHE
+────────────────────────────────────────────────────────────────────────────────────────
+human-in-the-loop    ● waiting       1h ago          0       -        -         -      -
+inbox                ● -             -               0       -        -         -      -
+specifier            ● waiting       1s ago          0       2    $0.35 238.4k tok    84%
+coder                ● waiting       1s ago          0       1    $2.29  4.4M tok    97%
+refactorer           ● waiting       1s ago          0       1    $2.10  4.5M tok    98%
+architect            ● waiting       1s ago          0       1    $0.67  1.2M tok    97%
+dashboard            ● -             -               0       -        -         -      -
+────────────────────────────────────────────────────────────────────────────────────────
+TOTAL COST: $5.41        TOTAL CYCLES: 5        TOKENS: 10.3M tok        ESCALATIONS: 0
+  tokens by kind: in 412 · out 71.1k · cache-read 10.0M · cache-write 219.2k
 
 Recent activity
   17:41:58  coder → refactorer            [Coder] Implement CAT-3 endpoint
@@ -419,6 +432,17 @@ role's `.kiln/status/<role>.json`; queue depth and recent activity come straight
 do (see "Pane Status Bar" below for where those numbers come from), wrapper roles don't track
 either today, so their cells read `-` rather than a misleading `$0.00`.
 
+**`CACHE` is the column to read first.** Tokens tell you a role is expensive; the cache hit
+rate tells you whether that is real work or a prompt being re-sent uncached every cycle. In
+the run above the four scheduler roles fed 10.3M input tokens to the model and only ~0.3M of
+it was billed as fresh. A role sitting well below its peers there is the one worth
+investigating — cost per token varied 2.7x between roles on an earlier run, and the entire
+gap was cache behaviour, not volume.
+
+`TOTAL COST` is marked partial (`$5.41+`) when any role in the run uses a backend that
+reports tokens but no dollars (`codex`, `copilot`) — a total that excludes a role is labelled
+as such rather than quietly under-reporting.
+
 Run it standalone against any project with `python -m scheduler.dashboard --once ...` (see
 `--help` for the required paths), or just launch a profile that includes it.
 
@@ -434,6 +458,170 @@ Each scheduled pane opens with a configuration banner (role, branch, resolved wo
 **resolved routing**, worktree, queue, timeouts, log path), then narrates every cycle. Per-role
 logs are written to `.kiln/logs/scheduler-<role>.log` so a crashed scheduler still leaves
 evidence after its pane is gone.
+
+---
+
+## Traffic Capture (`--proxy`)
+
+Token counts tell you *that* a role is expensive. Only the request body tells you *why* — how
+much of it is tool schemas, how much is generated instructions, how much is conversation being
+re-sent. Kiln can route agent API traffic through a local capture proxy to answer that.
+
+**Off by default; `--proxy` turns it on.** Enabled, it records metadata only — sizes, timings,
+model names and token counts, about 2.9 KB per request. **It does not record prompt text**;
+that needs a second, explicit opt-in.
+
+```powershell
+.\bin\kiln.ps1 -WorkingDir .                         # no proxy, no capture store
+.\bin\kiln.ps1 -WorkingDir . --proxy                 # metadata capture
+.\bin\kiln.ps1 -WorkingDir . --proxy --capture full  # + request/response bodies
+```
+
+Note what you *don't* give up by leaving it off — `COST`, `TOKENS` and `CACHE` come from each
+adapter parsing its own CLI stream, not from the proxy. Only the prompt-weight panel below
+needs it.
+
+And what turning it on costs, beyond the store: every routed request then passes through a
+local Python process, so if that process dies the routed roles lose their API access until the
+swarm is restarted. Nothing supervises it.
+
+### How it routes
+
+The proxy is a **base-URL override, not a MITM** — no certificates, no TLS interception, no
+system trust store changes. Each role is pointed at `http://127.0.0.1:8787/kiln/<role>`, so
+every captured request is attributable to a role by its path prefix. That path is injected
+through the existing `AgentCommand.env` plumbing, which means one-shot workers inherit it from
+their pane.
+
+`claude` and `codex` roles are routed today, **both verified live** — each CLI honours the
+override and still attaches its own subscription credential to a local host, so no API key is
+needed for either. They get there differently: Claude reads `ANTHROPIC_BASE_URL`, while Codex
+has no base-URL variable at all and receives `-c model_providers.…` overrides on its command
+line instead. Roles on `grok` or `copilot` run untouched and are simply absent from the
+capture; the launcher logs which roles it routed so an empty panel is never a mystery.
+
+One proxy serves both vendors. Because the path prefix identifies a *role* rather than a
+backend, each non-Anthropic role gets a `--route <role>=<host>/<base-path>` telling the proxy
+where that role's traffic actually belongs — the launcher derives these from the profile.
+
+The port defaults to 8787 and **probes upward if that is taken**, so two Kiln projects can run
+at once without colliding. The launcher then waits for the proxy to actually accept a
+connection and aborts the launch if it never does — a swarm pointed at a port that is silently
+serving *another* project would record its traffic into that project's store while everything
+appeared to work. `--proxy-port` pins an exact port instead, and fails rather than drifting if
+it is busy.
+
+`python -m proxy.server --stub` answers requests locally instead of forwarding, which makes
+the whole wiring dry-runnable without spending a token.
+
+### What it stores
+
+`.kiln/traffic.db`, deliberately **not** `messages.db` — that file is the swarm's live state
+and people open it in a SQLite browser; request bodies are orders of magnitude larger and
+would wreck that.
+
+| Mode | Recorded |
+|---|---|
+| `metadata` (default) | timing, status, byte sizes, model, token usage, and the tools/system/messages split |
+| `full` | the above plus request and response bodies, capped at 256 KiB each |
+
+Bodies are also the only part that grows: measured on a real store, 107.6 MB across 676
+requests was **98.3% bodies**. So `full` mode carries a budget — once stored bodies pass
+256 MB, the oldest rows have their bodies cleared while the rows themselves stay. Composition
+and token counts are computed at capture time, so a degraded row still feeds every panel; only
+the prompt text goes. Metadata mode never reaches the budget, because it writes no bodies.
+
+Both vendors' wire formats are read into the same columns. Anthropic sends `tools`/`system`/
+`messages` as top-level keys; the Responses API Codex uses has none of them and packs
+everything into one flat `input` array, so it is bucketed by item type instead. Token usage
+needs the same care in reverse — Anthropic reports `input_tokens` as the *fresh* remainder
+with cache reads counted separately, while OpenAI reports it as the total *including* them,
+so the cached portion is subtracted on the way in. Storing either number under the other's
+meaning would roughly halve the reported cache hit rate.
+
+`Authorization` and API-key header **values are never written** — header names are kept so you
+can see what was sent, values are replaced. Bodies in `full` mode contain the complete source
+the agent read, in plaintext, so treat that store accordingly.
+
+The composition split works in `metadata` mode: sizes are computed at capture time, so you can
+measure what a prompt is made of without keeping anyone's source code.
+
+### The prompt-weight panel
+
+With a traffic store present, the dashboard grows a panel:
+
+```text
+Prompt weight (proxy)  — averages per request, this run
+ROLE                   REQS   AVG REQ   MAX REQ    TOOLS   SYSTEM     MSGS  MSG%
+architect                36    117.5k    208.2k    33.3k     5.0k    56.3k   48%
+coder                    73    203.6k    366.8k    33.8k     5.9k   133.2k   65%
+human-in-the-loop        18    211.1k    250.3k   136.6k    30.7k    43.9k   21%
+refactorer               93    139.1k    242.3k    33.9k     5.2k   108.6k   78%
+specifier                12     91.3k    183.9k    28.5k     5.4k    22.9k   25%
+```
+
+Scoped to the current run by default. The store outlives a run, and averaging across runs
+blends configurations that are not comparable — `--traffic-all-history` opts into that, and
+the heading always states which you are reading. Columns read `-` where nothing recorded
+them, never a misleading `0`.
+
+### What it has actually found
+
+The panel above is not hypothetical. Measured against real runs:
+
+- **Tool schemas were 81% of a trivial request.** `build_agents_payload` parsed each worker's
+  declared `tools` list and then never sent it, so every worker was handed the full default
+  tool set. Sending the declared list cut tools from 30 to 9, tool bytes from 98.4k to 33.2k,
+  and **tokens per request by 40%** (71.9k → 43.4k). Wire traffic for a cycle went 43.4 MB →
+  24.0 MB.
+- **Worker instructions are 3–5% of a request** — the `SYSTEM` column above. The intuitive
+  optimization ("slim the `*-worker.md` files") is a rounding error; `MSGS` is 60–78%.
+- **96.8% of all input tokens are cache reads.** 11.5M tokens fed, ~370k billed fresh. Any
+  optimization that shrinks the cached prefix rather than the uncached remainder buys far less
+  than its size suggests.
+- **Duplication inside a request is 0.3–2.4%.** Workers re-read almost nothing; conversation
+  growth is the cost of the work, not sloppiness.
+
+### Using it to optimize *your* project
+
+Everything above was measured against Kiln's own shipped scaffolding, but the constitution,
+roles, skills and worker files that actually run are **yours** — `kiln/project/` is copied into
+your repo precisely so you can rewrite it. The proxy exists to tell you which of your edits are
+worth making. Kiln measures; what to slim is a question about your project, not about Kiln.
+
+A workable loop:
+
+1. **Run a cycle with `--proxy`** and read the prompt-weight panel. `SYSTEM` is your merged
+   constitution and role file; `TOOLS` is the tool set your worker declared; `MSGS` is the
+   conversation.
+2. **Attack the biggest column, not the most editable one.** These are very different things,
+   and confusing them is the trap the numbers above document.
+3. **Change one thing, then re-measure** on comparable work.
+
+Where the levers usually are, based on the measurements above:
+
+| If the big column is… | The lever is… |
+|---|---|
+| `TOOLS` | the `tools:` list in your worker frontmatter — declare only what the role needs |
+| `SYSTEM` | your `constitution/` and `roles/` files, but see the warning below |
+| `MSGS` | how much work you give a role per handoff, and how much file content it must read |
+
+**Two warnings, both learned the expensive way.**
+
+Slimming instructions is the intuitive move and it is usually the wrong one — `SYSTEM` was
+3–5% of a request here, so halving it changes almost nothing while costing you rules the
+workers actually follow. Check the column before you edit anything.
+
+And watch **`CACHE` on the main dashboard grid**, not just prompt weight. At a 97% hit rate,
+shrinking a *cached* prefix saves far less than its byte count suggests, while an edit that
+invalidates the cache every cycle can cost more than it saves. A role sitting well below its
+peers on `CACHE` is a better lead than a role with a large `AVG REQ`.
+
+**On re-measuring honestly:** Kiln has no way to replay a fixed workload against two
+configurations, so a before/after across two runs is comparing different work. Treat a single
+comparison as indicative, not proof — repeat it, or prefer changes whose effect is large enough
+to survive the noise. The 40% tool-schema result above was worth acting on because it was
+enormous; a 5% result measured the same way would not be.
 
 ---
 
@@ -570,6 +758,9 @@ platforms in either spelling** — `-ProfileName mixed-backends`, `-Profile mixe
 | `--example <name>` | `-Example` | Seed the scaffold from `examples/<name>` |
 | `--no-git` | `-NoGit` | Skip git initialisation when scaffolding |
 | `--dry-run` | | Print what would launch, start nothing |
+| `--proxy` | | Route agent API traffic through the local capture proxy (off by default) |
+| `--proxy-port <n>` | | Pin the capture proxy to an exact port (default: `8787`, probed upward if busy) |
+| `--capture <mode>` | | `metadata` (default) or `full` — capture depth, see "Traffic Capture" |
 | `--verbose` | `-Debug` | Verbose output |
 
 Kiln will create a git repository if one doesn't exist, initialize worktrees, and launch agents.
@@ -1087,10 +1278,10 @@ from — is `STATE_COLORS_HEX` in `kiln/framework/scheduler/pane_status.py`.
 ### Pane Status Bar (scheduler roles, every backend)
 
 A scheduler pane also pins its own colour-coded status line to its **bottom** row, showing
-role, state, cycle count, accumulated cost, handoff target and the last summary:
+role, state, cycle count, accumulated cost, tokens, handoff target and the last summary:
 
 ```text
- SPECIFIER   ● working   cycle 3   $1.24   → coder   wrote features/catalog/create_book.feature
+ SPECIFIER   ● working   cycle 3   $1.24   238.4k tok   → coder   wrote create_book.feature
 ```
 
 Unlike the WezTerm badges, this needs no terminal scripting hook and works anywhere. It is
@@ -1106,6 +1297,11 @@ terminal, and in panes shorter than six rows.
 The cost figure is the sum of `total_cost_usd` as reported by the agent CLI for every worker
 invocation this pane has made, including retries. It is per-pane, resets when the process
 restarts, and is priced at API list rates — read it as a relative signal, not a bill.
+
+The token figure is a total; the input/output/cache-read/cache-write breakdown is kept
+separately and shown on the dashboard, which has the width for it. Both segments are hidden
+when zero — a role whose backend reported no usage shows nothing rather than claiming it spent
+nothing.
 
 ### tmux Behavior (Unix Only)
 
@@ -1166,6 +1362,17 @@ There are two levels, and they are very different in consequence.
 Kills the processes this swarm started — schedulers, MCP servers, tmux sessions — identified by
 their command lines. **It does not touch your files, worktrees or branches**, and it does not
 close the terminal window itself; close that yourself, or its panes will sit at dead prompts.
+
+Closing the window is enough for an ordinary run — the panes die with it. **The one exception
+is `--proxy`:** the capture proxy runs detached so it outlives the launcher, which means it
+outlives the window too, leaving a background process still listening on its port.
+
+Nothing breaks if you close the window anyway — **the next `--proxy` launch of that project
+reclaims its own leftover proxy** before starting a new one, so ports do not creep and proxies
+do not pile up. `--stop` is still the tidy way to end a run, and the only one that stops the
+proxy straight away. Note it is machine-wide by design: run in one project it stops *every*
+Kiln process, including another project's swarm. The launch-time reclaim is deliberately
+narrower — it only ever touches a proxy writing to the project you are launching.
 
 ### Full project reset (Windows only)
 
@@ -1423,7 +1630,10 @@ was run and seven defects fell out.
 - ✓ Flexible terminal layouts (tabs, split panes, grids, focus layouts)
 - ✓ Per-agent model configuration for Claude agents
 - ✓ Built-in communication health check (`/kiln-ping` skill, on request from `human-in-the-loop`)
-- ✓ Swarm-wide live dashboard (`"scheduler": "dashboard"`) — role state, queue depth, cost/cycle totals, recent activity and escalations in one pane
+- ✓ Swarm-wide live dashboard (`"scheduler": "dashboard"`) — role state, queue depth, cost/cycle/token totals, cache hit rate, recent activity and escalations in one pane
+- ✓ Per-role token accounting from every backend's own stream — input/output/cache-read/cache-write kept separately, never collapsed to one number, and omitted rather than reported as a misleading zero
+- ✓ Opt-in traffic capture proxy (`--proxy`) — per-role attribution by URL path, credential values never stored, metadata-only unless `--capture full`, port collision handled, retention budget, and a dashboard panel splitting each request into tools/instructions/conversation
+- ✓ Two vendors through one proxy — `claude` and `codex` roles both routed and verified live, each keeping its own subscription auth, with per-role upstreams so a mixed-backend swarm needs no second proxy
 - ✓ Logbook tracking of all handoffs and agent actions
 - ✓ Wrapper + worker-subagent delegation for Claude `auto`-mode roles — persistent thin wrappers dispatch work to disposable worker subagents, keeping wrapper context at ~140 lines through unlimited cycles
 - ✓ Codex agent support, including worker-subagent delegation via Codex's own multi-agent spawn tools — generated `AGENTS.md` + `.codex/agents/<role>-worker.toml`, isolated per-role `CODEX_HOME` MCP config, `--dangerously-bypass-approvals-and-sandbox` launch flag
@@ -1438,6 +1648,16 @@ was run and seven defects fell out.
 - **Grok agents** (scheduler mode only — no wrapper mode yet): `--always-approve` (auto-approve all tool executions) plus `--no-subagents` (disables grok's own recursive subagent spawning, the same worker-isolation principle as the other three backends)
 
 This means agents can read/write/execute any file in their worktree without prompting. This is intentional for autonomous development workflows but should be understood as a security trade-off.
+
+**Traffic capture (`--proxy`):** off unless you ask for it, local-only, and never forwards
+anywhere but upstream. `Authorization`, API-key, cookie and account-identifier header values
+are never written to the store.
+
+Enabling it records **metadata only** — sizes, timings, model names, token counts. **No prompt
+text is recorded without `--capture full`**, and that remains a deliberate, separate opt-in for
+a reason: a request body contains the complete source the agent read, in plaintext, in a
+directory symlinked into every worktree. Treat a `full` `traffic.db` as sensitive as the
+repository it was captured from.
 
 **Risk mitigation:**
 
@@ -1464,6 +1684,19 @@ under **Deterministic Scheduler** above.
   as [nsd0okernicke/kiln#8](https://github.com/nsd0okernicke/kiln/issues/8). Copilot is parked
   out of every shipped profile's scheduler-mode rotation until this is resolved; it remains fine
   for wrapper-mode (interactive) roles, where this failure mode has never been observed.
+- **Traffic capture routes `claude` and `codex` roles only.** Both verified live, subscription
+  auth included. `grok` may have an equivalent override and needs a spike; `copilot` talks to
+  GitHub's endpoints and is likely MITM-only, which is out of scope. Roles on unrouted
+  backends run untouched and are simply absent from the capture — the launcher logs which
+  roles it routed, so an empty panel is never a mystery.
+- **The Copilot token parser has never seen a real stream.** It is written from that
+  adapter's documented event shape; no validated run has included Copilot. It returns
+  "nothing reported" rather than a wrong number if the shape differs, so the failure mode is
+  a `-` in the dashboard, not a fabricated figure. Copilot's own session store
+  (`~/.copilot/session-store.db`, table `assistant_usage_events`) uses
+  `input_tokens`/`output_tokens`/`cache_read_tokens`/`cache_write_tokens`, which suggests its
+  alias table is missing `cache_write` — the same gap a live capture found in the Codex
+  parser. Settle with one live call.
 - **`grok` has no wrapper-mode implementation.** Its scheduler adapter is real and live-verified,
   but there is no `loop-auto-grok.md`/wrapper dispatch path — a `grok` role must run `auto` +
   `"scheduler": "python"`; it cannot run `manual`.

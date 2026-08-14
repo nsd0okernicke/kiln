@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import json
 import logging
+import socket
 import subprocess
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 from launcher import cli, scaffold
@@ -269,6 +271,226 @@ class TestHostsPosixShell:
     def test_none_backend_is_powershell_on_windows(self, monkeypatch):
         monkeypatch.setattr(cli.os, "name", "nt")
         assert cli._hosts_posix_shell("none") is False
+
+
+class TestStopMarkers:
+    """
+    Every python-backed pane must be stoppable — issue #18.
+
+    `scheduler.inbox` and `scheduler.dashboard` were missing from the marker list, so both
+    survived `kiln --stop` and kept polling the database after the swarm was supposedly
+    down. This enumerates the pane types rather than restating the strings, so a future
+    pane type cannot quietly reintroduce the gap.
+    """
+
+    #: Every scheduler value a profile can set that produces a python-backed pane.
+    PANE_ROLES: ClassVar[list[dict]] = [
+        {"role": "coder", "agent": "claude", "scheduler": "python", "mode": "auto"},
+        {"role": "inbox", "scheduler": "inbox", "mode": "manual"},
+        {"role": "dashboard", "scheduler": "dashboard", "mode": "manual"},
+    ]
+
+    @pytest.mark.parametrize("role_kwargs", PANE_ROLES)
+    def test_each_python_backed_pane_has_a_stop_marker(self, tmp_path, role_kwargs):
+        from launcher.commands import build_agent_command
+        from launcher.config import RoleConfig
+        from launcher.stop import KILN_PROCESS_MARKERS
+
+        paths = KilnPaths.create(tmp_path / "proj", tmp_path / "fw")
+        command = build_agent_command(RoleConfig(**role_kwargs), paths, branch="main")
+        rendered = " ".join(command.argv)
+        assert any(marker in rendered for marker in KILN_PROCESS_MARKERS), (
+            f"{role_kwargs['role']} pane runs {rendered!r}, which no stop marker matches"
+        )
+
+    def test_the_capture_proxy_is_stoppable(self):
+        # Not a pane -- a detached background process -- but started by the same launch and
+        # it must end with it. A proxy left listening would relay whatever ran next.
+        from launcher.stop import KILN_PROCESS_MARKERS
+
+        assert "proxy.server" in KILN_PROCESS_MARKERS
+
+    def test_the_mcp_channel_server_marker_survives(self):
+        # Not produced by any pane command, so an enumeration test would happily delete it.
+        from launcher.stop import KILN_PROCESS_MARKERS
+
+        assert "channel.py" in KILN_PROCESS_MARKERS
+
+
+class TestReclaimingLeftoverProxies:
+    """
+    Closing the terminal window is a normal way to end a swarm and it never reaches the
+    proxy — that process is detached so it survives the launcher, and therefore the window.
+    Left alone, every close would leak a listener and each launch would climb to the next
+    port until `find_free_port` gave up and the launch failed.
+    """
+
+    def _processes(self, monkeypatch, rows):
+        from launcher import stop
+
+        monkeypatch.setattr(stop, "_windows_matches", lambda: rows)
+        monkeypatch.setattr(stop, "_posix_matches", lambda: rows)
+
+    def test_a_proxy_for_this_project_is_found(self, monkeypatch, tmp_path):
+        from launcher import stop
+
+        db = tmp_path / ".kiln" / "traffic.db"
+        self._processes(monkeypatch, [
+            (11, f"python -m proxy.server --db-path {db} --port 8787 --mode metadata"),
+        ])
+        assert [pid for pid, _ in stop.find_project_proxies(db)] == [11]
+
+    def test_another_project_s_proxy_is_left_alone(self, monkeypatch, tmp_path):
+        # Starting a swarm has no business killing another project's capture. `--stop` is
+        # machine-wide by design; this is not.
+        from launcher import stop
+
+        mine = tmp_path / "mine" / "traffic.db"
+        theirs = tmp_path / "theirs" / "traffic.db"
+        self._processes(monkeypatch, [
+            (22, f"python -m proxy.server --db-path {theirs} --port 8787 --mode metadata"),
+        ])
+        assert stop.find_project_proxies(mine) == []
+
+    def test_other_kiln_processes_are_not_mistaken_for_proxies(self, monkeypatch, tmp_path):
+        from launcher import stop
+
+        db = tmp_path / ".kiln" / "traffic.db"
+        self._processes(monkeypatch, [
+            (33, f"python -m scheduler.dashboard --traffic-db {db}"),
+        ])
+        assert stop.find_project_proxies(db) == []
+
+    def test_the_leftover_is_killed(self, monkeypatch, tmp_path):
+        from launcher import stop
+
+        db = tmp_path / ".kiln" / "traffic.db"
+        self._processes(monkeypatch, [
+            (44, f"python -m proxy.server --db-path {db} --port 8787 --mode metadata"),
+        ])
+        killed = []
+        monkeypatch.setattr(stop, "kill_process", lambda pid: killed.append(pid) or True)
+        assert stop.stop_project_proxies(db) == [44]
+        assert killed == [44]
+
+    def test_nothing_running_is_not_an_error(self, monkeypatch, tmp_path):
+        from launcher import stop
+
+        self._processes(monkeypatch, [])
+        assert stop.stop_project_proxies(tmp_path / "traffic.db") == []
+
+
+class TestProxyFlags:
+    def test_the_proxy_is_off_by_default(self):
+        # A plain `kiln` starts no extra process and writes no capture store. Everything the
+        # dashboard shows apart from the prompt-weight panel comes from the adapters, so the
+        # default costs nothing worth having.
+        assert cli.build_parser().parse_args([]).proxy is False
+
+    def test_it_is_turned_on_by_the_flag(self):
+        assert cli.build_parser().parse_args(["--proxy"]).proxy is True
+
+    def test_off_can_still_be_stated_explicitly(self):
+        # `--no-proxy` outlives the spell when the default was on: a script that spelled the
+        # default out should not start failing because the default moved back.
+        assert cli.build_parser().parse_args(["--no-proxy"]).proxy is False
+
+    def test_capture_defaults_to_metadata(self):
+        # Bodies hold whatever source the agent read, in plaintext, so even with --proxy
+        # given they stay a second and deliberate opt-in.
+        assert cli.build_parser().parse_args([]).capture == "metadata"
+
+    def test_full_capture_is_opt_in(self):
+        args = cli.build_parser().parse_args(["--proxy", "--capture", "full"])
+        assert args.proxy is True
+        assert args.capture == "full"
+
+    def test_the_port_is_configurable(self):
+        assert cli.build_parser().parse_args(["--proxy-port", "9999"]).proxy_port == 9999
+
+    def test_an_unknown_capture_mode_is_rejected(self):
+        with pytest.raises(SystemExit):
+            cli.build_parser().parse_args(["--capture", "everything"])
+
+
+class TestProxyPortSelection:
+    """
+    A fixed port breaks as soon as two projects capture at once: the second proxy dies on
+    bind, and its roles are still pointed at the first project's proxy, which forwards fine
+    and records their traffic into the wrong store. Nothing would surface that.
+    """
+
+    def test_the_preferred_port_is_used_when_free(self):
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            free = probe.getsockname()[1]
+        assert cli.find_free_port(free) == free
+
+    def test_a_taken_port_is_skipped(self):
+        with socket.socket() as taken:
+            taken.bind(("127.0.0.1", 0))
+            taken.listen(1)
+            port = taken.getsockname()[1]
+            assert cli.find_free_port(port) > port
+
+    def test_giving_up_is_an_error_not_a_random_port(self):
+        # A swarm whose proxy landed somewhere unpredictable is harder to reason about than
+        # one that refused to start.
+        with socket.socket() as taken:
+            taken.bind(("127.0.0.1", 0))
+            taken.listen(1)
+            port = taken.getsockname()[1]
+            with pytest.raises(cli.LaunchError):
+                cli.find_free_port(port, attempts=1)
+
+
+class TestProxyReadiness:
+    def test_a_listening_port_is_detected(self):
+        with socket.socket() as server:
+            server.bind(("127.0.0.1", 0))
+            server.listen(1)
+            assert cli.wait_until_listening(server.getsockname()[1], timeout=2.0) is True
+
+    def test_a_dead_proxy_is_reported_rather_than_assumed_working(self):
+        # Popen succeeding only means the process started; a failure to *bind* happens
+        # inside the child and lands in its log, where the launch would never look.
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        assert cli.wait_until_listening(port, timeout=0.5) is False
+
+
+class TestProxyRoutes:
+    """
+    One proxy, several vendors. Roles -- not backends -- are what the path prefix
+    identifies, so a mixed-backend swarm needs one route per non-default role rather than a
+    second proxy on another port.
+    """
+
+    def _profile(self, *agents):
+        from launcher.config import Profile, RoleConfig
+
+        roles = [RoleConfig(role=f"r{index}", agent=agent)
+                 for index, agent in enumerate(agents)]
+        return Profile(name="p", description="", roles=roles, layout={})
+
+    def test_a_claude_only_profile_needs_no_routes(self):
+        # Anthropic is the proxy's default upstream; naming it again would be noise.
+        assert cli.proxy_routes(self._profile("claude", "claude")) == []
+
+    def test_a_codex_role_is_routed_to_its_own_upstream(self):
+        assert cli.proxy_routes(self._profile("codex")) == [
+            "--route=r0=chatgpt.com/backend-api/codex"
+        ]
+
+    def test_only_the_non_default_roles_are_named(self):
+        routes = cli.proxy_routes(self._profile("claude", "codex", "claude"))
+        assert routes == ["--route=r1=chatgpt.com/backend-api/codex"]
+
+    def test_unroutable_backends_are_skipped(self):
+        # copilot and grok have no verified override, so they run unproxied rather than
+        # being pointed somewhere that would break their auth.
+        assert cli.proxy_routes(self._profile("copilot", "grok")) == []
 
 
 class TestCliParsing:

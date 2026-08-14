@@ -19,12 +19,18 @@ NOW_UTC = datetime(2026, 8, 9, 15, 0, 0, tzinfo=UTC)
 NOW_LOCAL = datetime(2026, 8, 9, 17, 0, 0)
 
 
-def _status(state="working", since=None, cycles=None, cost_usd=None):
+def _status(
+    state="working", since=None, cycles=None, cost_usd=None, tokens=None, token_usage=None
+):
     status = {"role": "coder", "state": state, "since": since or "2026-08-09T14:59:30Z"}
     if cycles is not None:
         status["cycles"] = cycles
     if cost_usd is not None:
         status["cost_usd"] = cost_usd
+    if tokens is not None:
+        status["tokens"] = tokens
+    if token_usage is not None:
+        status["token_usage"] = token_usage
     return status
 
 
@@ -144,23 +150,251 @@ class TestRenderStateGrid:
         row = next(line for line in lines if "coder" in line)
         assert "4" in row and "$1.50" in row
 
+    def test_shows_tokens(self):
+        sessions = [dashboard.RoleSession("coder", "claude", "Coder")]
+        statuses = {"coder": _status(tokens=12_345)}
+        lines = dashboard.render_state_grid(sessions, statuses, {}, NOW_UTC)
+        row = next(line for line in lines if "coder" in line)
+        assert "12.3k tok" in row
+
+    def test_a_role_reporting_no_usage_shows_a_placeholder_not_zero(self):
+        # Codex/Copilot roles whose usage could not be read must not claim they spent
+        # nothing -- that is the failure mode this whole column exists to remove.
+        sessions = [dashboard.RoleSession("specifier", "codex", "Specifier")]
+        statuses = {"specifier": _status(cycles=2)}
+        lines = dashboard.render_state_grid(sessions, statuses, {}, NOW_UTC)
+        row = next(line for line in lines if "specifier" in line)
+        assert "tok" not in row
+
+
+class TestCacheShare:
+    def test_is_the_cache_read_fraction_of_all_tokens(self):
+        assert dashboard.cache_share({"input": 100, "cache_read": 900}) == pytest.approx(0.9)
+
+    def test_no_breakdown_is_unknown_not_zero(self):
+        # A backend that reported nothing has not told us its cache rate is zero.
+        assert dashboard.cache_share(None) is None
+        assert dashboard.cache_share({}) is None
+
+    def test_an_all_zero_breakdown_is_unknown(self):
+        assert dashboard.cache_share({"input": 0, "cache_read": 0}) is None
+
+    def test_no_cache_reads_is_a_real_zero(self):
+        assert dashboard.cache_share({"input": 500, "output": 20}) == pytest.approx(0.0)
+
+    def test_the_column_renders_a_percentage(self):
+        sessions = [dashboard.RoleSession("coder", "claude", "Coder")]
+        statuses = {"coder": _status(tokens=1000, token_usage={"input": 100, "cache_read": 900})}
+        lines = dashboard.render_state_grid(sessions, statuses, {}, NOW_UTC)
+        assert "90%" in next(line for line in lines if "coder" in line)
+
+
+class TestTokenBreakdown:
+    def test_sums_each_kind_across_roles(self):
+        statuses = {
+            "coder": _status(token_usage={"input": 10, "cache_read": 100}),
+            "refactorer": _status(token_usage={"input": 5, "output": 2}),
+        }
+        assert dashboard.total_token_usage(statuses) == {
+            "input": 15, "cache_read": 100, "output": 2
+        }
+
+    def test_roles_without_a_breakdown_are_skipped(self):
+        assert dashboard.total_token_usage({"coder": _status()}) == {}
+
+    def test_formats_only_the_kinds_reported(self):
+        rendered = dashboard.format_token_breakdown({"input": 1200, "cache_read": 8_800_000})
+        assert "in 1.2k" in rendered
+        assert "cache-read 8.8M" in rendered
+        assert "out" not in rendered
+
+    def test_an_empty_breakdown_renders_nothing(self):
+        assert dashboard.format_token_breakdown({}) == ""
+
 
 class TestRenderTotals:
-    def test_sums_cost_and_cycles_across_roles(self):
+    def test_sums_cost_cycles_and_tokens_across_roles(self):
         statuses = {
-            "coder": _status(cycles=4, cost_usd=1.5),
-            "refactorer": _status(cycles=2, cost_usd=0.5),
+            "coder": _status(cycles=4, cost_usd=1.5, tokens=1000),
+            "refactorer": _status(cycles=2, cost_usd=0.5, tokens=500),
         }
-        cost, cycles = dashboard.render_totals(statuses)
+        cost, cycles, tokens = dashboard.render_totals(statuses)
         assert cost == pytest.approx(2.0)
         assert cycles == 6
+        assert tokens == 1500
 
     def test_missing_fields_count_as_zero(self):
         statuses = {"coder": _status()}
-        assert dashboard.render_totals(statuses) == (0, 0)
+        assert dashboard.render_totals(statuses) == (0, 0, 0)
 
     def test_empty_is_zero(self):
-        assert dashboard.render_totals({}) == (0, 0)
+        assert dashboard.render_totals({}) == (0, 0, 0)
+
+
+class TestCostIsPartial:
+    def _sessions(self, *pairs):
+        return [dashboard.RoleSession(role, agent, role) for role, agent in pairs]
+
+    def test_all_cost_reporting_backends_is_complete(self):
+        sessions = self._sessions(("coder", "claude"), ("refactorer", "grok"))
+        statuses = {"coder": _status(), "refactorer": _status()}
+        assert dashboard.cost_is_partial(sessions, statuses) is False
+
+    def test_a_running_codex_role_makes_it_partial(self):
+        sessions = self._sessions(("coder", "claude"), ("specifier", "codex"))
+        statuses = {"coder": _status(), "specifier": _status()}
+        assert dashboard.cost_is_partial(sessions, statuses) is True
+
+    def test_a_copilot_role_that_never_ran_does_not_count(self):
+        # No status file means the role has produced nothing, so the total is not yet
+        # missing anything on its account.
+        sessions = self._sessions(("coder", "claude"), ("specifier", "copilot"))
+        assert dashboard.cost_is_partial(sessions, {"coder": _status()}) is False
+
+
+class TestPromptWeight:
+    """The proxy panel: what each role actually puts on the wire."""
+
+    def _stats(self, **overrides):
+        stats = {"coder": {"requests": 12, "avg_bytes": 104_200,
+                           "max_bytes": 118_900, "total_bytes": 1_250_400,
+                           "avg_tools": 33_300, "avg_system": 5_900,
+                           "avg_messages": 80_200}}
+        stats.update(overrides)
+        return stats
+
+    def test_shows_the_composition_split(self):
+        # The split is the actionable part: system (the worker instructions) is ~5% of a
+        # request while messages is 60-70%, which redirects where to optimise.
+        row = next(line for line in dashboard.render_prompt_weight(self._stats())
+                   if line.startswith("coder"))
+        assert "33.3k" in row and "5.9k" in row and "80.2k" in row
+
+    def test_shows_the_message_share(self):
+        row = next(line for line in dashboard.render_prompt_weight(self._stats())
+                   if line.startswith("coder"))
+        assert "77%" in row  # 80200 / 104200
+
+    def test_rows_without_composition_show_placeholders(self):
+        # Captured before the columns existed, or an unparseable body.
+        stats = {"coder": {"requests": 3, "avg_bytes": 1000, "max_bytes": 1000,
+                           "total_bytes": 3000, "avg_tools": None,
+                           "avg_system": None, "avg_messages": None}}
+        row = next(line for line in dashboard.render_prompt_weight(stats)
+                   if line.startswith("coder"))
+        assert row.count("-") >= 3
+
+    def test_shows_a_row_per_role(self):
+        lines = dashboard.render_prompt_weight(self._stats())
+        assert any(line.startswith("coder") for line in lines)
+
+    def test_sizes_are_abbreviated(self):
+        # Request sizes are read at a glance, not to the byte.
+        row = next(line for line in dashboard.render_prompt_weight(self._stats())
+                   if line.startswith("coder"))
+        assert "104.2k" in row and "118.9k" in row
+
+    def test_no_data_renders_no_panel(self):
+        # The proxy is opt-in; an empty table would imply it ran and found nothing.
+        assert dashboard.render_prompt_weight({}) == []
+
+    def test_roles_are_ordered_predictably(self):
+        stats = self._stats(architect={"requests": 1, "avg_bytes": 1, "max_bytes": 1,
+                                       "total_bytes": 1})
+        roles = [line.split()[0] for line in dashboard.render_prompt_weight(stats)
+                 if line and line[0].isalpha() and not line.startswith(("ROLE", "Prompt"))]
+        assert roles == sorted(roles)
+
+    def test_the_panel_is_absent_from_a_dashboard_with_no_proxy(self):
+        lines = dashboard.render_dashboard(
+            project_name="p", branch="main",
+            sessions=[dashboard.RoleSession("coder", "claude", "Coder")],
+            statuses={}, queue_depth={}, messages=[],
+            now_utc=NOW_UTC, now_local=NOW_LOCAL,
+        )
+        assert not any("Prompt weight" in line for line in lines)
+
+    def test_the_panel_appears_when_there_is_traffic(self):
+        lines = dashboard.render_dashboard(
+            project_name="p", branch="main",
+            sessions=[dashboard.RoleSession("coder", "claude", "Coder")],
+            statuses={}, queue_depth={}, messages=[],
+            now_utc=NOW_UTC, now_local=NOW_LOCAL,
+            request_stats=self._stats(),
+        )
+        assert any("Prompt weight" in line for line in lines)
+
+
+class TestPromptWeightScope:
+    """
+    The store outlives a run, so the panel must say which window it is showing.
+
+    Averaging across runs blends configurations that are not comparable: one role measured
+    at 220.8k was really 199k before a change and 118k after, and the mean describes
+    neither.
+    """
+
+    def _stats(self):
+        return {"coder": {"requests": 1, "avg_bytes": 1000, "max_bytes": 1000,
+                          "total_bytes": 1000, "avg_tools": None,
+                          "avg_system": None, "avg_messages": None}}
+
+    def test_the_default_scope_is_stated(self):
+        assert "this run" in dashboard.render_prompt_weight(self._stats())[1]
+
+    def test_an_alternative_scope_is_stated(self):
+        heading = dashboard.render_prompt_weight(self._stats(), scope="all history")[1]
+        assert "all history" in heading
+
+    def test_rows_older_than_the_window_are_excluded(self, tmp_path):
+        from proxy.capture import TrafficRecord, TrafficStore
+
+        store = TrafficStore(tmp_path / "traffic.db")
+        store.ensure_schema()
+        store.record(TrafficRecord(role="coder", method="POST", path="/v1/messages",
+                                   request_bytes=999_000, ts="2026-08-01T00:00:00Z"))
+        store.record(TrafficRecord(role="coder", method="POST", path="/v1/messages",
+                                   request_bytes=1_000, ts="2026-08-13T00:00:00Z"))
+
+        everything = store.request_stats_by_role()["coder"]
+        this_run = store.request_stats_by_role(since="2026-08-12T00:00:00Z")["coder"]
+        assert everything["requests"] == 2
+        assert this_run["requests"] == 1
+        assert this_run["avg_bytes"] == 1_000, "the older, much larger row must not skew it"
+
+    def test_a_window_matching_nothing_hides_the_panel(self, tmp_path):
+        from proxy.capture import TrafficRecord, TrafficStore
+
+        store = TrafficStore(tmp_path / "traffic.db")
+        store.ensure_schema()
+        store.record(TrafficRecord(role="coder", method="POST", path="/v1/messages",
+                                   ts="2026-08-01T00:00:00Z"))
+        assert store.request_stats_by_role(since="2026-08-13T00:00:00Z") == {}
+
+
+class TestReadRequestStats:
+    def test_no_path_is_no_data(self):
+        assert dashboard.read_request_stats(None) == {}
+
+    def test_a_missing_store_is_no_data(self, tmp_path):
+        # The dashboard's job is the swarm; it must not die over an optional side channel.
+        assert dashboard.read_request_stats(tmp_path / "absent.db") == {}
+
+    def test_an_unreadable_store_is_no_data(self, tmp_path):
+        junk = tmp_path / "traffic.db"
+        junk.write_text("this is not a database", encoding="utf-8")
+        assert dashboard.read_request_stats(junk) == {}
+
+
+class TestFormatBytes:
+    def test_small_counts_are_exact(self):
+        assert dashboard._format_bytes(512) == "512"
+
+    def test_thousands(self):
+        assert dashboard._format_bytes(104_200) == "104.2k"
+
+    def test_millions(self):
+        assert dashboard._format_bytes(1_250_400) == "1.3M"
 
 
 class TestRenderActivity:
@@ -210,6 +444,27 @@ class TestRenderDashboard:
         lines = self._render()
         assert "library-hub-testrun5" in lines[0]
         assert "run1" in lines[0]
+
+    def test_the_rule_is_at_least_as_wide_as_the_grid(self):
+        # A rule sized to the title alone left the table visibly overhanging its own
+        # borders once the TOKENS column widened the grid.
+        lines = self._render()
+        rule, grid_header = lines[1], lines[2]
+        assert len(rule) >= len(grid_header)
+
+    def test_a_cost_reporting_swarm_has_no_partial_marker(self):
+        text = "\n".join(self._render())
+        assert "partial" not in text
+
+    def test_a_codex_role_marks_the_cost_total_partial(self):
+        text = "\n".join(
+            self._render(
+                sessions=[dashboard.RoleSession("specifier", "codex", "Specifier")],
+                statuses={"specifier": _status(cycles=2, tokens=4000)},
+            )
+        )
+        assert "$0.00+" in text
+        assert "partial" in text
 
     def test_includes_every_section(self):
         text = "\n".join(self._render())

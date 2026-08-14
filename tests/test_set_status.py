@@ -71,51 +71,86 @@ class TestBuildStatus:
         assert status["cycles"] == 7
         assert status["cost_usd"] == 1.25
 
-    def test_cycles_and_cost_are_omitted_when_absent(self, set_status):
-        # Not written as 0/None -- a wrapper-mode role that never tracked either must not
-        # have its status file claim "$0.00 spent, 0 cycles".
+    def test_the_token_breakdown_is_kept(self, set_status):
+        usage = {"input": 100, "output": 20, "cache_read": 900, "cache_write": 30}
+        status = set_status.build_status("coder", "working", None, "auto", tokens=usage)
+        assert status["token_usage"] == usage
+
+    def test_the_total_is_derived_from_the_breakdown(self, set_status):
+        # Derived here rather than accepted as its own flag, so the total and the breakdown
+        # cannot disagree.
+        usage = {"input": 100, "output": 20, "cache_read": 900, "cache_write": 30}
+        status = set_status.build_status("coder", "working", None, "auto", tokens=usage)
+        assert status["tokens"] == 1050
+
+    def test_a_partial_breakdown_totals_only_what_was_reported(self, set_status):
+        status = set_status.build_status("coder", "working", None, "auto", tokens={"output": 7})
+        assert status["tokens"] == 7
+        assert status["token_usage"] == {"output": 7}
+
+    def test_cycles_cost_and_tokens_are_omitted_when_absent(self, set_status):
+        # Not written as 0/None -- a wrapper-mode role that never tracked any of them must
+        # not have its status file claim "$0.00 spent, 0 cycles, 0 tokens".
         status = set_status.build_status("coder", "working", None, "auto")
         assert "cycles" not in status
         assert "cost_usd" not in status
+        assert "tokens" not in status
+        assert "token_usage" not in status
 
 
 class TestParseArgv:
     def test_role_and_state(self, set_status):
-        role, state, detail, mode, cycles, cost = set_status.parse_argv(["coder", "working"])
-        assert (role, state, detail, mode, cycles, cost) == (
-            "coder", "working", None, "auto", None, None,
-        )
+        parsed = set_status.parse_argv(["coder", "working"])
+        assert parsed == ("coder", "working", None, "auto", None, None, None)
 
     def test_detail_is_captured(self, set_status):
-        _, _, detail, _, _, _ = set_status.parse_argv(["coder", "delegating", "coder-worker"])
+        detail = set_status.parse_argv(["coder", "delegating", "coder-worker"])[2]
         assert detail == "coder-worker"
 
     def test_a_bare_dash_clears_detail(self, set_status):
-        _, _, detail, _, _, _ = set_status.parse_argv(["coder", "working", "-"])
-        assert detail is None
+        assert set_status.parse_argv(["coder", "working", "-"])[2] is None
 
     def test_mode_flag_is_parsed(self, set_status):
-        _, _, _, mode, _, _ = set_status.parse_argv(["coder", "working", "--mode=manual"])
-        assert mode == "manual"
+        assert set_status.parse_argv(["coder", "working", "--mode=manual"])[3] == "manual"
 
     def test_mode_flag_does_not_get_mistaken_for_detail(self, set_status):
-        _, _, detail, _, _, _ = set_status.parse_argv(["coder", "working", "--mode=manual"])
-        assert detail is None
+        assert set_status.parse_argv(["coder", "working", "--mode=manual"])[2] is None
 
     def test_cycles_flag_is_parsed_as_an_int(self, set_status):
-        _, _, _, _, cycles, _ = set_status.parse_argv(["coder", "working", "--cycles=7"])
-        assert cycles == 7
+        assert set_status.parse_argv(["coder", "working", "--cycles=7"])[4] == 7
 
     def test_cost_flag_is_parsed_as_a_float(self, set_status):
-        _, _, _, _, _, cost = set_status.parse_argv(["coder", "working", "--cost=1.25"])
-        assert cost == pytest.approx(1.25)
+        assert set_status.parse_argv(["coder", "working", "--cost=1.25"])[5] == pytest.approx(1.25)
+
+    def test_each_token_kind_is_parsed_into_the_breakdown(self, set_status):
+        tokens = set_status.parse_argv(
+            [
+                "coder", "working",
+                "--tokens-in=10", "--tokens-out=20",
+                "--tokens-cache-read=30", "--tokens-cache-write=40",
+            ]
+        )[6]
+        assert tokens == {"input": 10, "output": 20, "cache_read": 30, "cache_write": 40}
+
+    def test_only_the_kinds_passed_appear(self, set_status):
+        assert set_status.parse_argv(["coder", "working", "--tokens-in=10"])[6] == {"input": 10}
+
+    def test_no_token_flags_yields_none_not_an_empty_dict(self, set_status):
+        # None is what makes build_status omit the keys entirely.
+        assert set_status.parse_argv(["coder", "working"])[6] is None
+
+    def test_token_flags_do_not_get_mistaken_for_detail(self, set_status):
+        assert set_status.parse_argv(["coder", "working", "--tokens-in=4200"])[2] is None
 
     def test_all_flags_together(self, set_status):
-        role, state, detail, mode, cycles, cost = set_status.parse_argv(
-            ["coder", "working", "-", "--mode=auto", "--cycles=3", "--cost=0.5"]
+        parsed = set_status.parse_argv(
+            [
+                "coder", "working", "-", "--mode=auto", "--cycles=3", "--cost=0.5",
+                "--tokens-in=99", "--tokens-cache-read=1",
+            ]
         )
-        assert (role, state, detail, mode, cycles, cost) == (
-            "coder", "working", None, "auto", 3, 0.5,
+        assert parsed == (
+            "coder", "working", None, "auto", 3, 0.5, {"input": 99, "cache_read": 1},
         )
 
     def test_missing_arguments_raise(self, set_status):

@@ -25,6 +25,8 @@ import sys
 from dataclasses import dataclass, field
 from typing import TextIO
 
+from .adapters import TokenUsage
+
 #: Reserved for the bar itself.
 BAR_ROWS = 1
 
@@ -126,7 +128,27 @@ class PaneStatus:
     target: str = ""
     cycles: int = 0
     cost_usd: float = 0.0
+    #: Cumulative usage across every cycle this role has run, kept broken down rather than
+    #: summed to a single count. The breakdown is the actionable part: a large
+    #: `cache_read_tokens` is cheap and healthy, a large `input_tokens` is prompt bloat, and
+    #: a total alone cannot tell an operator which one they are looking at. All zero on a
+    #: backend that reports no usage, which is why the bar hides the segment entirely.
+    tokens: TokenUsage = field(default_factory=TokenUsage)
     detail: str = ""
+
+
+def format_tokens(total: int) -> str:
+    """
+    A token count short enough for one bar segment: `850 tok`, `12.3k tok`, `1.2M tok`.
+
+    A raw count is up to seven digits and would crowd out the target and detail on a narrow
+    pane, which are what an operator is actually watching.
+    """
+    if total < 1_000:
+        return f"{total} tok"
+    if total < 1_000_000:
+        return f"{total / 1_000:.1f}k tok"
+    return f"{total / 1_000_000:.1f}M tok"
 
 
 def format_bar(status: PaneStatus, width: int) -> str:
@@ -142,6 +164,11 @@ def format_bar(status: PaneStatus, width: int) -> str:
         segments.append(f"cycle {status.cycles}")
     if status.cost_usd:
         segments.append(f"${status.cost_usd:.2f}")
+    if status.tokens.total:
+        # Hidden at zero, like cost: a Codex/Copilot role whose usage could not be read
+        # should show nothing rather than assert it spent no tokens. The bar shows the
+        # total only -- the breakdown is a dashboard-width thing, not a one-row thing.
+        segments.append(format_tokens(status.tokens.total))
     if status.target:
         segments.append(f"\N{RIGHTWARDS ARROW} {status.target}")
 
