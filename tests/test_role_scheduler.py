@@ -334,10 +334,14 @@ class TestRetryPolicy:
         assert queued_for(db_path, "human-in-the-loop")[0]["work_item"] == "order-intake"
 
     def test_inbound_message_never_wedges_in_processing(self, make_ctx, inbound, read_message):
+        # The point is the *absence* of `processing`, which is what would strand the message.
+        # It lands on `failed` rather than `processed` now: it did not complete, and marking
+        # it processed made a failed cycle indistinguishable from a successful one, leaving
+        # `kiln retry` nothing to address.
         message_id, _ = inbound()
         fake = FakeWorker(worker(STATUS_BLOCKED, "no"), worker(STATUS_BLOCKED, "no"))
         role_scheduler.run_once(make_ctx(fake), SchedulerState())
-        assert read_message(message_id)["status"] == db.STATUS_PROCESSED
+        assert read_message(message_id)["status"] == db.STATUS_FAILED
 
 
 class TestWorkerDebugPersistence:
@@ -759,6 +763,113 @@ class TestCircuitBreaker:
 
         assert state.consecutive_escalations == 0
         assert state.halted is False
+
+
+class TestEscalationResume:
+    """
+    Escalation used to be a dead end: the inbound was marked `processed`, so there was nothing
+    left to address, and the human's only move was `kiln send` -- a *new* work item carrying
+    none of the failed cycle's context.
+    """
+
+    def _escalated(self, make_ctx, inbound, state=None):
+        message_id, _ = inbound()
+        fake = FakeWorker(worker(STATUS_BLOCKED, "no"), worker(STATUS_BLOCKED, "no fixtures"))
+        result = role_scheduler.run_once(make_ctx(fake), state or SchedulerState())
+        return message_id, result
+
+    def test_an_escalated_message_is_failed_not_processed(
+        self, make_ctx, inbound, read_message
+    ):
+        message_id, _ = self._escalated(make_ctx, inbound)
+
+        stored = read_message(message_id)
+        assert stored["status"] == db.STATUS_FAILED
+        assert "no fixtures" in stored["error"], "the reason must outlive the pane"
+
+    def test_a_failed_message_is_not_re_served_on_its_own(self, make_ctx, inbound, db_path):
+        self._escalated(make_ctx, inbound)
+        assert db.fetch_and_deliver(db_path, "coder", "main") is None
+
+    def test_a_resumed_message_is_worked_with_the_humans_guidance(
+        self, make_ctx, inbound, db_path
+    ):
+        from scheduler import retry
+
+        message_id, _ = self._escalated(make_ctx, inbound)
+        retry.resume(db_path=db_path, message_id=message_id, guidance="fixtures live in tests/")
+
+        fake = FakeWorker()
+        result = role_scheduler.run_once(make_ctx(fake), SchedulerState())
+
+        assert result.outcome == role_scheduler.HANDED_OFF
+        assert "fixtures live in tests/" in fake.prompts[0], (
+            "guidance must reach the worker, or resuming is just a re-run of what failed"
+        )
+
+
+class TestHaltedRoleParks:
+    """
+    The circuit breaker used to `return 1`, killing the pane -- and a `kiln retry` that
+    re-queues a message for a dead scheduler puts it into a queue nobody reads. A halted role
+    now stays alive and polls, accepting nothing except an explicitly resumed message.
+    """
+
+    def _halt(self, make_ctx, inbound):
+        state = SchedulerState()
+        for _ in range(3):
+            inbound()
+            fake = FakeWorker(worker(STATUS_BLOCKED, "no"), worker(STATUS_BLOCKED, "no"))
+            role_scheduler.run_once(make_ctx(fake), state)
+        return state
+
+    def test_three_escalations_halt_the_role(self, make_ctx, inbound):
+        assert self._halt(make_ctx, inbound).halted is True
+
+    def test_a_halted_role_ignores_ordinary_work(self, make_ctx, inbound):
+        state = self._halt(make_ctx, inbound)
+        inbound()
+        fake = FakeWorker()
+
+        result = role_scheduler.run_once(make_ctx(fake), state)
+
+        assert result.outcome == role_scheduler.HALTED
+        assert fake.calls == 0, "it has failed three times; a fourth attempt helps nobody"
+
+    def test_a_halted_role_does_not_consume_the_message_it_ignores(
+        self, make_ctx, inbound, read_message
+    ):
+        # It must still be there for whoever resumes the role.
+        state = self._halt(make_ctx, inbound)
+        message_id, _ = inbound()
+
+        role_scheduler.run_once(make_ctx(FakeWorker()), state)
+
+        assert read_message(message_id)["status"] == db.STATUS_QUEUED
+
+    def test_a_resume_wakes_it_up(self, make_ctx, inbound, db_path):
+        from scheduler import retry
+
+        state = self._halt(make_ctx, inbound)
+        failed_id = db.failed_messages(db_path, "main")[0]["id"]
+        retry.resume(db_path=db_path, message_id=failed_id, guidance="try the other fixture")
+
+        result = role_scheduler.run_once(make_ctx(FakeWorker()), state)
+
+        assert result.outcome == role_scheduler.HANDED_OFF
+        assert state.halted is False
+
+    def test_resuming_re_arms_the_circuit_breaker(self, make_ctx, inbound, db_path):
+        # Otherwise the next single escalation would halt the role again immediately.
+        from scheduler import retry
+
+        state = self._halt(make_ctx, inbound)
+        failed_id = db.failed_messages(db_path, "main")[0]["id"]
+        retry.resume(db_path=db_path, message_id=failed_id, guidance="x")
+
+        role_scheduler.run_once(make_ctx(FakeWorker()), state)
+
+        assert state.consecutive_escalations == 0
 
 
 class TestStatusReporting:

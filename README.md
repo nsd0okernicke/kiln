@@ -241,6 +241,7 @@ kiln/
 │       │   ├── inbox.py                  # The human's notification pane (`kiln inbox`)
 │       │   ├── dashboard.py              # Swarm-wide live view (`"scheduler": "dashboard"`)
 │       │   ├── send.py                   # Queue a handoff from the CLI (`kiln send`)
+│       │   ├── retry.py                  # Resume an escalated role (`kiln retry`)
 │       │   └── adapters/                 # One module per backend: claude, codex, copilot, grok
 │       │
 │       ├── proxy/                    # Opt-in traffic capture (`--proxy`, see "Traffic Capture")
@@ -1070,6 +1071,29 @@ no cost reporting.
 Both guards **escalate rather than hard-stop**: a hard stop leaves you a dead swarm and nothing
 to act on, while an escalation puts the reason in the inbox attached to the work item it is
 about. The escalation counts toward the circuit breaker like any other.
+
+### Unblocking a role that escalated (`kiln retry`)
+
+An escalated message is marked **`failed`**, with the reason stored on the row. It is not
+re-served by ordinary polling, so nothing retries it behind your back — but it stays
+addressable, which is what lets you send it back rather than starting over.
+
+```bash
+kiln retry                                   # list what failed, and why
+kiln retry 4f3a91c2 --guidance "the fixtures live in tests/conftest.py"
+```
+
+The **same message** goes back to the **same role**, so the work item, its lap count and its
+spend all stay attached to one piece of work — `kiln send` would have started a new one
+carrying none of the failed cycle's context. Your guidance reaches the worker as its retry
+brief, the same channel a second attempt already uses to see why the first one failed.
+
+**A halted role stays alive.** After three consecutive escalations the circuit breaker trips —
+it used to exit, which killed the pane and left `kiln retry` re-queueing work for a scheduler
+that was no longer running. The role now parks: it keeps polling, refuses ordinary handoffs
+(it has failed three times; a fourth attempt on new work helps nobody), and accepts only a
+message you explicitly resumed. A successful resumed cycle clears the escalation count, so the
+breaker starts fresh rather than tripping again on the next single failure.
 
 **Decoupling wrapper and worker models:** In Phase 6 (Wrapper + Worker-Subagent Delegation), the persistent wrapper only does `LISTEN → DELEGATE → SEND` — it never reasons about the actual task, that's entirely the worker subagent's job. This means the wrapper can run on a cheap/fast model (e.g. Haiku) while the worker that does the real TDD/implementation work runs on a stronger model (e.g. Sonnet):
 

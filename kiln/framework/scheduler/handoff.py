@@ -21,6 +21,13 @@ SEPARATOR = "═" * 64
 PING_FIELD = "Kiln-Ping"
 ESCALATION_FIELD = "Kiln-Escalation"
 
+#: Heading that introduces a human's instructions on a resumed message. Appended by
+#: `kiln retry` to the *original* content rather than stored in its own column: the queue's
+#: unused columns hold the failure (`error`) and the acknowledgement (`acked_at`), and the
+#: guidance is not metadata about the message -- it is part of what the worker must read.
+#: Putting it in `content` also means the inbox pane shows it without knowing it exists.
+GUIDANCE_HEADING = "--- HUMAN GUIDANCE (retry) ---"
+
 _TRAIL_ENTRY_RE = re.compile(r"^\s*-\s+(?P<entry>.+?)\s*$")
 
 #: A `Commit:` value only means "merge this" when it actually looks like a git object name.
@@ -51,11 +58,18 @@ class InboundHandoff:
     is_ping: bool
     trail: tuple[str, ...]
     raw: str
+    #: A human's instructions attached by `kiln retry`, or '' on an ordinary message.
+    guidance: str = ""
 
     @property
     def is_mergeable(self) -> bool:
         """True when there is a commit to merge. Pings legitimately carry no commit."""
         return bool(_COMMIT_RE.match(self.commit))
+
+    @property
+    def is_resume(self) -> bool:
+        """True when a human sent this message back with instructions."""
+        return bool(self.guidance)
 
 
 def parse_handoff(content: str) -> InboundHandoff:
@@ -74,7 +88,30 @@ def parse_handoff(content: str) -> InboundHandoff:
         is_ping=_is_truthy(_field(content, PING_FIELD)),
         trail=parse_trail(content),
         raw=content,
+        guidance=parse_guidance(content),
     )
+
+
+def attach_guidance(content: str, guidance: str) -> str:
+    """
+    Append a human's retry instructions to a message, replacing any earlier ones.
+
+    Replacing rather than stacking: a second retry means the first guidance did not work, and
+    handing the worker both sets would have it reconcile advice a human has already superseded.
+    """
+    return f"{strip_guidance(content).rstrip()}\n\n{GUIDANCE_HEADING}\n{guidance.strip()}\n"
+
+
+def strip_guidance(content: str) -> str:
+    """The message without its guidance section."""
+    head, separator, _ = content.partition(GUIDANCE_HEADING)
+    return head if separator else content
+
+
+def parse_guidance(content: str) -> str:
+    """The human's retry instructions, or '' when there are none."""
+    _, separator, tail = content.partition(GUIDANCE_HEADING)
+    return tail.strip() if separator else ""
 
 
 def is_escalation(content: str) -> bool:

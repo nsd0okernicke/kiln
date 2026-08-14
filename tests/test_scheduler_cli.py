@@ -408,7 +408,11 @@ class TestCliLoop:
         assert role_scheduler.main([*self._args(tmp_path), "--once"]) == 0
         assert cycles["count"] == 1
 
-    def test_halted_scheduler_exits_nonzero(self, tmp_path, monkeypatch):
+    def test_a_halted_scheduler_exits_nonzero_under_once(self, tmp_path, monkeypatch):
+        # A halted role no longer exits during a normal run -- it parks and polls so
+        # `kiln retry` can reach it (see test_scheduler_resilience.TestHaltedLoopParks).
+        # Under `--once` it must still exit, and non-zero: a scripted single cycle cannot
+        # block forever waiting for a human to type a command.
         def halting_cycle(ctx, state):
             state.halted = True
             return role_scheduler.CycleResult(role_scheduler.ESCALATED, detail="boom")
@@ -416,8 +420,7 @@ class TestCliLoop:
         monkeypatch.setattr(role_scheduler, "run_once", halting_cycle)
         monkeypatch.setattr(role_scheduler, "build_context", lambda args: _dummy_ctx(tmp_path))
 
-        # A halted role must surface a non-zero exit so the pane shows it stopped.
-        assert role_scheduler.main(self._args(tmp_path)) == 1
+        assert role_scheduler.main([*self._args(tmp_path), "--once"]) == 1
 
     def test_halted_scheduler_reports_through_ctx_set_status(self, tmp_path, monkeypatch):
         # Regression: `_run_loop` used to call `bar.update(state="halted")` directly,
@@ -436,7 +439,7 @@ class TestCliLoop:
         monkeypatch.setattr(role_scheduler, "run_once", halting_cycle)
         monkeypatch.setattr(role_scheduler, "build_context", lambda args: ctx)
 
-        assert role_scheduler.main(self._args(tmp_path)) == 1
+        assert role_scheduler.main([*self._args(tmp_path), "--once"]) == 1
         assert seen[-1] == "halted"
 
     def test_repeated_cycle_failures_report_blocked_then_halted(self, tmp_path, monkeypatch):
@@ -463,8 +466,9 @@ class TestCliLoop:
 
         def cycles(ctx, state):
             if not outcomes:
-                state.halted = True
-                return role_scheduler.CycleResult(role_scheduler.ESCALATED)
+                # Ends the loop without halting: a halted role now parks and keeps polling,
+                # which would sleep forever here instead of stopping.
+                raise KeyboardInterrupt
             return role_scheduler.CycleResult(outcomes.pop(0))
 
         monkeypatch.setattr(role_scheduler, "run_once", cycles)
@@ -573,7 +577,7 @@ class TestStatusBarWiring:
         monkeypatch.setattr(role_scheduler, "build_context", lambda args: _dummy_ctx(tmp_path))
         monkeypatch.setattr(role_scheduler, "attach_status_bar", lambda ctx, args: bar)
 
-        assert role_scheduler.main(self._args(tmp_path)) == 1
+        assert role_scheduler.main([*self._args(tmp_path), "--once"]) == 1
         assert pane_status.RESET_REGION in stream.getvalue()
 
     def test_the_region_is_released_even_when_the_loop_raises(self, tmp_path, monkeypatch):

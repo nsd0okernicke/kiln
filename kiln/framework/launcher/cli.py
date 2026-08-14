@@ -502,8 +502,8 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"terminal backend: {WEZTERM}, wt, {TMUX} or none",
     )
     parser.add_argument("command", nargs="?", default="",
-                        help="'init' to scaffold a new project; 'send' or 'inbox' for the "
-                             "human entry points; omit to launch")
+                        help="'init' to scaffold a new project; 'send', 'inbox' or "
+                             "'retry' for the human entry points; omit to launch")
     # `kiln init <dir>` is the form both the README and kiln.sh's own usage block document,
     # but only `command` existed, so argparse rejected the directory as an unrecognised
     # argument and the documented Unix scaffolding invocation could not run at all.
@@ -539,7 +539,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 #: Human entry points, delegated to the scheduler package rather than parsed here.
-SUBCOMMANDS = ("send", "inbox")
+SUBCOMMANDS = ("send", "inbox", "retry")
 
 
 def resolve_queue_context(argv: list[str]) -> list[str]:
@@ -577,16 +577,16 @@ def resolve_queue_context(argv: list[str]) -> list[str]:
 
 def run_subcommand(name: str, argv: list[str]) -> int:
     """
-    Delegate `kiln send` / `kiln inbox` to the scheduler package.
+    Delegate `kiln send` / `kiln inbox` / `kiln retry` to the scheduler package.
 
     Intercepted before the main parser rather than added as argparse subparsers: the
     top-level parser exists to accept the PowerShell flag spellings the shims forward
     unchanged, and bolting subparsers onto it changes how those are matched.
     """
-    from scheduler import inbox, send
+    from scheduler import inbox, retry, send
 
-    resolved = resolve_queue_context(argv)
-    return send.main(resolved) if name == "send" else inbox.main(resolved)
+    handlers = {"send": send.main, "inbox": inbox.main, "retry": retry.main}
+    return handlers[name](resolve_queue_context(argv))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -608,7 +608,8 @@ def main(argv: list[str] | None = None) -> int:
     # `kiln init <dir>` is accepted alongside `--init`, matching both shells' spellings.
     if args.command and args.command != "init":
         log.error(
-            "Unknown argument %r. Expected 'init', 'send' or 'inbox', or named flags "
+            "Unknown argument %r. Expected 'init', 'send', 'inbox' or 'retry', or "
+            "named flags "
             "like -WorkingDir.", args.command,
         )
         return 1

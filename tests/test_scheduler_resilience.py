@@ -60,6 +60,10 @@ def stub_context(monkeypatch, tmp_path):
 
 
 class TestLoopSurvivesFailures:
+    # These stubs end the loop by raising KeyboardInterrupt, not by setting `state.halted`.
+    # A halted role no longer exits -- it parks and polls for `kiln retry` -- so halting to
+    # stop a test loop would spin forever.
+
     def test_a_transient_failure_does_not_end_the_role(self, tmp_path, stub_context, monkeypatch):
         outcomes = [RuntimeError("database is locked"), CycleResult(role_scheduler.IDLE)]
 
@@ -67,8 +71,7 @@ class TestLoopSurvivesFailures:
             item = outcomes.pop(0)
             if isinstance(item, Exception):
                 raise item
-            state.halted = True  # end the test loop on the recovered cycle
-            return item
+            raise KeyboardInterrupt  # end the test loop on the recovered cycle
 
         monkeypatch.setattr(role_scheduler, "run_once", flaky)
         monkeypatch.setattr(role_scheduler.time, "sleep", lambda _s: None)
@@ -98,8 +101,7 @@ class TestLoopSurvivesFailures:
         def mixed(ctx, state):
             seen["n"] += 1
             if not script:
-                state.halted = True
-                return CycleResult(role_scheduler.IDLE)
+                raise KeyboardInterrupt
             item = script.pop(0)
             if isinstance(item, Exception):
                 raise item
@@ -131,6 +133,68 @@ class TestLoopSurvivesFailures:
         assert "Traceback" in written, "the stack trace must be preserved, not just the message"
 
 
+class TestHaltedLoopParks:
+    """
+    The circuit breaker used to `return 1` from the loop, which killed the pane. `kiln retry`
+    re-queues a message for the failed role -- into a queue nobody reads, if that role's
+    scheduler is gone. So a halted scheduler stays alive and keeps polling instead.
+    """
+
+    def test_a_halted_role_keeps_polling_instead_of_exiting(
+        self, tmp_path, stub_context, monkeypatch
+    ):
+        polls = {"n": 0}
+
+        def halted_then_stop(ctx, state):
+            state.halted = True
+            polls["n"] += 1
+            if polls["n"] >= 3:
+                raise KeyboardInterrupt
+            return CycleResult(role_scheduler.HALTED)
+
+        monkeypatch.setattr(role_scheduler, "run_once", halted_then_stop)
+        monkeypatch.setattr(role_scheduler.time, "sleep", lambda _s: None)
+
+        assert role_scheduler.main(_args(tmp_path)) == 130
+        assert polls["n"] == 3, "the loop must have kept polling while halted"
+
+    def test_it_announces_the_halt_once_not_every_poll(
+        self, tmp_path, stub_context, monkeypatch
+    ):
+        # A parked scheduler polls forever; repeating the line would bury the pane.
+        # Read from the log file, not caplog: configure_logging replaces the root handlers.
+        polls = {"n": 0}
+
+        def halted(ctx, state):
+            state.halted = True
+            polls["n"] += 1
+            if polls["n"] >= 4:
+                raise KeyboardInterrupt
+            return CycleResult(role_scheduler.HALTED)
+
+        monkeypatch.setattr(role_scheduler, "run_once", halted)
+        monkeypatch.setattr(role_scheduler.time, "sleep", lambda _s: None)
+
+        log_file = tmp_path / "logs" / "scheduler-coder.log"
+        role_scheduler.main(_args(tmp_path, **{"log-file": log_file}))
+        logging.shutdown()
+
+        assert log_file.read_text(encoding="utf-8").count("waiting for `kiln retry") == 1
+
+    def test_once_still_exits_rather_than_blocking_on_a_human(
+        self, tmp_path, stub_context, monkeypatch
+    ):
+        # A scripted single cycle must not park forever waiting for someone to type a command.
+        def halted(ctx, state):
+            state.halted = True
+            return CycleResult(role_scheduler.HALTED)
+
+        monkeypatch.setattr(role_scheduler, "run_once", halted)
+        monkeypatch.setattr(role_scheduler.time, "sleep", lambda _s: None)
+
+        assert role_scheduler.main([*_args(tmp_path), "--once"]) == 1
+
+
 class TestStaleMessageRecovery:
     """
     Work left `processing` by a killed scheduler is silently lost today: never re-served,
@@ -157,8 +221,7 @@ class TestStaleMessageRecovery:
         db.mark_processing(tmp_path / "messages.db", message_id)
 
         def one_cycle(ctx, state):
-            state.halted = True
-            return CycleResult(role_scheduler.IDLE)
+            raise KeyboardInterrupt  # one pass through the loop, then stop
 
         monkeypatch.setattr(role_scheduler, "run_once", one_cycle)
         with caplog.at_level(logging.WARNING):

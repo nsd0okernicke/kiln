@@ -279,6 +279,113 @@ class TestCountWorkItemArrivals:
         assert db.count_work_item_arrivals(db_path, "add-login", "main", "coder") == 0
 
 
+class TestFailedAndResume:
+    """
+    Escalation used to be a dead end: the inbound was marked `processed`, so a failed cycle
+    was indistinguishable from a successful one and there was nothing left to address. The
+    `error` and `acked_at` columns were declared with the table and never written by any code.
+    """
+
+    def test_failing_a_message_records_the_reason(self, db_path, add_message, read_message):
+        message_id = add_message(target="coder")
+
+        assert db.mark_failed(db_path, message_id, "worker blocked: missing fixtures") is True
+
+        stored = read_message(message_id)
+        assert stored["status"] == db.STATUS_FAILED
+        assert stored["error"] == "worker blocked: missing fixtures"
+
+    def test_failing_leaves_processed_at_unset(self, db_path, add_message, read_message):
+        # It did not complete. Stamping processed_at would make it look like it did.
+        message_id = add_message(target="coder")
+        db.mark_failed(db_path, message_id, "nope")
+        assert read_message(message_id)["processed_at"] is None
+
+    def test_a_failed_message_is_never_re_served(self, db_path, add_message):
+        # The invariant the `failed` status buys: it comes back only when a human sends it.
+        message_id = add_message(target="coder")
+        db.mark_failed(db_path, message_id, "nope")
+        assert db.fetch_and_deliver(db_path, "coder", "main") is None
+
+    def test_resuming_re_queues_the_same_row(self, db_path, add_message, read_message):
+        # A new row would look like brand-new work to every guard that counts per work item.
+        message_id = add_message(target="coder", work_item="add-login")
+        db.mark_failed(db_path, message_id, "nope")
+
+        db.resume_failed(db_path, message_id, "new content")
+
+        stored = read_message(message_id)
+        assert stored["status"] == db.STATUS_QUEUED
+        assert stored["content"] == "new content"
+        assert stored["work_item"] == "add-login", "the work item identity must survive"
+
+    def test_resuming_stamps_the_acknowledgement(self, db_path, add_message, read_message):
+        message_id = add_message(target="coder")
+        db.mark_failed(db_path, message_id, "nope")
+        db.resume_failed(db_path, message_id, "c")
+        assert read_message(message_id)["acked_at"]
+
+    def test_resuming_keeps_the_failure_reason(self, db_path, add_message, read_message):
+        # Still answerable afterwards: what went wrong the first time.
+        message_id = add_message(target="coder")
+        db.mark_failed(db_path, message_id, "missing fixtures")
+        db.resume_failed(db_path, message_id, "c")
+        assert read_message(message_id)["error"] == "missing fixtures"
+
+    @pytest.mark.parametrize(
+        "status", [db.STATUS_QUEUED, db.STATUS_DELIVERED, db.STATUS_PROCESSING]
+    )
+    def test_only_a_failed_message_can_be_resumed(self, db_path, add_message, status):
+        # Re-queueing something merely `processing` would hand a live scheduler a second
+        # copy of the work it is already doing.
+        message_id = add_message(target="coder", status=status)
+        assert db.resume_failed(db_path, message_id, "c") is None
+
+    def test_resuming_an_unknown_id_reports_failure(self, db_path):
+        assert db.resume_failed(db_path, "nope", "c") is None
+
+    def test_failed_messages_are_listable_with_their_reasons(self, db_path, add_message):
+        first = add_message(target="coder", work_item="add-login")
+        db.mark_failed(db_path, first, "missing fixtures")
+        add_message(target="coder")  # still queued; must not appear
+
+        listed = db.failed_messages(db_path, "main")
+
+        assert [(r["id"], r["error"]) for r in listed] == [(first, "missing fixtures")]
+
+
+class TestFetchResume:
+    """
+    What a halted role polls. `acked_at` is written only by `resume_failed`, so it separates
+    "a human looked at this and sent it back" from every other queued message -- without
+    inventing a second status meaning the same thing.
+    """
+
+    def test_it_ignores_ordinary_queued_work(self, db_path, add_message):
+        add_message(target="coder")
+        assert db.fetch_resume(db_path, "coder", "main") is None
+
+    def test_it_returns_a_resumed_message(self, db_path, add_message):
+        message_id = add_message(target="coder")
+        db.mark_failed(db_path, message_id, "nope")
+        db.resume_failed(db_path, message_id, "content")
+
+        assert db.fetch_resume(db_path, "coder", "main")["id"] == message_id
+
+    def test_it_marks_the_resumed_message_delivered(self, db_path, add_message, read_message):
+        message_id = add_message(target="coder")
+        db.mark_failed(db_path, message_id, "nope")
+        db.resume_failed(db_path, message_id, "content")
+        db.fetch_resume(db_path, "coder", "main")
+        assert read_message(message_id)["status"] == db.STATUS_DELIVERED
+
+    def test_it_is_scoped_to_the_role(self, db_path, add_message):
+        message_id = add_message(target="refactorer")
+        db.mark_failed(db_path, message_id, "nope")
+        db.resume_failed(db_path, message_id, "content")
+        assert db.fetch_resume(db_path, "coder", "main") is None
+
+
 class TestInsertHandoff:
     def test_returns_a_usable_id(self, db_path, read_message):
         message_id = db.insert_handoff(db_path, "coder", "refactorer", "payload", "main")

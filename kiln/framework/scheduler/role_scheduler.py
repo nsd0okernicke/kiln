@@ -147,6 +147,9 @@ class SchedulerState:
 
     consecutive_escalations: int = 0
     halted: bool = False
+    #: Whether the loop has already announced the halt. A parked scheduler polls forever, so
+    #: without this the pane fills with the same line every poll interval.
+    parked: bool = False
     #: Dollars this process has spent per work item. In memory, like
     #: `consecutive_escalations`: the queue stores no per-message cost, so persisting this
     #: would mean a schema change. The consequence is worth knowing -- a restarted scheduler
@@ -222,13 +225,26 @@ def should_retry(invocations: Sequence[WorkerInvocation], max_attempts: int) -> 
 
 def run_once(ctx: SchedulerContext, state: SchedulerState) -> CycleResult:
     """Perform one cycle. Returns IDLE when the inbox is empty — the caller sleeps."""
+    # A halted role keeps polling, but only for a message a human explicitly sent back. It
+    # has already failed three cycles in a row; taking the next ordinary handoff would fail a
+    # fourth time. Waiting here rather than exiting is what makes `kiln retry` able to reach
+    # it at all -- a re-queued message for a dead scheduler goes into a queue nobody reads.
     if state.halted:
-        return CycleResult(HALTED, detail=f"{ctx.role} halted after repeated escalations")
-
-    ctx.set_status("waiting")
-    message = db.fetch_and_deliver(ctx.db_path, ctx.role, ctx.branch)
-    if not message:
-        return CycleResult(IDLE)
+        ctx.set_status("halted")
+        message = db.fetch_resume(ctx.db_path, ctx.role, ctx.branch)
+        if not message:
+            return CycleResult(HALTED, detail=f"{ctx.role} halted; waiting for `kiln retry`")
+        log.warning(
+            f"{ICON_RETRY} resumed by a human; clearing %d consecutive escalation(s)",
+            state.consecutive_escalations,
+        )
+        state.halted = False
+        state.consecutive_escalations = 0
+    else:
+        ctx.set_status("waiting")
+        message = db.fetch_and_deliver(ctx.db_path, ctx.role, ctx.branch)
+        if not message:
+            return CycleResult(IDLE)
 
     message_id = str(message["id"])
     content = str(message["content"])
@@ -237,6 +253,8 @@ def run_once(ctx: SchedulerContext, state: SchedulerState) -> CycleResult:
     _persist_inbound(ctx, content)
 
     inbound = handoff.parse_handoff(content)
+    if inbound.is_resume:
+        log.info("human guidance attached: %s", inbound.guidance.replace("\n", " ")[:160])
     # Narrate the cycle: this pane is the operator's only window into work that used to be
     # visible as a running chat session.
     log.info(
@@ -351,7 +369,10 @@ def _delegate(
     the attempts, so recording per-outcome would mean four places to forget.
     """
     attempts = _Attempts()
-    retry_of: str | None = None
+    # A resumed message starts with the human's instructions already in the retry slot, so
+    # the worker's first attempt sees them the way a retry's second attempt sees the previous
+    # failure -- the same channel, which is why no new prompt plumbing was needed.
+    retry_of: str | None = inbound.guidance or None
 
     while True:
         prompt = build_task_prompt(
@@ -628,7 +649,12 @@ def _escalate(
         escalation=True,
     )
     _insert_verified(ctx, ESCALATION_TARGET, outbound, work_item=inbound.handoff)
-    db.mark_processed(ctx.db_path, message_id)
+    # `failed`, not `processed`: the escalated message stays addressable, with its reason in
+    # the `error` column, so `kiln retry` can send this exact row back rather than the human
+    # having to start a new work item carrying none of the failed cycle's context. It is
+    # still out of `processing`, which is what marking it processed was protecting against,
+    # and `fetch_and_deliver` does not select `failed`, so nothing re-serves it by accident.
+    db.mark_failed(ctx.db_path, message_id, detail)
 
     state.consecutive_escalations += 1
     ctx.set_status("blocked")
@@ -1131,12 +1157,30 @@ def _run_loop(
             continue
 
         _record_cycle(bar, result)
-        if result.outcome != IDLE:
+        if result.outcome != IDLE and result.outcome != HALTED:
             log.info("cycle -> %s %s", result.outcome, result.detail)
         if state.halted:
-            log.error(f"{ICON_HALT} scheduler halted; exiting")
+            # Park, do not exit. The circuit breaker used to return 1 here, which killed the
+            # pane -- and a `kiln retry` that re-queues a message for a dead scheduler puts
+            # it into a queue nobody reads. A parked scheduler keeps polling but accepts
+            # nothing except an explicitly resumed message (see run_once), so it stays on
+            # screen where the human is already looking, and it stays reachable.
+            if not state.parked:
+                state.parked = True
+                log.error(
+                    f"{ICON_HALT} scheduler halted; waiting for `kiln retry <message-id>`"
+                )
             ctx.set_status("halted")
-            return 1
+            if args.once:
+                # A scripted single cycle must not block forever waiting on a human.
+                return 1
+            try:
+                time.sleep(args.poll_interval)
+            except KeyboardInterrupt:
+                log.info("interrupted; shutting down")
+                return 130
+            continue
+        state.parked = False
         if args.once:
             return 0
         if result.outcome == IDLE:
@@ -1147,6 +1191,8 @@ def _run_loop(
                 # it is almost always where Ctrl+C lands.
                 log.info("interrupted; shutting down")
                 return 130
+
+
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

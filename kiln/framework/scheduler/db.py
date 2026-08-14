@@ -23,6 +23,11 @@ STATUS_QUEUED = "queued"
 STATUS_DELIVERED = "delivered"
 STATUS_PROCESSING = "processing"
 STATUS_PROCESSED = "processed"
+#: An escalated message: the cycle failed and a human was told. Deliberately *not* a state
+#: `fetch_and_deliver` selects, so a failure is never silently re-served -- it comes back only
+#: when someone runs `kiln retry`. Escalations used to be marked `processed`, which stopped
+#: them wedging in `processing` but also made them indistinguishable from work that succeeded.
+STATUS_FAILED = "failed"
 
 #: Normal handoff priority. 0-9 is high (architect handoffs, critical tasks), 100+ is
 #: informational — see constitution/workflow.md "Priority values".
@@ -105,14 +110,35 @@ def fetch_and_deliver(db_path: str | Path, role: str, branch: str) -> dict | Non
     crashed between delivery and processing pick the message back up instead of stranding
     it. Returns None when the inbox is empty.
     """
-    log.debug("polling DB for queued/delivered messages (role=%s branch=%s)", role, branch)
+    return _fetch_and_deliver(db_path, role, branch, resumed_only=False)
+
+
+def fetch_resume(db_path: str | Path, role: str, branch: str) -> dict | None:
+    """
+    As `fetch_and_deliver`, but only messages a human explicitly sent back.
+
+    What a halted role polls. After the circuit breaker trips, the scheduler must ignore
+    ordinary traffic -- it has already failed three cycles in a row and nothing has changed --
+    while still noticing a `kiln retry`. `acked_at` is the difference: only `resume_failed`
+    writes it, so it distinguishes "a human looked at this and sent it back" from every other
+    queued message without inventing a second status to mean the same thing.
+    """
+    return _fetch_and_deliver(db_path, role, branch, resumed_only=True)
+
+
+def _fetch_and_deliver(
+    db_path: str | Path, role: str, branch: str, resumed_only: bool
+) -> dict | None:
+    kind = "resumed" if resumed_only else "queued/delivered"
+    log.debug("polling DB for %s messages (role=%s branch=%s)", kind, role, branch)
     with closing(connect(db_path)) as conn:
         cur = conn.cursor()
         cur.execute(
-            """
-            SELECT id, sender, priority, content, created_at
+            f"""
+            SELECT id, sender, priority, content, created_at, acked_at
             FROM messages
             WHERE target = ? AND branch = ? AND status IN (?, ?)
+            {"AND acked_at IS NOT NULL" if resumed_only else ""}
             ORDER BY priority ASC, created_at ASC
             LIMIT 1
             """,
@@ -120,7 +146,7 @@ def fetch_and_deliver(db_path: str | Path, role: str, branch: str) -> dict | Non
         )
         row = cur.fetchone()
         if not row:
-            log.debug("no queued/delivered messages found")
+            log.debug("no %s messages found", kind)
             return None
 
         log.info(
@@ -274,6 +300,88 @@ def mark_processing(db_path: str | Path, message_id: str) -> bool:
 def mark_processed(db_path: str | Path, message_id: str) -> bool:
     """Flag a message as fully handled. False when no such message exists."""
     return _set_status(db_path, message_id, STATUS_PROCESSED, stamp_column="processed_at")
+
+
+def mark_failed(db_path: str | Path, message_id: str, error: str) -> bool:
+    """
+    Flag a message as escalated, keeping the reason. False when no such message exists.
+
+    Writes the `error` column, which was declared with the table and never written by any
+    code. The reason is what makes the failure addressable afterwards -- "which message
+    failed, and why" was previously answerable only by reading a scheduler log, if the pane
+    still existed.
+    """
+    with closing(connect(db_path)) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE messages SET status=?, error=? WHERE id=?",
+            (STATUS_FAILED, error, message_id),
+        )
+        conn.commit()
+        changed = cur.rowcount > 0
+
+    if changed:
+        log.info("marked id=%s as %s: %s", message_id, STATUS_FAILED, error)
+    else:
+        log.warning("no message found with id=%s", message_id)
+    return changed
+
+
+def failed_messages(db_path: str | Path, branch: str) -> list[dict]:
+    """Every escalated message on a branch, newest first -- what `kiln retry` lists."""
+    with closing(connect(db_path)) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, sender, target, work_item, error, created_at FROM messages "
+            "WHERE branch=? AND status=? ORDER BY created_at DESC",
+            (branch, STATUS_FAILED),
+        )
+        return [dict(row) for row in cur.fetchall()]
+
+
+def resume_failed(db_path: str | Path, message_id: str, content: str) -> dict | None:
+    """
+    Put one failed message back in its own role's queue, with the human's guidance attached.
+
+    The **same row** is re-queued rather than a new one inserted, so the work item, its lap
+    count and its history stay attached to one identity -- a fresh row would look like new
+    work to every guard that counts per work item.
+
+    `acked_at` records the human's acknowledgement. That column, like `error`, was declared
+    with the table and never written; this is evidently what it was for.
+
+    Returns the updated row, or None when the id is unknown or the message is not failed.
+    Refusing anything but a `failed` row is deliberate: re-queueing a message that is merely
+    `processing` would hand a live scheduler a second copy of what it is already working on.
+    """
+    with closing(connect(db_path)) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"""
+            UPDATE messages
+            SET status=?, content=?, acked_at={_UTC_NOW}, delivered_at=NULL
+            WHERE id=? AND status=?
+            RETURNING id, sender, target, branch, work_item, error, acked_at
+            """,
+            (STATUS_QUEUED, content, message_id, STATUS_FAILED),
+        )
+        row = cur.fetchone()
+        conn.commit()
+
+    if row is None:
+        log.warning("no failed message with id=%s to resume", message_id)
+        return None
+    log.info("resumed id=%s for %s", message_id, row["target"])
+    return dict(row)
+
+
+def get_message(db_path: str | Path, message_id: str) -> dict | None:
+    """One message by id, or None. For callers that need its content before rewriting it."""
+    with closing(connect(db_path)) as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM messages WHERE id=?", (message_id,))
+        row = cur.fetchone()
+        return dict(row) if row else None
 
 
 def _set_status(
