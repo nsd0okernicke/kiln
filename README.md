@@ -582,6 +582,47 @@ The panel above is not hypothetical. Measured against real runs:
 - **Duplication inside a request is 0.3–2.4%.** Workers re-read almost nothing; conversation
   growth is the cost of the work, not sloppiness.
 
+### Using it to optimize *your* project
+
+Everything above was measured against Kiln's own shipped scaffolding, but the constitution,
+roles, skills and worker files that actually run are **yours** — `kiln/project/` is copied into
+your repo precisely so you can rewrite it. The proxy exists to tell you which of your edits are
+worth making. Kiln measures; what to slim is a question about your project, not about Kiln.
+
+A workable loop:
+
+1. **Run a cycle with `--proxy`** and read the prompt-weight panel. `SYSTEM` is your merged
+   constitution and role file; `TOOLS` is the tool set your worker declared; `MSGS` is the
+   conversation.
+2. **Attack the biggest column, not the most editable one.** These are very different things,
+   and confusing them is the trap the numbers above document.
+3. **Change one thing, then re-measure** on comparable work.
+
+Where the levers usually are, based on the measurements above:
+
+| If the big column is… | The lever is… |
+|---|---|
+| `TOOLS` | the `tools:` list in your worker frontmatter — declare only what the role needs |
+| `SYSTEM` | your `constitution/` and `roles/` files, but see the warning below |
+| `MSGS` | how much work you give a role per handoff, and how much file content it must read |
+
+**Two warnings, both learned the expensive way.**
+
+Slimming instructions is the intuitive move and it is usually the wrong one — `SYSTEM` was
+3–5% of a request here, so halving it changes almost nothing while costing you rules the
+workers actually follow. Check the column before you edit anything.
+
+And watch **`CACHE` on the main dashboard grid**, not just prompt weight. At a 97% hit rate,
+shrinking a *cached* prefix saves far less than its byte count suggests, while an edit that
+invalidates the cache every cycle can cost more than it saves. A role sitting well below its
+peers on `CACHE` is a better lead than a role with a large `AVG REQ`.
+
+**On re-measuring honestly:** Kiln has no way to replay a fixed workload against two
+configurations, so a before/after across two runs is comparing different work. Treat a single
+comparison as indicative, not proof — repeat it, or prefer changes whose effect is large enough
+to survive the noise. The 40% tool-schema result above was worth acting on because it was
+enormous; a 5% result measured the same way would not be.
+
 ---
 
 ## Constitution and Roles
