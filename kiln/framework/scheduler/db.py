@@ -234,6 +234,29 @@ def count_queued_by_role(db_path: str | Path, branch: str) -> dict[str, int]:
         return {row["target"]: int(row["n"]) for row in cur.fetchall()}
 
 
+def oldest_queued_by_role(db_path: str | Path, branch: str) -> dict[str, str]:
+    """
+    `created_at` of the oldest still-queued message per target role.
+
+    Queue *depth* was already visible and is the weaker signal: one message that has sat
+    unserved for an hour says something is dead downstream, while five that arrived a minute
+    ago say the swarm is busy. Depth alone cannot tell those apart.
+
+    The value is naive **localtime**, matching the schema's own `created_at` default -- read
+    it with `dashboard._parse_local_timestamp`, not the UTC parser used for status files.
+    Mixing the two would produce an age off by the machine's UTC offset, which on this
+    codebase's own timezone would read as a two-hour stall on a message that just arrived.
+    """
+    with closing(connect(db_path)) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT target, MIN(created_at) AS oldest FROM messages "
+            "WHERE branch=? AND status=? GROUP BY target",
+            (branch, STATUS_QUEUED),
+        )
+        return {row["target"]: str(row["oldest"]) for row in cur.fetchall()}
+
+
 def cycles_by_work_item(db_path: str | Path, branch: str) -> dict[str, int]:
     """
     Message count per work item, newest-first by first appearance.

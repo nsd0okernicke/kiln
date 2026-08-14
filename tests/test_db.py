@@ -483,6 +483,31 @@ class TestWorkItem:
         assert read_message(message_id)["work_item"] is None
 
 
+class TestOldestQueuedByRole:
+    def test_returns_the_oldest_queued_message_per_role(self, db_path, add_message):
+        add_message(target="coder", created_at="2026-01-02 00:00:00")
+        add_message(target="coder", created_at="2026-01-01 00:00:00")
+        add_message(target="refactorer", created_at="2026-01-03 00:00:00")
+
+        assert db.oldest_queued_by_role(db_path, "main") == {
+            "coder": "2026-01-01 00:00:00",
+            "refactorer": "2026-01-03 00:00:00",
+        }
+
+    def test_only_queued_messages_count(self, db_path, add_message):
+        # A delivered message is being worked; its age is the role's SINCE, not a queue wait.
+        add_message(target="coder", status=db.STATUS_DELIVERED, created_at="2026-01-01 00:00:00")
+        add_message(target="coder", created_at="2026-01-05 00:00:00")
+        assert db.oldest_queued_by_role(db_path, "main") == {"coder": "2026-01-05 00:00:00"}
+
+    def test_an_empty_queue_yields_nothing(self, db_path):
+        assert db.oldest_queued_by_role(db_path, "main") == {}
+
+    def test_it_is_scoped_to_the_branch(self, db_path, add_message):
+        add_message(target="coder", branch="feature-x")
+        assert db.oldest_queued_by_role(db_path, "main") == {}
+
+
 class TestCyclesByWorkItem:
     def test_counts_messages_per_work_item(self, db_path):
         for _ in range(3):

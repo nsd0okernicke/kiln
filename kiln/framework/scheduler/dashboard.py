@@ -122,14 +122,60 @@ def _colorize(padded_text: str, state: str) -> str:
     return f"\x1b[48;2;{r};{g};{b}m\x1b[38;2;0;0;0m{padded_text}{pane_status.RESET_STYLE}"
 
 
+#: States in which a role is waiting on a worker subprocess, and therefore the only ones a
+#: stall means anything in. An `idle` role with an old `since` is not stuck, it is unemployed.
+WORKING_STATES = frozenset({"working", "retrying", "delegating"})
+
+#: Marks a role whose worker has run longer than the timeout it was launched with.
+STALL_MARKER = "\N{WARNING SIGN}"
+
+
+def is_stalled(status: dict | None, now_utc: datetime) -> bool:
+    """
+    True when a role has been working longer than its own configured worker timeout.
+
+    A role hung in `working` for an hour renders identically to one working normally, just
+    with a larger SINCE -- and "larger" is only meaningful against a number the dashboard did
+    not have. The timeout arrives in the status file, written by the scheduler that owns it,
+    so this compares against what the role was actually launched with rather than against a
+    profile the dashboard would have to re-parse and could disagree about.
+
+    Unknowable cases are not stalls: no status file, no timeout recorded, no `since`, or a
+    state where no worker is running.
+    """
+    if not status or status.get("state") not in WORKING_STATES:
+        return False
+    timeout = status.get("worker_timeout_sec")
+    since = status.get("since")
+    if not timeout or not since:
+        return False
+    try:
+        elapsed = (now_utc - _parse_status_since(since)).total_seconds()
+    except ValueError:
+        return False
+    return elapsed > timeout
+
+
+def attempt_suffix(status: dict | None) -> str:
+    """`2/2` for a role on its retry, or '' when it is on its first (or never reported)."""
+    if not status:
+        return ""
+    attempt, limit = status.get("attempt"), status.get("max_attempts")
+    if not attempt or not limit or attempt <= 1:
+        return ""
+    return f" {attempt}/{limit}"
+
+
 def render_state_grid(
     sessions: list[RoleSession],
     statuses: dict[str, dict],
     queue_depth: dict[str, int],
     now_utc: datetime,
+    oldest_queued: dict[str, str] | None = None,
+    now_local: datetime | None = None,
 ) -> list[str]:
     header = (
-        f"{'ROLE':<20} {'STATE':<16} {'SINCE':<10} {'QUEUE':>5} {'CYCLES':>7} "
+        f"{'ROLE':<20} {'STATE':<20} {'SINCE':<12} {'QUEUE':>5} {'WAIT':>8} {'CYCLES':>7} "
         f"{'COST':>8} {'TOKENS':>9} {'CACHE':>6}"
     )
     lines = [header, "\N{BOX DRAWINGS LIGHT HORIZONTAL}" * len(header)]
@@ -141,10 +187,13 @@ def render_state_grid(
             if status and status.get("since")
             else "-"
         )
+        if is_stalled(status, now_utc):
+            since = f"{STALL_MARKER} {since}"
         cycles = status.get("cycles") if status else None
         cost = status.get("cost_usd") if status else None
         tokens = status.get("tokens") if status else None
-        state_cell = _colorize(f"{pane_status.STATE_GLYPH} {state}".ljust(16), state)
+        label = f"{pane_status.STATE_GLYPH} {state}{attempt_suffix(status)}"
+        state_cell = _colorize(label.ljust(20), state)
         cycles_display = "-" if cycles is None else str(cycles)
         cost_display = "-" if cost is None else f"${cost:.2f}"
         # `-` for both "no status file yet" and "this backend reported no usage" -- the same
@@ -153,11 +202,33 @@ def render_state_grid(
         share = cache_share(status.get("token_usage") if status else None)
         cache_display = "-" if share is None else f"{share:.0%}"
         lines.append(
-            f"{session.role:<20} {state_cell} {since:<10} "
-            f"{queue_depth.get(session.role, 0):>5} {cycles_display:>7} {cost_display:>8} "
+            f"{session.role:<20} {state_cell} {since:<12} "
+            f"{queue_depth.get(session.role, 0):>5} "
+            f"{queue_wait(oldest_queued, session.role, now_local):>8} "
+            f"{cycles_display:>7} {cost_display:>8} "
             f"{tokens_display:>9} {cache_display:>6}"
         )
     return lines
+
+
+def queue_wait(
+    oldest_queued: dict[str, str] | None, role: str, now_local: datetime | None
+) -> str:
+    """
+    How long this role's oldest queued message has waited, or `-` when nothing is waiting.
+
+    Read with the *local* parser: `created_at` is naive localtime by the schema's own default,
+    unlike the UTC `since` in the status files. `dashboard` already carries both parsers for
+    exactly this reason, and using the wrong one here would show every fresh message as hours
+    old on any machine not on UTC.
+    """
+    stamp = (oldest_queued or {}).get(role)
+    if not stamp or now_local is None:
+        return "-"
+    try:
+        return _ago(_parse_local_timestamp(stamp), now_local).removesuffix(" ago")
+    except ValueError:
+        return "-"
 
 
 def cache_share(usage: dict | None) -> float | None:
@@ -332,6 +403,7 @@ def render_dashboard(
     activity_limit: int = DEFAULT_ACTIVITY_LIMIT,
     request_stats: dict[str, dict[str, int]] | None = None,
     request_scope: str = "this run",
+    oldest_queued: dict[str, str] | None = None,
 ) -> list[str]:
     """Pure: given one snapshot of the world, render every section. No I/O, no clock."""
     header = f"{ICON_TITLE} Kiln Dashboard \N{EM DASH} {project_name} ({branch})"
@@ -339,7 +411,10 @@ def render_dashboard(
     padding = max(2, 74 - len(header) - len(timestamp))
     title_line = f"{header}{' ' * padding}{timestamp}"
 
-    grid = render_state_grid(sessions, statuses, queue_depth, now_utc)
+    grid = render_state_grid(
+        sessions, statuses, queue_depth, now_utc,
+        oldest_queued=oldest_queued, now_local=now_local,
+    )
     # Sized to the widest thing it has to underline, not to the title alone: the grid grew
     # past a title-width rule when the TOKENS column was added, leaving the table visibly
     # overhanging its own borders. `grid[0]` is the column header, the one grid line
@@ -366,6 +441,14 @@ def render_dashboard(
     if cost_is_partial(sessions, statuses):
         lines.append(
             "  + partial: codex/copilot roles report tokens but no cost"
+        )
+    # Only when it applies: a permanent legend for a condition that is usually absent trains
+    # people to stop reading the line, which is the opposite of an early warning.
+    stalled = [s.role for s in sessions if is_stalled(statuses.get(s.role), now_utc)]
+    if stalled:
+        lines.append(
+            f"  {STALL_MARKER} past its worker timeout, so the worker may be hung: "
+            + ", ".join(stalled)
         )
 
     lines += render_prompt_weight(request_stats or {}, scope=request_scope)
@@ -400,6 +483,7 @@ def snapshot(ctx: DashboardContext) -> list[str]:
         if (status := read_status(ctx.status_dir, session.role)) is not None
     }
     queue_depth = db.count_queued_by_role(ctx.db_path, ctx.branch)
+    oldest_queued = db.oldest_queued_by_role(ctx.db_path, ctx.branch)
     # A wider window than activity_limit so escalations outside the visible activity list
     # still have a chance to surface -- this is a recent-window view, not exhaustive history.
     messages = db.recent_messages(ctx.db_path, ctx.branch, limit=max(ctx.activity_limit, 20))
@@ -416,6 +500,7 @@ def snapshot(ctx: DashboardContext) -> list[str]:
         activity_limit=ctx.activity_limit,
         request_stats=read_request_stats(ctx.traffic_db, since=ctx.traffic_since),
         request_scope="this run" if ctx.traffic_since else "all history",
+        oldest_queued=oldest_queued,
     )
 
 

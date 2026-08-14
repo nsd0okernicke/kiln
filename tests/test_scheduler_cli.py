@@ -521,6 +521,43 @@ class TestStatusBarWiring:
         _, kwargs = written[-1]
         assert kwargs == {"cycles": 1, "cost_usd": 1.5, "tokens": usage}
 
+    def test_the_status_file_does_not_lag_the_bar_by_a_cycle(self, tmp_path, monkeypatch):
+        # `_record_cycle` folds a cycle into the bar *after* run_once returns, but the last
+        # set_status of that cycle ("idle") runs inside it -- so the status file the dashboard
+        # reads carried the previous cycle's totals, and the two surfaces disagreed about the
+        # same number.
+        written = []
+        ctx = _dummy_ctx(tmp_path)
+        ctx.set_status = lambda state, **kwargs: written.append(kwargs)
+
+        def one_cycle(inner_ctx, state):
+            inner_ctx.set_status("idle")  # what _hand_off does at the end of a cycle
+            return role_scheduler.CycleResult(role_scheduler.HANDED_OFF, cost_usd=2.0)
+
+        monkeypatch.setattr(role_scheduler, "run_once", one_cycle)
+        monkeypatch.setattr(role_scheduler, "build_context", lambda args: ctx)
+
+        role_scheduler.main([*self._args(tmp_path), "--once"])
+
+        assert written[-1]["cycles"] == 1
+        assert written[-1]["cost_usd"] == pytest.approx(2.0)
+
+    def test_an_idle_poll_does_not_rewrite_the_status_file(self, tmp_path, monkeypatch):
+        # Otherwise every poll of an idle swarm rewrites N status files for no change.
+        written = []
+        ctx = _dummy_ctx(tmp_path)
+        ctx.set_status = lambda state, **kwargs: written.append(kwargs)
+
+        monkeypatch.setattr(
+            role_scheduler, "run_once",
+            lambda c, s: role_scheduler.CycleResult(role_scheduler.IDLE),
+        )
+        monkeypatch.setattr(role_scheduler, "build_context", lambda args: ctx)
+
+        role_scheduler.main([*self._args(tmp_path), "--once"])
+
+        assert written == []
+
     def test_the_handoff_target_is_shown_before_the_first_cycle(self, tmp_path):
         bar, _ = self._bar(tmp_path)
         assert bar.status.target == "refactorer"

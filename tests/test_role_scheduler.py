@@ -876,7 +876,8 @@ class TestStatusReporting:
     def test_reports_lifecycle_states(self, make_ctx, inbound):
         inbound()
         seen = []
-        ctx = make_ctx(FakeWorker(), set_status=seen.append)
+        # **kwargs, because delegation now also reports which attempt is running.
+        ctx = make_ctx(FakeWorker(), set_status=lambda state, **_kw: seen.append(state))
         role_scheduler.run_once(ctx, SchedulerState())
         assert "receiving" in seen and "working" in seen and "handing-off" in seen
 
@@ -884,7 +885,8 @@ class TestStatusReporting:
         inbound()
         seen = []
         fake = FakeWorker(worker(STATUS_BLOCKED, "no"), worker(STATUS_BLOCKED, "no"))
-        role_scheduler.run_once(make_ctx(fake, set_status=seen.append), SchedulerState())
+        ctx = make_ctx(fake, set_status=lambda state, **_kw: seen.append(state))
+        role_scheduler.run_once(ctx, SchedulerState())
         assert "blocked" in seen
 
     def test_status_writer_failure_is_not_fatal(self, tmp_path):

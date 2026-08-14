@@ -20,9 +20,11 @@ NOW_LOCAL = datetime(2026, 8, 9, 17, 0, 0)
 
 
 def _status(
-    state="working", since=None, cycles=None, cost_usd=None, tokens=None, token_usage=None
+    state="working", since=None, cycles=None, cost_usd=None, tokens=None, token_usage=None,
+    **extra,
 ):
     status = {"role": "coder", "state": state, "since": since or "2026-08-09T14:59:30Z"}
+    status.update(extra)
     if cycles is not None:
         status["cycles"] = cycles
     if cost_usd is not None:
@@ -165,6 +167,139 @@ class TestRenderStateGrid:
         lines = dashboard.render_state_grid(sessions, statuses, {}, NOW_UTC)
         row = next(line for line in lines if "specifier" in line)
         assert "tok" not in row
+
+
+class TestStallDetection:
+    """
+    A role hung in `working` for an hour renders identically to one working normally, just
+    with a larger SINCE -- and "larger" only means something against a number the dashboard
+    did not have. The scheduler writes its own worker timeout into the status file.
+    """
+
+    def _working(self, *, seconds_ago, timeout=900, state="working"):
+        since = NOW_UTC.timestamp() - seconds_ago
+        return _status(
+            state=state,
+            since=datetime.fromtimestamp(since, UTC).isoformat().replace("+00:00", "Z"),
+            worker_timeout_sec=timeout,
+        )
+
+    def test_working_past_the_timeout_is_a_stall(self):
+        assert dashboard.is_stalled(self._working(seconds_ago=1000), NOW_UTC) is True
+
+    def test_working_within_the_timeout_is_not(self):
+        assert dashboard.is_stalled(self._working(seconds_ago=100), NOW_UTC) is False
+
+    def test_a_retrying_role_can_stall_too(self):
+        stuck = self._working(seconds_ago=1000, state="retrying")
+        assert dashboard.is_stalled(stuck, NOW_UTC) is True
+
+    def test_an_idle_role_is_never_stalled(self):
+        # Idle for an hour is unemployed, not stuck. Flagging it would make the marker noise.
+        idle = self._working(seconds_ago=100_000, state="idle")
+        assert dashboard.is_stalled(idle, NOW_UTC) is False
+
+    def test_no_recorded_timeout_is_not_a_stall(self):
+        # Unknowable, not fine: a wrapper-mode role never writes one, and guessing a default
+        # here would flag roles against a number nobody configured.
+        status = _status(state="working", since="2020-01-01T00:00:00Z")
+        assert dashboard.is_stalled(status, NOW_UTC) is False
+
+    def test_no_status_file_is_not_a_stall(self):
+        assert dashboard.is_stalled(None, NOW_UTC) is False
+
+    def test_the_grid_marks_a_stalled_role(self):
+        sessions = [dashboard.RoleSession("coder", "claude", "Coder")]
+        statuses = {"coder": self._working(seconds_ago=1000)}
+        lines = dashboard.render_state_grid(sessions, statuses, {}, NOW_UTC)
+        row = next(line for line in lines if line.startswith("coder"))
+        assert dashboard.STALL_MARKER in row
+
+    def test_the_grid_leaves_a_healthy_role_unmarked(self):
+        sessions = [dashboard.RoleSession("coder", "claude", "Coder")]
+        statuses = {"coder": self._working(seconds_ago=10)}
+        lines = dashboard.render_state_grid(sessions, statuses, {}, NOW_UTC)
+        row = next(line for line in lines if line.startswith("coder"))
+        assert dashboard.STALL_MARKER not in row
+
+    def test_the_legend_appears_only_when_something_is_stalled(self):
+        # A permanent legend for a usually-absent condition trains people to stop reading it.
+        sessions = [dashboard.RoleSession("coder", "claude", "Coder")]
+        healthy = _render(sessions, {"coder": self._working(seconds_ago=10)})
+        stalled = _render(sessions, {"coder": self._working(seconds_ago=1000)})
+
+        assert not any("worker may be hung" in line for line in healthy)
+        assert any("worker may be hung" in line for line in stalled)
+
+
+class TestAttemptCounter:
+    def test_a_retry_shows_the_attempt(self):
+        # `working` and `retrying` were distinct already, but with no N/max an
+        # about-to-escalate role looked exactly like a healthy one.
+        assert dashboard.attempt_suffix(_status(attempt=2, max_attempts=2)) == " 2/2"
+
+    def test_a_first_attempt_shows_nothing(self):
+        # Every cycle starts here; showing "1/2" on all of them would be pure noise.
+        assert dashboard.attempt_suffix(_status(attempt=1, max_attempts=2)) == ""
+
+    def test_a_role_that_never_reported_shows_nothing(self):
+        assert dashboard.attempt_suffix(_status()) == ""
+        assert dashboard.attempt_suffix(None) == ""
+
+    def test_it_reaches_the_grid(self):
+        sessions = [dashboard.RoleSession("coder", "claude", "Coder")]
+        statuses = {"coder": _status(state="retrying", attempt=2, max_attempts=2)}
+        lines = dashboard.render_state_grid(sessions, statuses, {}, NOW_UTC)
+        assert any("2/2" in line for line in lines)
+
+
+class TestQueueWait:
+    """
+    Queue depth was already visible and is the weaker signal: one message unserved for an
+    hour says something downstream is dead, five that arrived a minute ago say the swarm is
+    busy. Depth alone cannot tell those apart.
+    """
+
+    def test_it_shows_the_age_of_the_oldest_queued_message(self):
+        oldest = {"coder": "2026-08-09 16:30:00"}  # NOW_LOCAL is 17:00
+        assert dashboard.queue_wait(oldest, "coder", NOW_LOCAL) == "30m"
+
+    def test_an_empty_queue_shows_a_placeholder(self):
+        assert dashboard.queue_wait({}, "coder", NOW_LOCAL) == "-"
+        assert dashboard.queue_wait(None, "coder", NOW_LOCAL) == "-"
+
+    def test_an_unparseable_timestamp_does_not_break_the_frame(self):
+        assert dashboard.queue_wait({"coder": "not a date"}, "coder", NOW_LOCAL) == "-"
+
+    def test_it_uses_the_local_parser_not_the_utc_one(self):
+        # created_at is naive localtime by the schema's own default, while status `since` is
+        # UTC. Reading it with the UTC parser would age every fresh message by the machine's
+        # offset -- two hours, on this fixture's own clock.
+        oldest = {"coder": NOW_LOCAL.strftime("%Y-%m-%d %H:%M:%S")}
+        assert dashboard.queue_wait(oldest, "coder", NOW_LOCAL) == "0s"
+
+    def test_it_reaches_the_grid(self):
+        sessions = [dashboard.RoleSession("coder", "claude", "Coder")]
+        lines = dashboard.render_state_grid(
+            sessions, {}, {"coder": 1}, NOW_UTC,
+            oldest_queued={"coder": "2026-08-09 16:30:00"}, now_local=NOW_LOCAL,
+        )
+        assert any("30m" in line for line in lines)
+
+
+def _render(sessions, statuses, **overrides):
+    kwargs = {
+        "project_name": "demo",
+        "branch": "main",
+        "sessions": sessions,
+        "statuses": statuses,
+        "queue_depth": {},
+        "messages": [],
+        "now_utc": NOW_UTC,
+        "now_local": NOW_LOCAL,
+    }
+    kwargs.update(overrides)
+    return dashboard.render_dashboard(**kwargs)
 
 
 class TestCacheShare:

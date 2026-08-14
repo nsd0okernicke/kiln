@@ -382,7 +382,14 @@ def _delegate(
             worktree=ctx.worktree,
             retry_of=retry_of,
         )
-        ctx.set_status("working" if not retry_of else "retrying")
+        # The attempt travels to the status file, and from there to the dashboard: `working`
+        # and `retrying` were distinct states already, but with no N/max an about-to-escalate
+        # role looked exactly like a healthy one.
+        ctx.set_status(
+            "working" if not retry_of else "retrying",
+            attempt=len(attempts.invocations) + 1,
+            max_attempts=ctx.max_attempts,
+        )
         log.info(
             f"{ICON_DELEGATE} delegating to %s (attempt %d/%d)",
             ctx.definition.name, len(attempts.invocations) + 1, ctx.max_attempts,
@@ -719,7 +726,7 @@ def _insert_verified(
 
 
 def make_status_writer(
-    role: str, script: Path | None
+    role: str, script: Path | None, worker_timeout: int | None = None
 ) -> Callable[..., None]:
     """
     Status writer that shells out to set-status.py, or a no-op when it is absent.
@@ -739,12 +746,24 @@ def make_status_writer(
         cycles: int | None = None,
         cost_usd: float | None = None,
         tokens: TokenUsage | None = None,
+        attempt: int | None = None,
+        max_attempts: int | None = None,
     ) -> None:
         command = [sys.executable, str(script), role, state]
         if cycles is not None:
             command.append(f"--cycles={cycles}")
         if cost_usd is not None:
             command.append(f"--cost={cost_usd}")
+        if attempt is not None:
+            command.append(f"--attempt={attempt}")
+        if max_attempts is not None:
+            command.append(f"--max-attempts={max_attempts}")
+        # Constant for the process, written on every status so the dashboard always has it.
+        # It travels through the status file rather than being re-derived from the profile:
+        # the dashboard would otherwise have to parse profiles and could disagree with what
+        # the scheduler was actually launched with.
+        if worker_timeout is not None:
+            command.append(f"--worker-timeout={worker_timeout}")
         if tokens is not None:
             # Each kind as its own flag rather than one total: set-status.py is copied
             # verbatim into every worktree and cannot import TokenUsage to unpack a
@@ -896,7 +915,9 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
         ),
         definition=definition,
         run_worker=run_worker,
-        set_status=make_status_writer(args.role, args.status_script),
+        set_status=make_status_writer(
+            args.role, args.status_script, worker_timeout=args.worker_timeout
+        ),
         max_cycles=args.max_cycles,
         max_budget_usd=args.max_budget_usd,
     )
@@ -980,20 +1001,40 @@ def attach_status_bar(ctx: SchedulerContext, args: argparse.Namespace) -> pane_s
 
     write_status = ctx.set_status
 
-    def set_status(state: str) -> None:
+    def set_status(state: str, **extra: object) -> None:
         # bar.status.cycles/cost_usd/tokens are already tracked (see _record_cycle) -- this
         # just threads the current totals one hop further, into the JSON file the dashboard
-        # reads, rather than tracking them a second time.
+        # reads, rather than tracking them a second time. `extra` carries per-call facts the
+        # bar does not track, like which attempt is running.
         write_status(
             state,
             cycles=bar.status.cycles,
             cost_usd=bar.status.cost_usd,
             tokens=bar.status.tokens,
+            **extra,
         )
         bar.update(state=state)
 
     ctx.set_status = set_status
     return bar
+
+
+def _sync_status_totals(
+    ctx: SchedulerContext, bar: pane_status.StatusBar, result: CycleResult
+) -> None:
+    """
+    Re-emit the status file so it carries *this* cycle's totals, not the previous one's.
+
+    `attach_status_bar`'s wrapper reads `bar.status.cycles`/`cost_usd`/`tokens` at the moment
+    it writes. The last `set_status` of a cycle ("idle", "blocked") runs inside `run_once` --
+    before `_record_cycle` folds the cycle into the bar -- so `.kiln/status/<role>.json`
+    trailed the pane's own bar by exactly one cycle. Two surfaces disagreeing about the same
+    number is the kind of thing that quietly costs a monitoring surface its credibility, so
+    it is fixed by ordering rather than documented.
+    """
+    if result.outcome == IDLE:
+        return
+    ctx.set_status(bar.status.state)
 
 
 def _record_cycle(bar: pane_status.StatusBar, result: CycleResult) -> None:
@@ -1157,6 +1198,7 @@ def _run_loop(
             continue
 
         _record_cycle(bar, result)
+        _sync_status_totals(ctx, bar, result)
         if result.outcome != IDLE and result.outcome != HALTED:
             log.info("cycle -> %s %s", result.outcome, result.detail)
         if state.halted:

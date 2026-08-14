@@ -101,7 +101,7 @@ class TestBuildStatus:
 class TestParseArgv:
     def test_role_and_state(self, set_status):
         parsed = set_status.parse_argv(["coder", "working"])
-        assert parsed == ("coder", "working", None, "auto", None, None, None)
+        assert parsed == ("coder", "working", None, "auto", None, None, None, {})
 
     def test_detail_is_captured(self, set_status):
         detail = set_status.parse_argv(["coder", "delegating", "coder-worker"])[2]
@@ -150,7 +150,7 @@ class TestParseArgv:
             ]
         )
         assert parsed == (
-            "coder", "working", None, "auto", 3, 0.5, {"input": 99, "cache_read": 1},
+            "coder", "working", None, "auto", 3, 0.5, {"input": 99, "cache_read": 1}, {},
         )
 
     def test_missing_arguments_raise(self, set_status):

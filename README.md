@@ -405,18 +405,19 @@ scrollback, there is nothing here worth scrolling back through:
 ```text
 📊 Kiln Dashboard — library-hub-testrun (main)                     13:36:57
 ────────────────────────────────────────────────────────────────────────────────────────
-ROLE                 STATE            SINCE      QUEUE  CYCLES     COST    TOKENS  CACHE
-────────────────────────────────────────────────────────────────────────────────────────
-human-in-the-loop    ● waiting       1h ago          0       -        -         -      -
-inbox                ● -             -               0       -        -         -      -
-specifier            ● waiting       1s ago          0       2    $0.35 238.4k tok    84%
-coder                ● waiting       1s ago          0       1    $2.29  4.4M tok    97%
-refactorer           ● waiting       1s ago          0       1    $2.10  4.5M tok    98%
-architect            ● waiting       1s ago          0       1    $0.67  1.2M tok    97%
-dashboard            ● -             -               0       -        -         -      -
+ROLE                 STATE                SINCE        QUEUE     WAIT  CYCLES     COST    TOKENS  CACHE
+──────────────────────────────────────────────────────────────────────────────────────────────────
+human-in-the-loop    ● waiting            1h ago           0        -       -        -         -      -
+inbox                ● -                  -                0        -       -        -         -      -
+specifier            ● waiting            1s ago           0        -       2    $0.35 238.4k tok    84%
+coder                ● retrying 2/2       4m ago           0        -       1    $2.29  4.4M tok    97%
+refactorer           ● working        ⚠ 22m ago            1      18m       1    $2.10  4.5M tok    98%
+architect            ● waiting            1s ago           0        -       1    $0.67  1.2M tok    97%
+dashboard            ● -                  -                0        -       -        -         -      -
 ────────────────────────────────────────────────────────────────────────────────────────
 TOTAL COST: $5.41        TOTAL CYCLES: 5        TOKENS: 10.3M tok        ESCALATIONS: 0
   tokens by kind: in 412 · out 71.1k · cache-read 10.0M · cache-write 219.2k
+  ⚠ past its worker timeout, so the worker may be hung: refactorer
 
 Recent activity
   17:41:58  coder → refactorer            [Coder] Implement CAT-3 endpoint
@@ -443,6 +444,28 @@ gap was cache behaviour, not volume.
 `TOTAL COST` is marked partial (`$5.41+`) when any role in the run uses a backend that
 reports tokens but no dollars (`codex`, `copilot`) — a total that excludes a role is labelled
 as such rather than quietly under-reporting.
+
+#### Early warning
+
+Three signals exist to make a swarm in trouble look different from a busy one, because until
+they existed it did not.
+
+- **⚠ on `SINCE`** — this role has been working longer than the worker timeout it was launched
+  with, so the worker may be hung. The timeout travels in the role's own status file rather
+  than being re-read from the profile, so the dashboard measures against what the scheduler
+  actually got, not what a config file says it should have. Only `working`/`retrying`/
+  `delegating` can stall; an `idle` role with an old `SINCE` is unemployed, not stuck. The
+  legend under the totals appears only while something is stalled.
+- **`WAIT`** — how long this role's *oldest* queued message has been waiting. Queue depth
+  alone cannot distinguish one message unserved for an hour (something downstream is dead)
+  from five that arrived a minute ago (the swarm is busy). `-` means nothing is waiting.
+- **`2/2` in `STATE`** — which attempt is running. `retrying` was already a distinct state,
+  but without the count a role one failure away from escalating looked like a healthy one.
+  A first attempt shows nothing, since every cycle starts there.
+
+The dashboard and the pane status bar now report the same cycle and cost numbers for the same
+cycle. They used to differ by one: the status file is written during the cycle, and the totals
+were only folded in after it returned.
 
 Run it standalone against any project with `python -m scheduler.dashboard --once ...` (see
 `--help` for the required paths), or just launch a profile that includes it.
