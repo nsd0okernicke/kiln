@@ -8,6 +8,8 @@ worktree, a BOM making git refuse to run the pre-push hook.
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 from launcher import workspace
 from launcher.config import parse_profile
@@ -377,6 +379,80 @@ class TestAgentConfigs:
     def test_no_codex_home_without_a_codex_role(self, paths):
         workspace.prepare_agent_configs(PROFILE, paths)
         assert not paths.codex_home("coder").exists()
+
+    def test_the_mcp_server_gets_a_generous_startup_timeout(self, paths):
+        # Codex's own default is too short for `npx mcp-sqlite`, which resolves (and on a
+        # cold cache downloads) the package before the server says anything. Observed live:
+        # "MCP client for `kiln-db` timed out". A role without kiln-db cannot hand off at all.
+        profile = parse_profile(
+            {"profiles": {"p": {"terminals": [{"role": "coder", "agent": "codex"}]}}}, "p"
+        )
+        workspace.prepare_agent_configs(profile, paths)
+        config = (paths.codex_home("coder") / "config.toml").read_text(encoding="utf-8")
+        assert "startup_timeout_sec" in config
+
+
+class TestCodexAuthSeeding:
+    """
+    Found live: a wrapper-mode Codex role sent an unauthenticated request and the upstream
+    answered `401 Unauthorized`. The isolated CODEX_HOME exists to protect the user's real
+    `config.toml` from Kiln's per-role trust and MCP entries -- it was never meant to isolate
+    their *identity*, but with no `auth.json` in it that is exactly what it did. Every shipped
+    profile had `human-in-the-loop` on Claude, so this path had never run.
+    """
+
+    def _fake_real_home(self, tmp_path, monkeypatch, credentials="{}"):
+        home = tmp_path / "real-codex"
+        home.mkdir()
+        if credentials is not None:
+            (home / "auth.json").write_text(credentials, encoding="utf-8")
+        monkeypatch.setenv("CODEX_HOME", str(home))
+        return home
+
+    def test_credentials_are_copied_into_the_roles_home(self, tmp_path, monkeypatch):
+        self._fake_real_home(tmp_path, monkeypatch, '{"token": "abc"}')
+        role_home = tmp_path / "role-home"
+        role_home.mkdir()
+
+        assert workspace.seed_codex_auth(role_home) is True
+        assert (role_home / "auth.json").read_text(encoding="utf-8") == '{"token": "abc"}'
+
+    def test_a_launch_seeds_every_codex_role(self, paths, tmp_path, monkeypatch):
+        self._fake_real_home(tmp_path, monkeypatch)
+        profile = parse_profile(
+            {"profiles": {"p": {"terminals": [
+                {"role": "coder", "agent": "codex"},
+                {"role": "architect", "agent": "codex"},
+            ]}}}, "p",
+        )
+
+        workspace.prepare_agent_configs(profile, paths)
+
+        for role in ("coder", "architect"):
+            assert (paths.codex_home(role) / "auth.json").is_file()
+
+    def test_missing_credentials_warn_rather_than_fail_the_launch(
+        self, tmp_path, monkeypatch, caplog
+    ):
+        # "Not logged in" is an ordinary state, and the CLI says so far better than a
+        # traceback from the launcher would.
+        self._fake_real_home(tmp_path, monkeypatch, credentials=None)
+        role_home = tmp_path / "role-home"
+        role_home.mkdir()
+
+        with caplog.at_level(logging.WARNING):
+            assert workspace.seed_codex_auth(role_home) is False
+
+        assert "codex login" in caplog.text
+
+    def test_it_reads_the_codex_home_environment_variable(self, tmp_path, monkeypatch):
+        # A user who relocated their Codex config must not be told they are logged out.
+        elsewhere = self._fake_real_home(tmp_path, monkeypatch)
+        assert workspace.real_codex_home() == elsewhere
+
+    def test_it_falls_back_to_the_default_location(self, monkeypatch):
+        monkeypatch.delenv("CODEX_HOME", raising=False)
+        assert workspace.real_codex_home().name == ".codex"
 
 
 class TestTrustCopilotWorktrees:

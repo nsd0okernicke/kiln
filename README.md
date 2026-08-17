@@ -353,9 +353,21 @@ Each CLI needed one accommodation, all of them in the adapter rather than in the
 `copilot` reads MCP config from `~/.copilot/mcp-config.json` rather than a per-call flag, so its
 globally-registered `kiln-db` server is disabled per invocation; `codex exec` has no
 `--agent`-by-name flag, so the worker's persona is embedded directly in the prompt, and a
-per-role isolated `CODEX_HOME` has no `auth.json` and 401s, so the adapter deliberately reuses
-the ambient authenticated one; `grok`'s `--output-format streaming-messages-json` turned out to
-be Anthropic-Messages-API-compatible, making it close to a drop-in twin of the Claude adapter.
+per-role isolated `CODEX_HOME` has no `auth.json` and 401s, so the scheduler's worker call
+deliberately reuses the ambient authenticated one while wrapper-mode roles get the credential
+copied in at launch (see below); `grok`'s `--output-format streaming-messages-json` turned out
+to be Anthropic-Messages-API-compatible, making it close to a drop-in twin of the Claude
+adapter.
+
+**Codex credentials and the isolated home.** A wrapper-mode Codex role runs with
+`CODEX_HOME` pointed at `.kiln/codex-home/<role>/`, so Kiln's per-role trust and MCP entries
+never touch your real `~/.codex/config.toml`. That isolation was never meant to cover your
+*identity*, but with no `auth.json` in the directory it did — the role sent an unauthenticated
+request and the upstream answered `401 Unauthorized`. The launcher now copies `auth.json` from
+your real `CODEX_HOME` (`$CODEX_HOME`, else `~/.codex`) into each Codex role's home, per launch
+so a refreshed token is picked up. **This means a credential file is written into `.kiln/`** —
+that directory is gitignored, but it is worth knowing it is there. Not logged in is a warning,
+not a launch failure: `codex login` says it better than the launcher can.
 
 ### Inbox mode (`"scheduler": "inbox"`)
 

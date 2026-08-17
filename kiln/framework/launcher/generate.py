@@ -347,6 +347,16 @@ def build_copilot_mcp_config(paths: KilnPaths) -> dict:
     }
 
 
+#: Seconds Codex waits for an MCP server to come up before giving up on it.
+#:
+#: Its own default is far too short for this one: `npx mcp-sqlite` resolves (and on a cold
+#: cache downloads) the package before the server says anything, which took longer than the
+#: default on a live Windows run and failed the whole MCP startup with
+#: "MCP client for `kiln-db` timed out". A role that loses `kiln-db` cannot send a handoff at
+#: all, so the cost of waiting is far lower than the cost of giving up early.
+CODEX_MCP_STARTUP_TIMEOUT_SEC = 120
+
+
 def build_codex_config_toml(paths: KilnPaths, worktree: Path) -> str:
     """
     A role's isolated CODEX_HOME config.
@@ -361,6 +371,7 @@ def build_codex_config_toml(paths: KilnPaths, worktree: Path) -> str:
         "[mcp_servers.kiln-db]\n"
         'command = "npx"\n'
         f'args = ["mcp-sqlite", "{str(paths.db_path).replace(chr(92), chr(92) * 2)}"]\n'
+        f"startup_timeout_sec = {CODEX_MCP_STARTUP_TIMEOUT_SEC}\n"
     )
 
 

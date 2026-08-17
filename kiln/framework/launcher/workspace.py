@@ -572,6 +572,51 @@ def prepare_agent_configs(profile: Profile, paths: KilnPaths) -> None:
         (home / "config.toml").write_text(
             build_codex_config_toml(paths, worktree), encoding="utf-8"
         )
+        seed_codex_auth(home)
+
+
+#: Codex keeps its OAuth credentials here, relative to CODEX_HOME.
+CODEX_AUTH_FILE = "auth.json"
+
+
+def real_codex_home() -> Path:
+    """The user's own CODEX_HOME — `$CODEX_HOME`, or `~/.codex`."""
+    configured = os.environ.get("CODEX_HOME")
+    return Path(configured) if configured else Path.home() / ".codex"
+
+
+def seed_codex_auth(home: Path) -> bool:
+    """
+    Copy the user's Codex credentials into a role's isolated CODEX_HOME. True when copied.
+
+    The isolation exists to protect the user's real `config.toml` from Kiln's per-role trust
+    and MCP entries — **not** to isolate their identity. Without this the role's home has no
+    `auth.json`, Codex sends an unauthenticated request, and the upstream answers `401
+    Unauthorized`. Found live the first time a wrapper-mode Codex role ran: every shipped
+    profile had `human-in-the-loop` on Claude, so this path had never been exercised.
+
+    Copied per launch rather than symlinked: a symlink needs privileges on Windows, and a
+    fresh copy each launch picks up a token the user's own `codex login` has since refreshed.
+    The copy is what Codex refreshes in place during the session, so the credential the run
+    uses stays valid even across a long swarm.
+
+    Never raises. A missing source is the ordinary "not logged in" case, and it is the CLI's
+    own job to say so clearly — failing the whole launch here would replace a good error
+    message with a worse one.
+    """
+    source = real_codex_home() / CODEX_AUTH_FILE
+    if not source.is_file():
+        log.warning(
+            "no Codex credentials at %s; codex roles will fail to authenticate. "
+            "Run `codex login` first.", source,
+        )
+        return False
+    try:
+        shutil.copy2(source, home / CODEX_AUTH_FILE)
+    except OSError as exc:
+        log.warning("could not copy Codex credentials into %s: %s", home, exc)
+        return False
+    return True
 
 
 def write_sessions_file(profile: Profile, paths: KilnPaths) -> Path:
