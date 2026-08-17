@@ -29,28 +29,32 @@
           "worktree": "specifier",
           "title": "Kiln Specifier",
           "mode": "auto",
-          "scheduler": "python"
+          "scheduler": "python",
+          "workerTimeout": 1800
         },
         {
           "role": "coder",
           "worktree": "coder",
           "title": "Kiln Coder",
           "mode": "auto",
-          "scheduler": "python"
+          "scheduler": "python",
+          "workerTimeout": 1800
         },
         {
           "role": "refactorer",
           "worktree": "refactorer",
           "title": "Kiln Refactorer",
           "mode": "auto",
-          "scheduler": "python"
+          "scheduler": "python",
+          "workerTimeout": 1800
         },
         {
           "role": "architect",
           "worktree": "architect",
           "title": "Kiln Architect",
           "mode": "auto",
-          "scheduler": "python"
+          "scheduler": "python",
+          "workerTimeout": 2400
         },
         {
           "role": "dashboard",
@@ -141,14 +145,16 @@
           "worktree": "coder",
           "title": "Kiln Coder",
           "mode": "auto",
-          "scheduler": "python"
+          "scheduler": "python",
+          "workerTimeout": 1800
         },
         {
           "role": "architect",
           "worktree": "architect",
           "title": "Kiln Architect",
           "mode": "auto",
-          "scheduler": "python"
+          "scheduler": "python",
+          "workerTimeout": 2400
         },
         {
           "role": "dashboard",
@@ -226,7 +232,8 @@
           "worktree": "coder",
           "title": "Kiln Coder",
           "mode": "auto",
-          "scheduler": "python"
+          "scheduler": "python",
+          "workerTimeout": 1800
         },
         {
           "role": "dashboard",
@@ -300,14 +307,16 @@
           "worktree": "refactorer",
           "title": "Kiln Refactorer",
           "mode": "auto",
-          "scheduler": "python"
+          "scheduler": "python",
+          "workerTimeout": 1800
         },
         {
           "role": "architect",
           "worktree": "architect",
           "title": "Kiln Architect",
           "mode": "auto",
-          "scheduler": "python"
+          "scheduler": "python",
+          "workerTimeout": 2400
         },
         {
           "role": "dashboard",
@@ -493,7 +502,8 @@
           "title": "Kiln Specifier (Codex)",
           "mode": "auto",
           "scheduler": "python",
-          "workerDebug": true
+          "workerDebug": true,
+          "workerTimeout": 1800
         },
         {
           "role": "coder",
@@ -503,7 +513,8 @@
           "mode": "auto",
           "model": "claude-sonnet-5",
           "scheduler": "python",
-          "workerDebug": true
+          "workerDebug": true,
+          "workerTimeout": 1800
         },
         {
           "role": "refactorer",
@@ -512,7 +523,8 @@
           "title": "Kiln Refactorer (Codex)",
           "mode": "auto",
           "scheduler": "python",
-          "workerDebug": true
+          "workerDebug": true,
+          "workerTimeout": 1800
         },
         {
           "role": "architect",
@@ -522,7 +534,8 @@
           "mode": "auto",
           "model": "claude-sonnet-5",
           "scheduler": "python",
-          "workerDebug": true
+          "workerDebug": true,
+          "workerTimeout": 2400
         },
         {
           "role": "dashboard",

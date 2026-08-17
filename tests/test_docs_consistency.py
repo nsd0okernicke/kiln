@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -84,6 +85,39 @@ class TestConfigFormat:
     def test_no_document_points_at_a_yaml_profile_file(self, path):
         # Kiln has never had a YAML profile format. Four documents told users to edit one.
         assert "profiles.yaml" not in path.read_text(encoding="utf-8")
+
+
+class TestShippedWorkerTimeouts:
+    """
+    The 900s module default is sized for an LLM session, not for what these roles are asked to
+    do. Measured live: cycles that finished spent 60-74% of their wall time waiting on the
+    model; cycles that hit the cap spent 14-31% and were cut off mid-progress, running the
+    project's own toolchain -- containers, mutation runs, dependency resolution.
+    """
+
+    #: Floors, not exact values -- tuning up is fine, dropping back to the default is the
+    #: regression. The architect runs a full mutation pass and needs the most.
+    MINIMUMS: ClassVar[dict[str, int]] = {
+        "specifier": 1800, "coder": 1800, "refactorer": 1800, "architect": 2400,
+    }
+
+    def test_every_scheduled_heavy_role_raises_it(self):
+        profiles = json.loads(FRAMEWORK_PROFILES.read_text(encoding="utf-8"))["profiles"]
+        thin = []
+        for name, profile in profiles.items():
+            for terminal in profile["terminals"]:
+                role = terminal.get("role")
+                if role not in self.MINIMUMS or terminal.get("scheduler") != "python":
+                    continue
+                if terminal.get("workerTimeout", 0) < self.MINIMUMS[role]:
+                    thin.append(f"{name}/{role}={terminal.get('workerTimeout')}")
+        assert not thin, f"worker timeout too low for the role's own gates: {thin}"
+
+    def test_the_architect_gets_the_longest(self):
+        # It owns the full mutation run; every other role does a scan at most.
+        profiles = json.loads(FRAMEWORK_PROFILES.read_text(encoding="utf-8"))["profiles"]
+        full = {t["role"]: t for t in profiles["full"]["terminals"]}
+        assert full["architect"]["workerTimeout"] > full["coder"]["workerTimeout"]
 
 
 class TestHandoffSkillVerification:

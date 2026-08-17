@@ -1129,7 +1129,7 @@ would not open.
 - **workerModel** — (Claude agents only, `mode: "auto"` roles only, optional) pins the `<role>-worker` subagent this wrapper dispatches each cycle to a different model than the wrapper itself. If omitted, the worker subagent inherits the wrapper's model (Claude Code's default behavior for subagents with no `model` frontmatter).
 
 - **pollInterval** — (scheduler, inbox and dashboard panes) seconds between polls. Defaults to 2.
-- **workerTimeout** — (scheduler roles) seconds before one worker invocation is abandoned. Defaults to 900.
+- **workerTimeout** — (scheduler roles) seconds before one worker invocation is abandoned. The module default is 900; the shipped profiles raise it per role — see below.
 - **maxAttempts** — (scheduler roles) worker attempts per handoff before escalating. Defaults to 2.
 - **escalationLimit** — (scheduler roles) consecutive escalations before the role stops taking new work and parks for `kiln retry`. Defaults to 3.
 - **activityLimit** — (dashboard panes) how many recent messages the activity list shows. Defaults to 8.
@@ -1206,6 +1206,29 @@ Details worth knowing:
   stating rather than leaving implicit.
 
 No role ships with a `verify` today, so every profile behaves exactly as it did.
+
+#### Why the shipped profiles raise `workerTimeout`
+
+The module default is 900s, and it is sized for an LLM session rather than for what these roles
+are asked to do. The shipped profiles therefore set it per role:
+
+| Role | `workerTimeout` | Why |
+|---|---|---|
+| `specifier` | 1800 | Writes and verifies a feature file, then runs the project's checks |
+| `coder` | 1800 | Strict TDD, plus acceptance tests that may start containers |
+| `refactorer` | 1800 | Coverage, CRAP, DRY and a mutation *scan* |
+| `architect` | 2400 | Full mutation run and final verification — the heaviest role by design |
+
+Measured on a live swarm, the split was stark. Cycles that finished spent **60–74%** of their
+wall time waiting on the model; cycles that hit the 900s cap spent **14–31%**, with 31–61 model
+turns each. They were not stuck on a slow model call — they were running the project's own
+toolchain: container startup, mutation runs, dependency resolution. The cap was cutting off work
+that was progressing.
+
+**Raising this is not how you bound a runaway.** `maxCycles` and `maxBudgetUsd` do that, and they
+count the thing that actually matters. The worker timeout only decides how long one invocation
+may take before it is abandoned, and setting it too low turns "slow" into "failed" — twice, then
+an escalation.
 
 ### Bounding an autonomous run
 
