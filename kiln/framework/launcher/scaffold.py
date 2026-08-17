@@ -17,6 +17,8 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from scheduler import git_ops
+
 from . import workspace
 from .paths import KilnPaths
 
@@ -185,20 +187,33 @@ def initialize_database(paths: KilnPaths, result: ScaffoldResult) -> None:
 
 def initialize_git(paths: KilnPaths, result: ScaffoldResult) -> None:
     """
-    Set up git and write .gitignore, but leave the first commit to the user.
+    Set up git and write `.gitignore`/`.gitattributes`, but leave the first commit to the user.
 
     Deliberately no initial commit: the scaffold has no idea what else belongs in the
     project's first commit, and the launcher commits .gitignore itself when needed.
+
+    Both files are written here as well as at launch. Writing them only at launch left `init`
+    producing a project whose first commit lacked them, so the user's own opening commit was
+    immediately followed by an unexplained modification the first time they ran `kiln`.
     """
     if (paths.project_root / ".git").exists():
-        workspace.ensure_gitignore(paths)
+        _write_git_metadata(paths)
         result.note("existing git repository; .gitignore updated")
         return
 
     workspace.run_git(["init"], paths.project_root, check=True)
     workspace.run_git(["branch", "-M", "main"], paths.project_root)
-    workspace.ensure_gitignore(paths)
+    _write_git_metadata(paths)
     result.note("initialised git repository (first commit left to you)")
+
+
+def _write_git_metadata(paths: KilnPaths) -> None:
+    """The ignore rules, the merge attributes, and the local-only copy of the latter."""
+    workspace.ensure_gitignore(paths)
+    workspace.ensure_gitattributes(paths)
+    # Effective without waiting for the committed file to reach each role's branch --
+    # see git_ops.ensure_union_merge.
+    git_ops.ensure_union_merge(paths.project_root)
 
 
 def scaffold(

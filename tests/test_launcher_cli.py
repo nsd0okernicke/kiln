@@ -72,6 +72,18 @@ class TestScaffold:
         assert (paths.kiln_project_dir / "constitution.md").is_file()
         assert (paths.roles_dir / "coder.md").is_file()
 
+    def test_a_scaffolded_project_already_has_the_merge_attributes(self, tmp_path, framework):
+        # Written at init as well as at launch. Only at launch left `init` producing a project
+        # whose first commit lacked them, so the user's own opening commit was immediately
+        # followed by an unexplained modification the first time they ran `kiln`.
+        target = tmp_path / "proj"
+        scaffold.scaffold(target, framework)
+
+        assert "logbook.md merge=union" in (target / ".gitattributes").read_text("utf-8")
+        assert "logbook.md merge=union" in (
+            target / ".git" / "info" / "attributes"
+        ).read_text("utf-8")
+
     def test_copies_skills_as_real_directories(self, tmp_path, framework):
         # Copied, not linked: they become the user's own editable content.
         target = tmp_path / "proj"
