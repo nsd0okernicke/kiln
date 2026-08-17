@@ -1,18 +1,20 @@
 {
   "version": "1.0",
-  "description": "Kiln framework default profiles. Profiles are named for the KIND OF WORK they do (full, fix, spike, harden, dry-run); codex-only and mixed-backends are test fixtures for Kiln itself, not production profiles.",
+  "description": "Kiln framework default profiles. Profiles are named for the KIND OF WORK they do (full, fix, spike, harden, dry-run); which backend runs them is a launch flag (--agent-override), not a profile. mixed-backends is marked \"fixture\": true because it mixes backends per role, which no single override can express.",
   "default": "full",
   "profiles": {
     "full": {
       "description": "New feature, spec-first. Human-guided intake feeding the full autonomous cycle: specifier -> coder -> refactorer -> architect, on the deterministic scheduler, plus a dashboard tab. Routing comes from constitution/workflow.md.",
+      "defaults": {
+        "agent": "claude",
+        "model": "claude-sonnet-5"
+      },
       "terminals": [
         {
           "role": "human-in-the-loop",
-          "agent": "claude",
           "worktree": "@current",
           "title": "Kiln Human-in-the-Loop",
-          "mode": "manual",
-          "model": "claude-sonnet-5"
+          "mode": "manual"
         },
         {
           "role": "inbox",
@@ -24,38 +26,30 @@
         },
         {
           "role": "specifier",
-          "agent": "claude",
           "worktree": "specifier",
           "title": "Kiln Specifier",
           "mode": "auto",
-          "model": "claude-sonnet-5",
           "scheduler": "python"
         },
         {
           "role": "coder",
-          "agent": "claude",
           "worktree": "coder",
           "title": "Kiln Coder",
           "mode": "auto",
-          "model": "claude-sonnet-5",
           "scheduler": "python"
         },
         {
           "role": "refactorer",
-          "agent": "claude",
           "worktree": "refactorer",
           "title": "Kiln Refactorer",
           "mode": "auto",
-          "model": "claude-sonnet-5",
           "scheduler": "python"
         },
         {
           "role": "architect",
-          "agent": "claude",
           "worktree": "architect",
           "title": "Kiln Architect",
           "mode": "auto",
-          "model": "claude-sonnet-5",
           "scheduler": "python"
         },
         {
@@ -123,14 +117,16 @@
     },
     "fix": {
       "description": "Bugs and small changes. No specifier and no Gherkin ceremony -- the human states the problem and the coder works it directly -- but the architect still reviews before it comes back, so the shortcut is in the ceremony, not the verification.",
+      "defaults": {
+        "agent": "claude",
+        "model": "claude-sonnet-5"
+      },
       "terminals": [
         {
           "role": "human-in-the-loop",
-          "agent": "claude",
           "worktree": "@current",
           "title": "Kiln Human-in-the-Loop",
-          "mode": "manual",
-          "model": "claude-sonnet-5"
+          "mode": "manual"
         },
         {
           "role": "inbox",
@@ -142,20 +138,16 @@
         },
         {
           "role": "coder",
-          "agent": "claude",
           "worktree": "coder",
           "title": "Kiln Coder",
           "mode": "auto",
-          "model": "claude-sonnet-5",
           "scheduler": "python"
         },
         {
           "role": "architect",
-          "agent": "claude",
           "worktree": "architect",
           "title": "Kiln Architect",
           "mode": "auto",
-          "model": "claude-sonnet-5",
           "scheduler": "python"
         },
         {
@@ -210,14 +202,16 @@
     },
     "spike": {
       "description": "Throwaway exploration. One coder, no gates, no review -- the answer is knowledge, not code you intend to keep. Use `harden` afterwards if a spike turns out to be worth keeping.",
+      "defaults": {
+        "agent": "claude",
+        "model": "claude-sonnet-5"
+      },
       "terminals": [
         {
           "role": "human-in-the-loop",
-          "agent": "claude",
           "worktree": "@current",
           "title": "Kiln Human-in-the-Loop",
-          "mode": "manual",
-          "model": "claude-sonnet-5"
+          "mode": "manual"
         },
         {
           "role": "inbox",
@@ -229,11 +223,9 @@
         },
         {
           "role": "coder",
-          "agent": "claude",
           "worktree": "coder",
           "title": "Kiln Coder",
           "mode": "auto",
-          "model": "claude-sonnet-5",
           "scheduler": "python"
         },
         {
@@ -284,14 +276,16 @@
     },
     "harden": {
       "description": "Point it at code that already exists. Coverage, CRAP, mutation and boundary review, with no new behaviour and no specifier. The only profile that offers anything on a codebase Kiln did not write.",
+      "defaults": {
+        "agent": "claude",
+        "model": "claude-sonnet-5"
+      },
       "terminals": [
         {
           "role": "human-in-the-loop",
-          "agent": "claude",
           "worktree": "@current",
           "title": "Kiln Human-in-the-Loop",
-          "mode": "manual",
-          "model": "claude-sonnet-5"
+          "mode": "manual"
         },
         {
           "role": "inbox",
@@ -303,20 +297,16 @@
         },
         {
           "role": "refactorer",
-          "agent": "claude",
           "worktree": "refactorer",
           "title": "Kiln Refactorer",
           "mode": "auto",
-          "model": "claude-sonnet-5",
           "scheduler": "python"
         },
         {
           "role": "architect",
-          "agent": "claude",
           "worktree": "architect",
           "title": "Kiln Architect",
           "mode": "auto",
-          "model": "claude-sonnet-5",
           "scheduler": "python"
         },
         {
@@ -371,14 +361,16 @@
     },
     "dry-run": {
       "description": "Every role manual, so a human approves each hop. For learning or demonstrating the flow: same shape as `full`, but nothing advances without you. Wrapper mode throughout, so the kiln-db and kiln-channel MCP servers must be installed.",
+      "defaults": {
+        "agent": "claude",
+        "model": "claude-sonnet-5"
+      },
       "terminals": [
         {
           "role": "human-in-the-loop",
-          "agent": "claude",
           "worktree": "@current",
           "title": "Kiln Human-in-the-Loop",
-          "mode": "manual",
-          "model": "claude-sonnet-5"
+          "mode": "manual"
         },
         {
           "role": "inbox",
@@ -390,35 +382,27 @@
         },
         {
           "role": "specifier",
-          "agent": "claude",
           "worktree": "specifier",
           "title": "Kiln Specifier",
-          "mode": "manual",
-          "model": "claude-sonnet-5"
+          "mode": "manual"
         },
         {
           "role": "coder",
-          "agent": "claude",
           "worktree": "coder",
           "title": "Kiln Coder",
-          "mode": "manual",
-          "model": "claude-sonnet-5"
+          "mode": "manual"
         },
         {
           "role": "refactorer",
-          "agent": "claude",
           "worktree": "refactorer",
           "title": "Kiln Refactorer",
-          "mode": "manual",
-          "model": "claude-sonnet-5"
+          "mode": "manual"
         },
         {
           "role": "architect",
-          "agent": "claude",
           "worktree": "architect",
           "title": "Kiln Architect",
-          "mode": "manual",
-          "model": "claude-sonnet-5"
+          "mode": "manual"
         },
         {
           "role": "dashboard",
@@ -455,119 +439,6 @@
           },
           {
             "title": "Manual Cycle",
-            "gridRows": 2,
-            "gridCols": 2,
-            "panes": [
-              {
-                "role": "specifier"
-              },
-              {
-                "role": "coder"
-              },
-              {
-                "role": "refactorer"
-              },
-              {
-                "role": "architect"
-              }
-            ]
-          },
-          {
-            "title": "Dashboard",
-            "panes": [
-              {
-                "role": "dashboard"
-              }
-            ]
-          }
-        ]
-      }
-    },
-    "codex-only": {
-      "description": "Same topology as the default profile, but every agent-bearing role (including human-in-the-loop) runs on Codex -- validates codex end-to-end, wrapper mode and scheduler mode together.",
-      "terminals": [
-        {
-          "role": "human-in-the-loop",
-          "agent": "codex",
-          "worktree": "@current",
-          "title": "Kiln Human-in-the-Loop (Codex)",
-          "mode": "manual"
-        },
-        {
-          "role": "inbox",
-          "worktree": "@current",
-          "title": "Kiln Inbox",
-          "mode": "manual",
-          "scheduler": "inbox",
-          "watches": "human-in-the-loop"
-        },
-        {
-          "role": "specifier",
-          "agent": "codex",
-          "worktree": "specifier",
-          "title": "Kiln Specifier (Codex)",
-          "mode": "auto",
-          "scheduler": "python"
-        },
-        {
-          "role": "coder",
-          "agent": "codex",
-          "worktree": "coder",
-          "title": "Kiln Coder (Codex)",
-          "mode": "auto",
-          "scheduler": "python"
-        },
-        {
-          "role": "refactorer",
-          "agent": "codex",
-          "worktree": "refactorer",
-          "title": "Kiln Refactorer (Codex)",
-          "mode": "auto",
-          "scheduler": "python"
-        },
-        {
-          "role": "architect",
-          "agent": "codex",
-          "worktree": "architect",
-          "title": "Kiln Architect (Codex)",
-          "mode": "auto",
-          "scheduler": "python"
-        },
-        {
-          "role": "dashboard",
-          "worktree": "@current",
-          "title": "Kiln Dashboard",
-          "mode": "manual",
-          "scheduler": "dashboard"
-        }
-      ],
-      "routing": {
-        "human-in-the-loop": "specifier",
-        "specifier": {
-          "default": "coder",
-          "architect": "human-in-the-loop"
-        },
-        "coder": "refactorer",
-        "refactorer": "architect",
-        "architect": "specifier"
-      },
-      "layout": {
-        "tabs": [
-          {
-            "title": "Human-in-the-Loop",
-            "panes": [
-              {
-                "role": "human-in-the-loop"
-              },
-              {
-                "role": "inbox",
-                "direction": "Bottom",
-                "size": 0.22
-              }
-            ]
-          },
-          {
-            "title": "Autonomous Cycle",
             "gridRows": 2,
             "gridCols": 2,
             "panes": [
@@ -714,7 +585,8 @@
             ]
           }
         ]
-      }
+      },
+      "fixture": true
     }
   }
 }

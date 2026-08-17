@@ -562,6 +562,50 @@ class TestCliParsing:
     def test_defaults_to_the_current_directory(self):
         assert cli.build_parser().parse_args([]).working_dir == "."
 
+    @pytest.mark.parametrize("flag", ["--agent-override", "-AgentOverride"])
+    def test_agent_override_is_parsed(self, flag):
+        assert cli.build_parser().parse_args([flag, "codex"]).agent_override == "codex"
+
+    def test_no_agent_override_by_default(self):
+        # The flag must be opt-in: it silently changes which binary every role runs.
+        assert cli.build_parser().parse_args([]).agent_override is None
+
+    def test_model_override_is_parsed(self):
+        args = cli.build_parser().parse_args(["--model-override", "gpt-5-codex"])
+        assert args.model_override == "gpt-5-codex"
+
+
+class TestListProfiles:
+    """
+    The profile list is the menu users pick production work from. `codex-only` and
+    `mixed-backends` sat on it looking like choices about *work* when they were choices about
+    *backends* -- one is now retired, the other is labelled.
+    """
+
+    def _run(self, tmp_path, capsys, argv):
+        (tmp_path / "kiln").mkdir(parents=True, exist_ok=True)
+        args = cli.build_parser().parse_args([*argv, "--working-dir", str(tmp_path)])
+        cli.run_list_profiles(args)
+        return capsys.readouterr().out
+
+    def test_fixtures_are_hidden_by_default(self, tmp_path, capsys):
+        out = self._run(tmp_path, capsys, ["--list-profiles"])
+        assert "full" in out
+        assert "mixed-backends" not in out
+
+    def test_it_says_how_many_it_hid(self, tmp_path, capsys):
+        # Hidden, not secret: a list that silently omits entries is its own trap.
+        assert "test fixture(s) hidden" in self._run(tmp_path, capsys, ["--list-profiles"])
+
+    def test_all_profiles_shows_them(self, tmp_path, capsys):
+        out = self._run(tmp_path, capsys, ["--list-profiles", "--all-profiles"])
+        assert "mixed-backends" in out
+
+    def test_codex_only_is_gone(self, tmp_path, capsys):
+        # `--agent-override codex` reproduces it, so the profile itself is redundant.
+        out = self._run(tmp_path, capsys, ["--list-profiles", "--all-profiles"])
+        assert "codex-only" not in out
+
 
 class TestCliErrors:
     def test_missing_working_directory_is_reported(self, tmp_path):

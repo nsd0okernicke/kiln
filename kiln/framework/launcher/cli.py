@@ -30,7 +30,14 @@ from .commands import (
     render_posix,
     render_powershell,
 )
-from .config import Profile, ProfileError, check_launchable, list_profiles, load_profile
+from .config import (
+    Profile,
+    ProfileError,
+    apply_agent_override,
+    check_launchable,
+    list_profiles,
+    load_profile,
+)
 from .generate import CHANNEL_IMPORT_PROBE, MCP_PYTHON
 from .paths import KilnPaths, python_command
 from .templates import TemplateError, check_project_scaffolding, resolve_framework_root
@@ -389,6 +396,12 @@ def run_launch(args: argparse.Namespace) -> int:
     check_dependencies()
 
     profile = load_profile(paths.project_root, paths.framework_root, args.profile)
+    if args.agent_override:
+        profile = apply_agent_override(profile, args.agent_override, args.model_override)
+        log.info(
+            "agent override: every agent-bearing role runs on %s (model: %s)",
+            args.agent_override, args.model_override or "the backend's own default",
+        )
     check_launchable(profile)
     log.info("profile: %s (%d roles)", profile.name, len(profile.roles))
     warn_if_channel_unavailable(profile)
@@ -476,8 +489,17 @@ def run_init(args: argparse.Namespace) -> int:
 def run_list_profiles(args: argparse.Namespace) -> int:
     project_root = Path(args.working_dir).expanduser().resolve()
     paths = KilnPaths.create(project_root, resolve_framework_root())
-    for name, description in list_profiles(paths.project_root, paths.framework_root):
+    listed = list_profiles(
+        paths.project_root, paths.framework_root, include_fixtures=args.all_profiles
+    )
+    for name, description in listed:
         print(f"{name:20} {description}")
+    if not args.all_profiles:
+        hidden = len(
+            list_profiles(paths.project_root, paths.framework_root, include_fixtures=True)
+        ) - len(listed)
+        if hidden:
+            print(f"\n({hidden} test fixture(s) hidden; --all-profiles to show them)")
     return 0
 
 
@@ -500,6 +522,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--terminal", "-Terminal", dest="terminal", default=None,
         help=f"terminal backend: {WEZTERM}, wt, {TMUX} or none",
+    )
+    parser.add_argument(
+        "--agent-override", "-AgentOverride", dest="agent_override", default=None,
+        help=(
+            "run every agent-bearing role of the chosen profile on this backend instead. "
+            "Drops each role's model, since model names are backend-specific -- pass "
+            "--model-override to set one"
+        ),
+    )
+    parser.add_argument(
+        "--model-override", "-ModelOverride", dest="model_override", default="",
+        help="model to use with --agent-override (default: let the backend's CLI choose)",
+    )
+    parser.add_argument(
+        "--all-profiles", "-AllProfiles", dest="all_profiles", action="store_true",
+        help="with --list-profiles, include profiles marked as test fixtures",
     )
     parser.add_argument("command", nargs="?", default="",
                         help="'init' to scaffold a new project; 'send', 'inbox' or "

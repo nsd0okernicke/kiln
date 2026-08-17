@@ -13,7 +13,7 @@ from __future__ import annotations
 import difflib
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from scheduler.routing import RoutingTable, parse_profile_routing
@@ -208,6 +208,10 @@ class Profile:
     #: the file and two shapes cannot both define the same role's default row — see
     #: `scheduler.routing.parse_profile_routing`.
     routing: RoutingTable = field(default_factory=RoutingTable)
+    #: A test fixture rather than a profile anyone should pick for real work. Hidden from
+    #: `--list-profiles` unless asked for: the profile list is the one menu users choose from,
+    #: and entries that exist to exercise Kiln itself do not belong on it.
+    fixture: bool = False
 
     def role(self, name: str) -> RoleConfig | None:
         return next((r for r in self.roles if r.role == name), None)
@@ -292,7 +296,11 @@ TERMINAL_KEYS = frozenset({
 })
 
 #: Same, one level up.
-PROFILE_KEYS = frozenset({"description", "terminals", "layout", "routing"})
+PROFILE_KEYS = frozenset({"description", "terminals", "layout", "routing", "defaults", "fixture"})
+
+#: Keys a profile-level `defaults` block may set. Everything a terminal accepts except its
+#: identity -- a default `role` would name every terminal the same thing.
+DEFAULTS_KEYS = TERMINAL_KEYS - {"role"}
 
 
 def _reject_unknown_keys(entry: dict, allowed: frozenset[str], context: str) -> None:
@@ -436,10 +444,18 @@ def parse_profile(config: dict, name: str) -> Profile:
     if not entries:
         raise ProfileError(f"profile {name!r} defines no terminals")
 
+    defaults = selected.get("defaults") or {}
+    if not isinstance(defaults, dict):
+        raise ProfileError(f"profile {name!r}: 'defaults' must be an object")
+    _reject_unknown_keys(defaults, DEFAULTS_KEYS, f"profile {name!r} defaults")
+
     roles: list[RoleConfig] = []
     seen: set[str] = set()
     for entry in entries:
-        parsed = _parse_role(entry)
+        # A terminal's own key always wins. Inheritance is for the values that are the same
+        # on every role -- which, in the shipped `full` profile, is the agent and the model
+        # repeated five times.
+        parsed = _parse_role({**defaults, **entry})
         if parsed.role in seen:
             raise ProfileError(f"duplicate role {parsed.role!r} in profile {name!r}")
         seen.add(parsed.role)
@@ -461,6 +477,7 @@ def parse_profile(config: dict, name: str) -> Profile:
         roles=tuple(roles),
         layout=layout,
         routing=routing,
+        fixture=bool(selected.get("fixture", False)),
     )
 
 
@@ -496,6 +513,46 @@ def _validate_layout(layout: dict, known: set[str], profile_name: str) -> None:
                     f"profile {profile_name!r}: layout references role {name!r}, which is "
                     f"not in this profile. Known roles: {', '.join(sorted(known))}"
                 )
+
+
+def apply_agent_override(profile: Profile, agent: str, model: str = "") -> Profile:
+    """
+    Run every agent-bearing role of this profile on a different backend.
+
+    This is what `codex-only` existed to do by hand: it was the same seven roles, the same
+    three tabs and the same layout as `full`, differing only in which binary ran them. A
+    profile list is the one menu users pick from, and an entry that names a *vendor* rather
+    than a kind of work does not belong on it.
+
+    **Models are dropped, not carried.** This is the trap: `full` sets `claude-sonnet-5` on
+    every role, and that name means nothing to the Codex CLI -- rewriting only `agent` would
+    hand every role a model its backend rejects, and the resulting error would blame the model
+    rather than the override. An empty model is the correct configuration for a switched
+    backend, and `role_scheduler.resolve_model` already reads it as "let the CLI pick its own
+    default" -- which is exactly the state `codex-only` was in, arrived at by hand.
+
+    `model` replaces rather than clears, for callers who know which model they want on the new
+    backend. Passive panes run no agent and are left alone.
+    """
+    if agent not in VALID_AGENTS:
+        raise ProfileError(
+            f"unsupported agent {agent!r}; expected one of " + ", ".join(VALID_AGENTS)
+        )
+
+    rewritten = tuple(
+        role if role.is_passive else replace(
+            role, agent=agent, model=model, worker_model=model
+        )
+        for role in profile.roles
+    )
+    for role in rewritten:
+        if role.max_budget_usd is not None and role.agent not in COST_REPORTING_AGENTS:
+            raise ProfileError(
+                f"role {role.role!r} sets maxBudgetUsd, but the override to {agent!r} moves "
+                f"it onto a backend that reports no cost, so the cap could never fire. "
+                f"Cost caps work on: " + ", ".join(COST_REPORTING_AGENTS)
+            )
+    return replace(profile, roles=rewritten)
 
 
 def check_launchable(profile: Profile) -> None:
@@ -560,9 +617,22 @@ def load_profile(
 
 
 def list_profiles(
-    project_root: str | Path, framework_root: str | Path | None = None
+    project_root: str | Path,
+    framework_root: str | Path | None = None,
+    include_fixtures: bool = False,
 ) -> list[tuple[str, str]]:
-    """(name, description) pairs for `--list-profiles`."""
+    """
+    (name, description) pairs for `--list-profiles`.
+
+    Profiles marked `"fixture": true` are hidden by default. They exist to exercise Kiln
+    itself, and this list is the menu a user picks production work from -- `codex-only` and
+    `mixed-backends` sat on it looking like choices about *work* when they were choices about
+    *backends*. Still launchable by name; just not advertised.
+    """
     config = _read_config(find_profiles_config(project_root, framework_root))
     profiles = config.get("profiles") or {}
-    return [(name, str((body or {}).get("description") or "")) for name, body in profiles.items()]
+    return [
+        (name, str((body or {}).get("description") or ""))
+        for name, body in profiles.items()
+        if include_fixtures or not (body or {}).get("fixture", False)
+    ]

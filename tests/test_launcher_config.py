@@ -14,6 +14,7 @@ from launcher.config import (
     Profile,
     ProfileError,
     RoleConfig,
+    apply_agent_override,
     default_profile_name,
     find_profiles_config,
     list_profiles,
@@ -333,6 +334,130 @@ class TestProfileKnobs:
     def test_a_non_positive_knob_is_rejected(self):
         with pytest.raises(ProfileError, match="greater than zero"):
             self._role(maxAttempts=0)
+
+
+class TestProfileDefaults:
+    """
+    `full` set `agent` and `model` identically on five roles. Saying one thing five times is
+    five chances for them to stop agreeing.
+    """
+
+    def _profile(self, defaults, terminals):
+        config = {"profiles": {"p": {"defaults": defaults, "terminals": terminals}}}
+        return parse_profile(config, "p")
+
+    def test_terminals_inherit_the_defaults(self):
+        profile = self._profile(
+            {"agent": "codex"}, [{"role": "coder"}, {"role": "architect"}]
+        )
+        assert [r.agent for r in profile.roles] == ["codex", "codex"]
+
+    def test_a_terminals_own_key_wins(self):
+        profile = self._profile(
+            {"agent": "codex"}, [{"role": "coder"}, {"role": "architect", "agent": "claude"}]
+        )
+        assert [r.agent for r in profile.roles] == ["codex", "claude"]
+
+    def test_any_terminal_key_can_be_defaulted(self):
+        # Not just agent/model: the same repetition applies to timeouts and guards.
+        profile = self._profile({"workerTimeout": 60}, [{"role": "coder"}])
+        assert profile.roles[0].worker_timeout == 60
+
+    def test_a_default_role_is_rejected(self):
+        # It would name every terminal the same thing.
+        with pytest.raises(ProfileError, match="role"):
+            self._profile({"role": "coder"}, [{"role": "coder"}])
+
+    def test_an_unknown_default_key_is_rejected(self):
+        with pytest.raises(ProfileError, match="nonsense"):
+            self._profile({"nonsense": 1}, [{"role": "coder"}])
+
+    def test_defaults_must_be_an_object(self):
+        config = {"profiles": {"p": {"defaults": "claude", "terminals": [{"role": "c"}]}}}
+        with pytest.raises(ProfileError, match="must be an object"):
+            parse_profile(config, "p")
+
+    def test_no_defaults_block_still_works(self):
+        config = {"profiles": {"p": {"terminals": [{"role": "coder", "agent": "codex"}]}}}
+        assert parse_profile(config, "p").roles[0].agent == "codex"
+
+
+class TestAgentOverride:
+    """
+    `codex-only` was `full` with one word changed on five roles. A profile list is the menu
+    users pick production work from, and an entry naming a *vendor* rather than a kind of work
+    does not belong on it.
+    """
+
+    def _profile(self, **defaults):
+        config = {"profiles": {"p": {
+            "defaults": {"agent": "claude", "model": "claude-sonnet-5", **defaults},
+            "terminals": [
+                {"role": "human-in-the-loop"},
+                {"role": "coder", "scheduler": "python"},
+                {"role": "inbox", "scheduler": "inbox", "watches": "human-in-the-loop"},
+            ],
+        }}}
+        return parse_profile(config, "p")
+
+    def test_every_agent_bearing_role_moves(self):
+        overridden = apply_agent_override(self._profile(), "codex")
+        assert [r.agent for r in overridden.roles if not r.is_passive] == ["codex", "codex"]
+
+    def test_the_incompatible_model_is_dropped(self):
+        # The trap: `claude-sonnet-5` means nothing to the Codex CLI, so rewriting only
+        # `agent` hands every role a model its backend rejects -- and the error blames the
+        # model rather than the override that caused it. An empty model is the correct
+        # configuration, which `resolve_model` already reads as "let the CLI choose".
+        agents = [r for r in apply_agent_override(self._profile(), "codex").roles
+                  if not r.is_passive]
+        assert agents, "the fixture must contain roles that actually run an agent"
+        assert all(r.model == "" for r in agents)
+        assert all(r.worker_model == "" for r in agents)
+
+    def test_a_replacement_model_can_be_given(self):
+        overridden = apply_agent_override(self._profile(), "codex", "gpt-5-codex")
+        assert overridden.role("coder").model == "gpt-5-codex"
+
+    def test_passive_panes_are_left_alone(self):
+        # They run no agent at all; rewriting one would be meaningless.
+        before = self._profile().role("inbox")
+        after = apply_agent_override(self._profile(), "codex").role("inbox")
+        assert after == before
+
+    def test_an_unknown_backend_is_refused(self):
+        with pytest.raises(ProfileError, match="unsupported agent"):
+            apply_agent_override(self._profile(), "gpt")
+
+    def test_it_refuses_to_strand_a_cost_cap(self):
+        # A cap that could never fire is worse than no cap -- the same rule `_parse_role`
+        # already enforces, which the override could otherwise walk straight past.
+        with pytest.raises(ProfileError, match="reports no cost"):
+            apply_agent_override(self._profile(maxBudgetUsd=5.0), "codex")
+
+    def test_everything_else_about_the_profile_survives(self):
+        overridden = apply_agent_override(self._profile(), "codex")
+        assert [r.role for r in overridden.roles] == [
+            "human-in-the-loop", "coder", "inbox"
+        ]
+        assert overridden.role("coder").scheduler == "python"
+
+    def test_it_reproduces_what_codex_only_used_to_ship(self):
+        # The retirement test: overriding the default profile must produce the shape the
+        # deleted profile had -- every agent-bearing role on codex, with no model at all.
+        import json
+        from pathlib import Path
+
+        repo = Path(__file__).resolve().parents[1]
+        config = json.loads(
+            (repo / "kiln" / "framework" / "profiles.json").read_text("utf-8")
+        )
+        overridden = apply_agent_override(parse_profile(config, config["default"]), "codex")
+
+        for role in overridden.roles:
+            if not role.is_passive:
+                assert role.agent == "codex"
+                assert role.model == ""
 
 
 class TestUnknownKeys:

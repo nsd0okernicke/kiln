@@ -1005,12 +1005,55 @@ answer "what am I about to do?" — the backend is a separate axis, set per role
 `harden` is the one worth knowing about: it needs no specifier, so it is the only profile that
 offers something on a codebase Kiln did not write.
 
-Two test fixtures also ship. They are for validating Kiln itself, not for production use:
-
-- **`codex-only`** — every agent-bearing role runs on Codex. Exercises codex end to end, wrapper and scheduler mode together.
-- **`mixed-backends`** — `specifier` and `refactorer` on Codex, the rest on Claude. Copilot is parked out of scheduler-mode rotation — see [Known Limitations & Future Work](#known-limitations--future-work).
-
 Switch to any of these with `-ProfileName <name>` (Windows) or `--profile <name>` (Unix).
+
+One test fixture also ships, and it is **hidden from `--list-profiles`** — pass `--all-profiles`
+to see it. It exists to validate Kiln itself, not for production use:
+
+- **`mixed-backends`** — `specifier` and `refactorer` on Codex, the rest on Claude. It stays a
+  profile because mixing backends *per role* is the one thing `--agent-override` cannot express.
+  Copilot is parked out of scheduler-mode rotation — see [Known Limitations & Future Work](#known-limitations--future-work).
+
+#### Backend is a flag, not a profile
+
+Every profile above describes a **kind of work**. Which AI backend runs it is a separate
+question, and `--agent-override` answers it:
+
+```bash
+kiln --profile full --agent-override codex
+kiln --profile harden --agent-override codex --model-override gpt-5-codex
+```
+
+This replaces the old `codex-only` profile, which was `full` with one word changed on five
+roles — a vendor name sitting on the menu users pick production work from.
+
+**The override drops each role's model**, and that is the point rather than an oversight. Model
+names belong to one vendor: `full` sets `claude-sonnet-5` on every role, and rewriting only
+`agent` would hand each one a model the Codex CLI rejects — with an error blaming the model
+instead of the override that caused it. An empty model is the correct configuration for a
+switched backend; the scheduler already reads it as *"let the CLI pick its own default"*. Pass
+`--model-override` when you know which model you want.
+
+It also refuses to strand a cost cap: overriding a role with `maxBudgetUsd` onto Copilot or
+Codex fails the launch, because those backends report `$0.00` and the cap could never fire.
+
+#### Saying it once: the `defaults` block
+
+A profile may declare values every terminal inherits, with a terminal's own key still winning:
+
+```jsonc
+{
+  "defaults": { "agent": "claude", "model": "claude-sonnet-5" },
+  "terminals": [
+    { "role": "coder", "worktree": "coder", "scheduler": "python" },
+    { "role": "architect", "worktree": "architect", "scheduler": "python", "agent": "codex" }
+  ]
+}
+```
+
+Any terminal key can be defaulted, not just `agent` and `model` — timeouts and guards repeat
+across roles just as readily. `full` used to state the same agent and model five times, which
+is five chances for them to stop agreeing.
 
 #### Profiles that reshape the cycle carry their own routing
 
