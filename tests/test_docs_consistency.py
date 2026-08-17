@@ -86,6 +86,39 @@ class TestConfigFormat:
         assert "profiles.yaml" not in path.read_text(encoding="utf-8")
 
 
+class TestHandoffSkillVerification:
+    """
+    The skill is a *second implementation* of the insert/verify pair, written in prose and
+    executed by wrapper-mode agents. It is the copy that failed live: its Step 5 asked "is
+    there a `queued` message from me?", the receiving scheduler had already taken the message,
+    and the agent duly sent the whole handoff a second time.
+
+    Python and prose cannot be kept in sync by a type checker, so this pins the one property
+    that matters -- verify by id, never by status.
+    """
+
+    def _skill(self) -> str:
+        return (
+            REPO / "kiln" / "project" / "skills" / "kiln-handoff" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+
+    def test_it_verifies_by_id(self):
+        assert "WHERE id=" in self._skill()
+
+    def test_it_does_not_verify_by_status(self):
+        # A status is exactly what a fast consumer changes out from under the sender.
+        assert "status='queued'" not in self._skill()
+
+    def test_it_asks_the_insert_to_return_the_id(self):
+        # Verifying by id is only possible if Step 4 hands one back.
+        assert "RETURNING id" in self._skill()
+
+    def test_it_stamps_the_insert_time_rather_than_a_chosen_one(self):
+        # Queue order is created_at ASC, so reusing the timestamp from the composed message
+        # puts the handoff in the wrong place in the queue -- observed live, ~43s stale.
+        assert "datetime('now', 'localtime')" in self._skill()
+
+
 class TestUnsupportedRoles:
     """
     `reviewer` cannot run: no shipped profile routes it, so the scheduler escalates NO_ROUTE on

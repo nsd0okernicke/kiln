@@ -804,13 +804,19 @@ def _insert_verified(
 
     Mirrors kiln-handoff/SKILL.md steps 4-5, which exist because the INSERT has been
     observed to fail silently.
+
+    Confirmed **by id**, not by "is there a queued message from me". The receiving scheduler
+    polls every couple of seconds and can take the message one second after it is written, so
+    a status-based check reports "not there" for a message that arrived perfectly. The retry
+    then inserts a second copy of the same handoff. Observed live on the skill's version of
+    this step -- see `db.message_exists`.
     """
     for attempt in (1, 2):
         message_id = db.insert_handoff(
             ctx.db_path, ctx.role, target, content, ctx.branch,
             priority=priority, work_item=work_item,
         )
-        if db.verify_queued(ctx.db_path, ctx.role, ctx.branch):
+        if db.message_exists(ctx.db_path, message_id):
             return message_id
         log.warning("handoff insert not visible after attempt %d; retrying", attempt)
     log.error("handoff to %s could not be verified after 2 attempts", target)

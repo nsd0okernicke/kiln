@@ -23,7 +23,7 @@ class TestSchema:
     def test_is_idempotent(self, db_path, add_message):
         message_id = add_message()
         db.ensure_schema(db_path)  # re-running init must not wipe the queue
-        assert db.verify_queued(db_path, "specifier", "main") == message_id
+        assert db.message_exists(db_path, message_id) is True
 
     def test_creates_parent_directories(self, tmp_path):
         nested = tmp_path / "deep" / ".kiln" / "messages.db"
@@ -420,31 +420,39 @@ class TestInsertHandoff:
         assert read_message(message_id)["content"] == content
 
 
-class TestVerifyQueued:
-    def test_finds_the_most_recent_queued_message(self, db_path, add_message):
-        add_message(sender="coder", created_at="2026-01-01 00:00:00", message_id="older")
-        add_message(sender="coder", created_at="2026-01-02 00:00:00", message_id="newer")
-        assert db.verify_queued(db_path, "coder", "main") == "newer"
+class TestMessageExists:
+    """
+    How an insert is confirmed, and why it is by id.
 
-    def test_returns_none_when_the_insert_never_landed(self, db_path):
-        assert db.verify_queued(db_path, "coder", "main") is None
-
-    def test_scoped_to_sender(self, db_path, add_message):
-        add_message(sender="refactorer")
-        assert db.verify_queued(db_path, "coder", "main") is None
-
-    def test_scoped_to_branch(self, db_path, add_message):
-        add_message(sender="coder", branch="other")
-        assert db.verify_queued(db_path, "coder", "main") is None
-
-    def test_ignores_messages_that_left_the_queue(self, db_path, add_message):
-        add_message(sender="coder", status=db.STATUS_DELIVERED)
-        assert db.verify_queued(db_path, "coder", "main") is None
+    Found live: `verify_queued` asked "is there a *queued* message from me?", the receiving
+    scheduler took the message one second after it was written, and the check reported the
+    insert had failed. The sender obediently sent the whole handoff again -- the specifier ran
+    two full cycles on one request and the coder was handed two competing specs.
+    """
 
     def test_confirms_a_freshly_inserted_handoff(self, db_path):
         # The insert/verify pair from kiln-handoff/SKILL.md steps 4-5.
         message_id = db.insert_handoff(db_path, "coder", "refactorer", "payload", "main")
-        assert db.verify_queued(db_path, "coder", "main") == message_id
+        assert db.message_exists(db_path, message_id) is True
+
+    def test_an_insert_that_never_landed_is_not_confirmed(self, db_path):
+        assert db.message_exists(db_path, "never-inserted") is False
+
+    @pytest.mark.parametrize(
+        "status",
+        [db.STATUS_DELIVERED, db.STATUS_PROCESSING, db.STATUS_PROCESSED, db.STATUS_FAILED],
+    )
+    def test_a_consumer_cannot_race_the_confirmation_away(self, db_path, status):
+        # The whole point. Every one of these states used to read as "your insert failed".
+        message_id = db.insert_handoff(db_path, "coder", "refactorer", "payload", "main")
+        db._set_status(db_path, message_id, status)
+        assert db.message_exists(db_path, message_id) is True
+
+    def test_another_senders_message_does_not_confirm_mine(self, db_path, add_message):
+        # An id is unique, so this cannot happen by accident -- but the check it replaced
+        # would happily confirm a *different* message that merely shared sender and branch.
+        add_message(sender="coder", message_id="someone-elses")
+        assert db.message_exists(db_path, "mine") is False
 
 
 class TestWorkItem:

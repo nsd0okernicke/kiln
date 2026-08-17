@@ -69,7 +69,15 @@ VALUES (
   '<your branch>',
   '<the Handoff name from Step 3>'
 )
+RETURNING id
 ```
+
+**Write `datetime('now', 'localtime')` literally.** Do not substitute a timestamp of your own,
+and in particular do not reuse the one you wrote into the message in Step 3 — that is the time
+you *composed* the handoff, which can be minutes earlier. The queue is served oldest-first by
+this column, so a stale value puts the message in the wrong place in the queue.
+
+**Keep the `id` it returns.** Step 5 needs it.
 
 `work_item` must be **the same handoff name you put in the message**, character for character.
 It is what groups every message belonging to one piece of work, so cost, cycle counts and loop
@@ -97,16 +105,24 @@ is what invents the name and there is nothing to carry yet.
 
 ### Step 5 — Verify (and retry if needed)
 
-Call `kiln-db` MCP `query`:
+Look up **the exact id Step 4 returned**. Call `kiln-db` MCP `query`:
 
 ```sql
-SELECT id FROM messages
-WHERE sender='<your role>'
-  AND branch='<your branch>'
-  AND status='queued'
-ORDER BY created_at DESC
-LIMIT 1
+SELECT id FROM messages WHERE id='<the id from Step 4>'
 ```
 
 - **Row returned** → skill complete. Return to `/kiln-receive`.
-- **No row returned** → INSERT failed silently. Repeat Step 4 then re-run Step 5. Do not return to `/kiln-receive` until a row is confirmed.
+- **No row returned** → the INSERT failed silently. Repeat Step 4 then re-run Step 5. Do not return to `/kiln-receive` until a row is confirmed.
+
+**Ask for the id, never for a status.** The obvious-looking check — *"is there a `queued`
+message from me?"* — is wrong, and it caused a real duplicate handoff. The receiving role polls
+every couple of seconds, so it can pick your message up and move it out of `queued` **one second
+after you write it**. A status-based check then finds nothing, you conclude your own INSERT
+failed, and you send the whole handoff a second time.
+
+The consequence is not a harmless retry. Observed live: the specifier received the same request
+twice, ran two complete cycles on it — roughly 650,000 tokens between them — and handed the coder
+two competing specifications for one work item.
+
+A row's id cannot be raced away. It either exists or it does not, and no other role can change
+that answer.

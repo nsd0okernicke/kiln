@@ -471,23 +471,24 @@ def insert_handoff(
     return message_id
 
 
-def verify_queued(db_path: str | Path, sender: str, branch: str) -> str | None:
+def message_exists(db_path: str | Path, message_id: str) -> bool:
     """
-    Return the id of the most recent queued message from `sender`, or None.
+    True when a message with this id is in the queue, whatever state it has reached.
 
-    Codifies step 5 of kiln-handoff/SKILL.md: an INSERT that silently failed leaves
-    nothing to find here, which is the caller's signal to retry the insert.
+    This is how an insert is confirmed. The obvious-looking alternative -- "is there a queued
+    message from me?" -- is what `verify_queued` did, and it is wrong in a way that took a
+    live run to expose: the receiving scheduler polls every couple of seconds, so it can take
+    the message and flip it out of `queued` **one second** after the insert. The check then
+    finds nothing, the caller concludes its own insert failed silently, and inserts again.
+
+    A duplicate handoff is not a harmless retry. Observed live: the specifier received the
+    same request twice and ran two full cycles on it, ~650k tokens between them, and the coder
+    was handed two specs for one work item.
+
+    Identity is the thing that cannot be raced away. A row either exists or it does not, and
+    no consumer can change that answer.
     """
     with closing(connect(db_path)) as conn:
         cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT id FROM messages
-            WHERE sender=? AND branch=? AND status=?
-            ORDER BY created_at DESC
-            LIMIT 1
-            """,
-            (sender, branch, STATUS_QUEUED),
-        )
-        row = cur.fetchone()
-        return str(row[0]) if row else None
+        cur.execute("SELECT 1 FROM messages WHERE id=? LIMIT 1", (message_id,))
+        return cur.fetchone() is not None

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import io
 import subprocess
+from contextlib import closing
 from datetime import datetime
 
 import pytest
@@ -39,13 +40,13 @@ class TestInsertVerification:
         # kiln-handoff/SKILL.md step 5 exists because the INSERT has been seen to fail
         # silently; this proves the scheduler actually retries rather than assuming.
         calls = {"verify": 0}
-        real_verify = db.verify_queued
+        real_verify = db.message_exists
 
         def flaky_verify(*args, **kwargs):
             calls["verify"] += 1
-            return None if calls["verify"] == 1 else real_verify(*args, **kwargs)
+            return False if calls["verify"] == 1 else real_verify(*args, **kwargs)
 
-        monkeypatch.setattr(role_scheduler.db, "verify_queued", flaky_verify)
+        monkeypatch.setattr(role_scheduler.db, "message_exists", flaky_verify)
 
         ctx = SchedulerContext(
             role="coder", branch="main", db_path=db_path, worktree=git_repo,
@@ -54,8 +55,37 @@ class TestInsertVerification:
         assert role_scheduler._insert_verified(ctx, "refactorer", "payload") is not None
         assert calls["verify"] == 2
 
+    def test_a_consumer_taking_the_message_does_not_cause_a_duplicate(
+        self, db_path, git_repo
+    ):
+        # The live failure, reproduced: the receiving role polls every couple of seconds and
+        # can take the handoff one second after it is written. A verification that asked "is
+        # there a *queued* message from me?" then reported the insert had failed, and the
+        # sender sent the whole handoff again -- one request, two full specifier cycles.
+        ctx = SchedulerContext(
+            role="coder", branch="main", db_path=db_path, worktree=git_repo,
+            routing=ROUTING, definition=DEFINITION, run_worker=FakeWorker(),
+        )
+        original_insert = db.insert_handoff
+
+        def insert_then_consume(*args, **kwargs):
+            message_id = original_insert(*args, **kwargs)
+            db.fetch_and_deliver(db_path, "refactorer", "main")  # the consumer, racing
+            return message_id
+
+        monkeypatch = pytest.MonkeyPatch()
+        monkeypatch.setattr(role_scheduler.db, "insert_handoff", insert_then_consume)
+        try:
+            assert role_scheduler._insert_verified(ctx, "refactorer", "payload") is not None
+        finally:
+            monkeypatch.undo()
+
+        with closing(db.connect(db_path)) as conn:
+            total = conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+        assert total == 1, "the handoff must be sent exactly once"
+
     def test_gives_up_after_two_attempts(self, db_path, git_repo, monkeypatch):
-        monkeypatch.setattr(role_scheduler.db, "verify_queued", lambda *a, **k: None)
+        monkeypatch.setattr(role_scheduler.db, "message_exists", lambda *a, **k: False)
         ctx = SchedulerContext(
             role="coder", branch="main", db_path=db_path, worktree=git_repo,
             routing=ROUTING, definition=DEFINITION, run_worker=FakeWorker(),
