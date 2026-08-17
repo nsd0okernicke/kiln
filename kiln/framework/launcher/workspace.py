@@ -18,6 +18,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from scheduler import git_ops
+
 from .config import Profile, RoleConfig
 from .generate import build_codex_config_toml, build_copilot_mcp_config, write_mcp_config
 from .paths import KilnPaths
@@ -101,6 +103,38 @@ def write_directory_gitignore(directory: Path) -> None:
         marker.write_text("*\n", encoding="utf-8")
 
 
+#: Committed counterpart to `git_ops.ensure_union_merge`'s local-only repair.
+#:
+#: Both exist on purpose. The `info/attributes` write is what actually unblocks a *running*
+#: swarm -- it is shared across worktrees and effective immediately. This file is what carries
+#: the rule to a fresh clone, another machine, or a human merging these branches by hand,
+#: none of which see a local-only attributes file. Same split as `.gitignore` (committed) and
+#: `info/exclude` (local repair).
+GITATTRIBUTES = (
+    "# Every role appends to logbook.md in its own worktree, so two branches always add\n"
+    "# different lines to the end of one file. `union` keeps both instead of conflicting.\n"
+    "logbook.md merge=union\n"
+)
+
+
+def ensure_gitattributes(paths: KilnPaths) -> Path:
+    """Create or top up the project `.gitattributes` with the entries Kiln requires."""
+    path = paths.project_root / ".gitattributes"
+    required = [
+        line for line in GITATTRIBUTES.splitlines() if line and not line.startswith("#")
+    ]
+    if not path.exists():
+        path.write_text(GITATTRIBUTES, encoding="utf-8")
+        return path
+
+    existing = {line.strip() for line in path.read_text(encoding="utf-8").splitlines()}
+    missing = [entry for entry in required if entry not in existing]
+    if missing:
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write("\n" + "\n".join(missing) + "\n")
+    return path
+
+
 def ensure_gitignore(paths: KilnPaths) -> Path:
     """Create or top up the project .gitignore with the entries Kiln requires."""
     path = paths.project_root / ".gitignore"
@@ -177,6 +211,12 @@ def initialize_repo(paths: KilnPaths) -> None:
         run_git(["branch", "-M", "main"], paths.project_root)
 
     ensure_gitignore(paths)
+    ensure_gitattributes(paths)
+    # Every launch, not just a new project: this is what repairs a project scaffolded before
+    # the rule existed, and the file it writes is local-only and shared across worktrees, so
+    # one call here covers every role for the whole run -- without waiting for the committed
+    # `.gitattributes` above to propagate onto each role's branch.
+    git_ops.ensure_union_merge(paths.project_root)
 
     if is_new:
         run_git(["add", "."], paths.project_root)

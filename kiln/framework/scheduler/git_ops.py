@@ -303,6 +303,67 @@ def ensure_generated_ignored(cwd: str | Path) -> None:
         ensure_ignored(pattern, cwd)
 
 
+#: Files every role appends to independently, in its own worktree, which therefore conflict
+#: on every merge unless git is told they are append-only.
+#:
+#: `logbook.md` is the whole list today: `/kiln-receive`, `/kiln-handoff` and `/kiln-ping` all
+#: instruct the agent to append a line and commit it. Two branches adding different lines to
+#: the end of one tracked file is the classic changelog conflict, and it fires every cycle
+#: regardless of what the swarm is actually building.
+#:
+#: It degrades further than a normal textual conflict. The squash mechanics -- `reset --soft`
+#: per role, `merge --squash` onto the human's branch -- leave commits with no link back to
+#: where their content came from, so the merge base often has no `logbook.md` at all. Git then
+#: sees the file as independently created on both sides and reports `add/add`, which it will
+#: not attempt to merge. Observed live twice; the first time it was attributed to a stale
+#: worktree branch (see `workspace.warn_if_worktree_conflicts`), which is a real but different
+#: problem.
+UNION_MERGE_PATHS = ("logbook.md",)
+
+
+def ensure_union_merge(cwd: str | Path, paths: tuple[str, ...] = UNION_MERGE_PATHS) -> None:
+    """
+    Declare append-only files union-merged, via the repo-local attributes file.
+
+    `union` keeps both sides' lines instead of conflicting -- exactly right for a log nobody
+    reads for structure, and it resolves the `add/add` case as well as ordinary divergence.
+
+    `.git/info/attributes` rather than a committed `.gitattributes`, for the same reason
+    `ensure_ignored` uses `info/exclude`: it changes nothing in the user's project. It also
+    takes effect *immediately* in every worktree, because `--git-path` resolves to the shared
+    common directory even from inside a linked worktree -- a committed `.gitattributes` would
+    only apply once it had propagated onto each role's branch, which is several merges too
+    late for the merges it exists to fix.
+    """
+    located = run_git(["rev-parse", "--git-path", "info/attributes"], cwd)
+    if not located.ok or not located.stdout:
+        log.warning("could not locate info/attributes; %s may conflict on merge", paths)
+        return
+
+    attributes_path = (
+        Path(located.stdout)
+        if Path(located.stdout).is_absolute()
+        else Path(cwd) / located.stdout
+    )
+    try:
+        existing = (
+            attributes_path.read_text(encoding="utf-8") if attributes_path.exists() else ""
+        )
+        lines = existing.splitlines()
+        missing = [f"{path} merge=union" for path in paths]
+        missing = [line for line in missing if line not in lines]
+        if not missing:
+            return
+        attributes_path.parent.mkdir(parents=True, exist_ok=True)
+        separator = "" if existing.endswith("\n") or not existing else "\n"
+        attributes_path.write_text(
+            f"{existing}{separator}" + "\n".join(missing) + "\n", encoding="utf-8"
+        )
+        log.info("declared %s union-merged in %s", ", ".join(paths), attributes_path)
+    except OSError as exc:
+        log.warning("could not update %s: %s", attributes_path, exc)
+
+
 def squash_anchor(cwd: str | Path) -> str:
     """
     The commit to squash back onto: the most recent merge, else the repo's root commit.

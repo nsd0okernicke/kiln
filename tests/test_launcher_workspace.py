@@ -9,11 +9,13 @@ worktree, a BOM making git refuse to run the pre-push hook.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import pytest
 from launcher import workspace
 from launcher.config import parse_profile
 from launcher.paths import KilnPaths
+from scheduler import git_ops
 
 pytestmark = pytest.mark.integration
 
@@ -364,6 +366,83 @@ class TestSkills:
         workspace.prepare_skills(profile, repo)
 
         assert not stale.exists()
+
+
+class TestLogbookUnionMerge:
+    """
+    Found live: a swarm wedged on `CONFLICT (add/add): Merge conflict in logbook.md`.
+
+    `/kiln-receive`, `/kiln-handoff` and `/kiln-ping` all tell the agent to append a line to
+    `logbook.md` and commit it -- in its own worktree, on its own branch. Two branches adding
+    different lines to the end of one tracked file is the classic changelog conflict, and it
+    fires every cycle regardless of what the swarm is building. Worse, the squash mechanics
+    leave the merge base with no `logbook.md` at all, so git reports `add/add` and refuses to
+    merge the contents rather than doing a resolvable three-way merge.
+    """
+
+    def test_the_local_attributes_file_declares_it(self, git_repo):
+        git_ops.ensure_union_merge(git_repo)
+        attributes = Path(
+            git_ops.run_git(["rev-parse", "--git-path", "info/attributes"], git_repo).stdout
+        )
+        if not attributes.is_absolute():
+            attributes = git_repo / attributes
+        assert "logbook.md merge=union" in attributes.read_text(encoding="utf-8")
+
+    def test_it_is_idempotent(self, git_repo):
+        for _ in range(3):
+            git_ops.ensure_union_merge(git_repo)
+        attributes = Path(
+            git_ops.run_git(["rev-parse", "--git-path", "info/attributes"], git_repo).stdout
+        )
+        if not attributes.is_absolute():
+            attributes = git_repo / attributes
+        text = attributes.read_text(encoding="utf-8")
+        assert text.count("logbook.md merge=union") == 1
+
+    def test_it_actually_resolves_an_add_add_conflict(self, git_repo, git_cmd):
+        # The behaviour, not the file: an attributes entry that did not change the merge
+        # outcome would be worthless, and `add/add` is the case a plain textual merge driver
+        # would still refuse.
+        git_ops.ensure_union_merge(git_repo)
+        git_cmd(git_repo, "checkout", "-q", "-b", "role-a")
+        (git_repo / "logbook.md").write_text("[SENT] from a\n", encoding="utf-8")
+        git_cmd(git_repo, "add", "-A")
+        git_cmd(git_repo, "commit", "-qm", "a")
+
+        git_cmd(git_repo, "checkout", "-q", "main")
+        git_cmd(git_repo, "checkout", "-q", "-b", "role-b")
+        (git_repo / "logbook.md").write_text("[RECEIVED] from b\n", encoding="utf-8")
+        git_cmd(git_repo, "add", "-A")
+        git_cmd(git_repo, "commit", "-qm", "b")
+
+        merged = git_ops.run_git(["merge", "role-a", "-m", "merge"], git_repo)
+
+        assert merged.ok, f"merge should not conflict: {merged.output}"
+        logbook = (git_repo / "logbook.md").read_text(encoding="utf-8")
+        assert "from a" in logbook and "from b" in logbook, "both sides' lines must survive"
+
+    def test_a_committed_gitattributes_carries_the_rule_to_a_clone(self, paths):
+        # The local file is invisible to a fresh clone or to a human merging by hand.
+        workspace.ensure_gitattributes(paths)
+        written = (paths.project_root / ".gitattributes").read_text(encoding="utf-8")
+        assert "logbook.md merge=union" in written
+
+    def test_it_tops_up_an_existing_gitattributes_without_clobbering_it(self, paths):
+        path = paths.project_root / ".gitattributes"
+        path.write_text("*.png binary\n", encoding="utf-8")
+
+        workspace.ensure_gitattributes(paths)
+
+        written = path.read_text(encoding="utf-8")
+        assert "*.png binary" in written, "the project's own rules must survive"
+        assert "logbook.md merge=union" in written
+
+    def test_topping_up_is_idempotent(self, paths):
+        for _ in range(3):
+            workspace.ensure_gitattributes(paths)
+        written = (paths.project_root / ".gitattributes").read_text(encoding="utf-8")
+        assert written.count("logbook.md merge=union") == 1
 
 
 class TestAgentConfigs:

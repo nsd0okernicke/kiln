@@ -1656,6 +1656,36 @@ proxy straight away. Note it is machine-wide by design: run in one project it st
 Kiln process, including another project's swarm. The launch-time reclaim is deliberately
 narrower — it only ever touches a proxy writing to the project you are launching.
 
+### Why `logbook.md` does not cause merge conflicts
+
+`/kiln-receive`, `/kiln-handoff` and `/kiln-ping` all append a line to `logbook.md` and commit
+it — each role doing so **in its own worktree, on its own branch**. Two branches adding
+different lines to the end of one tracked file is the classic changelog conflict, and it would
+fire every cycle regardless of what the swarm is building.
+
+It gets worse than an ordinary textual conflict. The squash mechanics (`reset --soft` per role,
+`merge --squash` onto the human's branch) leave commits with no link back to where their content
+came from, so the merge base frequently has **no `logbook.md` at all** — git then reports
+`CONFLICT (add/add)` and refuses to merge the contents rather than attempting a three-way merge.
+Observed live, twice.
+
+Kiln declares the file append-only, so git keeps both sides' lines instead of conflicting:
+
+```
+logbook.md merge=union
+```
+
+Written in two places on purpose. `.git/info/attributes` is the one that matters for a running
+swarm — it is local-only, shared across every worktree, and effective immediately, so it is
+also what repairs a project scaffolded before this existed. The committed `.gitattributes`
+carries the same rule to a fresh clone, another machine, or a human merging these branches by
+hand, none of which see a local-only file. Same split as `.gitignore` (committed) versus
+`.git/info/exclude` (local repair).
+
+**If a swarm is already wedged on this**, the entries land on the next launch — but the merge
+that is currently stuck still needs resolving by hand once. The logbook is narration, so either
+side is fine to keep.
+
 ### What happens to work that was in flight
 
 A role marks its handoff `processing` while it works on it. Stopping a swarm mid-cycle — with
