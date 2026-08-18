@@ -82,22 +82,32 @@ If a single file has > 100 mutation sites (reported by `--scan`):
 ## Example Workflow
 
 ```bash
-# Step 1: Identify files changed in this cycle
-git diff --name-only <base-branch>...HEAD | grep '\.py$'
+# Step 1: Describe the session. One config per package under test -- `module-path` is
+# singular, so a project with several top-level packages needs several sessions.
+cat > mutation.toml <<'TOML'
+[cosmic-ray]
+module-path = "<package>"
+timeout = 60.0
+excluded-modules = []
+test-command = "pytest tests/unit -x -q"
 
-# Step 2: Run mutation on each file
-for file in $(git diff --name-only); do
-  echo "Mutating $file..."
-  mutmut run --tests-dir tests $file --manifest mutations.xml --max-workers 8 --verbose
-done
+[cosmic-ray.distributor]
+name = "local"
+TOML
 
-# Step 3: Generate survivor report
-mutmut report --mutation-output-file mutmut_report.txt
+# Step 2: Enumerate every mutation site into a session database
+cosmic-ray init mutation.toml mutation.sqlite
 
-# Step 4: Summarize for handoff
-echo "Survivor count: $(grep "SURVIVED" mutmut_report.txt | wc -l)"
-echo "Top classes by survivors:"
-grep "SURVIVED" mutmut_report.txt | cut -d: -f1 | sort | uniq -c | sort -rn | head -5
+# Step 3: Keep the run differential -- drop sites in code this cycle did not touch
+cr-filter-git mutation.sqlite
+
+# Step 4: Execute. Resumable by design: re-running continues where it stopped rather
+# than starting over, which is what makes a long run survive an interrupted shell call.
+cosmic-ray exec mutation.toml mutation.sqlite
+
+# Step 5: Summarize for handoff
+cr-rate mutation.sqlite                          # survival rate
+cr-report --surviving-only mutation.sqlite       # the survivors themselves
 ```
 
 ## Language and Tool Mapping
@@ -106,7 +116,7 @@ The actual command names depend on your project's mutation tool (see `constituti
 
 | Language | Tool | Command |
 |---|---|---|
-| Python | `mutmut` | `mutmut run --tests-dir tests <file>` |
+| Python | `cosmic-ray` | `cosmic-ray init <config>.toml <session>.sqlite` → `cosmic-ray exec <config>.toml <session>.sqlite` |
 | Java/Kotlin | PIT (Pitest) | `./gradlew pitest -Dpitest.targetClasses=<class>` |
 | Go | `stryker` or equiv | `stryker run --target <package>` |
 
@@ -122,7 +132,7 @@ This skill is referenced by:
 ## Troubleshooting
 
 **Codex: mutation run times out around 600 seconds ("partial cache... not trustworthy")**
-- This is Codex's own shell tool, not `mutmut`: each shell call defaults to `timeout_ms: 600000`
+- This is Codex's own shell tool, not the mutation tool: each shell call defaults to `timeout_ms: 600000`
   (10 minutes) unless the command explicitly requests more. A whole-project mutation run
   easily exceeds that as a single call.
 - Preferred fix: follow the **Sequential Per-File Mutation** protocol above so each individual

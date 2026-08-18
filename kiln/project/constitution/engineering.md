@@ -4,7 +4,11 @@
 
 - On startup, acquire the github tools for the project language and get them ready to run.
 - Language tool table:
-  - Python: install with `pip` / `uv`; mutation `mutmut` (`pip install mutmut`), CRAP/complexity `radon` (`pip install radon`), linting `ruff` (`pip install ruff`), formatting `black` (`pip install black`), type checking `mypy` (`pip install mypy`).
+  - Python: install with `pip` / `uv`; mutation `cosmic-ray` (`pip install cosmic-ray`), CRAP/complexity `radon` (`pip install radon`), linting `ruff` (`pip install ruff`), formatting `black` (`pip install black`), type checking `mypy` (`pip install mypy`).
+    - Deliberately not `mutmut`: it refuses to start on native Windows and prints "please use
+      the WSL" (boxed/mutmut#397). The "one execution environment per worktree" rule below
+      forbids the only workaround it offers, so on Windows the two rules together make the
+      mutation gate unsatisfiable. `cosmic-ray` runs natively everywhere Kiln does.
 - Work in small, reviewable increments.
 - Prefer the simplest design that supports the current behavior and leaves clear options for the next step.
 - Keep tests close to the behavior being changed.
@@ -20,6 +24,12 @@
   one side are frequently not writable by the other, and the failure surfaces as a permission
   error deep inside a tool rather than as a configuration problem. If the native path does not
   work, say so in the handoff instead of switching.
+- A test suite that depends on an external runtime — a container engine, a database server, a
+  message broker — must probe for it before running, and if it is absent, skip that suite and
+  state the gap in the handoff. Do not let the suite discover this for itself: a container
+  fixture waits on the daemon indefinitely rather than failing, so the run does not error, it
+  simply stops, and the worker is killed by its timeout with nothing to show. `docker info`
+  is the probe for a container engine.
 - Delete a tool's generated output before re-running it — mutation working copies, coverage data,
   build directories. These survive a *successful* run too, so the cycle that inherits them is
   usually not the one that produced them.

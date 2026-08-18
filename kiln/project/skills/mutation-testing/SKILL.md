@@ -21,7 +21,9 @@ You are an expert at interpreting mutation testing and code duplication feedback
 ## Mutation Testing Instructions
 
 1. Run your project's mutation testing tool (see `constitution/engineering.md` or language-specific toolchain).
-   - **Python (mutmut)**: `mutmut run --tests-dir tests` then `mutmut results --json`
+   - **Python (cosmic-ray)**: `cosmic-ray init <config>.toml <session>.sqlite` then
+     `cosmic-ray exec <config>.toml <session>.sqlite`, and read the result with
+     `cr-report <session>.sqlite` (or `cr-rate <session>.sqlite` for the score alone)
    - **Java/Kotlin (PIT)**: `./gradlew pitest` then parse `build/reports/pitest/mutations.xml`
    - **Go (stryker)**: `stryker run --target <package>`
 
@@ -81,7 +83,7 @@ You are an expert at interpreting mutation testing and code duplication feedback
 
 ## If Tools Are Unavailable
 
-- **Tool not installed**: report which tool (e.g., "mutmut") and install command (e.g., `pip install mutmut`).
+- **Tool not installed**: report which tool (e.g., "cosmic-ray") and install command (e.g., `pip install cosmic-ray`).
 - **Report file missing**: capture build error output; do not parse non-existent files.
 - **Mutation run times out**: reduce scope (see `run-mutation`'s Sequential Per-File Mutation
   protocol), or — on Codex, whose shell tool defaults to a 600s (`timeout_ms: 600000`) per-call

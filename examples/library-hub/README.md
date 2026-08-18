@@ -9,6 +9,10 @@ LibraryHub is a reference example for Kiln. To create a new LibraryHub project:
 - **Windows**: PowerShell 7+, Git
 - **Unix/macOS**: Bash/zsh, Git
 - Claude Code CLI (to run agents in the swarm)
+- **A running container engine** (Docker Desktop, Podman, Colima). The acceptance suite uses
+  Testcontainers to start real PostgreSQL and RabbitMQ — see "Acceptance Fixtures" below.
+  Verify with `docker info` before starting a swarm: with no daemon reachable, the fixtures
+  block indefinitely rather than failing, and the cycle dies on its timeout with no diagnosis.
 
 ### Setup
 
@@ -31,7 +35,7 @@ cd /path/to/my-library-hub
 The install script scaffolds a complete, ready-to-run Kiln project with:
 - **Constitution files** — `kiln/project/constitution/` with framework rules (engineering.md, workflow.md) and project-specific configuration
 - **Agent role prompts** — `kiln/project/roles/` with specifier, coder, refactorer, architect instructions
-- **Project configuration** — `kiln/profiles.json` defining the swarm topology (optional; overrides the framework profile it would otherwise inherit)
+- **Project configuration** — `kiln.profiles.json` at the project root defining the swarm topology (optional; overrides the framework profile it would otherwise inherit)
 - **Git repository** — Initialized on `main` branch with all files committed
 - **Claude Code permissions** — `.claude/settings.json` pre-configured for agents
 - **This brief** — `README.md` with architecture and user stories for agents to implement
@@ -77,11 +81,11 @@ Owns user accounts and loan records with deadlines and overdue tracking. When a 
 ## User Stories
 
 ### Catalog Service
+- **CAT-3**: Create new book with metadata and initial stock
+- **CAT-5**: Retrieve single book by ISBN
 - **CAT-1**: Search books by title, author, or genre with pagination
 - **CAT-2**: Check book availability by ISBN
-- **CAT-3**: Create new book with metadata and initial stock
 - **CAT-4**: Automatically increase stock when BookReturned event arrives
-- **CAT-5**: Retrieve single book by ISBN
 - **CAT-6**: Manual stock return endpoint
 
 ### Loan Service
@@ -91,6 +95,62 @@ Owns user accounts and loan records with deadlines and overdue tracking. When a 
 - **LOAN-3**: View all loans for a user
 - **LOAN-4**: Return book
 - **LOAN-5**: View overdue loans (admin)
+
+## User Story Clarifications
+
+Ambiguities resolved during a human-in-the-loop clarification pass over the user stories above.
+For the specifier to turn into Gherkin — not prescriptive of implementation.
+
+### CAT-3: Create new book
+- Required fields: `isbn` (unique, validated format), `title`, `author`, `genre`,
+  `initial_stock` (integer >= 0). `description` is optional.
+- Creating a book with an ISBN that already exists returns 409 Conflict.
+
+### CAT-2 vs. CAT-5 (availability vs. retrieve by ISBN)
+- CAT-5 (`GET /books/{isbn}`) returns full book metadata plus the current available stock
+  count.
+- CAT-2 remains a separate, lightweight endpoint returning just `{isbn, available_count}`, for
+  cheap availability checks (e.g. from the Loan Service).
+
+### CAT-1: Search books
+- `title`, `author`, `genre` are independent optional query parameters, each doing
+  case-insensitive substring matching; when more than one is supplied they combine with AND.
+- Pagination: `page` (1-indexed, default 1) and `page_size` (default 20, max 100). Response
+  includes the total result count.
+- Default sort order: `title` ascending.
+
+### CAT-6: Manual stock return endpoint
+- An admin/ops stock-correction tool: lets an operator add N copies to an ISBN's stock
+  directly (drift correction, new acquisitions, recovering from a missed `BookReturned`
+  event).
+- Independent of any specific loan record — not a duplicate of the user-facing return flow.
+
+### LOAN-0: Create user account
+- Required fields: `name`, `email` (unique). The system generates a `user_id`, which
+  identifies the user on all subsequent loan calls. No password or authentication.
+
+### LOAN-1: Borrow book
+- If the catalog reservation result is REJECTED, the loan record persists in REJECTED status
+  and stays queryable via LOAN-2/LOAN-3 rather than being deleted.
+- No limit on concurrent active loans per user, and no restriction on requesting an ISBN the
+  user already holds an active loan for.
+- The loan due date term (default 28 days) is a single global configuration value; it is not
+  overridable per borrow request.
+
+### LOAN-3: View all loans for a user
+- Paginated with the same `page`/`page_size` scheme as CAT-1 (default 20, max 100), sorted by
+  `created_at` descending (newest first).
+
+### LOAN-4: Return book
+- Only an ACTIVE loan can be returned. Attempting to return a PENDING, REJECTED, or
+  already-RETURNED loan returns 409 Conflict.
+- Returning does not check overdue status for any penalty (no payment system in MVP) — it
+  transitions the loan to RETURNED and publishes `BookReturned` regardless of due date.
+
+### LOAN-5: View overdue loans (admin)
+- "Admin" means a separate, unauthenticated endpoint — no access control in MVP, consistent
+  with "Authentication: Not required for MVP" under Non-Functional Requirements.
+- Overdue = loan is ACTIVE and `due_date < now`.
 
 ## Architecture
 
@@ -230,8 +290,8 @@ Infrastructure section for bootstrap requirements.
 - **Message Queue**: RabbitMQ (async, event-driven, Topic exchange pattern)
 - **Testing**: pytest with async support (`pytest-asyncio`)
 - **BDD / Acceptance Tests**: `pytest-bdd` — feature files in `features/`, step implementations in `tests/acceptance/steps/`
-- **Acceptance Fixtures**: Testcontainers (`testcontainers[postgres,rabbitmq]`) — use real PostgreSQL and RabbitMQ; do NOT use in-memory SQLite for acceptance tests
-- **Quality Tools**: `mutmut` (mutation testing), `mypy` (strict type checking), `ruff` (linting + formatting), `radon` (complexity/CRAP), `hypothesis` (property-based testing)
+- **Acceptance Fixtures**: Testcontainers (`testcontainers[postgres,rabbitmq]`) — use real PostgreSQL and RabbitMQ; do NOT use in-memory SQLite for acceptance tests. Requires a running container engine; probe with `docker info` and skip the suite (reporting the gap) when there is none
+- **Quality Tools**: `cosmic-ray` (mutation testing), `mypy` (strict type checking), `ruff` (linting + formatting), `radon` (complexity/CRAP), `hypothesis` (property-based testing)
 - **Package Manager**: `uv`
 
 All services use the same tech stack. No divergence.
@@ -245,7 +305,7 @@ Mutation testing is the architect's responsibility (full run, once per cycle) �
 runs it, and the refactorer only scans mutation site counts (see `constitution/roles/coder.md`
 and `refactorer.md` → Non-Ownership). Do not send a handoff if a gate you own fails.
 
-- **Mutation Testing**: `domain/` and `application/` must achieve mutation score ≥ 80% — `mutmut run --paths domain,application`
+- **Mutation Testing**: `domain/` and `application/` must achieve mutation score ≥ 80% — one `cosmic-ray` session per service, gated with `cr-rate --fail-over 20 <session>.sqlite`
 - **Test Coverage**: All code must achieve > 90% — `coverage run -m pytest && coverage report`
 - **Type Checking**: All code must pass `mypy` in strict mode, no `type: ignore` without explanation — `mypy catalog/ loans/ --strict`
 - **Code Style**: Must pass `ruff` and `black` — `ruff check . && black --check .`
@@ -286,7 +346,7 @@ features/                    (Gherkin specs — owned by specifier, do not modif
 | `pytest tests/unit/` | Unit tests only — quick feedback |
 | `pytest tests/acceptance/` | Acceptance tests (requires running containers) |
 | `pytest --cov=catalog --cov=loan` | Coverage report |
-| `mutmut run --paths-to-mutate catalog/domain,catalog/application,loans/domain,loans/application` | Mutation testing |
+| `cosmic-ray init mutation-catalog.toml mutation-catalog.sqlite` then `cosmic-ray exec mutation-catalog.toml mutation-catalog.sqlite` | Mutation testing (repeat for `loans`) |
 
 ---
 

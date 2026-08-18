@@ -47,7 +47,7 @@ from pathlib import Path
 
 from ..status_contract import STATUS_BLOCKED, WorkerResult, parse_worker_report
 from ..worker_prompt import WorkerDefinition, build_agents_payload
-from . import TokenUsage, WorkerInvocation
+from . import REAP_TIMEOUT_SEC, TokenUsage, WorkerInvocation, terminate_tree
 
 log = logging.getLogger(__name__)
 
@@ -311,6 +311,9 @@ def run_worker(
             errors="replace",
             stdin=subprocess.DEVNULL,
             bufsize=1,  # line buffered, so the pane updates as the worker works
+            # A new session so the whole group can be signalled on timeout without
+            # touching the scheduler's own (POSIX); accepted and ignored on Windows.
+            start_new_session=True,
         )
     except OSError as exc:
         log.error("could not launch worker %s: %s", definition.name, exc)
@@ -318,7 +321,7 @@ def run_worker(
 
     def _abort() -> None:
         timed_out.set()
-        process.kill()
+        terminate_tree(process)
 
     # A watchdog rather than a per-line deadline: a worker that hangs producing no output at
     # all would otherwise block on readline forever.
@@ -339,7 +342,13 @@ def run_worker(
                 continue
             for rendered in render_event(event):
                 emit(rendered)
-        process.wait()
+        try:
+            # Bounded: the pipe closing means the child is finishing, not that it has
+            # finished. An unbounded wait here reintroduces exactly the hang the
+            # watchdog exists to end.
+            process.wait(timeout=REAP_TIMEOUT_SEC)
+        except subprocess.TimeoutExpired:
+            terminate_tree(process)
     finally:
         watchdog.cancel()
 

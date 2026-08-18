@@ -72,7 +72,7 @@ projects only need one row.
 
 | Language | Coverage | Complexity/CRAP | DRY | Mutation | Gherkin mutation |
 |---|---|---|---|---|---|
-| Python | `coverage.py` | `radon` | `radon mi` | `mutmut` | `gherkin-mutator` |
+| Python | `coverage.py` | `radon` | `radon mi` | `cosmic-ray` | `gherkin-mutator` |
 | Java/Kotlin | JaCoCo (`./gradlew jacocoTestReport`) | JaCoCo + PIT CRAP (threshold 30, differs from Python's ≤6 — see `crap-analyzer` "Threshold Note") | detekt / SonarQube | PIT (`./gradlew pitest`) | `gherkin-mutator` |
 | Go | `go test -cover` | custom/`go build` complexity tooling | custom or grep-based | `stryker` (or equivalent) | `gherkin-mutator` |
 

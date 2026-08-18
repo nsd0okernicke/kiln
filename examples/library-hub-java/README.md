@@ -11,6 +11,10 @@ a Java/Spring Boot stack. To create a new project:
 - **Unix/macOS**: Bash/zsh, Git
 - Claude Code CLI (to run agents in the swarm)
 - JDK 21+ (agents install/verify this themselves at startup — see `constitution/engineering.md`)
+- **A running container engine** (Docker Desktop, Podman, Colima). The acceptance suite uses
+  Testcontainers to start real PostgreSQL and RabbitMQ — see "Acceptance Fixtures" below.
+  Verify with `docker info` before starting a swarm: with no daemon reachable, the fixtures
+  block indefinitely rather than failing, and the cycle dies on its timeout with no diagnosis.
 
 ### Setup
 
@@ -236,7 +240,7 @@ Infrastructure section for bootstrap requirements.
 - **Build Tool**: Maven, multi-module (parent POM + `catalog-service`/`loans-service` modules)
 - **Testing**: JUnit 5, AssertJ, Mockito
 - **BDD / Acceptance Tests**: Cucumber-JVM — feature files in `src/test/resources/features/`, step definitions in `src/test/java/.../acceptance/steps/`
-- **Acceptance Fixtures**: Testcontainers (`postgresql`, `rabbitmq` modules) — use real PostgreSQL and RabbitMQ; do NOT use an embedded/in-memory database for acceptance tests
+- **Acceptance Fixtures**: Testcontainers (`postgresql`, `rabbitmq` modules) — use real PostgreSQL and RabbitMQ; do NOT use an embedded/in-memory database for acceptance tests. Requires a running container engine; probe with `docker info` and skip the suite (reporting the gap) when there is none
 - **Quality Tools**: PIT/`pitest` (mutation testing), JaCoCo (coverage), PIT's CRAP metric (complexity/CRAP, threshold 30 — see `skill-orchestration.md`'s Java/Kotlin tool mapping and "Threshold Note"), Checkstyle or Spotless (formatting/lint), ArchUnit (layering rule enforcement), jqwik (property-based testing)
 - **Package Manager**: Maven's own dependency management (no separate package manager)
 

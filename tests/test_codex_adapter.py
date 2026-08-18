@@ -194,6 +194,13 @@ class FakePopen:
         self.stderr = io.StringIO(stderr)
         self.returncode = returncode
         self.killed = False
+        #: `terminate_tree` needs a pid for the platform kill and a liveness check before it.
+        #: Negative so that if the OS call ever escaped a test it could not match a real
+        #: process — `subprocess.run` is stubbed below precisely so it never does.
+        self.pid = -1
+
+    def poll(self):
+        return 0 if self.killed else None
 
     def __iter__(self):
         return iter(self._lines)
@@ -243,6 +250,12 @@ class TestRunWorker:
                 return process
 
             monkeypatch.setattr(codex_adapter.subprocess, "Popen", _popen)
+            # `terminate_tree` shells out to taskkill (Windows) or signals a process group
+            # (POSIX); neither belongs in a unit test holding a fake process.
+            monkeypatch.setattr(
+                codex_adapter.subprocess, "run",
+                lambda argv, **kwargs: subprocess.CompletedProcess(argv, 0, b"", b""),
+            )
             return calls
 
         return _factory

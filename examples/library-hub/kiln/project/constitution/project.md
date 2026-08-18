@@ -93,10 +93,22 @@ testcontainers[postgres,rabbitmq]>=3.7
 pytest-asyncio>=0.21
 pytest-cov>=4.1
 hypothesis>=6.0
-mutmut>=2.4
+cosmic-ray>=8.3
 mypy>=1.5
 ruff>=0.1
 ```
+
+## Runtime Prerequisites
+
+`testcontainers` above is not a pure-Python dependency: it starts real PostgreSQL and RabbitMQ
+containers, so `tests/acceptance/` needs a reachable container engine.
+
+Probe with `docker info` before running that suite. If nothing answers, **skip the acceptance
+tests and say so in the handoff** — do not run them anyway. Testcontainers waits on the daemon
+indefinitely instead of failing, so the suite does not error out, it stops, and the worker is
+eventually killed by its timeout having produced no diagnosis at all.
+
+Unit tests have no such dependency and always run.
 
 pytest config in `pyproject.toml`:
 
@@ -125,7 +137,27 @@ testing is the architect's responsibility (full run, once per cycle); the refact
 mutation site counts, never runs the full suite (see `constitution/roles/coder.md` and
 `refactorer.md` → Non-Ownership):
 
-- Mutation score ≥ 80% on `domain/` and `application/`: `mutmut run --paths-to-mutate catalog/domain,catalog/application,loans/domain,loans/application`
+- Mutation score ≥ 80% on `domain/` and `application/`. `cosmic-ray`'s `module-path` is
+  singular, so this is one session per service — `mutation-catalog.toml` and
+  `mutation-loans.toml`, each excluding that service's `infrastructure`:
+
+  ```toml
+  [cosmic-ray]
+  module-path = "catalog"
+  timeout = 60.0
+  excluded-modules = ["catalog/infrastructure/*"]
+  test-command = "pytest tests/unit -x -q"
+
+  [cosmic-ray.distributor]
+  name = "local"
+  ```
+
+  ```bash
+  cosmic-ray init mutation-catalog.toml mutation-catalog.sqlite
+  cosmic-ray exec mutation-catalog.toml mutation-catalog.sqlite
+  cr-rate --fail-over 20 mutation-catalog.sqlite   # survival ≤ 20% == score ≥ 80%
+  ```
+
 - Coverage ≥ 90%: `pytest --cov=catalog --cov=loans --cov-report=term-missing`
 - Type checking: `mypy catalog/ loans/ --strict`
 - Lint: `ruff check . && ruff format --check .`

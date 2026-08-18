@@ -10,6 +10,7 @@ of a promise to be careful.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import ClassVar
 
@@ -151,6 +152,45 @@ class TestHandoffSkillVerification:
         # Queue order is created_at ASC, so reusing the timestamp from the composed message
         # puts the handoff in the wrong place in the queue -- observed live, ~43s stale.
         assert "datetime('now', 'localtime')" in self._skill()
+
+
+class TestExternalRuntimePrerequisites:
+    """
+    A dependency that needs a daemon must say so where a human looks before starting.
+
+    `library-hub`'s README mandated Testcontainers in three places and never mentioned
+    Docker anywhere -- its Prerequisites listed PowerShell, Git and the Claude CLI. With no
+    daemon running, `PostgresContainer(...)` does not fail, it waits, so a coder ran the
+    acceptance suite and hung until its worker timeout, twice, then escalated 75 minutes in.
+    Neither the brief nor the constitution gave it any reason to check first.
+    """
+
+    #: Any engine satisfies this -- the requirement is a reachable daemon, not Docker itself.
+    ENGINES: ClassVar[tuple[str, ...]] = ("docker", "podman", "colima", "container engine")
+
+    def _prerequisites(self, text: str) -> str:
+        """The Prerequisites section: from its heading to the next one of any level."""
+        start = re.search(r"^#+\s*Prerequisites\s*$", text, re.M)
+        if start is None:
+            return ""
+        rest = text[start.end():]
+        end = re.search(r"^#+\s", rest, re.M)
+        return (rest if end is None else rest[: end.start()]).lower()
+
+    @pytest.mark.parametrize(
+        "readme", sorted((REPO / "examples").glob("*/README.md")), ids=lambda p: p.parent.name
+    )
+    def test_an_example_needing_containers_names_one_in_its_prerequisites(self, readme):
+        text = readme.read_text(encoding="utf-8")
+        if "testcontainers" not in text.lower():
+            pytest.skip("no container-backed fixtures")
+
+        prerequisites = self._prerequisites(text)
+
+        assert any(engine in prerequisites for engine in self.ENGINES), (
+            f"{readme.parent.name} mandates Testcontainers but its Prerequisites never name a "
+            "container engine, so nothing tells a reader — or an agent — to start one"
+        )
 
 
 class TestUnsupportedRoles:
