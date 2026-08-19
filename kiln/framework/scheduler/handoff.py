@@ -62,9 +62,32 @@ class InboundHandoff:
     guidance: str = ""
 
     @property
+    def merge_target(self) -> str:
+        """
+        What to merge before working: the sender's commit, else the branch it named.
+
+        A commit is the precise answer and is preferred. But a message can name a branch and
+        no commit -- every `human-in-the-loop` intake does, because a person handing over a
+        user story has not committed anything -- and merging only on a commit meant those
+        messages moved no code at all.
+
+        The cost of that was measured, not theorised: over four cycles the specifier fell **30
+        commits and 60 files** behind `run2`, and wrote a specification for CAT-2 having never
+        seen the CAT-5, LOAN-0 or CAT-2 implementations. It drifts one further cycle behind
+        every time a human hands it work, because the human's message is exactly the kind that
+        carried no commit.
+
+        The branch is the right fallback: it is where the sender's work actually is, and the
+        header has always carried it.
+        """
+        if _COMMIT_RE.match(self.commit):
+            return self.commit
+        return self.branch
+
+    @property
     def is_mergeable(self) -> bool:
-        """True when there is a commit to merge. Pings legitimately carry no commit."""
-        return bool(_COMMIT_RE.match(self.commit))
+        """True when there is anything to merge. Pings legitimately carry neither."""
+        return bool(self.merge_target)
 
     @property
     def is_resume(self) -> bool:

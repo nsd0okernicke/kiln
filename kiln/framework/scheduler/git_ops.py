@@ -192,6 +192,25 @@ def squash_merge_commit(commit: str, cwd: str | Path, message: str) -> GitResult
     return GitResult(True, head_commit(cwd), "", 0)
 
 
+def already_contains(target: str, cwd: str | Path) -> bool:
+    """
+    True when `target` is already reachable from HEAD, so merging it would do nothing.
+
+    Load-bearing, not an optimisation. `merge_commit` relies on `--no-ff` producing a merge
+    commit for `squash_anchor` to find; but `git merge --no-ff <ancestor>` reports "Already up
+    to date" and creates *no* commit. Calling it on a target we already have would therefore
+    leave the cycle with no anchor, and `squash_anchor` falls back to the repository's ROOT --
+    which the next `reset --soft` collapses the entire project history into.
+
+    So the caller must ask this first and skip the merge when it answers True. Skipping is
+    also simply correct: there is nothing to bring in.
+
+    An unresolvable ref answers False, so an unknown branch reaches `merge_commit` and fails
+    there with git's own message rather than being silently treated as already-merged.
+    """
+    return run_git(["merge-base", "--is-ancestor", target, "HEAD"], cwd).ok
+
+
 def record_provenance(commit: str, cwd: str | Path) -> GitResult:
     """
     Link `commit` into this branch's ancestry without changing a single file.

@@ -309,14 +309,25 @@ class TestSend:
         )
         assert db.cycles_by_work_item(db_path, "main") == {"CAT-3 search": 1}
 
-    def test_a_new_request_carries_no_commit_and_is_not_mergeable(self, db_path):
-        # A human's opening request has nothing to merge; the receiver must not try.
+    def test_a_new_request_carries_no_commit_but_still_merges_the_branch(self, db_path):
+        """
+        This test used to assert the opposite, and the old assertion was the bug.
+
+        "A human's opening request has nothing to merge" is true of the *request* and false of
+        the *branch it names*, which carries every completed cycle. Skipping the merge cost the
+        specifier 30 commits and 60 files of drift over four cycles -- it specified CAT-2
+        having never seen the CAT-5, LOAN-0 or CAT-2 implementations.
+        """
         send.send(
             db_path=db_path, sender="human-in-the-loop", target="specifier",
             summary="new idea", branch="main",
         )
         fetched = db.fetch_and_deliver(db_path, "specifier", "main")
-        assert handoff.parse_handoff(fetched["content"]).is_mergeable is False
+
+        parsed = handoff.parse_handoff(fetched["content"])
+        assert parsed.commit == ""
+        assert parsed.is_mergeable is True
+        assert parsed.merge_target == "main"
 
     def test_a_commit_can_be_attached(self, db_path):
         send.send(

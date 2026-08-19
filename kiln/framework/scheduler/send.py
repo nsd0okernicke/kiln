@@ -10,9 +10,10 @@ This is the same INSERT, reachable directly. It has no LLM in it and no MCP depe
 human can start or unblock a cycle from any terminal — including when the swarm's agents are
 the thing that is broken.
 
-The commit is optional and usually absent: a human's opening request has no work to merge.
-Downstream roles handle that already — `InboundHandoff.is_mergeable` is false without one,
-which is the same path a ping takes.
+The commit is optional and usually absent: a human's opening request has no *new* work of its
+own to merge. The receiving role still merges `--branch` (default `main`), because that branch
+is where everything completed so far actually lives — without it a role handed work by a human
+never catches up, and drifts one full cycle behind on every intake.
 """
 
 from __future__ import annotations

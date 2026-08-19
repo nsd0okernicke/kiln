@@ -204,6 +204,51 @@ class TestSquashMergeCommit:
         assert git_ops.squash_merge_commit(commit, git_repo, "squashed").ok
 
 
+class TestAlreadyContains:
+    """
+    The guard that keeps `squash_anchor` alive once branches became mergeable.
+
+    Merging the branch a message names is right, but a role that is already current would
+    then merge an ancestor -- and `git merge --no-ff <ancestor>` reports "Already up to date"
+    and writes no commit. No commit means no anchor, and `squash_anchor` falls back to the
+    repository's ROOT, which the next `reset --soft` collapses the whole history into.
+    """
+
+    def test_an_ancestor_is_already_contained(self, git_repo, git_cmd):
+        base = git_ops.head_commit(git_repo)
+        _write_commit(git_repo, git_cmd, "f.txt", "later", "later work")
+
+        assert git_ops.already_contains(base, git_repo) is True
+
+    def test_a_branch_with_new_work_is_not(self, git_repo, git_cmd):
+        git_cmd(git_repo, "checkout", "-q", "-b", "sender")
+        _write_commit(git_repo, git_cmd, "f.txt", "sender", "sender work")
+        git_cmd(git_repo, "checkout", "-q", "main")
+
+        assert git_ops.already_contains("sender", git_repo) is False
+
+    def test_a_branch_name_resolves_not_just_a_hash(self, git_repo, git_cmd):
+        # The whole point of the change is that `merge_target` may be `run2`, not a sha.
+        assert git_ops.already_contains("main", git_repo) is True
+
+    def test_an_unknown_ref_is_not_treated_as_contained(self, git_repo):
+        # It must reach `merge_commit` and fail there with git's own message, rather than
+        # being silently skipped as "we already have it".
+        assert git_ops.already_contains("no-such-branch", git_repo) is False
+
+    def test_the_no_op_merge_it_prevents_really_does_lose_the_anchor(self, git_repo, git_cmd):
+        # Proves the guard is load-bearing rather than defensive: without it, this is what
+        # the scheduler would do, and `squash_anchor` would have nothing to find.
+        base = git_ops.head_commit(git_repo)
+        _write_commit(git_repo, git_cmd, "f.txt", "later", "later work")
+
+        git_ops.merge_commit(base, git_repo, "merging something we already have")
+
+        assert git_ops.run_git(["log", "--merges", "-1"], git_repo).stdout == "", (
+            "no merge commit was created, so squash_anchor would fall back to ROOT"
+        )
+
+
 class TestRecordProvenance:
     """
     The squash's missing parentage is what made the *next* lap conflict.

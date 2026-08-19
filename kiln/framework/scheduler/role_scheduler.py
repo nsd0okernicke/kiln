@@ -284,13 +284,18 @@ def run_once(ctx: SchedulerContext, state: SchedulerState) -> CycleResult:
         log.error(breach)
         return _escalate(ctx, state, message_id, inbound, breach, COST_CAP)
 
-    if inbound.is_mergeable:
-        log.info(f"{ICON_MERGE} merging %s from %s", inbound.commit[:8], inbound.branch or "?")
+    # Merge whatever the sender pointed at -- their commit, or failing that the branch they
+    # named. `already_contains` first: `merge_commit`'s `--no-ff` is what leaves an anchor for
+    # `squash_anchor`, and merging something we already have produces no commit and therefore
+    # no anchor.
+    merge_target = inbound.merge_target
+    if merge_target and not git_ops.already_contains(merge_target, ctx.worktree):
+        log.info(f"{ICON_MERGE} merging %s from %s", merge_target[:8], inbound.branch or "?")
         merged = git_ops.merge_commit(
-            inbound.commit, ctx.worktree, message=merge_commit_message(ctx.role, inbound)
+            merge_target, ctx.worktree, message=merge_commit_message(ctx.role, inbound)
         )
         if not merged.ok:
-            detail = f"merge of {inbound.commit} failed: {merged.output}"
+            detail = f"merge of {merge_target} failed: {merged.output}"
             log.error(detail)
             return _escalate(ctx, state, message_id, inbound, detail, MERGE_FAILED)
 

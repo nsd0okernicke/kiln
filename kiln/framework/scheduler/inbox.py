@@ -128,14 +128,16 @@ def receive(ctx: InboxContext, inbound: handoff.InboundHandoff, raw: str) -> lis
     if not (ctx.merge and inbound.is_mergeable):
         return lines
 
+    # `merge_target`, not `commit`: a message may name only the branch its work is on.
+    target = inbound.merge_target
     result = git_ops.squash_merge_commit(
-        inbound.commit, ctx.worktree, message=merge_commit_message(ctx.role, inbound)
+        target, ctx.worktree, message=merge_commit_message(ctx.role, inbound)
     )
     if result.ok:
-        log.info("squash-merged %s into %s", inbound.commit[:8], ctx.branch)
-        lines.append(f"   {ICON_MERGE} squash-merged {inbound.commit[:8]} into {ctx.branch}")
+        log.info("squash-merged %s into %s", target[:8], ctx.branch)
+        lines.append(f"   {ICON_MERGE} squash-merged {target[:8]} into {ctx.branch}")
     else:
-        log.error("merge of %s failed: %s", inbound.commit, result.output)
+        log.error("merge of %s failed: %s", target, result.output)
         lines.append(f"   {ICON_MERGE_FAILED} MERGE FAILED for {inbound.commit[:8]}:")
         lines.extend(f"      {line}" for line in result.output.splitlines())
         lines.append("      the work above is NOT in your tree; resolve before continuing")

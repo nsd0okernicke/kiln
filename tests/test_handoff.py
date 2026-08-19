@@ -73,6 +73,39 @@ class TestParsing:
         assert handoff.parse_handoff("Commit: abc123d\n").is_mergeable is True
         assert handoff.parse_handoff(f"Commit: {'a1b2c3d4' * 5}\n").is_mergeable is True
 
+    def test_a_branch_with_no_commit_is_still_mergeable(self):
+        """
+        Every `human-in-the-loop` intake looks like this -- a person handing over a user story
+        has committed nothing. Merging only on a commit meant those messages moved no code,
+        and the receiver worked from whatever it last saw.
+
+        Measured over four cycles: the specifier fell 30 commits and 60 files behind `run2`
+        and wrote a CAT-2 specification having never seen the CAT-5, LOAN-0 or CAT-2
+        implementations. The header named the branch the whole time.
+        """
+        parsed = handoff.parse_handoff("Sender: human-in-the-loop\nBranch: run2\nCommit:\n")
+
+        assert parsed.is_mergeable is True
+        assert parsed.merge_target == "run2"
+
+    def test_a_commit_still_wins_over_the_branch(self):
+        # The commit is the precise answer: a branch tip can move on between the sender
+        # composing the handoff and the receiver picking it up.
+        parsed = handoff.parse_handoff("Branch: run2\nCommit: abc123def\n")
+
+        assert parsed.merge_target == "abc123def"
+
+    def test_a_prose_commit_falls_back_to_the_branch(self):
+        # "(none — human request, no prior commit)" must never reach `git merge`, but it also
+        # must not cost the receiver the branch it was told about.
+        parsed = handoff.parse_handoff("Branch: run2\nCommit: (none — human request)\n")
+
+        assert parsed.merge_target == "run2"
+
+    def test_nothing_to_merge_is_still_nothing(self):
+        # A ping carries neither, and must not turn into a merge of something arbitrary.
+        assert handoff.parse_handoff("Sender: coder\nPing: true\n").is_mergeable is False
+
     def test_empty_message_parses(self):
         parsed = handoff.parse_handoff("")
         assert parsed.sender == ""
