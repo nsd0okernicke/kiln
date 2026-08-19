@@ -22,13 +22,19 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
-import threading
 from collections.abc import Callable
 from pathlib import Path
 
 from ..status_contract import STATUS_BLOCKED, WorkerResult, parse_worker_report
 from ..worker_prompt import WorkerDefinition, build_agents_payload
-from . import REAP_TIMEOUT_SEC, TokenUsage, WorkerInvocation, terminate_tree
+from . import (
+    DEFAULT_IDLE_TIMEOUT_SEC,
+    REAP_TIMEOUT_SEC,
+    TokenUsage,
+    Watchdog,
+    WorkerInvocation,
+    terminate_tree,
+)
 
 log = logging.getLogger(__name__)
 
@@ -289,6 +295,7 @@ def run_worker(
     cwd: str | Path,
     model: str,
     timeout: int = DEFAULT_TIMEOUT_SEC,
+    idle_timeout: float | None = DEFAULT_IDLE_TIMEOUT_SEC,
     permission_mode: str = DEFAULT_PERMISSION_MODE,
     max_budget_usd: float | None = None,
     on_output: Callable[[str], None] | None = None,
@@ -320,7 +327,6 @@ def run_worker(
     )
 
     emit = on_output or _default_emit
-    timed_out = threading.Event()
 
     try:
         process = subprocess.Popen(
@@ -341,19 +347,15 @@ def run_worker(
         log.error("could not launch worker %s: %s", definition.name, exc)
         return _blocked(f"could not launch claude: {exc}", "", is_error=True)
 
-    def _abort() -> None:
-        timed_out.set()
-        terminate_tree(process)
-
-    # A watchdog rather than a per-line deadline: a worker that hangs producing no output at
-    # all would otherwise block on readline forever.
-    watchdog = threading.Timer(timeout, _abort)
-    watchdog.daemon = True
-    watchdog.start()
+    # Two limits: `timeout` for a worker that is slow, `idle_timeout` for one that
+    # has stopped. Only the first existed, and it charged the full hour for a
+    # worker that had already gone quiet.
+    watchdog = Watchdog(process, timeout, idle_timeout).start()
 
     captured: list[str] = []
     try:
         for line in process.stdout:  # type: ignore[union-attr]
+            watchdog.saw_output()
             captured.append(line)
             stripped = line.strip()
             if not stripped.startswith("{"):
@@ -372,13 +374,13 @@ def run_worker(
         except subprocess.TimeoutExpired:
             terminate_tree(process)
     finally:
-        watchdog.cancel()
+        watchdog.stop()
 
     stdout = "".join(captured)
 
-    if timed_out.is_set():
-        log.error("worker %s exceeded %ss", definition.name, timeout)
-        return _blocked(f"worker timed out after {timeout}s", stdout, timed_out=True)
+    if watchdog.reason:
+        log.error("worker %s killed: %s", definition.name, watchdog.reason)
+        return _blocked(watchdog.reason, stdout, timed_out=True)
 
     stderr = (process.stderr.read() if process.stderr else "") or ""
     try:

@@ -122,20 +122,37 @@ class TestSquashMergeCommit:
         assert result.ok
         assert (git_repo / "f.txt").read_text(encoding="utf-8") == "from sender"
 
-    def test_creates_no_merge_commit_no_second_parent(self, git_repo, git_cmd):
-        # The whole point: this must not become something squash_anchor's `--merges` search
-        # would ever find, and it must not carry the sender branch in as ancestry.
+    def test_the_content_commit_has_a_single_parent(self, git_repo, git_cmd):
+        # The squash itself stays flat. `record_provenance` adds a *separate* commit on top
+        # for the ancestry link -- the two jobs must not be conflated into one merge.
         git_cmd(git_repo, "checkout", "-q", "-b", "sender")
         sender_commit = _write_commit(git_repo, git_cmd, "f.txt", "sender", "sender work")
         git_cmd(git_repo, "checkout", "-q", "main")
         before = git_ops.head_commit(git_repo)
 
-        result = git_ops.squash_merge_commit(sender_commit, git_repo, "squashed")
+        git_ops.squash_merge_commit(sender_commit, git_repo, "squashed")
 
-        parents = git_ops.run_git(["log", "-1", "--format=%P", result.stdout], git_repo).stdout
-        assert parents == before, "must have exactly one parent: the previous HEAD"
-        assert git_ops.run_git(["log", "--merges", "-1"], git_repo).stdout == "", (
-            "must not be discoverable by squash_anchor's --merges search"
+        content = git_ops.run_git(["rev-parse", "HEAD^1"], git_repo).stdout
+        parents = git_ops.run_git(["log", "-1", "--format=%P", content], git_repo).stdout
+        assert parents == before, "the content commit must have exactly one parent"
+
+    def test_the_senders_history_stays_off_the_first_parent_line(self, git_repo, git_cmd):
+        # The shape the squash exists to protect: `@current` reads as one commit per handoff,
+        # not as the sender's whole branch. The provenance link makes the sender *reachable*,
+        # which is different from putting it on the mainline.
+        git_cmd(git_repo, "checkout", "-q", "-b", "sender")
+        _write_commit(git_repo, git_cmd, "a.txt", "1", "sender step one")
+        _write_commit(git_repo, git_cmd, "b.txt", "2", "sender step two")
+        sender_commit = _write_commit(git_repo, git_cmd, "c.txt", "3", "sender step three")
+        git_cmd(git_repo, "checkout", "-q", "main")
+
+        git_ops.squash_merge_commit(sender_commit, git_repo, "squashed")
+
+        mainline = git_ops.run_git(
+            ["log", "--first-parent", "--format=%s"], git_repo
+        ).stdout.splitlines()
+        assert not [line for line in mainline if line.startswith("sender step")], (
+            f"sender's individual commits leaked onto the first-parent line: {mainline}"
         )
 
     def test_uses_the_given_message(self, git_repo, git_cmd):
@@ -147,7 +164,8 @@ class TestSquashMergeCommit:
             sender_commit, git_repo, "[Human-in-the-loop] Merge CAT-3 from architect"
         )
 
-        subject = git_ops.run_git(["log", "-1", "--format=%s"], git_repo).stdout
+        # HEAD is now the provenance link; the content commit beneath it carries the message.
+        subject = git_ops.run_git(["log", "-1", "--format=%s", "HEAD^1"], git_repo).stdout
         assert subject == "[Human-in-the-loop] Merge CAT-3 from architect"
 
     def test_a_conflict_fails_and_leaves_a_clean_tree(self, git_repo, git_cmd):
@@ -184,6 +202,106 @@ class TestSquashMergeCommit:
         (git_repo / ".claude" / "settings.json").write_text("{}", encoding="utf-8")
 
         assert git_ops.squash_merge_commit(commit, git_repo, "squashed").ok
+
+
+class TestRecordProvenance:
+    """
+    The squash's missing parentage is what made the *next* lap conflict.
+
+    Live topology, three cycles in: the coder's `books.py` went coder -> refactorer ->
+    architect with real merges, then came back through `human-in-the-loop`'s squash as
+    content with no history. Git computed the merge base as the specifier's feature-file
+    commit -- from before any implementation existed -- saw the same file created
+    independently on both sides, and refused. The coder was asked to reconcile its own work
+    with a refactored copy of its own work.
+    """
+
+    def _diverged_lap(self, repo, git_cmd):
+        """coder writes a file, refactorer rewrites it, both land on `main` via squash."""
+        git_cmd(repo, "checkout", "-q", "-b", "coder")
+        _write_commit(repo, git_cmd, "books.py", "def get():\n    return 1\n", "coder work")
+        git_cmd(repo, "checkout", "-q", "-b", "refactorer")
+        sender = _write_commit(
+            repo, git_cmd, "books.py", "def get():\n    return from_domain()\n", "refactor"
+        )
+        git_cmd(repo, "checkout", "-q", "main")
+        return sender
+
+    def test_the_next_lap_merges_cleanly(self, git_repo, git_cmd):
+        # The regression. Without the provenance link this merge conflicts.
+        sender = self._diverged_lap(git_repo, git_cmd)
+        git_ops.squash_merge_commit(sender, git_repo, "[HITL] merge from architect")
+        git_cmd(git_repo, "checkout", "-q", "-b", "specifier")
+        _write_commit(git_repo, git_cmd, "next.feature", "cat-1", "spec CAT-1")
+        git_cmd(git_repo, "checkout", "-q", "coder")
+
+        merged = git_ops.merge_commit("specifier", git_repo, "coder receives CAT-1")
+
+        assert merged.ok, f"the lap still conflicts: {merged.output}"
+        assert "from_domain" in (git_repo / "books.py").read_text(encoding="utf-8"), (
+            "the refactorer's version must win -- it is the descendant"
+        )
+
+    def test_the_merge_base_becomes_the_coders_own_commit(self, git_repo, git_cmd):
+        # Stated as the property rather than the symptom: the base was the pre-implementation
+        # spec commit, which is why two unrelated-looking files appeared.
+        sender = self._diverged_lap(git_repo, git_cmd)
+        coder_head = git_ops.run_git(["rev-parse", "coder"], git_repo).stdout
+
+        git_ops.squash_merge_commit(sender, git_repo, "[HITL] merge from architect")
+
+        base = git_ops.run_git(["merge-base", "coder", "HEAD"], git_repo).stdout
+        assert base == coder_head
+
+    def test_it_changes_no_files(self, git_repo, git_cmd):
+        # `-s ours` keeps this branch's tree; the squash decided the content already.
+        sender = self._diverged_lap(git_repo, git_cmd)
+        git_ops.squash_merge_commit(sender, git_repo, "[HITL] merge from architect")
+        before = git_ops.run_git(["rev-parse", "HEAD^{tree}"], git_repo).stdout
+
+        git_ops.record_provenance(sender, git_repo)
+
+        assert git_ops.run_git(["rev-parse", "HEAD^{tree}"], git_repo).stdout == before
+
+    def test_an_ancestor_needs_no_link(self, git_repo, git_cmd):
+        # Already reachable: git says "Already up to date" and writes nothing. Forcing a
+        # commit here (`--no-ff`) would add an empty merge to the human's branch every poll.
+        commit = git_ops.head_commit(git_repo)
+        before = git_ops.run_git(["rev-list", "--count", "HEAD"], git_repo).stdout
+
+        git_ops.record_provenance(commit, git_repo)
+
+        assert git_ops.run_git(["rev-list", "--count", "HEAD"], git_repo).stdout == before
+
+    def test_it_runs_over_a_humans_uncommitted_edits_without_disturbing_them(
+        self, git_repo, git_cmd
+    ):
+        """
+        `human-in-the-loop` works on a real branch a person may be editing right now.
+
+        A normal merge refuses when it would overwrite uncommitted changes. `-s ours` never
+        would -- the result tree *is* HEAD's tree -- so git runs it, the person's edit stays
+        in the working tree unstaged, and the commit records the pre-edit content.
+        """
+        sender = self._diverged_lap(git_repo, git_cmd)
+        (git_repo / "books.py").write_text("a human was editing this\n", encoding="utf-8")
+
+        result = git_ops.record_provenance(sender, git_repo)
+
+        assert result.ok
+        assert (git_repo / "books.py").read_text(encoding="utf-8") == (
+            "a human was editing this\n"
+        ), "the person's uncommitted work must survive the bookkeeping commit"
+        committed = git_ops.run_git(["show", "HEAD:books.py"], git_repo).stdout
+        assert "a human was editing this" not in committed, "must not commit their edit"
+
+    def test_an_unusable_ref_degrades_to_a_warning(self, git_repo, git_cmd, caplog):
+        # The content is already committed by the time this runs, so a failure here costs a
+        # truthful merge base, not the handoff. It must not raise into the inbox.
+        result = git_ops.record_provenance("0" * 40, git_repo)
+
+        assert result.ok is False
+        assert git_ops.head_commit(git_repo)  # branch still usable, nothing half-applied
 
 
 class TestGeneratedScaffoldingBlockingAMerge:

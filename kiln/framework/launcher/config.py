@@ -109,6 +109,8 @@ class RoleConfig:
     poll_interval: float | None = None
     #: Seconds before one worker invocation is abandoned.
     worker_timeout: int | None = None
+    #: Silence, not duration -- see adapters.Watchdog. None keeps the module default.
+    worker_idle_timeout: float | None = None
     #: Worker attempts per handoff before escalating. Was a `SchedulerContext` dataclass
     #: default with no CLI flag at all -- changeable only from code, despite being one of the
     #: two numbers that decide how an unattended swarm gives up.
@@ -291,7 +293,8 @@ def default_profile_name(
 TERMINAL_KEYS = frozenset({
     "role", "agent", "worktree", "title", "mode", "model", "workerModel", "scheduler",
     "watches", "workerDebug", "maxCycles", "maxBudgetUsd", "verify", "verifyTimeout",
-    "pollInterval", "workerTimeout", "maxAttempts", "escalationLimit", "activityLimit",
+    "pollInterval", "workerTimeout", "workerIdleTimeout", "maxAttempts",
+    "escalationLimit", "activityLimit",
     "bell",
 })
 
@@ -390,6 +393,9 @@ def _parse_role(entry: dict) -> RoleConfig:
         poll_interval=_positive_or_none(entry.get("pollInterval"), "pollInterval", role),
         worker_timeout=_positive_int_or_none(
             entry.get("workerTimeout"), "workerTimeout", role
+        ),
+        worker_idle_timeout=_positive_or_none(
+            entry.get("workerIdleTimeout"), "workerIdleTimeout", role
         ),
         max_attempts=_positive_int_or_none(entry.get("maxAttempts"), "maxAttempts", role),
         escalation_limit=_positive_int_or_none(

@@ -145,15 +145,20 @@ def merge_commit(commit: str, cwd: str | Path, message: str | None = None) -> Gi
 
 def squash_merge_commit(commit: str, cwd: str | Path, message: str) -> GitResult:
     """
-    Merge the sender's commit as one flat commit, with no merge-commit parent link.
+    Merge the sender's commit as one flat commit, then record where it came from.
 
     For `human-in-the-loop`'s inbox specifically. That role works directly on the project's
     real, potentially-pushed branch (`@current`), not a disposable local sub-branch the way
-    every scheduled role does — so a real `--no-ff` merge (`merge_commit`, above) would
-    permanently graft the sender's entire commit graph onto that branch's ancestry on every
-    single handoff, including whatever *that* sender had already merged in from its own
-    senders. `git merge --squash` stages the diff with no `MERGE_HEAD` and no second parent;
-    the follow-up commit lands on `@current` looking like one ordinary commit, not a merge.
+    every scheduled role does — so a real `--no-ff` merge (`merge_commit`, above) would put
+    the sender's entire commit graph on that branch's *first-parent line* on every single
+    handoff, including whatever that sender had already merged in from its own senders.
+    `git merge --squash` stages the diff instead, and the follow-up commit lands looking like
+    one ordinary commit.
+
+    `record_provenance` then adds the parent link back, without touching the tree. Squashing
+    alone was not survivable: it is the one hop in the lap that drops ancestry, and the next
+    time the work came round to the role that wrote it, git had no way to tell that one side
+    was a descendant of the other and conflicted. See `record_provenance` for the full case.
 
     Not a substitute for `merge_commit` anywhere a scheduler role receives: `squash_anchor`
     locates its anchor via `git log --merges -1`, which requires a real merge commit to
@@ -175,12 +180,60 @@ def squash_merge_commit(commit: str, cwd: str | Path, message: str) -> GitResult
     if not has_pending_changes(cwd):
         # Content identical to what's already there (e.g. a re-sent or no-op handoff) -- that
         # is success, not failure. Nothing to commit; reuse HEAD as the resulting commit.
+        # Still worth a provenance link: identical content is exactly the case where git has
+        # no other way to learn that this branch already carries the sender's work.
+        record_provenance(commit, cwd)
         return GitResult(True, head_commit(cwd), "", 0)
 
     committed = run_git(["commit", "-m", message], cwd)
     if not committed.ok:
         return committed
+    record_provenance(commit, cwd)
     return GitResult(True, head_commit(cwd), "", 0)
+
+
+def record_provenance(commit: str, cwd: str | Path) -> GitResult:
+    """
+    Link `commit` into this branch's ancestry without changing a single file.
+
+    `merge --squash` above copies content and drops parentage, and that missing parentage is
+    what makes the *next* lap conflict. Observed live on a three-cycle run: the coder's own
+    `books.py` reached the refactorer and the architect, then came back to the coder through
+    the squash as content with no history. Git computed the merge base as the specifier's
+    feature-file commit -- from *before* any implementation existed -- so it saw the same file
+    created independently on both sides and reported a content conflict. The coder was being
+    asked to reconcile its own work with a refactored copy of its own work.
+
+    `-s ours` keeps this branch's tree exactly as the squash left it and records the sender as
+    a second parent, so later merge bases tell the truth. Deliberately not `--no-ff`: when the
+    sender is already an ancestor there is nothing to record and git's "Already up to date"
+    is the correct no-op.
+
+    The trade, stated plainly because avoiding it is why the squash exists: `@current` gains
+    one merge commit per lap. It does *not* gain the sender's commits on its first-parent
+    line -- `git log --first-parent` still reads as one flat commit per handoff, which is the
+    shape the squash was protecting. What changes is that those commits become *reachable*,
+    which is the whole point.
+
+    Safe on a branch someone is editing, which `human-in-the-loop`'s always might be: a normal
+    merge refuses when it would overwrite uncommitted changes, but `-s ours` never would --
+    the result tree *is* HEAD's tree -- so git runs it and leaves their edit untouched in the
+    working tree. Verified, not assumed.
+
+    Best effort even so. The content is already committed by the time this runs, so anything
+    that goes wrong here costs a truthful merge base, not the handoff -- a warning, not an
+    error, and never an exception into the inbox.
+    """
+    message = f"Record provenance of {commit[:8]} (history link only, no content change)"
+    result = run_git(["merge", "-s", "ours", "-m", message, commit], cwd)
+    if not result.ok:
+        first_line = (result.output.strip().splitlines() or [""])[0]
+        log.warning(
+            "could not record provenance for %s: %s -- later merges against this branch will "
+            "compute an older merge base and may conflict on files both sides touched",
+            commit[:8], first_line,
+        )
+    return result
 
 
 def is_generated_path(path: str, patterns: tuple[str, ...] = GENERATED_WORKTREE_PATHS) -> bool:

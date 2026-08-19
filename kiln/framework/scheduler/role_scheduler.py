@@ -25,7 +25,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import db, git_ops, handoff, pane_status, status_contract, verify
-from .adapters import TokenUsage, WorkerInvocation
+from .adapters import DEFAULT_IDLE_TIMEOUT_SEC, TokenUsage, WorkerInvocation
 from .routing import RoutingTable, load_routing_table, parse_routing_arguments
 from .worker_prompt import WorkerDefinition, build_task_prompt, load_worker_definition
 
@@ -934,6 +934,8 @@ def format_banner(ctx: SchedulerContext, args: argparse.Namespace) -> list[str]:
         ("workflow", str(args.workflow)),
         ("queue", str(ctx.db_path)),
         ("poll / worker timeout", f"{args.poll_interval:g}s / {args.worker_timeout}s"),
+        ("idle timeout", f"{args.worker_idle_timeout:g}s" if args.worker_idle_timeout
+         else "off"),
     ]
     if args.log_file:
         fields.append(("log", str(args.log_file)))
@@ -994,6 +996,9 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
             cwd=args.worktree,
             model=model,
             timeout=args.worker_timeout,
+            # 0 means "off", not "kill immediately" -- the watchdog reads None as disabled,
+            # and a bare 0 would trip on the first poll before the worker printed anything.
+            idle_timeout=args.worker_idle_timeout or None,
             on_output=emit_worker_output,
             debug_base=debug_base,
             **budget,
@@ -1054,6 +1059,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--poll-interval", type=float, default=DEFAULT_POLL_INTERVAL_SEC)
     parser.add_argument("--worker-timeout", type=int, default=900)
+    parser.add_argument(
+        "--worker-idle-timeout", type=float, default=DEFAULT_IDLE_TIMEOUT_SEC,
+        help=(
+            "kill a worker that has produced no output for this long, even if its total "
+            "timeout has not expired. 0 disables it. Every hang seen live went silent and "
+            "stayed silent, so the total cap alone bills the full timeout for a worker that "
+            f"already stopped (default: {DEFAULT_IDLE_TIMEOUT_SEC}s)"
+        ),
+    )
     parser.add_argument("--once", action="store_true", help="run a single cycle and exit")
     parser.add_argument(
         "--max-cycles", type=int, default=None,

@@ -14,11 +14,26 @@ The project uses a shared virtual environment at `<project_root>/.venv`.
 - **On first startup**: if `.venv` does not exist at project root, create it:
   - Windows: `python -m venv <project_root>\.venv`
   - Unix: `python -m venv <project_root>/.venv`
-- **Always activate before any Python command**:
-  - Windows: `<project_root>\.venv\Scripts\activate`
-  - Unix: `source <project_root>/.venv/bin/activate`
-- Install dependencies once after creation: `pip install -e ".[dev]"`
+- **Call that environment's interpreter directly. Do not activate it**:
+  - Windows: `<project_root>\.venv\Scripts\python.exe -m pytest`
+  - Unix: `<project_root>/.venv/bin/python -m pytest`
+
+  Activation exists to mutate shell state, and it does so unreliably: in a non-interactive
+  shell `Scripts\activate` can hang rather than return, which stalls the cycle with no error
+  to report and no failing command to point at. Observed live -- a coder polled a hung
+  activation 63 times across 20 minutes, correctly identified it as "a shell activation
+  issue, not a test failure", and still never reached dependency installation. Naming the
+  interpreter needs no shell state and cannot hang.
+- Install dependencies once after creation:
+  `<project_root>\.venv\Scripts\python.exe -m pip install -e ".[dev]"` (Windows) or
+  `<project_root>/.venv/bin/python -m pip install -e ".[dev]"` (Unix)
 - **Do NOT create a new `.venv` inside your worktree.**
+
+Throughout the rest of this document, **`python` means that interpreter** -- `python -m pytest`,
+`python -m mypy`, `python -m ruff`. Tools with no module entry point are run from
+`<project_root>\.venv\Scripts\` on Windows, `<project_root>/.venv/bin/` on Unix. A bare
+`pytest` resolves against `PATH`, which without activation is the wrong interpreter or none at
+all.
 
 ## The domain/application vs infrastructure Boundary
 
@@ -140,7 +155,7 @@ mutation site counts, never runs the full suite (see `constitution/roles/coder.m
 `refactorer.md` → Non-Ownership). Scoped to `domain/` and `application/` only:
 
 - Mutation score ≥ 80%: `mutmut run --paths-to-mutate battlezone/domain,battlezone/application`
-- Coverage ≥ 90%: `coverage run -m pytest tests/unit tests/property && coverage report`
-- Type checking: `mypy battlezone/domain battlezone/application --strict`
-- Lint (whole package, including `infrastructure/`): `ruff check . && ruff format --check .`
+- Coverage ≥ 90%: `python -m coverage run -m pytest tests/unit tests/property && python -m coverage report`
+- Type checking: `python -m mypy battlezone/domain battlezone/application --strict`
+- Lint (whole package, including `infrastructure/`): `python -m ruff check . && python -m ruff format --check .`
 - Manual playtest whenever `infrastructure/` changes (see Local Run) — no automated substitute

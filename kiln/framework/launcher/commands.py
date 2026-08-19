@@ -183,6 +183,7 @@ def _scheduler_command(
     argv += _tuning_args(role, {
         "--poll-interval": role.poll_interval,
         "--worker-timeout": role.worker_timeout,
+        "--worker-idle-timeout": role.worker_idle_timeout,
         "--max-attempts": role.max_attempts,
         "--escalation-limit": role.escalation_limit,
     })

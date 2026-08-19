@@ -14,11 +14,26 @@ The project uses a shared virtual environment at `<project_root>/.venv`.
 - **On first startup**: if `.venv` does not exist at project root, create it:
   - Windows: `python -m venv <project_root>\.venv`
   - Unix: `python -m venv <project_root>/.venv`
-- **Always activate before any Python command**:
-  - Windows: `<project_root>\.venv\Scripts\activate`
-  - Unix: `source <project_root>/.venv/bin/activate`
-- Install dependencies once after creation: `pip install -e ".[dev]"`
+- **Call that environment's interpreter directly. Do not activate it**:
+  - Windows: `<project_root>\.venv\Scripts\python.exe -m pytest`
+  - Unix: `<project_root>/.venv/bin/python -m pytest`
+
+  Activation exists to mutate shell state, and it does so unreliably: in a non-interactive
+  shell `Scripts\activate` can hang rather than return, which stalls the cycle with no error
+  to report and no failing command to point at. Observed live -- a coder polled a hung
+  activation 63 times across 20 minutes, correctly identified it as "a shell activation
+  issue, not a test failure", and still never reached dependency installation. Naming the
+  interpreter needs no shell state and cannot hang.
+- Install dependencies once after creation:
+  `<project_root>\.venv\Scripts\python.exe -m pip install -e ".[dev]"` (Windows) or
+  `<project_root>/.venv/bin/python -m pip install -e ".[dev]"` (Unix)
 - **Do NOT create a new `.venv` inside your worktree.**
+
+Throughout the rest of this document, **`python` means that interpreter** — `python -m pytest`,
+`python -m mypy`, `python -m ruff`. Tools with no module entry point (`cosmic-ray`, `cr-rate`)
+are run from `<project_root>\.venv\Scripts\` on Windows, `<project_root>/.venv/bin/` on Unix.
+A bare `pytest` resolves against `PATH`, which without activation is the wrong interpreter or
+none at all.
 
 ## Package Layout
 
@@ -146,18 +161,18 @@ mutation site counts, never runs the full suite (see `constitution/roles/coder.m
   module-path = "catalog"
   timeout = 60.0
   excluded-modules = ["catalog/infrastructure/*"]
-  test-command = "pytest tests/unit -x -q"
+  test-command = "python -m pytest tests/unit -x -q"
 
   [cosmic-ray.distributor]
   name = "local"
   ```
 
   ```bash
-  cosmic-ray init mutation-catalog.toml mutation-catalog.sqlite
-  cosmic-ray exec mutation-catalog.toml mutation-catalog.sqlite
-  cr-rate --fail-over 20 mutation-catalog.sqlite   # survival ≤ 20% == score ≥ 80%
+  .venv\Scripts\cosmic-ray init mutation-catalog.toml mutation-catalog.sqlite
+  .venv\Scripts\cosmic-ray exec mutation-catalog.toml mutation-catalog.sqlite
+  .venv\Scripts\cr-rate --fail-over 20 mutation-catalog.sqlite   # survival ≤ 20% == score ≥ 80%
   ```
 
-- Coverage ≥ 90%: `pytest --cov=catalog --cov=loans --cov-report=term-missing`
-- Type checking: `mypy catalog/ loans/ --strict`
-- Lint: `ruff check . && ruff format --check .`
+- Coverage ≥ 90%: `python -m pytest --cov=catalog --cov=loans --cov-report=term-missing`
+- Type checking: `python -m mypy catalog/ loans/ --strict`
+- Lint: `python -m ruff check . && python -m ruff format --check .`

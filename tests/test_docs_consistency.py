@@ -193,6 +193,36 @@ class TestExternalRuntimePrerequisites:
         )
 
 
+class TestVirtualenvInvocation:
+    """
+    `Scripts\\activate` hangs in a non-interactive shell, and a hung activation is invisible.
+
+    Live: a codex coder followed "always activate before any Python command", the activation
+    never returned, and it polled the background cell 63 times over 20 minutes. It diagnosed
+    itself correctly -- "a shell activation issue, not a test failure" -- and still produced
+    nothing: no `pyproject.toml`, no package, one wedged handoff. Naming the interpreter needs
+    no shell state and cannot hang, so the instruction must not come back.
+    """
+
+    @pytest.mark.parametrize(
+        "doc",
+        sorted((REPO / "examples").glob("*/kiln/project/constitution/project.md")),
+        ids=lambda p: p.parents[3].name,
+    )
+    def test_no_example_tells_an_agent_to_activate_a_virtualenv(self, doc):
+        text = doc.read_text(encoding="utf-8")
+        offenders = [
+            line.strip()
+            for line in text.splitlines()
+            # The prose explaining *why not* to activate legitimately names the script.
+            if ("Scripts\\activate" in line or "bin/activate" in line)
+            and "not activate" not in text[: text.index(line)][-400:]
+        ]
+        assert not offenders, (
+            f"{doc.parents[3].name} still instructs activation: {offenders}"
+        )
+
+
 class TestUnsupportedRoles:
     """
     `reviewer` cannot run: no shipped profile routes it, so the scheduler escalates NO_ROUTE on

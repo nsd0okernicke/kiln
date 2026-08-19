@@ -178,7 +178,8 @@ class TestReceiveDoesTheWorkNotJustTheNotice:
 
         inbox.poll_once(human)
 
-        subject = git_ops.run_git(["log", "-1", "--format=%s"], git_repo).stdout
+        # HEAD is `record_provenance`'s history link; the content commit sits beneath it.
+        subject = git_ops.run_git(["log", "-1", "--format=%s", "HEAD^1"], git_repo).stdout
         assert subject == "[Human-in-the-loop] Merge CAT-3 from architect"
 
     def test_the_message_is_persisted_for_the_humans_own_session(self, human, git_repo):

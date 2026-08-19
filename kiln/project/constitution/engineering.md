@@ -24,6 +24,16 @@
   one side are frequently not writable by the other, and the failure surfaces as a permission
   error deep inside a tool rather than as a configuration problem. If the native path does not
   work, say so in the handoff instead of switching.
+- Prefer an invocation that needs no shell state. Name an interpreter or binary by path rather
+  than relying on a prior command having changed the environment — `\.venv\Scripts\python.exe
+  -m pytest`, not `activate` followed by `pytest`. A state-changing step is one more thing that
+  can hang or silently not apply, and when it does the failure appears in an unrelated command
+  much later.
+- A command that has not finished is not a command that needs more waiting. If you are polling
+  something you started and it has not progressed after a few checks, stop, kill it, and report
+  what it was — do not keep polling. Observed live: a worker recognised its own hung step
+  ("a shell activation issue, not a test failure") and then polled it another 30 times until
+  the cycle died with nothing handed off.
 - A test suite that depends on an external runtime — a container engine, a database server, a
   message broker — must probe for it before running, and if it is absent, skip that suite and
   state the gap in the handoff. Do not let the suite discover this for itself: a container

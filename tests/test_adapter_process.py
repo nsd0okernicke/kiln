@@ -23,7 +23,7 @@ import threading
 import time
 
 import pytest
-from scheduler.adapters import REAP_TIMEOUT_SEC, terminate_tree
+from scheduler.adapters import REAP_TIMEOUT_SEC, Watchdog, terminate_tree
 
 #: Long enough that nothing finishes on its own during a test, so a passing assertion can
 #: only mean the kill worked.
@@ -113,6 +113,126 @@ class TestTerminateTree:
         terminate_tree(process)
 
         assert called == []
+
+
+class TestWatchdog:
+    """
+    The total cap alone bills the full timeout for a worker that already stopped.
+
+    Measured on the run that prompted this: the coder went silent at 08:11:56 and the 3600s
+    cap fired at 08:56:32. Forty-four of those sixty minutes were spent waiting on a process
+    that had produced its last byte three quarters of an hour earlier. Every hang seen live
+    behaved the same way -- silent, and never speaking again.
+    """
+
+    def _quiet_process(self) -> subprocess.Popen:
+        """Prints once, then goes quiet without exiting -- the shape of every live hang."""
+        code = f"print('hello', flush=True); import time; time.sleep({SLEEP_SEC})"
+        return subprocess.Popen(
+            [sys.executable, "-c", code],
+            stdout=subprocess.PIPE, text=True, start_new_session=True,
+        )
+
+    def test_it_kills_a_worker_that_has_gone_quiet(self):
+        process = self._quiet_process()
+        try:
+            watchdog = Watchdog(process, timeout=600, idle_timeout=2)
+            watchdog.POLL_SEC = 0.2
+            watchdog.start()
+            assert process.stdout is not None
+            assert process.stdout.readline().strip() == "hello"
+            watchdog.saw_output()
+
+            assert process.stdout.read() == "", "the read never unblocked"
+
+            assert watchdog.reason is not None
+            assert "no output" in watchdog.reason
+            watchdog.stop()
+        finally:
+            process.kill()
+
+    def test_it_reports_silence_not_a_generic_timeout(self):
+        # The distinction is the whole diagnostic value: "slow" and "stopped" want different
+        # responses from whoever reads the escalation.
+        process = self._quiet_process()
+        try:
+            watchdog = Watchdog(process, timeout=600, idle_timeout=1)
+            watchdog.POLL_SEC = 0.2
+            watchdog.start()
+            assert process.stdout is not None
+            process.stdout.read()
+            watchdog.stop()
+
+            assert "timed out after" not in (watchdog.reason or "")
+            assert "idle limit" in (watchdog.reason or "")
+        finally:
+            process.kill()
+
+    def test_output_keeps_a_busy_worker_alive(self):
+        # It must not fire on healthy work. A worker emitting events resets the clock, so a
+        # long-but-productive cycle runs to its real cap.
+        code = (
+            "import time\n"
+            "for _ in range(20):\n"
+            "    print('tick', flush=True)\n"
+            "    time.sleep(0.1)\n"
+        )
+        process = subprocess.Popen(
+            [sys.executable, "-c", code], stdout=subprocess.PIPE, text=True, start_new_session=True
+        )
+        try:
+            watchdog = Watchdog(process, timeout=600, idle_timeout=1)
+            watchdog.POLL_SEC = 0.1
+            watchdog.start()
+            assert process.stdout is not None
+            lines = 0
+            for _line in process.stdout:
+                watchdog.saw_output()
+                lines += 1
+            watchdog.stop()
+
+            assert lines == 20, f"worker was cut short after {lines} lines"
+            assert watchdog.reason is None
+        finally:
+            process.kill()
+
+    def test_the_total_cap_still_applies_to_a_chatty_worker(self):
+        # A worker can be productive and still overrun; idle must not replace the total cap.
+        code = "import time\nwhile True:\n    print('tick', flush=True)\n    time.sleep(0.05)\n"
+        process = subprocess.Popen(
+            [sys.executable, "-c", code], stdout=subprocess.PIPE, text=True, start_new_session=True
+        )
+        try:
+            watchdog = Watchdog(process, timeout=1, idle_timeout=600)
+            watchdog.POLL_SEC = 0.1
+            watchdog.start()
+            assert process.stdout is not None
+            for _line in process.stdout:
+                watchdog.saw_output()
+            watchdog.stop()
+
+            assert "timed out after" in (watchdog.reason or "")
+        finally:
+            process.kill()
+
+    @pytest.mark.parametrize("disabled", [None, 0], ids=["none", "zero"])
+    def test_it_can_be_switched_off(self, disabled):
+        # `--worker-idle-timeout 0` for a backend that legitimately works in long silences.
+        # 0 must mean *off*, not "kill on the first poll" -- the scheduler maps it to None,
+        # and a watchdog that read it literally would kill every worker before its first line.
+        disabled = disabled or None  # exactly what role_scheduler does with the CLI value
+        process = self._quiet_process()
+        try:
+            watchdog = Watchdog(process, timeout=600, idle_timeout=disabled)
+            watchdog.POLL_SEC = 0.1
+            watchdog.start()
+            time.sleep(1)
+            watchdog.stop()
+
+            assert watchdog.reason is None
+            assert process.poll() is None, "the worker was killed with idle checking disabled"
+        finally:
+            process.kill()
 
 
 @pytest.mark.skipif(os.name != "nt", reason="taskkill is the Windows branch")
