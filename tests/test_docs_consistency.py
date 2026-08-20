@@ -240,3 +240,80 @@ class TestUnsupportedRoles:
             "reviewer has no routing row in any profile, so it stalls on its first handoff -- "
             "its role file must say so"
         )
+
+
+class TestReadmeProfileExample:
+    """
+    The README prints the `full` profile in full, and tells the reader to start from it.
+
+    That block drifted for five commits and became unlaunchable: it still named the profile
+    `default`, still repeated `agent`/`model` on every terminal after the `defaults` block
+    replaced them, and carried no `routing` -- which `check_launchable` now refuses. A reader
+    who did exactly what the surrounding prose says would have hit a launch error on a config
+    copied out of our own documentation.
+
+    Prose about a profile cannot be checked. A JSON block quoting one can be, so it is.
+    """
+
+    #: Fence in README.md whose content parses as a profiles.json fragment containing `full`.
+    _FENCE = re.compile(r"```json\n(\{.*?\n\})\n```", re.S)
+
+    def _readme_full_profile(self) -> dict:
+        text = (REPO / "README.md").read_text(encoding="utf-8")
+        for block in self._FENCE.findall(text):
+            try:
+                parsed = json.loads(block)
+            except json.JSONDecodeError:
+                continue  # illustrative fragments with `...` in them; not our target
+            if "full" in parsed.get("profiles", {}):
+                return parsed
+        pytest.fail("README.md no longer contains a JSON block defining the 'full' profile")
+
+    def test_the_readme_block_matches_the_shipped_profile(self):
+        documented = self._readme_full_profile()
+        shipped = json.loads(FRAMEWORK_PROFILES.read_text(encoding="utf-8"))
+
+        assert documented["profiles"]["full"] == shipped["profiles"]["full"], (
+            "README.md's 'full' profile block no longer matches kiln/framework/profiles.json"
+        )
+
+    def test_the_readme_block_names_the_real_default(self):
+        documented = self._readme_full_profile()
+        shipped = json.loads(FRAMEWORK_PROFILES.read_text(encoding="utf-8"))
+
+        assert documented.get("default") == shipped["default"]
+
+
+class TestEveryShippedProfileDeclaresRouting:
+    """
+    Routing moved into the profile and workflow.md is rendered from it, so a profile without a
+    `routing` block has no table to render and `check_launchable` rejects it. A shipped profile
+    in that state is a launch error we ship, not a runtime surprise.
+    """
+
+    def test_no_shipped_profile_would_be_refused_at_launch(self):
+        profiles = json.loads(FRAMEWORK_PROFILES.read_text(encoding="utf-8"))["profiles"]
+
+        missing = [name for name, profile in profiles.items() if not profile.get("routing")]
+
+        assert not missing, f"shipped profiles that declare no routing: {missing}"
+
+
+class TestDocumentedTerminalKeys:
+    """
+    `workerIdleTimeout` and `workerDebug` were both accepted by the loader, and `workerDebug`
+    was set in a shipped profile, while neither appeared anywhere in the README. An accepted
+    key that no document mentions is one a user can only find by reading the source -- and
+    since unknown keys now fail the launch, the accepted set *is* the public interface.
+    """
+
+    def test_every_accepted_terminal_key_is_documented(self):
+        from launcher.config import TERMINAL_KEYS
+
+        readme = (REPO / "README.md").read_text(encoding="utf-8")
+
+        undocumented = sorted(key for key in TERMINAL_KEYS if f"**{key}**" not in readme)
+
+        assert not undocumented, (
+            f"terminal keys the loader accepts but README.md never documents: {undocumented}"
+        )

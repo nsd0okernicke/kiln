@@ -1,8 +1,15 @@
 """
-Handoff routing — parsed from the `## Handoff Routing` table in constitution/workflow.md.
+Handoff routing — the table itself, plus both directions it travels.
 
-Ports bin/kiln.ps1's Read-HandoffRoutingTable (bin/kiln.ps1:787) to Python and extends it
-with an optional third column so sender-dependent routing is expressed as data:
+The source of truth is the launched profile's `routing` block, parsed by
+`parse_profile_routing`. `render_routing_table` writes it back out as the markdown table that
+fills workflow.md's `{{ROUTING_TABLE}}` placeholder at generation time, so agents still read
+one table in one place -- they just no longer own it. `load_routing_table` parses that markdown
+form back, and remains the reader for anything holding a workflow.md rather than a profile.
+
+The markdown shape below is therefore both the rendered output and the accepted input. It ports
+bin/kiln.ps1's Read-HandoffRoutingTable (bin/kiln.ps1:787) to Python and extends it with an
+optional third column so sender-dependent routing is expressed as data:
 
     | Role              | Sends to          | When Sender |
     | ----------------- | ----------------- | ----------- |

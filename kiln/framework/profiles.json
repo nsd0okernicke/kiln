@@ -4,7 +4,7 @@
   "default": "full",
   "profiles": {
     "full": {
-      "description": "New feature, spec-first. Human-guided intake feeding the full autonomous cycle: specifier -> coder -> refactorer -> architect, on the deterministic scheduler, plus a dashboard tab. Routing comes from constitution/workflow.md.",
+      "description": "New feature, spec-first. Human-guided intake feeding the full autonomous cycle: specifier -> coder -> refactorer -> architect, on the deterministic scheduler, plus a dashboard tab.",
       "defaults": {
         "agent": "claude",
         "model": "claude-sonnet-5"

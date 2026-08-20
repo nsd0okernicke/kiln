@@ -14,7 +14,16 @@ Kiln launches a config-driven multi-agent swarm, each agent working in its own g
 
 ## Quick Start
 
-The fastest way to get a working Kiln project: run the install script.
+Kiln is not installed — it is cloned and run in place. `bin/kiln.ps1` / `bin/kiln.sh` are run
+from the clone, and they scaffold and launch projects that live anywhere else on disk.
+
+```bash
+git clone https://github.com/nsd0okernicke/kiln.git
+cd kiln
+```
+
+Everything below is run from that directory. See **Platform Support** for the prerequisites
+(Python 3.11+, git, at least one agent CLI).
 
 ### 1. Create a New Project
 
@@ -221,6 +230,7 @@ kiln/
 │       │   ├── paths.py                  # Every path Kiln touches, in one place
 │       │   ├── commands.py               # The command injected into each pane
 │       │   ├── generate.py               # CLAUDE.md / AGENTS.md / .mcp.json / worker files
+│       │   ├── templates.py              # Loads templates/constitution/roles, fills placeholders
 │       │   ├── workspace.py              # gitignore, hooks, worktrees, skills
 │       │   ├── scaffold.py               # `init` project scaffolding
 │       │   ├── stop.py                   # `--stop` process teardown
@@ -252,7 +262,7 @@ kiln/
 │       ├── profiles.json             # Default configuration profiles
 │       ├── templates/                # Loop/runtime templates for wrapper-mode roles
 │       ├── mcp-server/               # kiln-channel: blocking wait_for_message() receiver
-│       └── tools/                    # set-status.py — re-seeded into .kiln/tools/ every launch
+│       └── tools/                    # set-status.py, status-hook.py — re-seeded into .kiln/tools/ every launch
 │
 ├── examples/                     # Example project briefs
 ├── tests/                        # pytest suite for launcher/ and scheduler/
@@ -789,13 +799,16 @@ platforms in either spelling** — `-ProfileName harden`, `-Profile harden` and
 | `--working-dir <path>` | `-WorkingDir`, `-Target`, `--target` | Project directory (default: `.`) |
 | `--profile <name>` | `-Profile`, `-ProfileName` | Which profile to launch |
 | `--terminal <backend>` | `-Terminal` | `wezterm`, `wt`, `tmux` or `none` (default: auto-detect) |
+| `--agent-override <backend>` | `-AgentOverride` | Run every agent-bearing role on this backend instead. Drops each role's model — see "Backend is a flag, not a profile" |
+| `--model-override <model>` | `-ModelOverride` | Model to use with `--agent-override` (default: let that CLI choose) |
 | `--stop` | `-Stop` | Stop a running swarm |
 | `--list-profiles` | `-ListProfiles` | List available profiles and exit |
+| `--all-profiles` | `-AllProfiles` | With `--list-profiles`, also show profiles marked as test fixtures |
 | `--init` | `-Init` | Scaffold a new project instead of launching (or the `init` subcommand) |
 | `--example <name>` | `-Example` | Seed the scaffold from `examples/<name>` |
 | `--no-git` | `-NoGit` | Skip git initialisation when scaffolding |
 | `--dry-run` | | Print what would launch, start nothing |
-| `--proxy` | | Route agent API traffic through the local capture proxy (off by default) |
+| `--proxy` / `--no-proxy` | `-Proxy` | Route agent API traffic through the local capture proxy (off by default) |
 | `--proxy-port <n>` | | Pin the capture proxy to an exact port (default: `8787`, probed upward if busy) |
 | `--capture <mode>` | | `metadata` (default) or `full` — capture depth, see "Traffic Capture" |
 | `--verbose` | `-Debug` | Verbose output |
@@ -804,6 +817,48 @@ Kiln will create a git repository if one doesn't exist, initialize worktrees, an
 
 `--dry-run` is the fastest way to see exactly what a profile will do — it prints the resolved
 command line and working directory for every role without spawning a terminal.
+
+#### The human entry points: `send`, `inbox`, `retry`
+
+Three subcommands are for you rather than for the swarm. They are the first argument, and they
+take the project from `--working-dir` (default `.`) — the message database and the branch are
+filled in for you, since a queue is branch-scoped and an inbox watching the wrong branch is
+indistinguishable from an empty one.
+
+| Command | What it does |
+|---|---|
+| `send <summary> --to <role>` | Queue a handoff from the CLI. `--from` (default `human-in-the-loop`), `--commit`, `--priority`, `--escalation` |
+| `inbox` | The human's notification pane. `--once` drains and exits; `--role`, `--no-bell`, `--no-status-bar` |
+| `retry [id] [--guidance <text>]` | List escalated work, or send one item back to the role that failed it |
+
+Written out in full, the way you would actually type them:
+
+```powershell
+# Windows
+.\bin\kiln.ps1 send "add pagination to GET /books" --to specifier
+.\bin\kiln.ps1 retry
+```
+
+```bash
+# Unix/macOS
+./bin/kiln.sh send "add pagination to GET /books" --to specifier
+./bin/kiln.sh retry
+```
+
+> **On the shorthand.** The rest of this README writes these as `kiln send` / `kiln inbox` /
+> `kiln retry` for readability. There is no `kiln` on your `PATH` — substitute
+> `.\bin\kiln.ps1` or `./bin/kiln.sh`, or make yourself an alias:
+>
+> ```bash
+> alias kiln='/path/to/kiln/bin/kiln.sh'          # bash/zsh
+> ```
+>
+> ```powershell
+> function kiln { & C:\path\to\kiln\bin\kiln.ps1 @args }   # PowerShell profile
+> ```
+>
+> The subcommands' own `--help` output already calls itself `kiln send` / `kiln retry`, so the
+> alias is the spelling they assume.
 
 ### Windows (PowerShell)
 
@@ -899,7 +954,7 @@ command line and working directory for every role without spawning a terminal.
 
 ## Configuration Profiles
 
-Kiln uses JSON profiles to define swarm topology. The default profile is `default`, whose name is set by the top-level `"default"` key in `kiln/framework/profiles.json` (`load_profile()` in `kiln/framework/launcher/config.py` resolves it at launch if no `--profile` is given). All projects inherit the framework's default profiles from `kiln/framework/profiles.json` automatically.
+Kiln uses JSON profiles to define swarm topology. The profile used when you pass no `--profile` is `full`, named by the top-level `"default"` key in `kiln/framework/profiles.json` (`load_profile()` in `kiln/framework/launcher/config.py` resolves it at launch). All projects inherit the framework's profiles from `kiln/framework/profiles.json` automatically.
 
 **To customize profiles for a specific project**, create `kiln.profiles.json` at your project root. Kiln will use your custom profiles instead of the framework defaults.
 
@@ -913,63 +968,76 @@ The framework's `full` profile pairs a human-facing intake role with a fully aut
 
 ```json
 {
+  "default": "full",
   "profiles": {
-    "default": {
-      "description": "Human-guided request intake (human-in-the-loop, with a live inbox pane) feeding a fully autonomous specifier -> coder -> refactorer -> architect cycle on the deterministic scheduler, plus a dashboard tab",
+    "full": {
+      "description": "New feature, spec-first. Human-guided intake feeding the full autonomous cycle: specifier -> coder -> refactorer -> architect, on the deterministic scheduler, plus a dashboard tab.",
+      "defaults": {
+        "agent": "claude",
+        "model": "claude-sonnet-5"
+      },
       "terminals": [
         {
           "role": "human-in-the-loop",
-          "agent": "claude",
           "worktree": "@current",
-          "mode": "manual",
-          "model": "claude-sonnet-5"
+          "title": "Kiln Human-in-the-Loop",
+          "mode": "manual"
         },
         {
           "role": "inbox",
           "worktree": "@current",
+          "title": "Kiln Inbox",
           "mode": "manual",
           "scheduler": "inbox",
           "watches": "human-in-the-loop"
         },
         {
           "role": "specifier",
-          "agent": "claude",
           "worktree": "specifier",
+          "title": "Kiln Specifier",
           "mode": "auto",
-          "model": "claude-sonnet-5",
-          "scheduler": "python"
+          "scheduler": "python",
+          "workerTimeout": 1800
         },
         {
           "role": "coder",
-          "agent": "claude",
           "worktree": "coder",
+          "title": "Kiln Coder",
           "mode": "auto",
-          "model": "claude-sonnet-5",
-          "scheduler": "python"
+          "scheduler": "python",
+          "workerTimeout": 1800
         },
         {
           "role": "refactorer",
-          "agent": "claude",
           "worktree": "refactorer",
+          "title": "Kiln Refactorer",
           "mode": "auto",
-          "model": "claude-sonnet-5",
-          "scheduler": "python"
+          "scheduler": "python",
+          "workerTimeout": 1800
         },
         {
           "role": "architect",
-          "agent": "claude",
           "worktree": "architect",
+          "title": "Kiln Architect",
           "mode": "auto",
-          "model": "claude-sonnet-5",
-          "scheduler": "python"
+          "scheduler": "python",
+          "workerTimeout": 2400
         },
         {
           "role": "dashboard",
           "worktree": "@current",
+          "title": "Kiln Dashboard",
           "mode": "manual",
           "scheduler": "dashboard"
         }
       ],
+      "routing": {
+        "human-in-the-loop": "specifier",
+        "specifier": {"default": "coder", "architect": "human-in-the-loop"},
+        "coder": "refactorer",
+        "refactorer": "architect",
+        "architect": "specifier"
+      },
       "layout": {
         "tabs": [
           {
@@ -1000,6 +1068,20 @@ The framework's `full` profile pairs a human-facing intake role with a fully aut
   }
 }
 ```
+
+Three blocks in there are easy to skim past and are the ones a hand-written profile most often
+gets wrong:
+
+- **`defaults`** holds `agent` and `model` once instead of five times — see **Saying it once**
+  below. A terminal's own key still wins.
+- **`routing`** is **mandatory**, not decorative. A profile that launches any handing-off role
+  and declares no `routing` is refused at launch — see **Every profile carries its own routing**
+  below.
+- **`workerTimeout`** is raised per role because the module default of 900s is sized for an LLM
+  session, not for the toolchain each role actually runs — see **Terminal fields** below.
+
+This block is kept honest by `tests/test_docs_consistency.py`, which parses it out of this file
+and compares it to `kiln/framework/profiles.json`.
 
 ### Other Bundled Profiles
 
@@ -1067,16 +1149,25 @@ Any terminal key can be defaulted, not just `agent` and `model` — timeouts and
 across roles just as readily. `full` used to state the same agent and model five times, which
 is five chances for them to stop agreeing.
 
-#### Profiles that reshape the cycle carry their own routing
+#### Every profile carries its own routing
 
-There is one `## Handoff Routing` table in `constitution/workflow.md`, and it **refuses to
-load** if two rows compete for the same role. `full` needs `architect → specifier`; `harden`
-has no specifier and needs `architect → human-in-the-loop`. Both are the architect's *default*
-row, so one shared table cannot express both — and the clash is not a quiet misroute, it is a
-parse failure that takes down every profile at once.
+There used to be one `## Handoff Routing` table in `constitution/workflow.md` that every
+profile shared, and it **refused to load** if two rows competed for the same role. `full` needs
+`architect → specifier`; `harden` has no specifier and needs `architect → human-in-the-loop`.
+Both are the architect's *default* row, so one shared table could not express both — and the
+clash was not a quiet misroute, it was a parse failure that took down every profile at once.
 
-So a profile can declare its own `routing`, which **replaces** the file's table rather than
-adding to it:
+That direction is now inverted. **Routing lives in the profile**, and `constitution/workflow.md`
+is *rendered from it* at launch: the file ships with a `{{ROUTING_TABLE}}` placeholder rather
+than a hand-written table, and `generate.py` fills it in with the routing of the profile you
+actually launched. Each agent still reads one table in one place; it just is no longer the
+source.
+
+Which makes `routing` **required**, not optional. `check_launchable()` in
+`launcher/config.py` refuses a profile that launches any handing-off role and declares no
+routing — a profile with an inbox and a dashboard and nothing else is the one exemption, since
+neither hands off. Without that check the swarm starts, runs one cycle and escalates
+`NO_ROUTE`, which is a worse place to learn it than the launch that caused it.
 
 ```json
 "harden": {
@@ -1089,9 +1180,9 @@ adding to it:
 }
 ```
 
-Replacement rather than overlay is deliberate: with an overlay, answering "where does the
-architect hand off in this profile" would mean reading two files and knowing which wins. A
-profile that omits `routing` keeps using `workflow.md`, which is what `full` and `dry-run` do.
+One place rather than two is the point: answering "where does the architect hand off in this
+profile" means reading that profile, and nothing else. All six bundled profiles declare their
+own block.
 
 Sender-conditional rows use the nested form, where the keys are sender names and `default` is
 the blank `When Sender` row:
@@ -1125,11 +1216,20 @@ would not open.
 - **worktree** — `@current` to work in the main directory, or any name (creates `.worktrees/<name>/`)
   - Use `@current` for coordinator/review roles that work on the current branch
   - Use separate worktree names for roles that need isolation (e.g., each agent on its own branch)
+- **title** — the terminal tab/pane title. Defaults to a title derived from the role name.
+- **mode** — `auto` (runs unattended) or `manual` (a live session you talk to).
+- **scheduler** — `python` for a scheduled worker loop, `inbox` for the human's notification
+  pane, `dashboard` for the swarm-wide view. Omit it for a wrapper-mode role — see
+  **Execution Modes** above.
+- **watches** — (inbox panes) which role's queue this pane reports on. Must name a role the
+  same profile launches.
 - **model** — (Claude agents only) which Claude model to use, e.g., `claude-haiku-4-5-20251001`, `claude-sonnet-5`, `claude-opus-5`
 - **workerModel** — (Claude agents only, `mode: "auto"` roles only, optional) pins the `<role>-worker` subagent this wrapper dispatches each cycle to a different model than the wrapper itself. If omitted, the worker subagent inherits the wrapper's model (Claude Code's default behavior for subagents with no `model` frontmatter).
 
 - **pollInterval** — (scheduler, inbox and dashboard panes) seconds between polls. Defaults to 2.
-- **workerTimeout** — (scheduler roles) seconds before one worker invocation is abandoned. The module default is 900; the shipped profiles raise it per role — see below.
+- **workerTimeout** — (scheduler roles) seconds before one worker invocation is abandoned however busy it is. The module default is 900; the shipped profiles raise it per role — see below.
+- **workerIdleTimeout** — (scheduler roles) seconds of *silence* before a worker is abandoned. A second, independent limit — see **Two ways a worker gets killed** below.
+- **workerDebug** — (scheduler roles) additionally write the backend CLI's own internal debug trace to `.kiln/logs/agent-debug-<role>-attempt<N>.log`. `false` by default; the `mixed-backends` fixture turns it on for all four scheduled roles, which is what it is for — diagnosing an adapter against an unfamiliar backend. Independent of `.kiln/logs/worker-debug-<role>-attempt<N>.log`, which is written for *any* worker that fails to report done, debug flag or not.
 - **maxAttempts** — (scheduler roles) worker attempts per handoff before escalating. Defaults to 2.
 - **escalationLimit** — (scheduler roles) consecutive escalations before the role stops taking new work and parks for `kiln retry`. Defaults to 3.
 - **activityLimit** — (dashboard panes) how many recent messages the activity list shows. Defaults to 8.
@@ -1229,6 +1329,35 @@ that was progressing.
 count the thing that actually matters. The worker timeout only decides how long one invocation
 may take before it is abandoned, and setting it too low turns "slow" into "failed" — twice, then
 an escalation.
+
+#### Two ways a worker gets killed (`workerIdleTimeout`)
+
+`workerTimeout` bounds a worker that is genuinely working and merely slow. It is the wrong
+instrument for a worker that has **stopped**, and stopping is what every hang observed live
+actually did:
+
+- a `testcontainers` fixture waiting on a Docker daemon that was not running
+- a PowerShell activation script that never returned
+- a codex code-mode cell reporting "Wall time 11.0 seconds", unchanged, forever
+
+None of the three ever recovered, and none produced a single line of output after going quiet.
+With only a total cap, the last of them cost **60 minutes for 16 minutes of work** — silence
+began at 08:11 and the cap fired at 08:56.
+
+So there is a second, independent limit. `workerIdleTimeout` is seconds of *silence*, measured
+from the last line the worker emitted, and it cannot fire on healthy work: a working agent emits
+events continuously, which is the same property the pane status bar already relies on to stay
+live. Whichever limit trips first kills the worker **and everything it spawned** — workers shell
+out, and killing only the direct child leaves grandchildren holding the stdout pipe open.
+
+The kill reason is reported rather than flattened into a generic timeout, so the scheduler log
+distinguishes `worker timed out after 1800s` from `worker produced no output for 420s (idle
+limit 400s)`. That failure counts as one attempt, like any other, and the usual
+`maxAttempts` → escalation path follows.
+
+Both limits are per role and both are optional. The idle default is **300s** for every adapter,
+and no shipped profile overrides it — raise it for a role whose toolchain genuinely goes quiet
+for longer than five minutes at a stretch.
 
 ### Bounding an autonomous run
 
@@ -1425,7 +1554,7 @@ You can mix different agents in a single swarm:
 }
 ```
 
-Each agent backend requires the corresponding CLI tool to be installed and available in `PATH`. The `architect: grok` role needs `"scheduler": "python"` explicitly — grok has no wrapper mode, so it can only run as a scheduled `auto` role (see Known Limitations). The framework ships a real, working version of this idea as the **`mixed-backends`** profile (`coder` on Copilot, `refactorer` on Codex, everything else on Claude, all on the scheduler) — see **Other Bundled Profiles** above.
+Each agent backend requires the corresponding CLI tool to be installed and available in `PATH`. The `architect: grok` role needs `"scheduler": "python"` explicitly — grok has no wrapper mode, so it can only run as a scheduled `auto` role (see Known Limitations). The framework ships a working version of this idea as the **`mixed-backends`** profile (`specifier` and `refactorer` on Codex, everything else on Claude, all on the scheduler). It is a test fixture rather than a production profile and is hidden from `--list-profiles` — see **Other Bundled Profiles** above.
 
 ### Running a Different Profile
 
@@ -1687,10 +1816,12 @@ different lines to the end of one tracked file is the classic changelog conflict
 fire every cycle regardless of what the swarm is building.
 
 It gets worse than an ordinary textual conflict. The squash mechanics (`reset --soft` per role,
-`merge --squash` onto the human's branch) leave commits with no link back to where their content
-came from, so the merge base frequently has **no `logbook.md` at all** — git then reports
+`merge --squash` onto the human's branch) used to leave commits with no link back to where their
+content came from, so the merge base frequently had **no `logbook.md` at all** — git then reports
 `CONFLICT (add/add)` and refuses to merge the contents rather than attempting a three-way merge.
-Observed live, twice.
+Observed live, twice. The provenance link described below repairs the merge base, but the
+`merge=union` rule below is what actually settles the logbook, and it is worth having on both
+counts.
 
 Kiln declares the file append-only, so git keeps both sides' lines instead of conflicting:
 
@@ -1708,6 +1839,40 @@ hand, none of which see a local-only file. Same split as `.gitignore` (committed
 **If a swarm is already wedged on this**, the entries land on the next launch — but the merge
 that is currently stuck still needs resolving by hand once. The logbook is narration, so either
 side is fine to keep.
+
+### Why your branch gains one merge commit per lap
+
+`human-in-the-loop` works directly on the project's real, possibly-pushed branch (`@current`),
+not on a disposable sub-branch the way every scheduled role does. A true `--no-ff` merge there
+would put the sender's entire commit graph on that branch's **first-parent line** on every
+handoff, including everything that sender had already merged from *its* senders. So the inbox
+squash-merges instead, and the result lands looking like one ordinary commit.
+
+Squashing alone turned out not to be survivable. It is the one hop in the lap that drops
+ancestry, and dropping it broke the *next* lap. Observed live on a three-cycle run: the coder's
+own `books.py` went out to the refactorer and the architect, then came back to the coder through
+the squash as content with no history. Git computed the merge base as the specifier's
+feature-file commit — from before any implementation existed — saw the same file created
+independently on both sides, and reported a content conflict. The coder was being asked to
+reconcile its own work with a refactored copy of its own work.
+
+So the squash is followed by a **provenance commit**: `git merge -s ours`, which keeps the tree
+exactly as the squash left it and records the sender as a second parent. Nothing about your
+files changes; later merge bases simply tell the truth.
+
+What this costs you, stated plainly, because avoiding it is why the squash exists in the first
+place:
+
+- `@current` gains **one merge commit per lap**.
+- It does **not** gain the sender's commits on its first-parent line. `git log --first-parent`
+  still reads as one flat commit per handoff, which is the shape the squash was protecting.
+- Those commits do become *reachable*, which is the entire point.
+
+It is safe on a branch you are editing. A normal merge refuses when it would overwrite
+uncommitted changes; `-s ours` never would, because the result tree *is* `HEAD`'s tree — git
+runs it and leaves your edit untouched in the working tree. Verified, not assumed. And it is
+best-effort: the content is already committed by the time it runs, so a failure costs a truthful
+merge base, not the handoff. You get a warning in the log, never an exception in the inbox.
 
 ### What happens to work that was in flight
 
@@ -1904,7 +2069,7 @@ equivalent).
 - ✓ **Per-pane status bar** and a configuration banner for scheduler roles.
 - ✓ **Swarm-wide dashboard** (`"scheduler": "dashboard"`, `scheduler/dashboard.py`) — a
   `top`-style pane aggregating role state, queue depth, cost/cycle totals and recent
-  activity/escalations across every role at once. Shipped as its own tab in the `default`
+  activity/escalations across every role at once. Shipped as its own tab in every bundled
   profile. See **Dashboard mode** above.
 - ✓ **Cost/cycle persistence** — `.kiln/status/<role>.json` now carries optional
   `cycles`/`cost_usd` fields (threaded from the pane status bar through `set-status.py`), so
@@ -2023,9 +2188,15 @@ repository it was captured from.
 ### Known Limitations & Future Work
 
 What does *not* work yet, or works with a caveat. For what is already validated, see the ✓ list
-under **Deterministic Scheduler** above.
+under **Kiln v0.3 — Phase 7** above.
 
-- **Error handling** — Minimal error recovery in agent workflows; graceful degradation not yet implemented
+- **Error handling is now structural, but it is bounded rather than clever.** A failed worker is
+  retried (`maxAttempts`), then escalated; three consecutive escalations park the role for
+  `kiln retry`; a worker that hangs or goes silent is killed by the watchdog; work left mid-cycle
+  by a killed role is re-served at the next startup; a `verify` command can fail a handoff before
+  it is sent. What none of that does is *understand* a failure — the swarm's answer to anything
+  it cannot retry its way past is to stop and tell a human, by design. Domain-specific recovery
+  is still yours to write, as a `verify` command or role prose.
 - **Scaling** — Tested with 4 agents over 8+ cycles with stable performance; behavior with 10+ agents unknown
 - **Copilot scheduler-mode workers are currently unreliable on long sessions.** Non-interactive
   (`-p`) Copilot CLI sessions (roughly 4-8 minutes, many tool calls) silently and permanently
@@ -2091,9 +2262,8 @@ under **Deterministic Scheduler** above.
 2. **`grok` wrapper mode** — closes the one remaining "backend accepted but one mode
    unimplemented" gap, following the same shape as the Copilot/Codex wrapper work
 3. **Port `kiln-cleanup.ps1` to Python** — closes the Unix cleanup gap and removes the last non-shim PowerShell in the launch path
-4. **Add error handling** — graceful failure modes when agents can't process messages
-5. **Multi-language projects** — test beyond the LibraryHub FastAPI example
-6. **CI/CD integration** — how Kiln agents fit into GitHub Actions / GitLab CI
+4. **Multi-language projects** — test beyond the LibraryHub FastAPI example
+5. **CI/CD integration** — how Kiln agents fit into GitHub Actions / GitLab CI
 
 ---
 
