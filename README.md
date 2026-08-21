@@ -102,9 +102,9 @@ Kiln is a lightweight orchestration layer that:
   - **Message lifecycle**: `queued` (created) → `delivered` (retrieved by agent) → `processing` (work started) → `processed` (handoff sent)
 - Keeps all swarm state in `.kiln/` (logs, sessions, message database) — gitignored and ephemeral
 
-![Kiln running the default profile: a Human-in-the-Loop tab alongside an Autonomous Cycle tab showing specifier, coder, refactorer, and architect in a 2×2 grid, each with a live status badge](docs/images/kiln1.png)
+![Kiln's Human-in-the-Loop tab in WezTerm: three tabs across the top (Human-in-the-Loop, Autonomous Cycle, Dashboard), a live status badge per role in the top-right, a Claude session in manual mode asking what to work on, and a Kiln inbox pane pinned beneath it showing the role it watches, the branch, the worktree and the queue path](docs/images/kiln1.png)
 
-*The default profile in WezTerm — one tab for the human-facing intake role, one tab with the autonomous four-role cycle running as a grid.*
+*The default profile's first tab. The badge strip top-right tracks every role at once; the `inbox` pane pinned beneath the session is the half that listens, so the session above it stays free to type into — see **Inbox mode** below for why that split is necessary.*
 
 ### Project Structure Created by `bin/kiln.ps1 -Init` / `bin/kiln.sh init`
 
@@ -310,11 +310,25 @@ A Python process owns the pane. It polls SQLite directly, merges, invokes the ag
 **once per handoff** as a subprocess, reads the result, squashes and inserts the next handoff —
 then loops. The LLM only does the work; it makes none of the control-flow decisions.
 
+![Scheduler mode, one cycle of run_once(): poll the queue, receive and mark processing, check the guards then merge, run the worker as a one-shot CLI subprocess with the verify gate and one retry folded into the same loop, then hand off — squash, INSERT, read back, mark processed — and loop; guard breaches and an undone worker escalate to human-in-the-loop, where a circuit breaker halts the role after three in a row](docs/images/diagram-scheduler-cycle.svg)
+
+*One `run_once()` cycle for the coder. Note where the verify gate sits — **inside** `_delegate`'s
+retry loop, not between it and the handoff: a failing verify demotes the attempt to `blocked`, so
+"the worker said it was blocked" and "the worker said it was done but the tests disagree" go
+through the same `should_retry` rule and the same escalation counter.*
+
 ```jsonc
 { "role": "coder", "agent": "claude", "worktree": "coder",
   "mode": "auto", "model": "claude-sonnet-5",
   "scheduler": "python" }        // <- what every shipped `auto` role sets
 ```
+
+![The Autonomous Cycle tab mid-handoff: the specifier pane has finished a cycle and shows KILN-STATUS done, the squash, the queued handoff to coder and its per-pane status bar reading waiting, cycle 1, $0.37, 230.4k tok, arrow coder; the coder pane shows the scheduler header followed by message found, marked delivered, marked processing, received handoff from specifier, merging, and delegating to coder-worker attempt 1 of 1](docs/images/kiln2.png)
+
+*The same cycle in real panes. Every line the coder pane prints — deliver, mark processing, merge,
+delegate — is `run_once()` narrating itself; there is no LLM session in that pane to narrate it.
+The header above each log is the scheduler's own config dump: worker, hands-off target, queue
+path, poll and worker timeouts.*
 
 ### Wrapper mode (manual roles, and any backend without an adapter)
 
@@ -325,6 +339,13 @@ turn is finished, and delegates the actual work to a disposable worker subagent.
 are prose, so the model can misread them — a turn that ends early, a merge step that gets
 skipped — which is exactly the class of failure scheduler mode was built to remove for
 anything that doesn't structurally need a live conversation.
+
+![Wrapper mode, the coder's internal cycle: a persistent LLM session runs /kiln-receive, mark_processing, an Agent-tool delegation to the coder-worker subagent with one retry, /kiln-handoff and mark_processed, then calls /kiln-receive again in the same turn](docs/images/diagram-coder-internal-cycle.svg)
+
+*The same role, driven by prose instead. Compare the two: the scheduler's guards, cost caps and
+circuit breaker have no counterpart here, the queue is reached through MCP rather than SQLite, and
+the turn ends when the model judges it has — which is the step that stalled in live testing, and
+the reason step 7 is written the way it is.*
 
 What changes when a role is scheduled:
 
@@ -425,6 +446,13 @@ as `inbox`.
 Each poll (every 2s by default, `--poll-interval` to change it) it clears the pane and redraws
 a full frame — unlike the inbox and the pane status bar, which deliberately preserve
 scrollback, there is nothing here worth scrolling back through:
+
+![The Kiln Dashboard tab: a per-role table of state, time since, queue depth, wait, cycles, cost, tokens and cache hit rate for all seven panes; totals for cost, cycles, tokens and escalations; a tokens-by-kind breakdown; a prompt-weight table of requests and average and maximum request sizes per role; and Recent activity and Escalations logs](docs/images/kiln4.png)
+
+*A live run: two completed cycles, $5.41 spent, 11.3M tokens — 11.0M of them cache reads, which
+is what the CACHE column is reporting. The prompt-weight panel below the totals comes from the
+capture proxy — see [The prompt-weight panel](#the-prompt-weight-panel) under **Traffic Capture** —
+and appears only when a run is proxied; the annotated layout is unpacked here:*
 
 ```text
 📊 Kiln Dashboard — library-hub-testrun (main)                     13:36:57
@@ -745,9 +773,9 @@ This ensures every agent operates with full constitutional context plus its spec
 
 Concretely, here's what that looks like for the coder — the wrapper receives and merges the handoff, delegates to a fresh `coder-worker` subagent that runs the actual red → green → refactor TDD cycle, then hands the result onward:
 
-![Coder wrapper internal cycle: receive and merge, delegate to coder-worker, retry once on failure, then handoff — with the worker's TDD red/green/refactor loop shown alongside](docs/images/diagram-coder-internal-cycle.svg)
+![Wrapper mode, the coder's internal cycle: /kiln-receive blocks on wait_for_message() then merges and logs, mark_processing, delegate to the coder-worker subagent with the Agent tool, retry once on a failed report and hand off a blocker after a second, /kiln-handoff to log, squash, INSERT and verify the row, mark_processed, then call /kiln-receive again in the same turn — with the disposable subagent's TDD red/green/refactor loop shown alongside](docs/images/diagram-coder-internal-cycle.svg)
 
-*The wrapper half (right) is identical for every role; only the worker's inner loop (left) changes — a refactorer-worker would run coverage → CRAP → mutation gates instead of TDD.*
+*This is **wrapper mode** — the persistent-LLM-session variant, which shipped profiles now keep only for the human-facing `manual` role. The wrapper half (right) is identical for every role; only the worker's inner loop (left) changes — a refactorer-worker would run coverage → CRAP → mutation gates instead of TDD. For the scheduler-mode equivalent, see [Execution Modes: Wrapper vs Scheduler](#execution-modes-wrapper-vs-scheduler).*
 
 The dispatch mechanism differs per backend:
 
@@ -966,7 +994,7 @@ Kiln uses JSON profiles to define swarm topology. The profile used when you pass
 
 The framework's `full` profile pairs a human-facing intake role with a fully autonomous specifier → coder → refactorer → architect cycle: `human-in-the-loop` runs `manual` in the main directory (`@current`) to gather and confirm the request with you, with a live `inbox` strip beneath it for escalations, then the other four roles run `auto` **on the deterministic scheduler** in their own worktrees with no human input needed, and a dedicated `dashboard` tab gives a swarm-wide view. Each `auto` role's scheduler pane and worker both run on Sonnet by default — see "Decoupling wrapper and worker models" below if you want to split a role's pane onto a cheaper/faster model than its worker:
 
-![Default profile topology: human-in-the-loop gathers and confirms a request, hands it to an autonomous specifier → coder → refactorer → architect cycle, which reports completion back](docs/images/agentic_coding_topology_human_left_v3.svg)
+![Default profile topology: a human-in-the-loop pane with an inbox strip beneath it gathers and confirms a request, hands it to a specifier → coder → refactorer → architect cycle running on the deterministic scheduler, which reports completion — or escalates — back to the inbox, alongside a separate dashboard tab](docs/images/agentic_coding_topology_human_left_v3.svg)
 
 *What the JSON below configures: one manual, human-facing role (with an inbox strip for escalations) feeding a fully autonomous 4-role cycle, plus a dashboard tab. See **Inbox mode** and **Dashboard mode** below for what those two extra panes do.*
 
@@ -1696,9 +1724,12 @@ Each `auto`-mode role's wrapper cycles through four states — **waiting** (idle
 
 On WezTerm, Kiln's generated Lua config polls the status JSON files directly (not the contested pane title) roughly once a second and renders a live, color-coded status bar in the top-right of the window — one badge per role, background colored by state (green = waiting, blue = receiving, teal = delegating, violet = handoff), visible regardless of which tab or pane is focused. This is what makes state visible even in grid/pane layouts like the default profile's "Autonomous Cycle" tab, where multiple roles share a single tab and would otherwise have no per-pane title of their own.
 
-![Live status bar in the top-right of a WezTerm window, showing human-in-the-loop as "handoff" and specifier as "delegating: specifier-worker" while coder, refactorer, and architect show "waiting"](docs/images/kiln4.png)
+![The Autonomous Cycle tab one handoff later, with the WezTerm badge strip in the top-right showing refactorer as "working" while human-in-the-loop, specifier, coder and architect all show "waiting"](docs/images/kiln3.png)
 
-*The specifier's badge mid-cycle: `delegating: specifier-worker` — the wrapper has dispatched its worker subagent and is blocked waiting on the result.*
+*The badge strip doing the job this section describes. This is the grid tab, where four roles share
+one tab and none has a title of its own — yet `refactorer ● working` is legible without focusing
+any pane. The coder pane below it has just finished the cycle that was in flight two screenshots
+ago: `$5.04`, `11.0M tok`, handed off to the refactorer.*
 
 Neither Windows Terminal nor tmux has an equivalent scripting hook for a composite status bar — you can still read the JSON files directly (e.g. `Get-Content .kiln/status/coder.json`, or `cat .kiln/status/coder.json` on Unix) to see live state. This is one of the two concrete things you lose by not using WezTerm; the other is layout fidelity (see "Layout Examples" above).
 
@@ -1728,7 +1759,8 @@ role, state, cycle count, accumulated cost, tokens, handoff target and the last 
  SPECIFIER   ● working   cycle 3   $1.24   238.4k tok   → coder   wrote create_book.feature
 ```
 
-Unlike the WezTerm badges, this needs no terminal scripting hook and works anywhere. It is
+The green bars along the bottom of each pane in the two Autonomous Cycle screenshots above are
+this. Unlike the WezTerm badges, this needs no terminal scripting hook and works anywhere. It is
 drawn with a VT scrolling region, so the pane remains an ordinary terminal — selection,
 copy/paste and scrollback all keep working, and only the last row is reserved. Disable it with
 `--no-status-bar`; it disables itself automatically when output is piped rather than shown in a

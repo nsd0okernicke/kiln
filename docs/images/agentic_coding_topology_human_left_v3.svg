@@ -1,60 +1,129 @@
-<svg width="100%" viewBox="0 0 680 480" role="img" style="" xmlns="http://www.w3.org/2000/svg">
-<title style="fill:rgb(0, 0, 0);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">Default profile topology, agentic coding cycle</title>
-<desc style="fill:rgb(0, 0, 0);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">Human-in-the-loop on the left sends a new request to the Specifier and receives a forward completion back from the Specifier. Inside the agent cycle, Specifier hands off to Coder, Coder hands off to Refactorer, Refactorer hands off to Architect, and Architect hands off back to Specifier.</desc>
-<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker><mask id="imagine-text-gaps-4sgj98" maskUnits="userSpaceOnUse"><rect x="0" y="0" width="680" height="480" fill="white"/><rect x="392.8125" y="76" width="74.419921875" height="19" fill="black" rx="2"/><rect x="294.828125" y="125" width="70.5859375" height="22" fill="black" rx="2"/><rect x="283.1171875" y="150.5" width="93.58987426757812" height="19" fill="black" rx="2"/><rect x="276.25" y="166.5" width="107.337890625" height="19" fill="black" rx="2"/><rect x="524.1796875" y="131" width="51.875" height="22" fill="black" rx="2"/><rect x="486.9609375" y="156.5" width="125.90582275390625" height="19" fill="black" rx="2"/><rect x="293.0234375" y="381" width="73.96694946289062" height="22" fill="black" rx="2"/><rect x="286" y="406.5" width="88.1239013671875" height="19" fill="black" rx="2"/><rect x="510.078125" y="375" width="81.0869140625" height="22" fill="black" rx="2"/><rect x="495.8359375" y="398.5" width="108.4779052734375" height="19" fill="black" rx="2"/><rect x="499.3125" y="414.5" width="102.51983642578125" height="19" fill="black" rx="2"/><rect x="35.8984375" y="227" width="138.42886352539062" height="22" fill="black" rx="2"/><rect x="50.2265625" y="252.5" width="110.52186584472656" height="19" fill="black" rx="2"/><rect x="46.78125" y="270.5" width="116.2718505859375" height="19" fill="black" rx="2"/><rect x="78.9375" y="284.5" width="53.08995056152344" height="19" fill="black" rx="2"/><rect x="413.5703125" y="124" width="53.82794189453125" height="19" fill="black" rx="2"/><rect x="563.5703125" y="264" width="53.82794189453125" height="19" fill="black" rx="2"/><rect x="413.5703125" y="374" width="53.82794189453125" height="19" fill="black" rx="2"/><rect x="228.5703125" y="264" width="53.82794189453125" height="19" fill="black" rx="2"/><rect x="190.796875" y="46" width="79.38189697265625" height="19" fill="black" rx="2"/><rect x="169.6796875" y="6" width="120.46383666992188" height="19" fill="black" rx="2"/></mask></defs>
+<svg width="100%" viewBox="0 0 1040 630" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>Default profile topology, agentic coding cycle</title>
+<desc>The full profile. A Human-in-the-Loop tab holds a manual human-in-the-loop pane running in the main directory, with an inbox strip beneath it that waits for messages, merges the sender's commit and delivers to the pane above. The human-in-the-loop sends a new request to the Specifier. An Autonomous Cycle tab runs specifier, coder, refactorer and architect on the deterministic Python scheduler, each in its own worktree: Specifier hands off to Coder, Coder to Refactorer, Refactorer to Architect, and Architect back to Specifier. The Specifier returns a completion to the inbox, and any role can escalate to the inbox. A separate Dashboard tab gives a swarm-wide view of the run.</desc>
 
-<rect x="220" y="70" width="420" height="380" rx="16" fill="none" stroke="var(--t)" stroke-width="0.5" stroke-dasharray="4 4" opacity="0.5" style="fill:none;stroke:rgb(137, 135, 129);color:rgb(11, 11, 11);stroke-width:0.5px;stroke-dasharray:4px, 4px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.5;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-<text x="430" y="90" text-anchor="middle" opacity="0.6" style="fill:rgb(82, 81, 78);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.6;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:auto">agent cycle</text>
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="#898781" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <marker id="arrow-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="#a8422a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>
+    text { font-family: "Anthropic Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .name { font-size: 14px; font-weight: 500; }
+    .sub  { font-size: 11.5px; font-weight: 400; }
+    .edge { font-size: 12px; fill: #52514e; }
+    .grp  { font-size: 12px; fill: #52514e; }
+    .note { font-size: 10.5px; fill: #6b6a66; }
+    .box  { stroke-width: 0.5; }
+    .conn { fill: none; stroke: #898781; stroke-width: 1.5; }
+    .dash { fill: none; stroke: #898781; stroke-width: 1.5; stroke-dasharray: 5 4; }
+    .cluster { fill: none; stroke: #898781; stroke-width: 0.5; stroke-dasharray: 4 4; opacity: 0.6; }
+  </style>
+</defs>
 
-<g style="fill:rgb(0, 0, 0);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
-  <rect x="250" y="110" width="160" height="80" rx="8" stroke-width="0.5" style="fill:rgb(230, 241, 251);stroke:rgb(24, 95, 165);color:rgb(11, 11, 11);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-  <text x="330" y="136" text-anchor="middle" dominant-baseline="central" style="fill:rgb(12, 68, 124);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:14px;font-weight:500;text-anchor:middle;dominant-baseline:central">Specifier</text>
-  <text x="330" y="160" text-anchor="middle" dominant-baseline="central" style="fill:rgb(24, 95, 165);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:central">writes Gherkin</text>
-  <text x="330" y="176" text-anchor="middle" dominant-baseline="central" style="fill:rgb(24, 95, 165);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:central">acceptance tests</text>
+<rect x="0" y="0" width="1040" height="630" fill="#fcfcfb"/>
+
+<!-- ===== groups ===== -->
+<rect class="cluster" x="26" y="118" width="238" height="280" rx="16"/>
+<text class="grp" x="145" y="138" text-anchor="middle">Human-in-the-Loop tab</text>
+
+<rect class="cluster" x="26" y="430" width="238" height="140" rx="16"/>
+<text class="grp" x="145" y="450" text-anchor="middle">Dashboard tab</text>
+
+<rect class="cluster" x="340" y="100" width="670" height="470" rx="16"/>
+<text class="grp" x="675" y="122" text-anchor="middle">Autonomous Cycle tab — deterministic Python scheduler</text>
+
+<!-- ===== human-in-the-loop ===== -->
+<g>
+  <rect class="box" x="40" y="152" width="210" height="98" rx="8" fill="#eeedfe" stroke="#534ab7"/>
+  <text class="name" x="145" y="180" text-anchor="middle" fill="#3c3489">Human-in-the-Loop</text>
+  <text class="sub"  x="145" y="202" text-anchor="middle" fill="#534ab7">manual · @current</text>
+  <text class="sub"  x="145" y="220" text-anchor="middle" fill="#534ab7">gathers &amp; confirms</text>
+  <text class="sub"  x="145" y="236" text-anchor="middle" fill="#534ab7">the request</text>
 </g>
 
-<g style="fill:rgb(0, 0, 0);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
-  <rect x="470" y="110" width="160" height="80" rx="8" stroke-width="0.5" style="fill:rgb(250, 236, 231);stroke:rgb(153, 60, 29);color:rgb(11, 11, 11);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-  <text x="550" y="142" text-anchor="middle" dominant-baseline="central" style="fill:rgb(113, 43, 19);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:14px;font-weight:500;text-anchor:middle;dominant-baseline:central">Coder</text>
-  <text x="550" y="166" text-anchor="middle" dominant-baseline="central" style="fill:rgb(153, 60, 29);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:central">TDD implementation</text>
+<!-- ===== inbox ===== -->
+<g>
+  <rect class="box" x="40" y="296" width="210" height="84" rx="8" fill="#f6f5ff" stroke="#7871c4"/>
+  <text class="name" x="145" y="320" text-anchor="middle" fill="#3c3489">Inbox</text>
+  <text class="sub"  x="145" y="340" text-anchor="middle" fill="#6058b2">kiln inbox — waits, merges,</text>
+  <text class="sub"  x="145" y="356" text-anchor="middle" fill="#6058b2">delivers to the pane above</text>
 </g>
 
-<g style="fill:rgb(0, 0, 0);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
-  <rect x="250" y="360" width="160" height="80" rx="8" stroke-width="0.5" style="fill:rgb(250, 238, 218);stroke:rgb(133, 79, 11);color:rgb(11, 11, 11);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-  <text x="330" y="392" text-anchor="middle" dominant-baseline="central" style="fill:rgb(99, 56, 6);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:14px;font-weight:500;text-anchor:middle;dominant-baseline:central">Architect</text>
-  <text x="330" y="416" text-anchor="middle" dominant-baseline="central" style="fill:rgb(133, 79, 11);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:central">design review</text>
+<line class="conn" x1="145" y1="294" x2="145" y2="253" marker-end="url(#arrow)"/>
+<text class="edge" x="205" y="277" text-anchor="middle">surfaces it</text>
+
+<!-- ===== dashboard ===== -->
+<g>
+  <rect class="box" x="40" y="466" width="210" height="88" rx="8" fill="#f2f2f0" stroke="#898781"/>
+  <text class="name" x="145" y="494" text-anchor="middle" fill="#3c3b38">Dashboard</text>
+  <text class="sub"  x="145" y="516" text-anchor="middle" fill="#5a5854">swarm-wide view</text>
+  <text class="sub"  x="145" y="532" text-anchor="middle" fill="#5a5854">of the run</text>
 </g>
 
-<g style="fill:rgb(0, 0, 0);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
-  <rect x="470" y="360" width="160" height="80" rx="8" stroke-width="0.5" style="fill:rgb(225, 245, 238);stroke:rgb(15, 110, 86);color:rgb(11, 11, 11);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-  <text x="550" y="386" text-anchor="middle" dominant-baseline="central" style="fill:rgb(8, 80, 65);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:14px;font-weight:500;text-anchor:middle;dominant-baseline:central">Refactorer</text>
-  <text x="550" y="408" text-anchor="middle" dominant-baseline="central" style="fill:rgb(15, 110, 86);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:central">coverage · CRAP ·</text>
-  <text x="550" y="424" text-anchor="middle" dominant-baseline="central" style="fill:rgb(15, 110, 86);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:central">mutation testing</text>
+<!-- ===== cycle roles ===== -->
+<g>
+  <rect class="box" x="380" y="160" width="240" height="118" rx="8" fill="#e6f1fb" stroke="#185fa5"/>
+  <text class="name" x="500" y="192" text-anchor="middle" fill="#0c447c">Specifier</text>
+  <text class="sub"  x="500" y="216" text-anchor="middle" fill="#185fa5">auto · own worktree</text>
+  <text class="sub"  x="500" y="242" text-anchor="middle" fill="#185fa5">writes Gherkin</text>
+  <text class="sub"  x="500" y="258" text-anchor="middle" fill="#185fa5">acceptance tests</text>
 </g>
 
-<g style="fill:rgb(0, 0, 0);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
-  <rect x="30" y="210" width="150" height="120" rx="8" stroke-width="0.5" style="fill:rgb(238, 237, 254);stroke:rgb(83, 74, 183);color:rgb(11, 11, 11);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-  <text x="105" y="238" text-anchor="middle" dominant-baseline="central" style="fill:rgb(60, 52, 137);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:14px;font-weight:500;text-anchor:middle;dominant-baseline:central">Human-in-the-Loop</text>
-  <text x="105" y="262" text-anchor="middle" dominant-baseline="central" style="fill:rgb(83, 74, 183);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:central">manual · @current</text>
-  <text x="105" y="280" text-anchor="middle" dominant-baseline="central" style="fill:rgb(83, 74, 183);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:central">gathers &amp; confirms</text>
-  <text x="105" y="294" text-anchor="middle" dominant-baseline="central" style="fill:rgb(83, 74, 183);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:central">request</text>
+<g>
+  <rect class="box" x="730" y="160" width="240" height="118" rx="8" fill="#faece7" stroke="#993c1d"/>
+  <text class="name" x="850" y="192" text-anchor="middle" fill="#712b13">Coder</text>
+  <text class="sub"  x="850" y="216" text-anchor="middle" fill="#993c1d">auto · own worktree</text>
+  <text class="sub"  x="850" y="242" text-anchor="middle" fill="#993c1d">TDD red → green →</text>
+  <text class="sub"  x="850" y="258" text-anchor="middle" fill="#993c1d">refactor, until green</text>
 </g>
 
-<line x1="410" y1="150" x2="468" y2="150" marker-end="url(#arrow)" stroke="var(--t)" stroke-width="0.5" style="fill:none;stroke:rgb(137, 135, 129);color:rgb(11, 11, 11);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-<text x="440" y="138" text-anchor="middle" style="fill:rgb(82, 81, 78);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:auto">handoff</text>
+<g>
+  <rect class="box" x="730" y="390" width="240" height="118" rx="8" fill="#e1f5ee" stroke="#0f6e56"/>
+  <text class="name" x="850" y="422" text-anchor="middle" fill="#085041">Refactorer</text>
+  <text class="sub"  x="850" y="446" text-anchor="middle" fill="#0f6e56">auto · own worktree</text>
+  <text class="sub"  x="850" y="472" text-anchor="middle" fill="#0f6e56">coverage → CRAP → DRY</text>
+  <text class="sub"  x="850" y="488" text-anchor="middle" fill="#0f6e56">→ mutation site count</text>
+</g>
 
-<line x1="550" y1="190" x2="550" y2="358" marker-end="url(#arrow)" stroke="var(--t)" stroke-width="0.5" style="fill:none;stroke:rgb(137, 135, 129);color:rgb(11, 11, 11);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-<text x="590" y="278" text-anchor="middle" style="fill:rgb(82, 81, 78);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:auto">handoff</text>
+<g>
+  <rect class="box" x="380" y="390" width="240" height="118" rx="8" fill="#faeeda" stroke="#854f0b"/>
+  <text class="name" x="500" y="422" text-anchor="middle" fill="#633806">Architect</text>
+  <text class="sub"  x="500" y="446" text-anchor="middle" fill="#854f0b">auto · own worktree</text>
+  <text class="sub"  x="500" y="472" text-anchor="middle" fill="#854f0b">module structure · mutation</text>
+  <text class="sub"  x="500" y="488" text-anchor="middle" fill="#854f0b">→ DRY → soft Gherkin</text>
+</g>
 
-<line x1="470" y1="400" x2="412" y2="400" marker-end="url(#arrow)" stroke="var(--t)" stroke-width="0.5" style="fill:none;stroke:rgb(137, 135, 129);color:rgb(11, 11, 11);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-<text x="440" y="388" text-anchor="middle" style="fill:rgb(82, 81, 78);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:auto">handoff</text>
+<!-- ===== cycle edges ===== -->
+<line class="conn" x1="622" y1="219" x2="728" y2="219" marker-end="url(#arrow)"/>
+<text class="edge" x="675" y="207" text-anchor="middle">handoff</text>
 
-<line x1="330" y1="360" x2="330" y2="192" marker-end="url(#arrow)" stroke="var(--t)" stroke-width="0.5" style="fill:none;stroke:rgb(137, 135, 129);color:rgb(11, 11, 11);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-<text x="255" y="278" text-anchor="middle" style="fill:rgb(82, 81, 78);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:auto">handoff</text>
+<line class="conn" x1="850" y1="280" x2="850" y2="388" marker-end="url(#arrow)"/>
+<text class="edge" x="892" y="338" text-anchor="middle">handoff</text>
 
-<path d="M155 205 C 200 55, 270 32, 322 108" fill="none" stroke="var(--t)" stroke-width="0.5" marker-end="url(#arrow)" style="fill:none;stroke:rgb(137, 135, 129);color:rgb(11, 11, 11);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-<text x="230" y="60" text-anchor="middle" style="fill:rgb(82, 81, 78);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:auto">new request</text>
+<line class="conn" x1="728" y1="449" x2="622" y2="449" marker-end="url(#arrow)"/>
+<text class="edge" x="676" y="437" text-anchor="middle">handoff</text>
 
-<path d="M338 108 C 400 20, 65 8, 118 208" fill="none" stroke="var(--t)" stroke-width="0.5" marker-end="url(#arrow)" mask="url(#imagine-text-gaps-4sgj98)" style="fill:none;stroke:rgb(137, 135, 129);color:rgb(11, 11, 11);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-<text x="230" y="20" text-anchor="middle" style="fill:rgb(82, 81, 78);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:auto">forward completion</text>
+<line class="conn" x1="500" y1="388" x2="500" y2="280" marker-end="url(#arrow)"/>
+<text class="edge" x="458" y="338" text-anchor="middle">handoff</text>
+
+<!-- ===== human edges ===== -->
+<line class="conn" x1="252" y1="200" x2="377" y2="200" marker-end="url(#arrow)"/>
+<text class="edge" x="314" y="188" text-anchor="middle">new request</text>
+
+<path class="conn" d="M378 248 C 330 250, 300 290, 254 311" marker-end="url(#arrow)"/>
+<text class="edge" x="306" y="252" text-anchor="middle">completion</text>
+
+<path class="dash" d="M378 420 C 330 420, 290 390, 254 355" marker-end="url(#arrow)"/>
+<text class="edge" x="300" y="432" text-anchor="middle">escalation</text>
+
+<!-- ===== footnotes ===== -->
+<text class="note" x="675" y="528" text-anchor="middle">every auto role = a persistent wrapper + a disposable worker per cycle</text>
+<text class="note" x="675" y="544" text-anchor="middle">scheduler guards: watchdog (duration + silence) · verify gate · maxCycles / maxBudgetUsd</text>
+<text class="note" x="675" y="560" text-anchor="middle">circuit breaker after 3 consecutive escalations · kiln retry to unpark a halted role</text>
+
+<text class="note" x="520" y="596" text-anchor="middle">The specifier routes back to human-in-the-loop only when the sender was the architect; every other handoff continues the cycle.</text>
+<text class="note" x="520" y="612" text-anchor="middle">Messages live in .kiln/messages.db and move through one lifecycle: queued → delivered → processing → processed.</text>
 </svg>

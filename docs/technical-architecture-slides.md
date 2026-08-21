@@ -30,7 +30,7 @@ Technical overview — topology, wrapper/worker delegation, and the handoff loop
 
 A human-facing intake role feeds a fully autonomous four-role cycle:
 
-![w:1000](images/agentic_coding_topology_human_left_v3.svg)
+![w:820](images/agentic_coding_topology_human_left_v3.svg)
 
 `human-in-the-loop` (manual, `@current`) gathers and confirms the request, then **specifier → coder → refactorer → architect** run unattended and report back.
 
@@ -49,26 +49,58 @@ Every `auto`-mode role's wrapper drives the same five-step cycle, every turn:
 5. **Loop back to step 1** — in the same turn, no exceptions
 
 Scheduler mode adds the deterministic guards around this: a watchdog on both duration and
-silence, an optional `verify` gate before the handoff, `maxCycles`/`maxBudgetUsd` ceilings, a
+silence, an optional `verify` gate folded into the retry loop, `maxCycles`/`maxBudgetUsd` ceilings, a
 circuit breaker after three escalations, and `kiln retry` to unpark a role.
 
 Messages move through one lifecycle: `queued` → `delivered` → `processing` → `processed`.
 
 ---
 
-## One Role, Concretely: the Coder
+## One Role, Concretely: the Coder (Wrapper Mode)
 
-![w:1050](images/diagram-coder-internal-cycle.svg)
+![w:620](images/diagram-coder-internal-cycle.svg)
 
 The wrapper half (right) is identical for every role. Only the worker's inner loop (left) changes — a refactorer-worker runs coverage → CRAP → mutation gates instead of TDD red/green/refactor.
 
 ---
 
-## Watching It Run
+## The Same Role, on the Scheduler
 
-![w:950](images/kiln1.png)
+![w:600](images/diagram-scheduler-cycle.svg)
 
-The default profile in WezTerm — a Human-in-the-Loop tab alongside an Autonomous Cycle tab, all four roles visible in a 2×2 grid with live status badges.
+`run_once()` makes every control-flow decision; the LLM only does the work. The verify gate sits **inside** the retry loop, so a failed gate and a blocked worker share one rule and one escalation counter.
+
+---
+
+## Watching It Run — Intake
+
+![w:880](images/kiln1.png)
+
+Tab 1: the `manual` human-in-the-loop session, with the `inbox` pane pinned beneath it. The strip top-right badges every role at once.
+
+---
+
+## Watching It Run — the Cycle
+
+![w:880](images/kiln2.png)
+
+Tab 2: four scheduler panes. The specifier has just handed off (`$0.37`, 230.4k tok); the coder is delivering, merging and delegating to `coder-worker`. No LLM session drives any of this.
+
+---
+
+## Watching It Run — One Handoff Later
+
+![w:880](images/kiln3.png)
+
+The coder finished at `$5.04` / 11.0M tok and handed off; the refactorer is now merging and delegating. The badge strip tracks it without focusing a pane.
+
+---
+
+## Watching It Run — the Dashboard
+
+![w:880](images/kiln4.png)
+
+Tab 3: every role's state, queue depth, cycles, cost, tokens and cache rate, plus totals, prompt weight per role, recent activity and escalations.
 
 ---
 
