@@ -169,8 +169,16 @@ class KilnPaths:
     def channel_log(self, role: str) -> Path:
         return self.logs_dir / f"channel-{role}.log"
 
-    def agent_debug_log(self, role: str) -> Path:
-        return self.logs_dir / f"claude-debug-{role}.log"
+    def agent_debug_log(self, role: str, agent: str = "claude") -> Path:
+        """
+        Where a wrapper-mode CLI writes its own internal trace (`--debug-file`).
+
+        Named for the backend, not hardcoded to `claude`: `grok` takes the same flag, and a
+        grok role writing to `claude-debug-<role>.log` would send anyone diagnosing a stall
+        (README's troubleshooting steps name this file by path) to a log for the wrong CLI.
+        The default keeps every existing Claude path and filename unchanged.
+        """
+        return self.logs_dir / f"{agent}-debug-{role}.log"
 
     def scheduler_log(self, role: str) -> Path:
         return self.logs_dir / f"scheduler-{role}.log"

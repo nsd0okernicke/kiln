@@ -40,6 +40,11 @@ TEMPLATES = {
     "loop-auto-codex.md": "# Codex Loop\n",
     "runtime-codex.md": "# Codex Runtime\n",
     "wrapper-prompt-auto-codex.md": "# Codex Wrapper\n",
+    "loop-auto-grok.md": "# Grok Loop\n",
+    "loop-manual-grok.md": "# Grok Manual Loop\n",
+    "loop-manual-grok-with-inbox.md": "# Grok Manual Loop With Inbox\n",
+    "runtime-grok.md": "# Grok Runtime\n",
+    "wrapper-prompt-auto-grok.md": "# Grok Wrapper\n",
 }
 
 
@@ -142,6 +147,11 @@ class TestInstructionFiles:
             ("claude", "CLAUDE.md"),
             ("codex", "AGENTS.md"),
             ("copilot", "copilot-instructions.md"),
+            # Grok has no instruction filename of its own: verified against grok 1.0.5, it
+            # discovers AGENTS.md and CLAUDE.md and ignores GROK.md / .grok/GROK.md entirely.
+            # AGENTS.md is the cross-vendor name and the one it lists first. Sharing the name
+            # with Codex is safe because a worktree belongs to exactly one role.
+            ("grok", "AGENTS.md"),
         ],
     )
     def test_each_backend_gets_its_own_filename(self, paths, agent, expected):
@@ -149,6 +159,35 @@ class TestInstructionFiles:
             role(agent=agent), paths, "main", paths.project_root
         )
         assert written.name == expected
+
+    def test_a_grok_auto_role_delegates_rather_than_carrying_its_own_work_rules(self, paths):
+        # Grok discovers `.grok/agents/<role>-worker.md` as a project agent and has
+        # `spawn_subagent` (both verified live), so it is a real delegating wrapper like the
+        # other three -- not the odd one out that has to do the work in-session.
+        content = generate.render_instructions(
+            role(agent="grok"), paths, "main", paths.project_root
+        )
+        assert "# Grok Wrapper" in content
+        assert "Implement via TDD" not in content
+
+    def test_a_grok_manual_role_still_gets_its_role_rules(self, paths):
+        content = generate.render_instructions(
+            role(agent="grok", mode="manual"), paths, "main", paths.project_root
+        )
+        assert "Implement via TDD" in content
+        assert "# Grok Manual Loop" in content
+
+    def test_a_grok_scheduler_role_gets_no_instruction_file(self, paths):
+        # Same leak the Claude spike found: a stray AGENTS.md *is* read by a one-shot worker,
+        # so a grok role switching to the scheduler must not keep the wrapper's file.
+        generate.write_instructions(role(agent="grok"), paths, "main", paths.project_root)
+        assert (paths.project_root / "AGENTS.md").exists()
+
+        generate.write_instructions(
+            role(agent="grok", scheduler="python", mode="auto"),
+            paths, "main", paths.project_root,
+        )
+        assert not (paths.project_root / "AGENTS.md").exists()
 
     def test_auto_role_gets_the_wrapper_prompt_not_its_own_role_rules(self, paths):
         # The wrapper delegates; the role's work rules belong to the worker.
@@ -340,6 +379,47 @@ class TestMcpConfig:
         toml = generate.build_codex_config_toml(paths, paths.project_root)
         assert 'trust_level = "trusted"' in toml
         assert str(paths.project_root) in toml
+
+
+class TestBlockingChannelAgents:
+    """
+    Which backends may see `kiln-channel` in their worktree's `.mcp.json`.
+
+    Grok forced this to become explicit. It reads `.mcp.json` — the same file Claude does,
+    confirmed with `grok inspect` against 1.0.5 — so a channel entry there is a tool it can
+    actually reach, while its loop template tells it to poll `kiln-db` and never to call
+    `wait_for_message()`. Registering the server anyway is a contradiction the agent can
+    resolve the wrong way, so the registration follows the loop rather than the backend.
+
+    (`grok mcp list` reports "no MCP servers configured" for a worktree wired purely through
+    `.mcp.json`, because it lists only grok's own config-file entries. Checking discovery
+    that way is what made this look like a per-backend config problem in the first place.)
+    """
+
+    def test_only_claude_blocks_on_the_channel(self):
+        # Codex and Copilot poll for the same unverified-blocking reason, and read neither
+        # `.mcp.json` nor each other's config -- so for them this is inert. Grok is the one
+        # backend where getting it wrong is visible to the agent.
+        assert set(generate.BLOCKING_CHANNEL_AGENTS) == {"claude"}
+
+    def test_grok_is_not_one_of_them(self):
+        assert "grok" not in generate.BLOCKING_CHANNEL_AGENTS
+
+    def test_a_claude_wrapper_role_gets_the_channel(self):
+        assert generate.channel_is_available(role(agent="claude", mode="manual")) is True
+
+    def test_a_grok_wrapper_role_does_not(self):
+        assert generate.channel_is_available(role(agent="grok", mode="manual")) is False
+
+    def test_a_scheduler_role_does_not_even_on_claude(self):
+        assert generate.channel_is_available(
+            role(agent="claude", mode="auto", scheduler="python")
+        ) is False
+
+    def test_no_role_means_no_channel(self):
+        # The server is role-scoped by env var, so a config with no owner would hand one
+        # role another role's queue.
+        assert generate.channel_is_available(None) is False
 
 
 class TestGenerateAll:

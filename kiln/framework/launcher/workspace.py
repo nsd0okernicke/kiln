@@ -21,7 +21,12 @@ from pathlib import Path
 from scheduler import git_ops
 
 from .config import Profile, RoleConfig
-from .generate import build_codex_config_toml, build_copilot_mcp_config, write_mcp_config
+from .generate import (
+    build_codex_config_toml,
+    build_copilot_mcp_config,
+    channel_is_available,
+    write_mcp_config,
+)
 from .paths import KilnPaths
 
 log = logging.getLogger(__name__)
@@ -427,12 +432,10 @@ def prepare_worktrees(profile: Profile, paths: KilnPaths, branch: str) -> list[P
         _link_or_copy(worktree / ".kiln", paths.state_dir, role.role)
         _copy_settings(paths, worktree)
         _copy_worker_definitions(paths, worktree)
-        # kiln-channel is the blocking *poll* server. A scheduler role does its own polling
-        # in Python and its worker runs with --strict-mcp-config, so nothing in that
-        # worktree should advertise a messaging channel — leaving one there implies the
-        # agent is still responsible for receiving handoffs, which it no longer is.
+        # See generate.channel_is_available for why a role may not get the blocking channel.
         write_mcp_config(
-            worktree, paths, role.role, branch, include_channel=not role.uses_scheduler
+            worktree, paths, role.role, branch,
+            include_channel=channel_is_available(role),
         )
         (worktree / "tmp").mkdir(parents=True, exist_ok=True)
         sub_branches.append(role_branch)
@@ -458,6 +461,7 @@ def _copy_worker_definitions(paths: KilnPaths, worktree: Path) -> None:
         (Path(".claude") / "agents", "*-worker.md"),
         (Path(".github") / "agents", "*-worker.agent.md"),
         (Path(".codex") / "agents", "*-worker.toml"),
+        (Path(".grok") / "agents", "*-worker.md"),
     ):
         source = paths.project_root / relative
         destination = worktree / relative
@@ -476,6 +480,11 @@ def _copy_worker_definitions(paths: KilnPaths, worktree: Path) -> None:
 #: to `agent: copilot`) is just as visible to Copilot as `.github/skills`. Every convention is
 #: therefore kept in sync in every worktree, not just whichever one nominally belongs to that
 #: role's current agent.
+#:
+#: Grok needs no fourth entry. Verified with `grok inspect` against 1.0.5: it discovers
+#: project skills from `.claude/skills` and `.agents/skills` (and a `.grok/skills` of its own,
+#: which Kiln has no reason to populate as well) but NOT `.github/skills` -- so the two it
+#: shares with this list already reach it, including the wrapper-only filtering below.
 SKILL_DIR_CONVENTIONS = (
     (".claude", "skills"),
     (".github", "skills"),
@@ -507,7 +516,7 @@ def prepare_skills(profile: Profile, paths: KilnPaths) -> int:
             role.uses_scheduler,
         )
         for role in profile.roles
-        if role.agent in ("claude", "copilot", "codex")
+        if role.agent in ("claude", "copilot", "codex", "grok")
     ]
     if targets:
         targets.append((paths.project_root, False))
@@ -591,8 +600,14 @@ def _trust_copilot_worktrees(profile: Profile, paths: KilnPaths) -> None:
 
 
 def prepare_agent_configs(profile: Profile, paths: KilnPaths) -> None:
-    """Write the global Copilot MCP config and trusted folders, and each Codex role's
-    isolated CODEX_HOME."""
+    """
+    Write the per-backend configs the worktree's own `.mcp.json` cannot cover.
+
+    Only two backends need this. Copilot reads one global `~/.copilot/mcp-config.json` plus a
+    trusted-folder list; Codex reads a relocated `CODEX_HOME/config.toml` per role. Claude and
+    Grok both read the worktree `.mcp.json` that `prepare_worktrees` already writes — Grok's
+    doing so confirmed with `grok inspect` against 1.0.5 — so neither needs anything here.
+    """
     if profile.has_agent("copilot"):
         copilot_dir = Path.home() / ".copilot"
         copilot_dir.mkdir(parents=True, exist_ok=True)

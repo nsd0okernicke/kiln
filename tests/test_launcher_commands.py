@@ -171,9 +171,50 @@ class TestCodex:
         assert "--dangerously-bypass-approvals-and-sandbox" in build(paths, agent="codex").argv
 
 
+class TestGrok:
+    def test_launches_grok_with_the_start_prompt(self, paths):
+        argv = build(paths, agent="grok").argv
+        assert argv[0] == "grok"
+        assert argv[-1] == START_PROMPT
+
+    def test_auto_mode_bypasses_permissions(self, paths):
+        # `--permission-mode` rather than `--always-approve`, which the one-shot adapter
+        # uses: only the former can express the manual/auto split, and a manual role is
+        # human-supervised. Both flags exist on this CLI (verified against grok 1.0.5).
+        argv = build(paths, agent="grok", mode="auto").argv
+        assert argv[argv.index("--permission-mode") + 1] == "bypassPermissions"
+
+    def test_manual_mode_keeps_prompts(self, paths):
+        argv = build(paths, agent="grok", mode="manual").argv
+        assert argv[argv.index("--permission-mode") + 1] == "default"
+
+    def test_keeps_subagents_enabled(self, paths):
+        # The mirror image of the scheduler adapter, which passes --no-subagents to isolate a
+        # one-shot worker. A wrapper *is* the delegator: without spawn_subagent it cannot
+        # reach `<role>-worker` at all and would have to do the work itself.
+        assert "--no-subagents" not in build(paths, agent="grok").argv
+
+    def test_model_is_optional(self, paths):
+        assert "-m" not in build(paths, agent="grok").argv
+        argv = build(paths, agent="grok", model="grok-4.5").argv
+        assert argv[argv.index("-m") + 1] == "grok-4.5"
+
+    def test_gets_a_banner_because_its_cli_shows_no_role(self, paths):
+        # Same reason as Copilot: there is no `-n`/`--name` equivalent on this CLI.
+        assert build(paths, agent="grok").banner == "Coder"
+
+    def test_debug_log_is_named_for_grok_not_claude(self, paths):
+        argv = build(paths, agent="grok").argv
+        assert "claude-debug" not in argv[argv.index("--debug-file") + 1]
+        assert "grok-debug-coder.log" in argv[argv.index("--debug-file") + 1]
+
+
 class TestUnsupportedAgent:
     def test_reports_in_the_pane_instead_of_failing_the_launch(self, paths):
-        argv = build(paths, agent="grok").argv
+        # Unreachable for anything in VALID_AGENTS -- all four now have a launch path. This
+        # pins the behaviour for the next backend added there before it has one: one pane
+        # says so, rather than the whole swarm failing to start.
+        argv = build(paths, agent="some-future-agent").argv
         assert argv[0] == "echo"
         assert "not supported" in argv[1]
 

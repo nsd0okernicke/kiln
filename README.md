@@ -84,7 +84,7 @@ See **"Running Kiln"** below for more options and customization.
 
 Kiln is a lightweight orchestration layer that:
 
-- Launches a **config-driven swarm** — specify each agent's role, AI tool/backend (claude/copilot/codex/grok, all four scheduler-capable; `grok` has no wrapper mode yet — see Known Limitations), and workspace (main directory or isolated worktree)
+- Launches a **config-driven swarm** — specify each agent's role, AI tool/backend (claude/copilot/codex/grok, all four capable of both execution modes), and workspace (main directory or isolated worktree)
   - Uses framework defaults from `kiln/framework/profiles.json`
   - Projects can override by creating `kiln.profiles.json` at the root
   - Flexible terminal layouts: tabs, split panes, grids, or custom hierarchical arrangements
@@ -162,7 +162,7 @@ unchanged. There is no second implementation to fall behind.
 
 - Python 3.11+ — the launcher, the scheduler and the MCP servers are all Python
 - Git
-- One or more agent CLIs (Claude Code, GitHub Copilot, Codex) depending on configured agents
+- One or more agent CLIs (Claude Code, GitHub Copilot, Codex, Grok) depending on configured agents
 - `pip install -r kiln/framework/mcp-server/requirements.txt` if you use wrapper-mode roles
   (the `kiln-db` / `kiln-channel` MCP servers). Scheduler-mode roles need no MCP server.
   On Debian/Ubuntu that exact command fails with `error: externally-managed-environment`
@@ -298,10 +298,11 @@ Every `auto`-mode role runs a receive → merge → work → squash → hand-off
 that cycle two ways, chosen per role with the `scheduler` field in a profile — and now that
 every accepted backend (`claude`, `copilot`, `codex`, `grok`) has a one-shot scheduler adapter,
 every shipped profile's `auto`-mode roles default to scheduler mode. Wrapper mode remains for
-exactly two cases: whichever single role is a profile's human-facing `manual` entry point
-(that role needs a real conversation, which the scheduler's one-shot model has no room for),
-and any backend without a scheduler adapter (`grok`'s wrapper mode specifically is not
-implemented — see Known Limitations).
+whichever single role is a profile's human-facing `manual` entry point — that role needs a real
+conversation, which the scheduler's one-shot model has no room for.
+
+All four backends now implement **both** modes, so the choice is purely about what the role
+does, never about what its CLI can be driven to do.
 
 ### Scheduler mode (`"scheduler": "python"`, the default for `auto` roles)
 
@@ -736,7 +737,7 @@ By default, **all projects use the framework's `kiln/framework/profiles.json`**,
   - **Claude agents**: `CLAUDE.md` in the worktree root
   - **Copilot agents**: `.github/copilot-instructions.md` in the worktree root
   - **Codex agents**: `AGENTS.md` in the worktree root — Codex CLI's own project-instructions convention (confirmed against the installed binary's string table)
-  - **Grok**: no wrapper-mode instruction file — grok has no wrapper mode at all yet, only the scheduler path (which reads the worker definition directly, not a generated instruction file) — see Known Limitations
+  - **Grok agents**: `AGENTS.md` in the worktree root. Grok has no instruction filename of its own — verified against grok 1.0.5 with `grok inspect`, it discovers `AGENTS.md` and `CLAUDE.md` and ignores `GROK.md` entirely — so it reuses the cross-vendor name, the one it lists first. Sharing that name with Codex costs nothing: a worktree belongs to exactly one role, so no directory is ever written by two backends.
 
 This ensures every agent operates with full constitutional context plus its specific role directives.
 
@@ -753,6 +754,7 @@ The dispatch mechanism differs per backend:
 - **Claude**: worker defined in a generated `.claude/agents/<role>-worker.md`, dispatched via Claude Code's `Agent` tool (blocking, deterministic — the wrapper explicitly invokes `subagent_type: "<role>-worker"`). No access to the `Agent` tool itself (no recursive subagent spawning) and no MCP messaging tools — it can only read/write/edit/test in its worktree. Its full working transcript never enters the wrapper's own context — only its final report does, which is what keeps the wrapper's context small and repetitive cycle over cycle, rather than filling up with the noise of the actual implementation work.
 - **Copilot**: worker defined in a generated `.github/agents/<role>-worker.agent.md` (GitHub Copilot CLI's custom-agent format), dispatched by prose instruction — the wrapper's loop template tells it to delegate to the named custom agent, and Copilot CLI's own harness resolves that to a subagent call with its own isolated context window. `tools:` is scoped to `read, write, shell` — no MCP server names listed, so it has no messaging access, mirroring the Claude worker's isolation. Unlike Claude's `Agent` tool, this delegation is the model's own judgment call rather than a guaranteed deterministic invocation — GitHub has tuned Copilot CLI to be more selective about delegating on its own, so the wrapper prompt explicitly instructs it to always delegate even when it judges it could finish faster itself.
 - **Codex**: worker defined in a generated `.codex/agents/<role>-worker.toml` (Codex CLI's own project-scoped custom-agent format — required fields `name`, `description`, `developer_instructions`; confirmed against official docs at `developers.openai.com/codex/subagents`), dispatched via Codex's built-in multi-agent spawn tools (`spawn_agent`/`assign_agent_task`/`wait_agent`/`close_agent` — the `multi_agent` feature, stable and enabled by default, confirmed directly against a live `codex.exe` install). `mcp_servers = {}` in the worker's TOML excludes messaging access, mirroring the Claude/Copilot worker's isolation.
+- **Grok**: worker defined in a generated `.grok/agents/<role>-worker.md` — the same frontmatter-markdown format as Claude's, and discovered the same way (`grok inspect` reports it as a *project* agent), dispatched via Grok's `spawn_subagent` tool. Like Copilot's, this is a prose-driven delegation rather than a deterministic tool invocation, so the wrapper prompt insists on delegating even when the model judges it could finish faster itself. The worker's isolation comes from the invocation rather than the file: in scheduler mode the adapter passes `--no-subagents` (no recursive spawning) and the worker gets no MCP server of its own, mirroring the other three.
 
 ### Default Workflow
 
@@ -767,6 +769,8 @@ The default four-agent workflow runs in a continuous loop. Each Claude wrapper a
 **Copilot follows the same shape** (receive → delegate → retry-once-on-failure → handoff → loop again in the same turn) but via its own inline polling loop (`loop-auto-copilot.md`) rather than the `/kiln-receive`/`/kiln-handoff` skills — it polls `messages` directly via SQL (`query`), since Copilot has no blocking `kiln-channel` MCP tool, and squashes/logs the same way inline rather than through a shared skill file.
 
 **Codex follows the same shape too** (`loop-auto-codex.md`) — but unlike Copilot, it uses the same `/kiln-receive`/`/kiln-handoff` skills as Claude (Codex CLI supports skill-style slash commands), just delegating to the `<role>-worker` custom agent via Codex's built-in multi-agent spawn tools (`spawn_agent`/`assign_agent_task`/`wait_agent`/`close_agent`) instead of Claude Code's `Agent` tool, and retrying once on failure the same way. `manual` mode is also available for Codex (e.g. for a human-supervised role like `specifier`) using `loop-manual-codex.md`, same as any other backend.
+
+**Grok sits closest to Codex** (`loop-auto-grok.md`). It uses the same `/kiln-handoff` skill — verified with `grok inspect`, it discovers project skills from `.claude/skills` and `.agents/skills`, both of which Kiln already populates — and delegates to `<role>-worker` via `spawn_subagent`. Like Copilot and Codex it *polls* `kiln-db` rather than blocking on `kiln-channel`, because no spike has established that this CLI tolerates a long-blocking MCP call. Grok reads the worktree's `.mcp.json` directly (the same file Claude does), so rather than registering a channel the loop is told never to call, Kiln withholds it entirely for grok roles — see `generate.BLOCKING_CHANNEL_AGENTS`. `manual` mode uses `loop-manual-grok.md`, same as any other backend.
 
 The cycle flows: **specifier → coder → refactorer → architect → specifier**
 
@@ -907,11 +911,11 @@ Written out in full, the way you would actually type them:
 
 4. **Startup creates**:
    - Git worktrees under `.worktrees/` (one per non-@current role)
-   - Generated `CLAUDE.md` (Claude agents) or `.github/copilot-instructions.md` (Copilot agents) in each worktree with embedded constitution + project + role content
-   - Generated worker agent definitions for `auto`-mode roles — `.claude/agents/<role>-worker.md` (Claude) or `.github/agents/<role>-worker.agent.md` (Copilot) — the worker definition the wrapper delegates its actual work to each cycle
-   - Per-worktree `.mcp.json` with both `kiln-db` and `kiln-channel` configured (correct role and branch env vars injected)
+   - Generated instructions in each worktree with embedded constitution + project + role content — `CLAUDE.md` (Claude), `.github/copilot-instructions.md` (Copilot), or `AGENTS.md` (Codex and Grok)
+   - Generated worker agent definitions for `auto`-mode roles — `.claude/agents/<role>-worker.md` (Claude), `.github/agents/<role>-worker.agent.md` (Copilot), `.codex/agents/<role>-worker.toml` (Codex) or `.grok/agents/<role>-worker.md` (Grok) — the worker definition the wrapper delegates its actual work to each cycle
+   - Per-worktree `.mcp.json` with `kiln-db` and, for a role whose loop blocks on it, `kiln-channel` (correct role and branch env vars injected). Claude and Grok both read this file; Copilot and Codex read their own config instead
    - Channel log files at `.kiln/logs/channel-<role>.log` for debugging
-   - Claude Code debug log files at `.kiln/logs/claude-debug-<role>.log` (`--debug-file`) for diagnosing stalls after the fact
+   - CLI debug log files at `.kiln/logs/<agent>-debug-<role>.log` (`--debug-file`, written by the Claude and Grok CLIs) for diagnosing stalls after the fact
    - WezTerm tabs/panes (or Windows Terminal tabs) for each role
    - `.kiln/messages.db` SQLite database for inter-agent messaging via MCP
 
@@ -1116,7 +1120,13 @@ question, and `--agent-override` answers it:
 ```bash
 kiln --profile full --agent-override codex
 kiln --profile harden --agent-override codex --model-override gpt-5-codex
+kiln --profile full --agent-override grok
 ```
+
+Any of the four accepted backends works as an override target — `claude`, `copilot`, `codex`
+or `grok` — since all four have both a scheduler adapter and a wrapper implementation. `grok`
+is additionally one of the two backends that reports a real dollar figure, so unlike Copilot
+and Codex it can carry a `maxBudgetUsd` cap through an override unharmed.
 
 This replaces the old `codex-only` profile, which was `full` with one word changed on five
 roles — a vendor name sitting on the menu users pick production work from.
@@ -1212,7 +1222,7 @@ would not open.
 **Terminal fields:**
 
 - **role** — maps to `kiln/project/roles/<role>.md` (must exist)
-- **agent** — which AI tool to use: `claude`, `copilot`, `codex`, or `grok`. All four have a scheduler adapter (`"scheduler": "python"` works for any of them); only `grok` has no *wrapper*-mode implementation yet, so a `grok` role must run `auto` + scheduled, never `manual` — see Known Limitations.
+- **agent** — which AI tool to use: `claude`, `copilot`, `codex`, or `grok`. All four have both a scheduler adapter (`"scheduler": "python"`) and a wrapper-mode implementation, so any of them can run in either mode, `auto` or `manual`.
 - **worktree** — `@current` to work in the main directory, or any name (creates `.worktrees/<name>/`)
   - Use `@current` for coordinator/review roles that work on the current branch
   - Use separate worktree names for roles that need isolation (e.g., each agent on its own branch)
@@ -1554,7 +1564,7 @@ You can mix different agents in a single swarm:
 }
 ```
 
-Each agent backend requires the corresponding CLI tool to be installed and available in `PATH`. The `architect: grok` role needs `"scheduler": "python"` explicitly — grok has no wrapper mode, so it can only run as a scheduled `auto` role (see Known Limitations). The framework ships a working version of this idea as the **`mixed-backends`** profile (`specifier` and `refactorer` on Codex, everything else on Claude, all on the scheduler). It is a test fixture rather than a production profile and is hidden from `--list-profiles` — see **Other Bundled Profiles** above.
+Each agent backend requires the corresponding CLI tool to be installed and available in `PATH`. The framework ships a working version of this idea as the **`mixed-backends`** profile (`specifier` and `refactorer` on Codex, everything else on Claude, all on the scheduler). It is a test fixture rather than a production profile and is hidden from `--list-profiles` — see **Other Bundled Profiles** above.
 
 ### Running a Different Profile
 
@@ -2038,7 +2048,7 @@ If the ping never comes back:
 3. **Review agent console**: Each agent window shows what it received and did.
 4. **Check logbook.md**: Look for the `[SENT]`/`[RECEIVED]` trail of `kiln-ping` entries to see
    where it stalled.
-5. **Check the agent's own reasoning**: `.kiln/logs/claude-debug-<role>.log` captures what the
+5. **Check the agent's own reasoning**: `.kiln/logs/<agent>-debug-<role>.log` captures what the
    agent was actually doing/deciding, if it stalled without an obvious cause in the message queue
    or channel log.
 
@@ -2123,7 +2133,7 @@ was run and seven defects fell out.
   - ✓ Loop templates' "not end-of-turn" guardrail now explicitly covers looping back to `/kiln-receive`, not just the handoff-sent step — closes a confirmed stall where an agent finished a verified handoff and simply stopped instead of waiting for the next message
   - ✓ `.gitignore` fixes for symlinked/regenerated paths (`.kiln`, `CLAUDE.md`, `.mcp.json`, `tmp/`) that were getting accidentally committed and causing every `/kiln-receive` merge to hit conflicts
   - ✓ `.gitignore` is now committed before any worktree is created, even in a pre-existing repo, so new worktrees actually inherit it
-  - ✓ Per-agent Claude Code debug logs (`--debug-file`) at `.kiln/logs/claude-debug-<role>.log`
+  - ✓ Per-agent CLI debug logs (`--debug-file`) at `.kiln/logs/<agent>-debug-<role>.log`
   - ✓ `kiln-db.ps1` CLI (`list-messages`, `show-message`, `stats`, `retry-message`, `clear-old`) for inspecting the message queue without hand-writing SQL
 - **Phase 6: Wrapper + Worker-Subagent Delegation** — Makes Claude, `auto`-mode role agents thin wrappers that delegate their actual work to a disposable worker subagent each cycle, keeping the wrapper's context small and repetitive instead of accumulating the full working transcript
   - ✓ Worker-agent generation (then `Write-GeneratedWorkerAgent` in `kiln.ps1`, now `write_worker_file()` in `launcher/generate.py`) produces `.claude/agents/<role>-worker.md` — role file + `engineering.md` + `project.md`, no `workflow.md`, no `Agent`/MCP tools
@@ -2163,7 +2173,7 @@ was run and seven defects fell out.
 - **Claude agents**: `--permission-mode bypassPermissions` (auto-approve all MCP tools and file operations)
 - **Copilot agents**: `--allow-all` (auto-approve GitHub Copilot tools and file access)
 - **Codex agents**: `--dangerously-bypass-approvals-and-sandbox` (auto-approve all tool calls and disable the sandbox — Codex's own explicitly-named equivalent). Each Codex role also gets its own isolated config directory via the `CODEX_HOME` env var (`.kiln/codex-home/<role>/`), so Kiln never overwrites your real `~/.codex/config.toml`.
-- **Grok agents** (scheduler mode only — no wrapper mode yet): `--always-approve` (auto-approve all tool executions) plus `--no-subagents` (disables grok's own recursive subagent spawning, the same worker-isolation principle as the other three backends)
+- **Grok agents**: the two modes differ, deliberately. A **scheduler-mode** one-shot worker gets `--always-approve` (auto-approve all tool executions) plus `--no-subagents` (disables grok's own recursive subagent spawning, the same worker-isolation principle as the other three backends). A **wrapper-mode** session instead gets `--permission-mode` — `bypassPermissions` for an `auto` role, `default` for a `manual` one, matching Claude's values exactly — and keeps subagents enabled, because dispatching to `<role>-worker` via `spawn_subagent` is the whole job of a wrapper
 
 This means agents can read/write/execute any file in their worktree without prompting. This is intentional for autonomous development workflows but should be understood as a security trade-off.
 
@@ -2221,9 +2231,28 @@ under **Kiln v0.3 — Phase 7** above.
   `input_tokens`/`output_tokens`/`cache_read_tokens`/`cache_write_tokens`, which suggests its
   alias table is missing `cache_write` — the same gap a live capture found in the Codex
   parser. Settle with one live call.
-- **`grok` has no wrapper-mode implementation.** Its scheduler adapter is real and live-verified,
-  but there is no `loop-auto-grok.md`/wrapper dispatch path — a `grok` role must run `auto` +
-  `"scheduler": "python"`; it cannot run `manual`.
+- **`grok`'s wrapper mode is built but has never run a live cycle.** Every flag and discovery
+  path behind it was verified against grok 1.0.5 by scaffolding a real worktree and reading
+  back `grok inspect` — `--permission-mode`, `AGENTS.md` as project instructions, the
+  `<role>-worker` project agent from `.grok/agents/`, the `kiln-*` skills from `.claude/skills`
+  and `.agents/skills`, and `kiln-db` from the worktree's `.mcp.json`. What has *not* happened
+  is a real receive → merge → delegate → hand-off cycle with a grok wrapper driving it, so the
+  loop templates are unproven prose in the way every other backend's were before their first run.
+- **`grok`'s loop templates poll rather than block.** `kiln-channel`'s `wait_for_message()` is a
+  long-blocking MCP call and no spike has established that this CLI tolerates one — the same
+  unknown that put Codex and Copilot on polling loops. Because grok *does* read `.mcp.json`,
+  the channel is withheld from its worktree entirely (`generate.BLOCKING_CHANNEL_AGENTS`)
+  rather than registered and forbidden in prose, and the loop polls `kiln-db` every 15s. One
+  spike showing blocking works would move grok into that set and let it use Claude's loop shape.
+  Note that `grok mcp list` reports "no MCP servers configured" for a worktree wired through
+  `.mcp.json` — it lists only grok's own config-file entries, so `grok inspect` is the command
+  that actually answers what a session can see.
+- **A grok session reads Claude's global config, and Kiln cannot stop it.** Confirmed via
+  `grok inspect`: `~/.claude/AGENTS.md`, `~/.claude/settings.local.json` and user-level Claude
+  skills all load into a grok session. That is ambient context outside any worktree, so a grok
+  role sees a little more than the generated instructions Kiln controls. Unlike Claude
+  (`--strict-mcp-config`) and Codex (`--ignore-user-config`), this CLI exposes no override to
+  suppress it.
 - **Unix parity is real, but was unverified until it was actually run.** Both shims call the
   same Python `generate.py`, so template injection, `auto`/`manual` modes and worker
   delegation are structurally identical on every platform, and what remains platform-specific
@@ -2259,8 +2288,10 @@ under **Kiln v0.3 — Phase 7** above.
    `mixed-backends`, plus genuine concurrent SQLite contention: every cycle so far has been
    sequential, with only one role holding work at a time, so four schedulers have still
    never actually raced for the queue
-2. **`grok` wrapper mode** — closes the one remaining "backend accepted but one mode
-   unimplemented" gap, following the same shape as the Copilot/Codex wrapper work
+2. **Run a `grok` wrapper role once, for real** — the implementation landed with every flag
+   and discovery path spiked against grok 1.0.5, but no live cycle has driven it. One
+   `manual` grok role taken through receive → delegate → hand-off would settle whether the
+   loop templates hold, and whether a blocking `kiln-channel` call is viable after all
 3. **Port `kiln-cleanup.ps1` to Python** — closes the Unix cleanup gap and removes the last non-shim PowerShell in the launch path
 4. **Multi-language projects** — test beyond the LibraryHub FastAPI example
 5. **CI/CD integration** — how Kiln agents fit into GitHub Actions / GitLab CI

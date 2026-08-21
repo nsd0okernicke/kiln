@@ -142,6 +142,24 @@ if (Test-Path $githubAgentsDir) {
     }
 }
 
+$codexAgentsDir = Join-Path $ProjectDir ".codex" "agents"
+if (Test-Path $codexAgentsDir) {
+    $removed = Get-ChildItem -Path $codexAgentsDir -Filter "*-worker.toml" -ErrorAction SilentlyContinue
+    if ($removed) {
+        $removed | Remove-Item -Force -ErrorAction SilentlyContinue
+        Write-Host "  ✓ Removed .codex/agents/*-worker.toml"
+    }
+}
+
+$grokAgentsDir = Join-Path $ProjectDir ".grok" "agents"
+if (Test-Path $grokAgentsDir) {
+    $removed = Get-ChildItem -Path $grokAgentsDir -Filter "*-worker.md" -ErrorAction SilentlyContinue
+    if ($removed) {
+        $removed | Remove-Item -Force -ErrorAction SilentlyContinue
+        Write-Host "  ✓ Removed .grok/agents/*-worker.md"
+    }
+}
+
 # Step 5: Remove state directories
 Write-Host ""
 Write-Host "Step 5: Removing state directories..."

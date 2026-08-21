@@ -113,6 +113,46 @@ def _copilot_command(role: RoleConfig) -> AgentCommand:
     return AgentCommand(argv=argv, banner=role.display_name)
 
 
+def _grok_command(role: RoleConfig, paths: KilnPaths) -> AgentCommand:
+    """
+    An interactive grok wrapper session.
+
+    Every flag verified live against `grok` 1.0.5, the same methodology the scheduler adapter
+    used. The two non-obvious choices:
+
+    - `--permission-mode`, not the adapter's `--always-approve`. Both exist on this CLI and
+      both auto-approve, but only `--permission-mode` can also express *not* auto-approving,
+      which is what a `manual` role needs — it is human-supervised, and silently bypassing its
+      approvals would be wrong. The value names match Claude's exactly.
+    - No `--no-subagents`. The adapter passes it to isolate a one-shot worker from recursive
+      delegation; a wrapper is the opposite case. It reaches `<role>-worker` through grok's
+      `spawn_subagent` tool, so disabling that would leave it no way to delegate and force it
+      to do the role's work itself — the failure this whole pattern exists to prevent.
+
+    No `--agents` payload either, unlike the adapter: a wrapper session discovers
+    `.grok/agents/<role>-worker.md` from the worktree as a *project* agent (verified via
+    `grok inspect`), which is the file `generate.write_worker_file` already writes there.
+
+    MCP is not on the argv at all — this CLI has no `--mcp-config` equivalent. It reads the
+    worktree's `.mcp.json` directly, the same file Claude is pointed at explicitly, so
+    `workspace.prepare_worktrees` has already wired this role's servers by the time the pane
+    opens. That file carries `kiln-db` only for a grok role: see
+    `generate.BLOCKING_CHANNEL_AGENTS` for why the channel is withheld.
+    """
+    permission_mode = "default" if role.mode == "manual" else "bypassPermissions"
+    argv = [
+        "grok",
+        "--permission-mode", permission_mode,
+        "--debug-file", str(paths.agent_debug_log(role.role, "grok")),
+    ]
+    if role.model:
+        argv += ["-m", role.model]
+    argv.append(START_PROMPT)
+    # Banner for the same reason Copilot gets one: no `-n`/`--name` flag, so nothing in the
+    # session itself says which role this pane is.
+    return AgentCommand(argv=argv, banner=role.display_name)
+
+
 def _codex_command(
     role: RoleConfig, paths: KilnPaths, proxy_url: str | None = None
 ) -> AgentCommand:
@@ -326,9 +366,12 @@ def build_agent_command(
         return _copilot_command(role)
     if role.agent == "codex":
         return _codex_command(role, paths, proxy_url).with_env(**proxy_env(role, proxy_url))
+    if role.agent == "grok":
+        return _grok_command(role, paths)
 
-    # `grok` is configurable but has no launch implementation; say so in the pane rather
-    # than failing the whole swarm launch.
+    # Every agent `config.VALID_AGENTS` accepts is handled above, so this is only reachable
+    # for one added there without a launch path yet. Say so in the pane rather than failing
+    # the whole swarm launch for one role.
     return AgentCommand(argv=["echo", f"Agent {role.agent} is not supported yet"])
 
 

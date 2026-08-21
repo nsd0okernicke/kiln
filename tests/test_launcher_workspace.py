@@ -368,6 +368,114 @@ class TestSkills:
         assert not stale.exists()
 
 
+GROK_PROFILE = parse_profile(
+    {
+        "profiles": {
+            "p": {
+                "terminals": [
+                    {"role": "specifier", "worktree": "@current", "mode": "manual"},
+                    {
+                        "role": "coder",
+                        "agent": "grok",
+                        "worktree": "coder",
+                        "mode": "auto",
+                    },
+                ]
+            }
+        }
+    },
+    "p",
+)
+
+
+class TestGrokWorktreeSetup:
+    """
+    What a grok wrapper role needs in its worktree, all verified with `grok inspect` against
+    grok 1.0.5: its worker definition under `.grok/agents/`, skills in a convention it scans,
+    and a `.mcp.json` carrying `kiln-db` but *not* `kiln-channel`.
+
+    Grok needs no per-backend MCP config of its own. It reads the worktree `.mcp.json`
+    directly, exactly as Claude does -- which also means the channel entry is not inert for
+    it the way it is for Codex and Copilot, and has to be withheld to match its polling loop.
+    """
+
+    def test_the_worker_definition_is_mirrored_into_the_worktree(self, repo):
+        # Written to the project root by generate.write_worker_file, then copied per worktree
+        # -- a grok wrapper discovers `<role>-worker` as a project agent from its own cwd.
+        source = repo.project_root / ".grok" / "agents"
+        source.mkdir(parents=True)
+        (source / "coder-worker.md").write_text("---\nname: coder-worker\n---\n", encoding="utf-8")
+
+        workspace.prepare_state_dirs(repo)
+        workspace.prepare_worktrees(GROK_PROFILE, repo, "main")
+
+        assert (repo.worktree_path("coder") / ".grok" / "agents" / "coder-worker.md").is_file()
+
+    def test_the_worktree_mcp_config_carries_kiln_db(self, repo):
+        # Without it the pane launches and can then do nothing: no query to poll with, no
+        # insert to hand off with.
+        import json
+
+        workspace.prepare_state_dirs(repo)
+        workspace.prepare_worktrees(GROK_PROFILE, repo, "main")
+
+        config = json.loads(
+            (repo.worktree_path("coder") / ".mcp.json").read_text(encoding="utf-8")
+        )
+        assert "kiln-db" in config["mcpServers"]
+
+    def test_the_worktree_mcp_config_withholds_the_blocking_channel(self, repo):
+        # Grok's loop polls kiln-db and is told never to call wait_for_message(). Since grok
+        # really does read this file, listing the channel would advertise a tool the prose
+        # forbids -- the same contradiction scheduler roles are already protected from.
+        import json
+
+        workspace.prepare_state_dirs(repo)
+        workspace.prepare_worktrees(GROK_PROFILE, repo, "main")
+
+        config = json.loads(
+            (repo.worktree_path("coder") / ".mcp.json").read_text(encoding="utf-8")
+        )
+        assert "kiln-channel" not in config["mcpServers"]
+
+    def test_a_claude_wrapper_role_still_gets_the_channel(self, repo):
+        # The blocking loop is Claude's and must not be collateral damage of the above.
+        import json
+
+        workspace.prepare_state_dirs(repo)
+        workspace.prepare_worktrees(PROFILE, repo, "main")
+
+        config = json.loads(
+            (repo.worktree_path("coder") / ".mcp.json").read_text(encoding="utf-8")
+        )
+        assert "kiln-channel" in config["mcpServers"]
+
+    def test_grok_needs_no_backend_config_of_its_own(self, repo):
+        # It reads .mcp.json, so there is deliberately nothing for prepare_agent_configs to
+        # write -- an earlier version of this wrote a redundant .grok/config.toml.
+        workspace.prepare_state_dirs(repo)
+        workspace.prepare_worktrees(GROK_PROFILE, repo, "main")
+        workspace.prepare_agent_configs(GROK_PROFILE, repo)
+
+        assert not (repo.worktree_path("coder") / ".grok" / "config.toml").exists()
+
+    def test_skills_are_linked_for_a_grok_role(self, repo):
+        # Verified live: grok scans .claude/skills and .agents/skills (and .grok/skills), but
+        # NOT .github/skills. The two it shares with Kiln's existing conventions are enough,
+        # so grok needs no new convention -- only to stop being filtered out of the loop.
+        skill = repo.skills_dir / "tdd-red"
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text("---\nname: x\n---\n", encoding="utf-8")
+
+        workspace.prepare_state_dirs(repo)
+        workspace.prepare_worktrees(GROK_PROFILE, repo, "main")
+        workspace.prepare_skills(GROK_PROFILE, repo)
+
+        coder_root = repo.worktree_path("coder")
+        assert (coder_root / ".claude" / "skills" / "tdd-red").exists()
+        assert (coder_root / ".agents" / "skills" / "tdd-red").exists()
+
+
 class TestLogbookUnionMerge:
     """
     Found live: a swarm wedged on `CONFLICT (add/add): Merge conflict in logbook.md`.

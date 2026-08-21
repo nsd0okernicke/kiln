@@ -26,16 +26,17 @@ SYSTEM_PROFILES_PATH = (
     else Path("/etc/kiln/profiles.json")
 )
 
-#: `grok` has a scheduler adapter (`scheduler/adapters/grok_adapter.py`) but no *wrapper*-mode
-#: launch implementation (see README's Known Limitations) -- it is listed so an existing
-#: profile does not fail validation for a wrapper-mode role.
+#: Every accepted backend now runs in both modes: a one-shot scheduler adapter
+#: (`scheduler/adapters/`) and an interactive wrapper session (`commands.build_agent_command`
+#: plus a full template set, which `test_docs_consistency` pins). `grok` was the last to
+#: carry only the former.
 VALID_AGENTS = ("claude", "copilot", "codex", "grok")
 VALID_MODES = ("auto", "manual")
 
 #: Agents with a one-shot adapter in `scheduler/adapters/` -- the deterministic scheduler can
 #: only drive a backend it knows how to invoke non-interactively. Every currently-accepted
 #: agent has one; a future agent added to VALID_AGENTS without an adapter yet would stay out
-#: of this set until it has one too (same path `grok` followed here).
+#: of this set until it has one too.
 SCHEDULER_CAPABLE_AGENTS = ("claude", "copilot", "codex", "grok")
 
 #: Backends whose CLI reports a real dollar figure (`total_cost_usd`). Copilot and Codex do

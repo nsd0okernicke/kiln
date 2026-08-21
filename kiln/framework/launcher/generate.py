@@ -52,9 +52,29 @@ CHANNEL_IMPORT_PROBE = (
     "    from mcp.server.mcpserver import MCPServer\n"
 )
 
+#: Backends whose wrapper loop *blocks* on kiln-channel's `wait_for_message()` instead of
+#: polling kiln-db.
+#:
+#: Only Claude is verified to tolerate a long-blocking MCP tool call; the same unknown is why
+#: Codex's and Copilot's loop templates poll, and Grok's now do too. This is what decides
+#: whether a worktree's `.mcp.json` advertises the channel at all, because a registered server
+#: the loop is told never to call is an invitation to call it anyway.
+#:
+#: It matters for Grok specifically: verified with `grok inspect` against 1.0.5, Grok reads
+#: `.mcp.json` directly — the same file Claude does — so anything listed there is a tool it can
+#: genuinely see and reach. (`grok mcp list` shows only Grok's *own* config-file entries and
+#: reports "no MCP servers configured" for a worktree wired purely through `.mcp.json`, which
+#: makes it a misleading way to check this.) Codex and Copilot read neither, so for them this
+#: is a no-op that keeps a latent trap from opening if they ever start.
+BLOCKING_CHANNEL_AGENTS = frozenset({"claude"})
+
 #: Backends with real in-session worker delegation, so their wrapper gets the delegating
 #: prompt rather than the role's own work rules.
-DELEGATING_AGENTS = ("claude", "copilot", "codex")
+#:
+#: `grok` qualifies on both counts, verified live against 1.0.5: `grok inspect` reports
+#: `.grok/agents/<role>-worker.md` as a *project* agent — the file `write_worker_file`
+#: already puts there — and the CLI has a `spawn_subagent` tool to dispatch to it.
+DELEGATING_AGENTS = ("claude", "copilot", "codex", "grok")
 
 DEFAULT_HANDOFF_TARGET = "specifier"
 
@@ -71,12 +91,45 @@ def _now() -> str:
 
 
 def instruction_file_for(role: RoleConfig, worktree: Path) -> Path:
-    """Where each backend looks for project instructions."""
+    """
+    Where each backend looks for project instructions.
+
+    `grok` has no filename of its own. Verified against grok 1.0.5 with `grok inspect`: it
+    discovers `AGENTS.md` and `CLAUDE.md` from the repo root and ignores `GROK.md` and
+    `.grok/GROK.md` entirely — so one of the other two conventions has to be reused, and
+    AGENTS.md is both the cross-vendor name and the one grok lists first. Sharing it with
+    Codex costs nothing: a worktree belongs to exactly one role, so no directory is ever
+    written by two backends. It is already in REQUIRED_GITIGNORE_ENTRIES for the same reason.
+    """
     if role.agent == "copilot":
         return worktree / ".github" / "copilot-instructions.md"
-    if role.agent == "codex":
+    if role.agent in ("codex", "grok"):
         return worktree / "AGENTS.md"
     return worktree / "CLAUDE.md"
+
+
+def channel_is_available(role: RoleConfig | None) -> bool:
+    """
+    Whether this role's `.mcp.json` should register `kiln-channel` at all.
+
+    One rule for the two places that write such a file — `workspace.prepare_worktrees` for a
+    worktree role and `cli` for whichever role owns the project root — because they were
+    deciding it separately and had already drifted: the root copy asked only "is there a role
+    here", so an `@current` role got a blocking channel regardless of whether its loop blocks
+    or whether it runs under the scheduler at all.
+
+    Three conditions, each for a failure the entry causes rather than prevents. No role: the
+    server is role-scoped by env var, so a shared config would deliver someone else's
+    messages. A scheduler role: it polls in Python and its worker runs with
+    `--strict-mcp-config`, so a channel implies it still receives its own handoffs. A backend
+    outside `BLOCKING_CHANNEL_AGENTS`: its loop is told to poll `kiln-db` and never to call
+    `wait_for_message()`, so registering the tool contradicts its own instructions.
+    """
+    return (
+        role is not None
+        and not role.uses_scheduler
+        and role.agent in BLOCKING_CHANNEL_AGENTS
+    )
 
 
 def build_substitutions(

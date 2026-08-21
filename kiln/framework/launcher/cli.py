@@ -209,7 +209,7 @@ def prepare(profile: Profile, paths: KilnPaths) -> str:
         paths,
         current.role if current else None,
         branch,
-        include_channel=current is not None,
+        include_channel=generate.channel_is_available(current),
     )
     _copy_root_settings(paths)
 

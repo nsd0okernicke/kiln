@@ -299,6 +299,47 @@ class TestEveryShippedProfileDeclaresRouting:
         assert not missing, f"shipped profiles that declare no routing: {missing}"
 
 
+class TestWrapperTemplateSets:
+    """
+    A backend accepted by the loader but missing a template does not degrade -- it takes the
+    launch down. `read_template` raises `TemplateError` for a missing file, and
+    `render_instructions` reaches for all of these by name derived from `role.agent`/
+    `role.mode`, so the first user to configure the gap gets a crash rather than a fallback.
+
+    This is the shape `grok` was in for its whole scheduler-only life: a legal `agent` value
+    with no `loop-auto-grok.md` behind it.
+    """
+
+    def _expected(self, agent: str) -> set[str]:
+        """Every template `generate.render_instructions` can ask for, for one agent."""
+        from launcher.generate import DELEGATING_AGENTS
+
+        names = {
+            f"loop-auto-{agent}.md",
+            f"loop-manual-{agent}.md",
+            f"loop-manual-{agent}-with-inbox.md",
+            f"runtime-{agent}.md",
+        }
+        if agent in DELEGATING_AGENTS:
+            names.add(f"wrapper-prompt-auto-{agent}.md")
+        return names
+
+    def test_every_accepted_agent_has_a_complete_template_set(self):
+        from launcher.config import VALID_AGENTS
+
+        present = {p.name for p in (REPO / "kiln" / "framework" / "templates").glob("*.md")}
+
+        missing = {
+            agent: sorted(self._expected(agent) - present) for agent in VALID_AGENTS
+        }
+        incomplete = {agent: names for agent, names in missing.items() if names}
+
+        assert not incomplete, (
+            f"agents the loader accepts whose wrapper templates do not ship: {incomplete} -- "
+            "configuring one fails the launch with TemplateError"
+        )
+
+
 class TestDocumentedTerminalKeys:
     """
     `workerIdleTimeout` and `workerDebug` were both accepted by the loader, and `workerDebug`
