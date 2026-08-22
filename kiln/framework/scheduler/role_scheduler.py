@@ -829,7 +829,10 @@ def _insert_verified(
 
 
 def make_status_writer(
-    role: str, script: Path | None, worker_timeout: int | None = None
+    role: str,
+    script: Path | None,
+    worker_timeout: int | None = None,
+    model: str = "",
 ) -> Callable[..., None]:
     """
     Status writer that shells out to set-status.py, or a no-op when it is absent.
@@ -867,6 +870,13 @@ def make_status_writer(
         # the scheduler was actually launched with.
         if worker_timeout is not None:
             command.append(f"--worker-timeout={worker_timeout}")
+        # Constant for the process, like the timeout above, and travelling the same way and
+        # for the same reason: this is the *resolved* model (flag, else the worker
+        # definition's frontmatter, else a backend default), and only this process knows it.
+        # A reader that consulted the profile would show nothing for a role whose model
+        # comes from frontmatter.
+        if model:
+            command.append(f"--model={model}")
         if tokens is not None:
             # Each kind as its own flag rather than one total: set-status.py is copied
             # verbatim into every worktree and cannot import TokenUsage to unpack a
@@ -1024,7 +1034,10 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
         definition=definition,
         run_worker=run_worker,
         set_status=make_status_writer(
-            args.role, args.status_script, worker_timeout=args.worker_timeout
+            args.role, args.status_script, worker_timeout=args.worker_timeout,
+            # `resolve_model`, not `args.model`: the same value the worker is actually
+            # invoked with, including the frontmatter and default fallbacks.
+            model=model,
         ),
         max_attempts=args.max_attempts,
         escalation_limit=args.escalation_limit,

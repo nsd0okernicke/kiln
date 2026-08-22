@@ -98,6 +98,84 @@ class TestThemeSwitcher:
             assert f'"{theme}"' in inline
 
 
+class TestIconography:
+    def test_every_use_resolves_to_a_symbol_the_page_defines(self, page):
+        # A `<use href="#missing">` renders nothing at all -- no error, no fallback, just a
+        # gap where the logo was.
+        defined = set(re.findall(r'<symbol id="([^"]+)"', page))
+        used = {href.lstrip("#") for href in re.findall(r'<use href="([^"]+)"', page)}
+
+        assert used <= defined, f"<use> points at undefined symbols: {sorted(used - defined)}"
+
+    def test_the_kiln_mark_is_drawn_rather_than_fetched_or_embedded(self, page):
+        # Traced from docs/images/logo.png as vector geometry: it inherits `currentColor`,
+        # so it re-tints itself per theme, and it stays crisp at any zoom. A PNG data URI
+        # would do neither and would dwarf the rest of the file.
+        assert '<symbol id="i-kiln"' in page
+        assert "data:image" not in page
+
+    def test_the_project_and_branch_each_carry_an_icon(self, page):
+        # The two facts an operator re-checks constantly. They used to be one run-on string.
+        assert "i-folder" in page and "i-branch" in page
+
+
+class TestWorkingCardAnimation:
+    def test_the_pulse_is_driven_by_a_real_message_state(self, page):
+        # Decoration on every card would say nothing; this fires only while a worker
+        # subprocess is actually running on that item.
+        assert 'card.status === "processing"' in page
+        assert ".card.working { animation:" in page
+
+    def test_a_finished_card_never_pulses(self, page):
+        # `done` is terminal, and a pulsing Done column would read as work still moving.
+        assert 'lane !== "done" ? " working"' in page
+
+    def test_reduced_motion_is_honoured(self, page):
+        # An operator surface must not force motion on someone whose OS asked for less.
+        reduced = page.partition("@media (prefers-reduced-motion: reduce)")[2]
+
+        assert reduced, "no prefers-reduced-motion block"
+        assert "animation: none" in reduced.partition("}")[0] + reduced[:300]
+
+    def test_the_state_survives_without_the_animation(self, page):
+        # Colour, not just movement, carries it -- otherwise reduced-motion users lose the
+        # signal entirely rather than seeing a calmer version of it.
+        reduced = page.partition("@media (prefers-reduced-motion: reduce)")[2][:300]
+
+        assert "border-left-color" in reduced
+
+
+class TestAgentColours:
+    """
+    Which backend runs a role, shown as coloured text rather than a vendor mark: the page
+    must stay self-contained and offline, so a logo would have to be drawn from memory, and
+    a not-quite-right vendor mark is worse than an accurate word.
+    """
+
+    #: Every backend `launcher.config.VALID_AGENTS` accepts.
+    AGENTS = ("claude", "codex", "copilot", "grok")
+
+    def test_every_accepted_backend_has_its_own_colour(self, page):
+        from launcher.config import VALID_AGENTS
+
+        declared = _declared_in(page, ":root")
+
+        missing = [a for a in VALID_AGENTS if f"--agent-{a}" not in declared]
+        assert not missing, f"backends with no colour, so they render unstyled: {missing}"
+
+    @pytest.mark.parametrize("theme", ["light", "neon"])
+    def test_each_theme_restates_every_agent_colour(self, page, theme):
+        # A dark-tuned agent colour inherited into the light theme is the exact failure the
+        # core-surface test already guards for the main palette.
+        declared = _declared_in(page, f':root[data-theme="{theme}"]')
+
+        missing = [a for a in self.AGENTS if f"--agent-{a}" not in declared]
+        assert not missing, f"the {theme} theme inherits {missing} from the dark palette"
+
+    def test_the_model_is_shown_beside_the_agent(self, page):
+        assert '"model"' in page or 'role.model' in page
+
+
 class TestPageIsSelfContained:
     def test_it_loads_nothing_from_the_network(self, page):
         # The cockpit is served by a stdlib HTTP server on a machine that may well be

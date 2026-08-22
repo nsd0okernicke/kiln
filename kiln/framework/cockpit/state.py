@@ -104,6 +104,10 @@ def role_rows(snapshot: SwarmSnapshot, work_items: list[dict]) -> list[dict]:
             "role": session.role,
             "agent": session.agent,
             "display_name": session.display_name,
+            # The *resolved* model, written by the scheduler into its own status file --
+            # the profile's value can be empty for a role whose model comes from the worker
+            # definition's frontmatter. None until the role has reported once.
+            "model": (status or {}).get("model"),
             "state": status["state"] if status else None,
             "since": (status or {}).get("since"),
             "since_ago": _since_ago(status, snapshot.now_utc),

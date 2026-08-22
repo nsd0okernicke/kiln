@@ -57,6 +57,16 @@ EXTRA_INT_FLAGS = {
     "--worker-timeout=": "worker_timeout_sec",
 }
 
+#: Flag -> key for extras that are text rather than numbers.
+#:
+#: `model` is the *resolved* model, which only the scheduler knows: it is the CLI flag, else
+#: the worker definition's frontmatter, else a backend-specific default (`resolve_model`).
+#: A reader that took the profile's value instead would show nothing for a role whose model
+#: comes from frontmatter -- the same trap `worker_timeout_sec` documents, and the same fix.
+EXTRA_TEXT_FLAGS = {
+    "--model=": "model",
+}
+
 #: Flag -> key in the status file's `token_usage` object. Each kind arrives as its own
 #: scalar flag because this script is copied verbatim into every worktree and cannot import
 #: scheduler.adapters.TokenUsage to unpack a structured value.
@@ -108,11 +118,21 @@ def parse_argv(argv):
         elif arg.startswith("--cost="):
             cost_usd = float(arg.split("=", 1)[1])
         else:
-            for flag, key in {**TOKEN_FLAGS, **EXTRA_INT_FLAGS}.items():
+            for flag, key in EXTRA_TEXT_FLAGS.items():
                 if arg.startswith(flag):
-                    target = tokens if flag in TOKEN_FLAGS else extras
-                    target[key] = int(arg.split("=", 1)[1])
+                    value = arg.split("=", 1)[1].strip()
+                    # Empty means "the CLI picks its own default" for copilot/codex/grok --
+                    # absent from the file rather than an empty string, matching the
+                    # omit-when-unknown rule the numeric extras already follow.
+                    if value:
+                        extras[key] = value
                     break
+            else:
+                for flag, key in {**TOKEN_FLAGS, **EXTRA_INT_FLAGS}.items():
+                    if arg.startswith(flag):
+                        target = tokens if flag in TOKEN_FLAGS else extras
+                        target[key] = int(arg.split("=", 1)[1])
+                        break
 
     return role, state, detail, mode, cycles, cost_usd, tokens or None, extras
 

@@ -158,6 +158,47 @@ class TestParseArgv:
             set_status.parse_argv(["coder"])
 
 
+class TestModelFlag:
+    """
+    The resolved model, carried to anything that displays roles.
+
+    It travels through the status file for the same reason `worker_timeout_sec` does: only
+    the scheduler process knows it. `resolve_model` is the CLI flag, else the worker
+    definition's frontmatter, else a backend default -- so a reader that consulted the
+    profile instead would show nothing for a role whose model comes from frontmatter.
+    """
+
+    def test_the_model_reaches_the_status_file(self, set_status):
+        _, _, _, _, _, _, _, extras = set_status.parse_argv(
+            ["coder", "working", "--model=claude-sonnet-5"]
+        )
+
+        assert extras["model"] == "claude-sonnet-5"
+
+    def test_an_empty_model_is_omitted_rather_than_written_blank(self, set_status):
+        # Empty means "the CLI picks its own default" for copilot/codex/grok. An empty
+        # string in the file reads as broken configuration; absence reads as unknown, which
+        # is the truth.
+        _, _, _, _, _, _, _, extras = set_status.parse_argv(["coder", "working", "--model="])
+
+        assert "model" not in extras
+
+    def test_a_role_never_told_a_model_has_no_key_at_all(self, set_status):
+        status = set_status.build_status("coder", "working", None, "auto", extras={})
+
+        assert "model" not in status
+
+    def test_the_numeric_extras_still_parse_alongside_it(self, set_status):
+        # The text flags are checked first now, so the int path must not have been shadowed.
+        _, _, _, _, cycles, _, _, extras = set_status.parse_argv(
+            ["coder", "working", "--cycles=3", "--worker-timeout=1800", "--model=sonnet"]
+        )
+
+        assert cycles == 3
+        assert extras["worker_timeout_sec"] == 1800
+        assert extras["model"] == "sonnet"
+
+
 class TestEndToEnd:
     def test_a_previously_rejected_state_is_now_accepted(self, tmp_path, monkeypatch):
         # "halted" was rejected before STATE_EMOJIS gained parity with STATE_COLORS_HEX --

@@ -582,9 +582,23 @@ What the page gives you:
   replaced by the real card in the next lane. Until that happens, the placeholder is how you
   know the request is queued and not lost.
 - **Work queue** — the dashboard's per-role table (state, since, queue depth, wait, cycles,
-  cost, tokens, cache rate), plus what each role is currently holding. Lists the same roles
-  the terminal grid does, through the same `visible_roles` rule, so the two cannot disagree
-  about which roles exist — stateless panes are left out of both.
+  cost, tokens, cache rate), plus what each role is currently holding, and which backend and
+  model it runs. Lists the same roles the terminal grid does, through the same
+  `visible_roles` rule, so the two cannot disagree about which roles exist — stateless panes
+  are left out of both.
+
+  The **Agent** column colours each backend distinctly (one hue per `claude` / `codex` /
+  `copilot` / `grok`), which is what makes a mixed-backend swarm readable at a glance. It is
+  coloured text rather than a vendor logo on purpose: the page is served offline and must
+  stay self-contained, so a mark would have to be hand-drawn, and a not-quite-right vendor
+  logo is worse than an accurate word.
+
+  The model beside it is the **resolved** one — the `--model` flag, else the worker
+  definition's frontmatter, else the backend's own default (`role_scheduler.resolve_model`).
+  It reaches the browser through the role's status file rather than the profile, for the
+  same reason `worker_timeout_sec` does: a reader consulting the profile would show nothing
+  for a role whose model comes from frontmatter. A role that has not reported a cycle yet
+  shows `—`, because until then there genuinely is no answer.
 - **New task** — queues a handoff from the human role to whatever the profile's routing says
   the human hands off to (`specifier` in `full`). This is the same insert `kiln send` does,
   so it actually starts a cycle.

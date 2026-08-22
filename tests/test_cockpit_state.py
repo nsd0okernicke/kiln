@@ -277,6 +277,23 @@ class TestRoleRows:
 
         assert [row["role"] for row in rows] == ["specifier", "coder"]
 
+    def test_it_reports_which_backend_and_model_a_role_runs(self):
+        # The agent comes from the sessions file, the model from the role's own status file
+        # -- the model the worker was actually invoked with, not what the profile asked for.
+        statuses = {"coder": {"state": "idle", "model": "claude-sonnet-5"}}
+
+        rows = cockpit_state.role_rows(_snapshot(statuses=statuses), [])
+
+        assert rows[1]["agent"] == "claude"
+        assert rows[1]["model"] == "claude-sonnet-5"
+
+    def test_a_role_that_has_not_reported_yet_has_no_model(self):
+        # None, not a guess from the profile: until the scheduler writes a status there is
+        # genuinely no answer, and a frontmatter model would make any guess wrong.
+        rows = cockpit_state.role_rows(_snapshot(), [])
+
+        assert rows[1]["model"] is None
+
     def test_a_role_with_no_status_reports_nothing_rather_than_zero(self):
         # Same rule the dashboard's `-` columns follow: a role that never tracked cost must
         # not appear to have measured $0.00.

@@ -1158,6 +1158,41 @@ class TestStatusReporting:
         role_scheduler.make_status_writer("coder", script)("working")
         assert calls["cmd"][-2:] == ["coder", "working"]
 
+    def test_the_resolved_model_travels_with_every_status(self, tmp_path, monkeypatch):
+        # Constant for the process, written on every status, exactly like the worker
+        # timeout: nothing downstream can re-derive it, because `resolve_model` falls back
+        # to the worker definition's frontmatter, which no reader parses.
+        script = tmp_path / "set-status.py"
+        script.write_text("import sys\n", encoding="utf-8")
+        calls = {}
+        monkeypatch.setattr(
+            role_scheduler.subprocess,
+            "run",
+            lambda cmd, **kw: calls.setdefault("cmd", cmd)
+            or subprocess.CompletedProcess(cmd, 0),
+        )
+
+        role_scheduler.make_status_writer("coder", script, model="claude-sonnet-5")("working")
+
+        assert "--model=claude-sonnet-5" in calls["cmd"]
+
+    def test_an_unset_model_passes_no_flag_at_all(self, tmp_path, monkeypatch):
+        # An empty model is a real state for copilot/codex/grok -- "let the CLI choose" --
+        # and `--model=` would write a blank into the status file rather than leaving it out.
+        script = tmp_path / "set-status.py"
+        script.write_text("import sys\n", encoding="utf-8")
+        calls = {}
+        monkeypatch.setattr(
+            role_scheduler.subprocess,
+            "run",
+            lambda cmd, **kw: calls.setdefault("cmd", cmd)
+            or subprocess.CompletedProcess(cmd, 0),
+        )
+
+        role_scheduler.make_status_writer("coder", script)("working")
+
+        assert not any(part.startswith("--model=") for part in calls["cmd"])
+
 
 class TestCommitPrefix:
     @pytest.mark.parametrize(
