@@ -329,6 +329,59 @@ class TestStopMarkers:
         assert "channel.py" in KILN_PROCESS_MARKERS
 
 
+class TestPanesCarryPassivity:
+    """
+    The WezTerm tab bar badges a role from its status file, and defaults a `manual` role
+    with no status to `waiting`. Stateless panes have no status file *by construction*, so
+    all three advertised themselves as waiting for something. The Lua never sees a profile,
+    so `build_panes` is the only place that can tell it.
+    """
+
+    def _profile(self):
+        from launcher.config import parse_profile
+
+        return parse_profile(
+            {
+                "profiles": {
+                    "p": {
+                        "terminals": [
+                            {"role": "human-in-the-loop", "worktree": "@current",
+                             "mode": "manual"},
+                            {"role": "coder", "worktree": "coder", "scheduler": "python"},
+                            {"role": "inbox", "worktree": "@current", "mode": "manual",
+                             "scheduler": "inbox", "watches": "human-in-the-loop"},
+                            {"role": "dashboard", "worktree": "@current", "mode": "manual",
+                             "scheduler": "dashboard"},
+                            {"role": "cockpit", "worktree": "@current", "mode": "manual",
+                             "scheduler": "cockpit"},
+                        ],
+                        "routing": {"human-in-the-loop": "coder", "coder": "human-in-the-loop"},
+                    }
+                }
+            },
+            "p",
+        )
+
+    def test_only_the_stateless_panes_are_marked(self, tmp_path):
+        paths = KilnPaths.create(tmp_path / "proj", tmp_path / "fw")
+
+        panes = cli.build_panes(self._profile(), paths, "main", "wezterm")
+
+        assert {pane.role: pane.passive for pane in panes} == {
+            "human-in-the-loop": False, "coder": False,
+            "inbox": True, "dashboard": True, "cockpit": True,
+        }
+
+    def test_every_pane_is_still_launched(self, tmp_path):
+        # Only the badge row filters. A hidden pane that was never spawned would mean no
+        # cockpit process at all.
+        paths = KilnPaths.create(tmp_path / "proj", tmp_path / "fw")
+
+        panes = cli.build_panes(self._profile(), paths, "main", "wezterm")
+
+        assert len(panes) == 5
+
+
 class TestReclaimingLeftoverProxies:
     """
     Closing the terminal window is a normal way to end a swarm and it never reaches the

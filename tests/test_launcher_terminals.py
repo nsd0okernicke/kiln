@@ -71,7 +71,21 @@ class TestWezTermEnvironment:
         roles = json.loads(env[wezterm.ENV_ROLES])
         assert [r["role"] for r in roles] == ["specifier", "coder"]
         for role in roles:
-            assert set(role) >= {"role", "name", "path", "cmd", "mode"}
+            assert set(role) >= {"role", "name", "path", "cmd", "mode", "passive"}
+
+    def test_roles_json_marks_stateless_panes(self):
+        # The Lua cannot work this out for itself -- it never sees a profile -- so the flag
+        # has to ride along with the pane it describes.
+        panes = [*PANES, PaneSpec(
+            role="cockpit", name="Cockpit", path="C:/proj", cmd="python -m cockpit.server",
+            mode="manual", passive=True,
+        )]
+
+        roles = json.loads(wezterm.build_environment(panes, {}, Path("C:/p"))[wezterm.ENV_ROLES])
+
+        assert {r["role"]: r["passive"] for r in roles} == {
+            "specifier": False, "coder": False, "cockpit": True,
+        }
 
     def test_layout_is_omitted_when_absent(self):
         assert wezterm.ENV_LAYOUT not in wezterm.build_environment(PANES, {}, Path("C:/p"))
@@ -109,6 +123,25 @@ class TestWezTermLua:
     def test_reads_status_from_the_json_file_not_the_pane_title(self):
         # The agent rewrites its own OSC-0 title constantly and would win the race.
         assert "/.kiln/status/" in wezterm.LUA_CONFIG
+
+    def test_stateless_panes_get_no_status_badge(self):
+        # They never write a status file, and the `mode == 'manual'` fallback below badges a
+        # role with no status as `waiting` -- so a healthy cockpit advertised itself as
+        # waiting for something. Filtered into `shown` before the loop.
+        assert "if not r.passive then" in wezterm.LUA_CONFIG
+
+    def test_the_badge_separator_counts_the_filtered_list(self):
+        # `i < #roles` would emit a trailing separator whenever the last role is a hidden
+        # pane -- which, in the shipped `full` profile, it always is.
+        assert "if i < #shown then" in wezterm.LUA_CONFIG
+        assert "if i < #roles then" not in wezterm.LUA_CONFIG
+
+    def test_hidden_panes_are_still_spawned(self):
+        # Only the badge row filters: `gui-startup` must create every pane, or the cockpit
+        # would have no process at all.
+        startup = wezterm.LUA_CONFIG.partition("wezterm.on('gui-startup'")[2]
+
+        assert "passive" not in startup
 
     def test_defines_colours_for_scheduler_states(self):
         # The scheduler reports states the old wrapper never did. Colours now live in

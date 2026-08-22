@@ -243,7 +243,7 @@ def oldest_queued_by_role(db_path: str | Path, branch: str) -> dict[str, str]:
     ago say the swarm is busy. Depth alone cannot tell those apart.
 
     The value is naive **localtime**, matching the schema's own `created_at` default -- read
-    it with `dashboard._parse_local_timestamp`, not the UTC parser used for status files.
+    it with `dashboard.parse_local_timestamp`, not the UTC parser used for status files.
     Mixing the two would produce an age off by the machine's UTC offset, which on this
     codebase's own timezone would read as a two-hour stall on a message that just arrived.
     """
@@ -311,6 +311,70 @@ def recent_messages(db_path: str | Path, branch: str, limit: int = 10) -> list[d
             "SELECT id, sender, target, status, content, created_at FROM messages "
             "WHERE branch=? ORDER BY created_at DESC LIMIT ?",
             (branch, limit),
+        )
+        return [dict(row) for row in cur.fetchall()]
+
+
+#: How many recent work-item messages the board reads in one poll.
+#:
+#: A window, not a history: the cockpit board needs the *latest* message per work item, and
+#: a run producing more than this many handoffs has long since finished the items at the far
+#: end. Kept modest because the cockpit re-reads it every couple of seconds and each row
+#: carries a full handoff body.
+WORK_ITEM_WINDOW = 120
+
+
+def work_item_messages(
+    db_path: str | Path, branch: str, limit: int = WORK_ITEM_WINDOW
+) -> list[dict]:
+    """
+    Recent messages on a branch, newest first — the cockpit board's input.
+
+    Grouping into cards is left to the caller (`cockpit.state.build_board`) rather than done
+    in SQL. "Latest row per group" in SQLite is either a bare-column-with-MAX trick, which
+    picks arbitrarily among rows sharing a `created_at` second — two hops of one cycle can
+    easily land in the same second — or a window function this module would then depend on.
+    Ordering here and grouping in a pure function is deterministic, and puts the lane rules
+    somewhere they can be tested without a database.
+
+    `rowid` breaks the tie `created_at` cannot: it is monotonic in insert order, which is
+    exactly the ordering a same-second pair of handoffs needs.
+
+    **Messages with no work item are included**, and that is the whole reason this is not a
+    `work_item IS NOT NULL` query. A human's intake hop legitimately has no name yet -- the
+    specifier is what invents one -- so filtering NULLs here made every new request invisible
+    on the board until the specifier's first cycle finished, which took eight minutes on the
+    run that exposed it. Whether an unnamed row deserves a card is a display question, and it
+    is answered in `cockpit.state.build_board` where it can be tested without a database.
+    """
+    with closing(connect(db_path)) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, sender, target, status, content, created_at, work_item, error "
+            "FROM messages WHERE branch=? "
+            "ORDER BY created_at DESC, rowid DESC LIMIT ?",
+            (branch, limit),
+        )
+        return [dict(row) for row in cur.fetchall()]
+
+
+def pending_for_role(db_path: str | Path, branch: str, role: str) -> list[dict]:
+    """
+    Everything still waiting in one role's queue — what the cockpit's Attention rail reads.
+
+    `count_queued_by_role` answers how many; this answers which, which is what a human
+    reviewing completed cycles actually needs. Includes `delivered`: a message handed to a
+    role that has not finished with it is still outstanding work, and for the human's own
+    queue — served by the inbox pane, which marks `processed` the moment it displays one —
+    the distinction is invisible anyway.
+    """
+    with closing(connect(db_path)) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, sender, target, status, content, created_at, work_item "
+            "FROM messages WHERE branch=? AND target=? AND status IN (?, ?) "
+            "ORDER BY created_at DESC",
+            (branch, role, STATUS_QUEUED, STATUS_DELIVERED),
         )
         return [dict(row) for row in cur.fetchall()]
 

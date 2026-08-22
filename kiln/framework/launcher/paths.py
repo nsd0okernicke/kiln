@@ -98,6 +98,27 @@ class KilnPaths:
         return self.state_dir / "sessions"
 
     @property
+    def cockpit_url_file(self) -> Path:
+        """
+        `.kiln/cockpit-url` — where the running cockpit says it ended up.
+
+        Written because the port is not fixed: the cockpit probes upward when its preferred
+        one is taken, so a second project's cockpit is somewhere the operator did not choose.
+        A file makes that answerable from any other terminal without reading the pane.
+        """
+        return self.state_dir / "cockpit-url"
+
+    @property
+    def cockpit_pid_file(self) -> Path:
+        """
+        `.kiln/cockpit.pid` — a courtesy, not the way the cockpit is stopped.
+
+        `kiln --stop` finds it by command line like every other Kiln process, so a stale or
+        missing pid file changes nothing about teardown.
+        """
+        return self.state_dir / "cockpit.pid"
+
+    @property
     def codex_home_dir(self) -> Path:
         return self.state_dir / "codex-home"
 

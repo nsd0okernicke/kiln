@@ -63,7 +63,16 @@ SCHEDULER_INBOX = "inbox"
 #: the same shape as an inbox pane (see `RoleConfig.is_passive`).
 SCHEDULER_DASHBOARD = "dashboard"
 
-VALID_SCHEDULERS = (SCHEDULER_PYTHON, SCHEDULER_INBOX, SCHEDULER_DASHBOARD)
+#: Turns a role entry into the local web cockpit (issue #22) rather than an agent. It runs
+#: `cockpit.server`, which serves one page on 127.0.0.1 over the same `messages.db` and
+#: status files the dashboard reads. Same passive shape as `inbox` and `dashboard`, and
+#: deliberately alongside them rather than instead: the TTY dashboard is the only view that
+#: works over SSH or without a browser.
+SCHEDULER_COCKPIT = "cockpit"
+
+VALID_SCHEDULERS = (
+    SCHEDULER_PYTHON, SCHEDULER_INBOX, SCHEDULER_DASHBOARD, SCHEDULER_COCKPIT
+)
 
 
 class ProfileError(Exception):
@@ -122,6 +131,13 @@ class RoleConfig:
     activity_limit: int | None = None
     #: Inbox panes only: ring the terminal bell on arrival. True is the shipped behaviour.
     bell: bool = True
+    #: Cockpit panes only: the port to prefer. The cockpit probes upward when it is taken,
+    #: so this is a preference rather than a reservation. None keeps `cockpit.server`'s own
+    #: default -- one number, in one place, rather than a copy of it here.
+    port: int | None = None
+    #: Cockpit panes only: open a browser tab at launch. True is the shipped behaviour;
+    #: `KILN_COCKPIT_NO_BROWSER` overrides it per machine for headless boxes.
+    open_browser: bool = True
 
     @property
     def uses_current_dir(self) -> bool:
@@ -171,11 +187,22 @@ class RoleConfig:
         return self.scheduler == SCHEDULER_DASHBOARD
 
     @property
+    def is_cockpit(self) -> bool:
+        """
+        True for the web cockpit pane rather than an agent.
+
+        Passive like `is_dashboard` -- no agent, no worktree, no generated files -- but it
+        binds a port and accepts writes, so it is the one passive pane that can start and
+        stop work. That difference lives in what it runs, not in how the launcher treats it.
+        """
+        return self.scheduler == SCHEDULER_COCKPIT
+
+    @property
     def is_passive(self) -> bool:
         """
-        True for any pane that runs no agent at all (inbox or dashboard).
+        True for any pane that runs no agent at all (inbox, dashboard or cockpit).
 
-        Use this, not `is_inbox`/`is_dashboard` individually, wherever the decision is
+        Use this, not the individual `is_*` properties, wherever the decision is
         simply "does this role get normal per-role generation" (instructions, worker
         definitions, `.mcp.json` ownership). A role that shares its worktree with a real
         role -- which every passive pane does, by design -- must never be treated as owning
@@ -186,7 +213,7 @@ class RoleConfig:
         passive-pane type was added). Only check `is_inbox`/`is_dashboard` directly where the
         code needs to know *which* passive pane it is, e.g. which command to build.
         """
-        return self.is_inbox or self.is_dashboard
+        return self.is_inbox or self.is_dashboard or self.is_cockpit
 
     @property
     def watched_role(self) -> str:
@@ -296,7 +323,7 @@ TERMINAL_KEYS = frozenset({
     "watches", "workerDebug", "maxCycles", "maxBudgetUsd", "verify", "verifyTimeout",
     "pollInterval", "workerTimeout", "workerIdleTimeout", "maxAttempts",
     "escalationLimit", "activityLimit",
-    "bell",
+    "bell", "port", "openBrowser",
 })
 
 #: Same, one level up.
@@ -406,6 +433,8 @@ def _parse_role(entry: dict) -> RoleConfig:
             entry.get("activityLimit"), "activityLimit", role
         ),
         bell=bool(entry.get("bell", True)),
+        port=_positive_int_or_none(entry.get("port"), "port", role),
+        open_browser=bool(entry.get("openBrowser", True)),
     )
 
 

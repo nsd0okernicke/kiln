@@ -120,7 +120,19 @@ wezterm.on('update-status', function(window, pane)
   local MODE_EMOJIS = { auto = '🤖', manual = '🧑' }
   local segments = {}
 
-  for i, r in ipairs(roles) do
+  -- Stateless panes (inbox, dashboard, cockpit) never write a status file, and the
+  -- `mode == 'manual'` fallback below would badge them 'waiting' -- which they never are.
+  -- Filtered into their own list first rather than skipped inside the loop, because the
+  -- separator test is `i < #roles`: skipping the last entry mid-loop would leave a
+  -- trailing separator with nothing after it.
+  local shown = {}
+  for _, r in ipairs(roles) do
+    if not r.passive then
+      table.insert(shown, r)
+    end
+  end
+
+  for i, r in ipairs(shown) do
     local title = nil
     local state = nil
     local mode = r.mode or 'auto'
@@ -149,7 +161,7 @@ wezterm.on('update-status', function(window, pane)
     table.insert(segments, { Foreground = { Color = '#000000' } })
     table.insert(segments, { Text = ' ' .. display_title .. ' ' })
     table.insert(segments, 'ResetAttributes')
-    if i < #roles then
+    if i < #shown then
       table.insert(segments, { Text = ' ' })
     end
   end

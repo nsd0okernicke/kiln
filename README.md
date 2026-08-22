@@ -460,12 +460,10 @@ and appears only when a run is proxied; the annotated layout is unpacked here:*
 ROLE                 STATE                SINCE        QUEUE     WAIT  CYCLES     COST    TOKENS  CACHE
 ──────────────────────────────────────────────────────────────────────────────────────────────────
 human-in-the-loop    ● waiting            1h ago           0        -       -        -         -      -
-inbox                ● -                  -                0        -       -        -         -      -
 specifier            ● waiting            1s ago           0        -       2    $0.35 238.4k tok    84%
 coder                ● retrying 2/2       4m ago           0        -       1    $2.29  4.4M tok    97%
 refactorer           ● working        ⚠ 22m ago            1      18m       1    $2.10  4.5M tok    98%
 architect            ● waiting            1s ago           0        -       1    $0.67  1.2M tok    97%
-dashboard            ● -                  -                0        -       -        -         -      -
 ────────────────────────────────────────────────────────────────────────────────────────
 TOTAL COST: $5.41        TOTAL CYCLES: 5        TOKENS: 10.3M tok        ESCALATIONS: 0
   tokens by kind: in 412 · out 71.1k · cache-read 10.0M · cache-write 219.2k
@@ -485,6 +483,15 @@ role's `.kiln/status/<role>.json`; queue depth and recent activity come straight
 `messages.db`. Cost and cycles are only shown for roles that report them — scheduler roles
 do (see "Pane Status Bar" below for where those numbers come from), wrapper roles don't track
 either today, so their cells read `-` rather than a misleading `$0.00`.
+
+**Stateless panes are omitted.** `inbox`, `dashboard` and `cockpit` run no agent and are
+never given a `--status-script`, so they cannot write a status file at all — their row was
+dashes in every column, permanently. The sessions file records each pane's kind (a fifth
+column, added for this) and the grid, the cockpit's Work Queue and the WezTerm tab-bar badges
+all skip them. They are still launched, still listed in `.kiln/sessions`, and still stopped
+by `kiln --stop`; only the state tables leave them out. In WezTerm this also removed a
+falsehood: a `manual` role with no status file is badged `waiting`, so a perfectly healthy
+cockpit pane used to advertise itself as waiting for something.
 
 **`CACHE` is the column to read first.** Tokens tell you a role is expensive; the cache hit
 rate tells you whether that is real work or a prompt being re-sent uncached every cycle. In
@@ -534,6 +541,82 @@ Each scheduled pane opens with a configuration banner (role, branch, resolved wo
 **resolved routing**, worktree, queue, timeouts, log path), then narrates every cycle. Per-role
 logs are written to `.kiln/logs/scheduler-<role>.log` so a crashed scheduler still leaves
 evidence after its pane is gone.
+
+### Cockpit mode (`"scheduler": "cockpit"`)
+
+A fifth kind of pane, and the only one you read in a browser. It runs `cockpit.server`: a
+stdlib HTTP server bound to `127.0.0.1` that serves one page over the *same*
+`.kiln/messages.db`, `.kiln/status/<role>.json` and `.kiln/sessions` the dashboard reads.
+No agent, no worktree, no generated instructions, no MCP — the same passive shape as `inbox`
+and `dashboard`.
+
+```jsonc
+{ "role": "cockpit", "worktree": "@current", "title": "Kiln Cockpit",
+  "mode": "manual", "scheduler": "cockpit" }
+```
+
+**It is an addition, not a replacement.** The terminal dashboard stays, and keeps its tab in
+the shipped `full` profile. The two answer different questions:
+
+| | Terminal dashboard | Web cockpit |
+|---|---|---|
+| Job | Observe the swarm | Operate the swarm |
+| Lives | WezTerm / tmux tab | localhost browser |
+| Needs a TTY | Yes | No |
+| Starts / stops work | No | Yes |
+
+SSH sessions, headless boxes and no-browser setups still need the TTY view, so it is never
+going away.
+
+What the page gives you:
+
+- **Attention** — failed cycles first (each with a Retry button, the same `kiln retry`
+  path), then escalations, then completed cycles waiting in the human's queue.
+- **Board** — one swimlane per role that participates in routing, plus **Done**. Cards are
+  work items, grouped by the `KILN-HANDOFF:` name; a card sits in the lane of whichever role
+  holds its latest unprocessed message, so it moves on its own as the cycle advances.
+
+  A brand-new request has no work-item name yet — the specifier is the role that invents one
+  (see **Work items** below) — so it appears as a *dashed, italic* placeholder card titled
+  with its opening line. When the specifier names the work and hands off, the placeholder is
+  replaced by the real card in the next lane. Until that happens, the placeholder is how you
+  know the request is queued and not lost.
+- **Work queue** — the dashboard's per-role table (state, since, queue depth, wait, cycles,
+  cost, tokens, cache rate), plus what each role is currently holding. Lists the same roles
+  the terminal grid does, through the same `visible_roles` rule, so the two cannot disagree
+  about which roles exist — stateless panes are left out of both.
+- **New task** — queues a handoff from the human role to whatever the profile's routing says
+  the human hands off to (`specifier` in `full`). This is the same insert `kiln send` does,
+  so it actually starts a cycle.
+- **Chat** — a note into the human role's own queue, surfaced by the inbox pane. It does not
+  start a cycle.
+- **Stop swarm** — `kiln --stop`, behind a typed `TEARDOWN` confirmation.
+
+Clicking any card, activity row or Attention row opens the full handoff body.
+
+**Themes.** Three, switchable from the header: **Dark** (the default), **Light**, and **Neon**
+— a dark background with cyan/magenta accents. The choice is remembered per browser in
+`localStorage` and applied before the page paints, so a reload does not flash the default
+palette first. Themes are a pure token swap on `:root`, so adding a fourth means adding one
+`:root[data-theme="…"]` block and one button — no rule needs to change. Every palette is
+checked against WCAG AA (4.5:1) for the text pairs on the page; the tightest is the 12px
+state pill, which is why the light theme's blue and red are a shade deeper than they need to
+be as button fills.
+
+The pane prints the URL it bound and opens a browser tab; set `KILN_COCKPIT_NO_BROWSER=1` (or
+`"openBrowser": false`) to suppress the tab. The URL is also written to `.kiln/cockpit-url`,
+which matters because the port is a *preference*: the cockpit probes upward from 8765 when the
+port is taken, so two projects can be open at once without either silently attaching to the
+other's swarm.
+
+**Security posture.** The cockpit binds loopback only — there is deliberately no `--host`
+flag — and has no authentication, because it can start work, retry failed cycles and kill
+every Kiln process on the machine. Mutating requests additionally require an `X-Kiln-Cockpit`
+header, which a hostile page in your browser cannot set against `127.0.0.1` without a
+preflight the server never approves. Do not put it behind a tunnel or a reverse proxy.
+
+Run it standalone against any project with `python -m cockpit.server --db-path ... --status-dir
+... --sessions-file ...` (see `--help`), or just launch a profile that includes it.
 
 ---
 
@@ -996,14 +1079,14 @@ The framework's `full` profile pairs a human-facing intake role with a fully aut
 
 ![Default profile topology: a human-in-the-loop pane with an inbox strip beneath it gathers and confirms a request, hands it to a specifier → coder → refactorer → architect cycle running on the deterministic scheduler, which reports completion — or escalates — back to the inbox, alongside a separate dashboard tab](docs/images/agentic_coding_topology_human_left_v3.svg)
 
-*What the JSON below configures: one manual, human-facing role (with an inbox strip for escalations) feeding a fully autonomous 4-role cycle, plus a dashboard tab. See **Inbox mode** and **Dashboard mode** below for what those two extra panes do.*
+*What the JSON below configures: one manual, human-facing role (with an inbox strip for escalations) feeding a fully autonomous 4-role cycle, plus a dashboard tab and a cockpit tab. See **Inbox mode**, **Dashboard mode** and **Cockpit mode** below for what those extra panes do.*
 
 ```json
 {
   "default": "full",
   "profiles": {
     "full": {
-      "description": "New feature, spec-first. Human-guided intake feeding the full autonomous cycle: specifier -> coder -> refactorer -> architect, on the deterministic scheduler, plus a dashboard tab.",
+      "description": "New feature, spec-first. Human-guided intake feeding the full autonomous cycle: specifier -> coder -> refactorer -> architect, on the deterministic scheduler, plus a dashboard tab and the local web cockpit.",
       "defaults": {
         "agent": "claude",
         "model": "claude-sonnet-5"
@@ -1061,6 +1144,13 @@ The framework's `full` profile pairs a human-facing intake role with a fully aut
           "title": "Kiln Dashboard",
           "mode": "manual",
           "scheduler": "dashboard"
+        },
+        {
+          "role": "cockpit",
+          "worktree": "@current",
+          "title": "Kiln Cockpit",
+          "mode": "manual",
+          "scheduler": "cockpit"
         }
       ],
       "routing": {
@@ -1093,6 +1183,10 @@ The framework's `full` profile pairs a human-facing intake role with a fully aut
           {
             "title": "Dashboard",
             "panes": [{"role": "dashboard"}]
+          },
+          {
+            "title": "Cockpit",
+            "panes": [{"role": "cockpit"}]
           }
         ]
       }
@@ -1257,8 +1351,8 @@ would not open.
 - **title** — the terminal tab/pane title. Defaults to a title derived from the role name.
 - **mode** — `auto` (runs unattended) or `manual` (a live session you talk to).
 - **scheduler** — `python` for a scheduled worker loop, `inbox` for the human's notification
-  pane, `dashboard` for the swarm-wide view. Omit it for a wrapper-mode role — see
-  **Execution Modes** above.
+  pane, `dashboard` for the swarm-wide view, `cockpit` for the local browser cockpit. Omit it
+  for a wrapper-mode role — see **Execution Modes** above.
 - **watches** — (inbox panes) which role's queue this pane reports on. Must name a role the
   same profile launches.
 - **model** — (Claude agents only) which Claude model to use, e.g., `claude-haiku-4-5-20251001`, `claude-sonnet-5`, `claude-opus-5`
@@ -1270,8 +1364,10 @@ would not open.
 - **workerDebug** — (scheduler roles) additionally write the backend CLI's own internal debug trace to `.kiln/logs/agent-debug-<role>-attempt<N>.log`. `false` by default; the `mixed-backends` fixture turns it on for all four scheduled roles, which is what it is for — diagnosing an adapter against an unfamiliar backend. Independent of `.kiln/logs/worker-debug-<role>-attempt<N>.log`, which is written for *any* worker that fails to report done, debug flag or not.
 - **maxAttempts** — (scheduler roles) worker attempts per handoff before escalating. Defaults to 2.
 - **escalationLimit** — (scheduler roles) consecutive escalations before the role stops taking new work and parks for `kiln retry`. Defaults to 3.
-- **activityLimit** — (dashboard panes) how many recent messages the activity list shows. Defaults to 8.
+- **activityLimit** — (dashboard and cockpit panes) how many recent messages the activity list shows. Defaults to 8 on the dashboard, 12 in the cockpit.
 - **bell** — (inbox panes) ring the terminal bell on arrival. `true` by default.
+- **port** — (cockpit panes) the port the cockpit prefers. Defaults to 8765, and is a preference rather than a reservation: the cockpit probes upward when the port is taken, so two projects can be open at once.
+- **openBrowser** — (cockpit panes) open a browser tab at launch. `true` by default; set `KILN_COCKPIT_NO_BROWSER` to override it per machine without editing the profile.
 - **verify** — (scheduler roles, optional) shell command run in this role's worktree after the worker reports done and before the handoff. A non-zero exit costs an attempt. Empty by default — see below.
 - **verifyTimeout** — (scheduler roles, optional) seconds before `verify` is killed and treated as a failure. Defaults to 300.
 - **maxCycles** — (scheduler roles, optional) how many times one work item may reach this role before it escalates instead of running. Unbounded by default.

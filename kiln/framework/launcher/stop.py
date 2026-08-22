@@ -23,6 +23,10 @@ log = logging.getLogger(__name__)
 #: database after the swarm was supposedly down (issue #18) -- which also made the
 #: stuck-in-`processing` bug (#19) easy to hit, since stopping mid-cycle is routine.
 #:
+#: `cockpit.server` holds a listening socket rather than just polling, which makes leaking
+#: it worse than leaking a pane: a surviving cockpit keeps a port bound and keeps offering
+#: New Task and Teardown buttons for a swarm that no longer exists.
+#:
 #: `proxy.server` is a detached background process rather than a pane, but it is started by
 #: the same launch and must end with it: a capture proxy left listening would keep relaying
 #: traffic for whatever ran next.
@@ -39,6 +43,7 @@ KILN_PROCESS_MARKERS = (
     "scheduler.role_scheduler",
     "scheduler.inbox",
     "scheduler.dashboard",
+    "cockpit.server",
     "proxy.server",
 )
 

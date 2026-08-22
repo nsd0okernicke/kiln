@@ -21,7 +21,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import generate, scaffold, stop, workspace
+from . import generate, ports, scaffold, stop, workspace
 from .commands import (
     PROXY_CAPABLE_AGENTS,
     PROXY_UPSTREAMS,
@@ -178,6 +178,7 @@ def build_panes(
                 cmd=render(command, clear=clear),
                 mode=role.mode,
                 agent=role.agent,
+                passive=role.is_passive,
             )
         )
     return panes
@@ -262,19 +263,17 @@ def find_free_port(preferred: int, attempts: int = PROXY_PORT_ATTEMPTS) -> int:
 
     Raises LaunchError rather than falling back to an ephemeral port: a swarm whose proxy
     landed somewhere unpredictable is harder to reason about than one that refused to start.
+    The probe itself lives in `ports` because the cockpit needs the same one; the *message*
+    stays here, because "launch with --no-proxy" is advice only this caller can give.
     """
-    for candidate in range(preferred, preferred + attempts):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-            try:
-                probe.bind(("127.0.0.1", candidate))
-            except OSError:
-                continue
-            return candidate
-    raise LaunchError(
-        f"no free port for the capture proxy in {preferred}-{preferred + attempts - 1}. "
-        "Leftover proxies from other projects may be holding them: `kiln --stop` clears "
-        "every Kiln process, or launch with --no-proxy."
-    )
+    port = ports.first_free_port(preferred, attempts)
+    if port is None:
+        raise LaunchError(
+            f"no free port for the capture proxy in {preferred}-{preferred + attempts - 1}. "
+            "Leftover proxies from other projects may be holding them: `kiln --stop` clears "
+            "every Kiln process, or launch with --no-proxy."
+        )
+    return port
 
 
 def wait_until_listening(
@@ -441,6 +440,8 @@ def run_launch(args: argparse.Namespace) -> int:
             kind = f"inbox -> {role.watched_role}"  # runs no agent at all
         elif role.is_dashboard:
             kind = "dashboard"  # runs no agent at all, aggregates every role
+        elif role.is_cockpit:
+            kind = "cockpit (browser)"  # serves one page on 127.0.0.1
         elif role.uses_scheduler:
             kind = f"{role.agent} [scheduler]"
         else:

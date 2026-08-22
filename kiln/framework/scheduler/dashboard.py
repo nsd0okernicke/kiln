@@ -42,6 +42,26 @@ _SUMMARY_RE = re.compile(
 )
 
 
+#: Pane kinds that run no agent and report no state.
+#:
+#: Nothing ever hands these panes a `--status-script`, so they never write
+#: `.kiln/status/<role>.json` -- not "have not yet", but structurally cannot. Listing them
+#: beside roles that do report state produced a row of dashes in every view, and in WezTerm
+#: something worse: the tab-bar Lua defaults a `manual` role with no status file to
+#: `waiting`, so a perfectly healthy cockpit pane advertised itself as waiting for something.
+#:
+#: Restated here rather than imported: `launcher.config` owns these strings and writes them
+#: into the sessions file, but `scheduler` must not import `launcher` -- the dependency runs
+#: the other way. `test_dashboard` pins the two sets against each other, which a test can do
+#: because it may import both.
+PASSIVE_KINDS = frozenset({"inbox", "dashboard", "cockpit"})
+
+#: What a pane whose kind the sessions file does not record is assumed to be. Only a file
+#: written before the kind column existed can produce this, and treating those roles as
+#: agents keeps an older launch rendering exactly as it used to.
+DEFAULT_KIND = "agent"
+
+
 @dataclass(frozen=True)
 class RoleSession:
     """
@@ -52,10 +72,27 @@ class RoleSession:
     role: str
     agent: str
     display_name: str
+    #: `agent`, `python`, `inbox`, `dashboard` or `cockpit` — the profile's `scheduler` value.
+    kind: str = DEFAULT_KIND
+
+    @property
+    def passive(self) -> bool:
+        """True for a pane that runs no agent and can never report state."""
+        return self.kind in PASSIVE_KINDS
 
 
 def read_sessions(path: Path) -> list[RoleSession]:
-    """Parse `.kiln/sessions` (`index\\trole\\tagent\\tdisplay_name` per line)."""
+    """
+    Parse `.kiln/sessions` (`index\\trole\\tagent\\tdisplay_name\\tkind` per line).
+
+    **Every row is returned, passive ones included.** Filtering belongs to the renderers:
+    `launcher.cli.run_stop` and `cockpit.actions._session_roles` both read this to close
+    tmux sessions, and a passive pane dropped here would be one nothing ever tore down.
+
+    The kind column is optional so a sessions file from an earlier launch -- one written
+    before the column existed, which is exactly what a running swarm has on disk during an
+    upgrade -- still parses, with every role defaulting to `agent`.
+    """
     if not path.is_file():
         return []
     sessions = []
@@ -64,8 +101,21 @@ def read_sessions(path: Path) -> list[RoleSession]:
         if len(parts) < 4:
             continue
         _, role, agent, display_name = parts[:4]
-        sessions.append(RoleSession(role=role, agent=agent, display_name=display_name))
+        kind = parts[4].strip() if len(parts) > 4 and parts[4].strip() else DEFAULT_KIND
+        sessions.append(
+            RoleSession(role=role, agent=agent, display_name=display_name, kind=kind)
+        )
     return sessions
+
+
+def visible_roles(sessions: list[RoleSession]) -> list[RoleSession]:
+    """
+    The roles worth a row in a state table — everything except the stateless panes.
+
+    One rule with two callers (this module's grid and `cockpit.state.role_rows`), so the
+    terminal and the browser cannot come to disagree about which roles exist.
+    """
+    return [session for session in sessions if not session.passive]
 
 
 def read_status(status_dir: Path, role: str) -> dict | None:
@@ -95,17 +145,17 @@ def extract_summary(content: str, max_chars: int = 60) -> str:
     return line
 
 
-def _parse_status_since(value: str) -> datetime:
+def parse_status_since(value: str) -> datetime:
     """`set-status.py` writes UTC ISO 8601 with a trailing `Z`."""
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
-def _parse_local_timestamp(value: str) -> datetime:
+def parse_local_timestamp(value: str) -> datetime:
     """`messages.db`'s `created_at` is naive local time (the schema's own default)."""
     return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
 
 
-def _ago(dt: datetime, now: datetime) -> str:
+def format_age(dt: datetime, now: datetime) -> str:
     seconds = max(0, int((now - dt).total_seconds()))
     if seconds < 60:
         return f"{seconds}s ago"
@@ -150,7 +200,7 @@ def is_stalled(status: dict | None, now_utc: datetime) -> bool:
     if not timeout or not since:
         return False
     try:
-        elapsed = (now_utc - _parse_status_since(since)).total_seconds()
+        elapsed = (now_utc - parse_status_since(since)).total_seconds()
     except ValueError:
         return False
     return elapsed > timeout
@@ -179,11 +229,14 @@ def render_state_grid(
         f"{'COST':>8} {'TOKENS':>9} {'CACHE':>6}"
     )
     lines = [header, "\N{BOX DRAWINGS LIGHT HORIZONTAL}" * len(header)]
-    for session in sessions:
+    # Stateless panes are skipped here rather than by the caller: `render_dashboard` also
+    # hands `sessions` to `cost_is_partial`, which needs the full inventory to judge whether
+    # a non-cost-reporting backend is in play.
+    for session in visible_roles(sessions):
         status = statuses.get(session.role)
         state = status["state"] if status else "-"
         since = (
-            _ago(_parse_status_since(status["since"]), now_utc)
+            format_age(parse_status_since(status["since"]), now_utc)
             if status and status.get("since")
             else "-"
         )
@@ -226,7 +279,7 @@ def queue_wait(
     if not stamp or now_local is None:
         return "-"
     try:
-        return _ago(_parse_local_timestamp(stamp), now_local).removesuffix(" ago")
+        return format_age(parse_local_timestamp(stamp), now_local).removesuffix(" ago")
     except ValueError:
         return "-"
 
@@ -367,7 +420,7 @@ def _section(value: int | None) -> str:
 
 
 def _activity_line(row: dict, now_local: datetime) -> str:
-    when = _ago(_parse_local_timestamp(row["created_at"]), now_local)
+    when = format_age(parse_local_timestamp(row["created_at"]), now_local)
     summary = extract_summary(row["content"])
     return f"  {when:<8} {row['sender']} \N{RIGHTWARDS ARROW} {row['target']:<20} {summary}"
 
@@ -474,33 +527,73 @@ class DashboardContext:
     traffic_since: str | None = None
 
 
-def snapshot(ctx: DashboardContext) -> list[str]:
-    """Gather current state from disk/DB and render one frame."""
+@dataclass(frozen=True)
+class SwarmSnapshot:
+    """
+    One gathered view of the world, before anything decides how to display it.
+
+    Split out of `snapshot` so a second front end can read the same numbers the TTY
+    dashboard shows without going through `render_dashboard`, which answers in rendered
+    ASCII (`list[str]`) and therefore cannot be re-parsed into anything else. The web
+    cockpit (`cockpit.state`) builds its JSON from this; the ASCII render is unchanged and
+    still the only consumer inside this module.
+
+    Both clocks travel with the data deliberately: `created_at` in the queue is naive
+    localtime and `since` in the status files is UTC, so a consumer that kept only one of
+    them would necessarily read one of the two wrong -- the exact bug `queue_wait` documents.
+    """
+
+    sessions: list[RoleSession]
+    statuses: dict[str, dict]
+    queue_depth: dict[str, int]
+    oldest_queued: dict[str, str]
+    messages: list[dict]
+    request_stats: dict[str, dict[str, int]]
+    now_utc: datetime
+    now_local: datetime
+
+
+def collect(ctx: DashboardContext) -> SwarmSnapshot:
+    """Read every source of truth once: sessions, status files, queue, recent messages."""
     sessions = read_sessions(ctx.sessions_file)
     statuses = {
         session.role: status
         for session in sessions
         if (status := read_status(ctx.status_dir, session.role)) is not None
     }
-    queue_depth = db.count_queued_by_role(ctx.db_path, ctx.branch)
-    oldest_queued = db.oldest_queued_by_role(ctx.db_path, ctx.branch)
-    # A wider window than activity_limit so escalations outside the visible activity list
-    # still have a chance to surface -- this is a recent-window view, not exhaustive history.
-    messages = db.recent_messages(ctx.db_path, ctx.branch, limit=max(ctx.activity_limit, 20))
+    return SwarmSnapshot(
+        sessions=sessions,
+        statuses=statuses,
+        queue_depth=db.count_queued_by_role(ctx.db_path, ctx.branch),
+        oldest_queued=db.oldest_queued_by_role(ctx.db_path, ctx.branch),
+        # A wider window than activity_limit so escalations outside the visible activity
+        # list still have a chance to surface -- this is a recent-window view, not
+        # exhaustive history.
+        messages=db.recent_messages(
+            ctx.db_path, ctx.branch, limit=max(ctx.activity_limit, 20)
+        ),
+        request_stats=read_request_stats(ctx.traffic_db, since=ctx.traffic_since),
+        now_utc=datetime.now(UTC),
+        now_local=datetime.now(),
+    )
 
+
+def snapshot(ctx: DashboardContext) -> list[str]:
+    """Gather current state from disk/DB and render one frame."""
+    state = collect(ctx)
     return render_dashboard(
         project_name=ctx.project_name,
         branch=ctx.branch,
-        sessions=sessions,
-        statuses=statuses,
-        queue_depth=queue_depth,
-        messages=messages,
-        now_utc=datetime.now(UTC),
-        now_local=datetime.now(),
+        sessions=state.sessions,
+        statuses=state.statuses,
+        queue_depth=state.queue_depth,
+        messages=state.messages,
+        now_utc=state.now_utc,
+        now_local=state.now_local,
         activity_limit=ctx.activity_limit,
-        request_stats=read_request_stats(ctx.traffic_db, since=ctx.traffic_since),
+        request_stats=state.request_stats,
         request_scope="this run" if ctx.traffic_since else "all history",
-        oldest_queued=oldest_queued,
+        oldest_queued=state.oldest_queued,
     )
 
 

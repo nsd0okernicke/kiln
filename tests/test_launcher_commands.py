@@ -20,8 +20,9 @@ from launcher.commands import (
     render_posix,
     render_powershell,
 )
-from launcher.config import RoleConfig
+from launcher.config import Profile, RoleConfig
 from launcher.paths import KilnPaths, python_command
+from scheduler.routing import parse_profile_routing
 
 
 @pytest.fixture
@@ -114,6 +115,114 @@ class TestProxyWiring:
         command = build(paths, role="dashboard", scheduler="dashboard", mode="manual")
         assert "--traffic-db" in command.argv
         assert str(paths.traffic_db) in command.argv
+
+
+class TestCockpitPane:
+    """
+    The cockpit pane (issue #22). It is a passive pane like the dashboard, but two of its
+    flags come from the *profile* rather than from paths, because the cockpit deliberately
+    does not parse profiles itself.
+    """
+
+    def _profile(self, **overrides):
+        roles = overrides.pop("roles", None) or (
+            RoleConfig(role="human-in-the-loop", worktree="@current", mode="manual"),
+            RoleConfig(role="specifier", scheduler="python"),
+            RoleConfig(role="coder", scheduler="python"),
+            RoleConfig(role="dashboard", scheduler="dashboard", mode="manual"),
+            RoleConfig(role="cockpit", scheduler="cockpit", mode="manual"),
+        )
+        routing = overrides.pop("routing", None) or parse_profile_routing({
+            "human-in-the-loop": "specifier",
+            "specifier": "coder",
+            "coder": "human-in-the-loop",
+        })
+        return Profile(name="test", roles=roles, routing=routing, **overrides)
+
+    def _cockpit(self, paths, profile=None, **role_kwargs):
+        role_kwargs.setdefault("role", "cockpit")
+        role_kwargs.setdefault("scheduler", "cockpit")
+        role_kwargs.setdefault("mode", "manual")
+        return build_agent_command(
+            RoleConfig(**role_kwargs), paths, branch="main",
+            profile=profile if profile is not None else self._profile(),
+        )
+
+    def test_it_runs_the_cockpit_server_and_not_an_agent(self, paths):
+        argv = self._cockpit(paths).argv
+
+        assert argv[1:3] == ["-m", "cockpit.server"]
+
+    def test_it_reads_the_same_state_the_dashboard_does(self, paths):
+        # A second front end over one set of numbers, not a second source of them.
+        argv = self._cockpit(paths).argv
+
+        assert argv[argv.index("--db-path") + 1] == str(paths.db_path)
+        assert argv[argv.index("--status-dir") + 1] == str(paths.status_dir)
+        assert argv[argv.index("--sessions-file") + 1] == str(paths.sessions_file)
+
+    def test_lanes_come_from_routing_in_profile_order(self, paths):
+        # Not every role: `inbox`, `dashboard` and the cockpit itself hand nothing off, so a
+        # lane for them would be permanently empty by construction.
+        argv = self._cockpit(paths).argv
+
+        assert argv[argv.index("--lanes") + 1] == "human-in-the-loop,specifier,coder"
+
+    def test_new_task_targets_whatever_routing_says_the_human_hands_off_to(self, paths):
+        # Asking the table is the only answer that cannot disagree with the swarm's own
+        # first hop.
+        argv = self._cockpit(paths).argv
+
+        assert argv[argv.index("--intake-role") + 1] == "specifier"
+
+    def test_the_human_role_is_the_profiles_manual_role(self, paths):
+        profile = self._profile(roles=(
+            RoleConfig(role="operator", worktree="@current", mode="manual"),
+            RoleConfig(role="coder", scheduler="python"),
+            RoleConfig(role="cockpit", scheduler="cockpit", mode="manual"),
+        ), routing=parse_profile_routing({"operator": "coder", "coder": "operator"}))
+
+        argv = self._cockpit(paths, profile=profile).argv
+
+        assert argv[argv.index("--human-role") + 1] == "operator"
+
+    def test_a_profile_with_no_manual_role_still_launches(self, paths):
+        # A cockpit that refused to start over a naming convention would be worse than one
+        # that falls back to the conventional name.
+        profile = self._profile(roles=(
+            RoleConfig(role="coder", scheduler="python"),
+            RoleConfig(role="cockpit", scheduler="cockpit", mode="manual"),
+        ), routing=parse_profile_routing({"coder": "coder"}))
+
+        argv = self._cockpit(paths, profile=profile).argv
+
+        assert argv[argv.index("--human-role") + 1] == "human-in-the-loop"
+
+    def test_it_records_where_it_bound(self, paths):
+        argv = self._cockpit(paths).argv
+
+        assert argv[argv.index("--url-file") + 1] == str(paths.cockpit_url_file)
+        assert argv[argv.index("--pid-file") + 1] == str(paths.cockpit_pid_file)
+
+    def test_a_configured_port_is_passed_through(self, paths):
+        argv = self._cockpit(paths, port=9100).argv
+
+        assert argv[argv.index("--port") + 1] == "9100"
+
+    def test_an_unset_port_leaves_the_modules_own_default_alone(self, paths):
+        # Two places to change one number is how they drift.
+        assert "--port" not in self._cockpit(paths).argv
+
+    def test_opting_out_of_the_browser_reaches_the_command(self, paths):
+        assert "--no-browser" in self._cockpit(paths, open_browser=False).argv
+
+    def test_the_browser_opens_by_default(self, paths):
+        assert "--no-browser" not in self._cockpit(paths).argv
+
+    def test_it_sets_pythonpath_so_the_package_resolves(self, paths):
+        env = self._cockpit(paths).env
+
+        assert env["PYTHONPATH"].replace("\\", "/").endswith("kiln/framework")
 
 
 class TestClaude:

@@ -750,7 +750,47 @@ class TestSessionsFile:
         content = workspace.write_sessions_file(PROFILE, paths).read_text(encoding="utf-8")
         lines = content.strip().splitlines()
         assert len(lines) == 2
-        assert lines[0].split("\t") == ["1", "specifier", "claude", "Specifier"]
+        assert lines[0].split("\t") == ["1", "specifier", "claude", "Specifier", "agent"]
+
+    def test_it_records_each_panes_kind(self, paths):
+        # This file is the only thing the terminal dashboard and the web cockpit read; the
+        # profile is long gone by then. Without the kind neither can tell a role that
+        # reports state from a pane that structurally cannot.
+        profile = parse_profile(
+            {
+                "profiles": {
+                    "p": {
+                        "terminals": [
+                            {"role": "human-in-the-loop", "worktree": "@current",
+                             "mode": "manual"},
+                            {"role": "coder", "worktree": "coder", "scheduler": "python"},
+                            {"role": "inbox", "worktree": "@current", "mode": "manual",
+                             "scheduler": "inbox", "watches": "human-in-the-loop"},
+                            {"role": "cockpit", "worktree": "@current", "mode": "manual",
+                             "scheduler": "cockpit"},
+                        ]
+                    }
+                }
+            },
+            "p",
+        )
+
+        content = workspace.write_sessions_file(profile, paths).read_text(encoding="utf-8")
+
+        kinds = [line.split("\t")[4] for line in content.strip().splitlines()]
+        assert kinds == ["agent", "python", "inbox", "cockpit"]
+
+    def test_the_kind_column_round_trips_through_the_reader(self, paths):
+        # The writer and the reader live in different packages, so the format is only
+        # actually agreed if one is fed the other's output.
+        from scheduler import dashboard
+
+        path = workspace.write_sessions_file(PROFILE, paths)
+
+        sessions = dashboard.read_sessions(path)
+
+        assert [s.role for s in sessions] == ["specifier", "coder"]
+        assert all(s.passive is False for s in sessions)
 
 
 class TestTemplateCopying:

@@ -675,9 +675,20 @@ def seed_codex_auth(home: Path) -> bool:
 
 
 def write_sessions_file(profile: Profile, paths: KilnPaths) -> Path:
-    """Tab-separated role inventory, read by the status bar and `-Stop`."""
+    """
+    Tab-separated role inventory, read by the status bar and `-Stop`.
+
+    The fifth column is the pane's kind (`agent`, `python`, `inbox`, `dashboard`, `cockpit`),
+    and it is here because this is the last point that knows it. Everything downstream reads
+    this file rather than the profile -- the terminal dashboard and the web cockpit both do --
+    so without it neither can tell a role that reports state from a pane that structurally
+    cannot, and both listed `inbox`/`dashboard`/`cockpit` as rows of dashes forever.
+
+    The concrete kind rather than a bare `passive` flag: it costs the same byte count and
+    answers "what is this pane" as well as "does it have state".
+    """
     lines = [
-        f"{index}\t{role.role}\t{role.agent}\t{role.display_name}"
+        f"{index}\t{role.role}\t{role.agent}\t{role.display_name}\t{role.scheduler or 'agent'}"
         for index, role in enumerate(profile.roles, start=1)
     ]
     paths.state_dir.mkdir(parents=True, exist_ok=True)

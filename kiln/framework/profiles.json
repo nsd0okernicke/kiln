@@ -4,7 +4,7 @@
   "default": "full",
   "profiles": {
     "full": {
-      "description": "New feature, spec-first. Human-guided intake feeding the full autonomous cycle: specifier -> coder -> refactorer -> architect, on the deterministic scheduler, plus a dashboard tab.",
+      "description": "New feature, spec-first. Human-guided intake feeding the full autonomous cycle: specifier -> coder -> refactorer -> architect, on the deterministic scheduler, plus a dashboard tab and the local web cockpit.",
       "defaults": {
         "agent": "claude",
         "model": "claude-sonnet-5"
@@ -62,6 +62,13 @@
           "title": "Kiln Dashboard",
           "mode": "manual",
           "scheduler": "dashboard"
+        },
+        {
+          "role": "cockpit",
+          "worktree": "@current",
+          "title": "Kiln Cockpit",
+          "mode": "manual",
+          "scheduler": "cockpit"
         }
       ],
       "routing": {
@@ -113,6 +120,14 @@
             "panes": [
               {
                 "role": "dashboard"
+              }
+            ]
+          },
+          {
+            "title": "Cockpit",
+            "panes": [
+              {
+                "role": "cockpit"
               }
             ]
           }

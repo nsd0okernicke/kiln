@@ -76,6 +76,100 @@ class TestReadSessions:
         path.write_text("not enough columns\n1\tcoder\tclaude\tCoder\n", encoding="utf-8")
         assert [s.role for s in dashboard.read_sessions(path)] == ["coder"]
 
+    def test_the_kind_column_is_read(self, tmp_path):
+        path = tmp_path / "sessions"
+        path.write_text(
+            "1\tcoder\tclaude\tCoder\tpython\n2\tcockpit\tclaude\tCockpit\tcockpit\n",
+            encoding="utf-8",
+        )
+
+        sessions = dashboard.read_sessions(path)
+
+        assert [s.kind for s in sessions] == ["python", "cockpit"]
+        assert [s.passive for s in sessions] == [False, True]
+
+    def test_a_file_without_the_kind_column_still_parses(self, tmp_path):
+        # A swarm launched before the column existed has exactly this file on disk, and the
+        # dashboard polls it every two seconds -- an upgrade must not blank the grid.
+        path = tmp_path / "sessions"
+        path.write_text("1\tcoder\tclaude\tCoder\n", encoding="utf-8")
+
+        sessions = dashboard.read_sessions(path)
+
+        assert sessions[0].kind == dashboard.DEFAULT_KIND
+        assert sessions[0].passive is False
+
+    def test_an_empty_kind_column_falls_back_rather_than_becoming_a_kind(self, tmp_path):
+        path = tmp_path / "sessions"
+        path.write_text("1\tcoder\tclaude\tCoder\t\n", encoding="utf-8")
+
+        assert dashboard.read_sessions(path)[0].kind == dashboard.DEFAULT_KIND
+
+    def test_passive_panes_are_still_returned(self, tmp_path):
+        # `run_stop` and the cockpit's teardown both read this file to close tmux sessions.
+        # A passive pane filtered out here is one nothing ever tears down.
+        path = tmp_path / "sessions"
+        path.write_text("1\tinbox\tclaude\tInbox\tinbox\n", encoding="utf-8")
+
+        assert [s.role for s in dashboard.read_sessions(path)] == ["inbox"]
+
+
+class TestVisibleRoles:
+    """
+    Which roles earn a row in a state table. One rule, shared by the terminal grid and the
+    cockpit's Work Queue, so the two views cannot disagree about which roles exist.
+    """
+
+    def _sessions(self):
+        return [
+            dashboard.RoleSession("human-in-the-loop", "claude", "Human", "agent"),
+            dashboard.RoleSession("inbox", "claude", "Inbox", "inbox"),
+            dashboard.RoleSession("coder", "claude", "Coder", "python"),
+            dashboard.RoleSession("dashboard", "claude", "Dashboard", "dashboard"),
+            dashboard.RoleSession("cockpit", "claude", "Cockpit", "cockpit"),
+        ]
+
+    def test_it_drops_every_stateless_pane(self):
+        visible = dashboard.visible_roles(self._sessions())
+
+        assert [s.role for s in visible] == ["human-in-the-loop", "coder"]
+
+    def test_it_keeps_the_session_objects_themselves(self):
+        # Not names: the callers go on to read `.agent` and `.display_name` off these.
+        sessions = self._sessions()
+
+        assert dashboard.visible_roles(sessions) == [sessions[0], sessions[2]]
+
+    def test_a_legacy_session_file_hides_nothing(self):
+        # Every role defaults to `agent`, so an upgrade cannot silently empty the grid.
+        legacy = [dashboard.RoleSession("coder", "claude", "Coder")]
+
+        assert dashboard.visible_roles(legacy) == legacy
+
+
+class TestPassiveKindsMatchTheLauncher:
+    """
+    `scheduler` may not import `launcher` -- the dependency runs the other way -- so
+    `PASSIVE_KINDS` restates strings that `launcher.config` owns and writes into the
+    sessions file. A test may import both, which is what makes the restatement safe rather
+    than a copy waiting to drift.
+    """
+
+    def test_the_two_definitions_agree(self):
+        from launcher import config
+
+        owned_by_the_launcher = {
+            config.SCHEDULER_INBOX, config.SCHEDULER_DASHBOARD, config.SCHEDULER_COCKPIT,
+        }
+
+        assert owned_by_the_launcher == dashboard.PASSIVE_KINDS
+
+    def test_the_scheduled_kind_is_not_passive(self):
+        # `python` roles are the ones that report the most state of all.
+        from launcher import config
+
+        assert config.SCHEDULER_PYTHON not in dashboard.PASSIVE_KINDS
+
 
 class TestReadStatus:
     def test_reads_the_json_file(self, tmp_path):
@@ -111,20 +205,30 @@ class TestExtractSummary:
 
 class TestAgo:
     def test_seconds(self):
-        assert dashboard._ago(NOW_UTC.replace(second=30), NOW_UTC.replace(second=45)) == "15s ago"
+        earlier, later = NOW_UTC.replace(second=30), NOW_UTC.replace(second=45)
+
+        assert dashboard.format_age(earlier, later) == "15s ago"
 
     def test_minutes(self):
-        assert dashboard._ago(datetime(2026, 8, 9, 14, 55), datetime(2026, 8, 9, 15, 0)) == "5m ago"
+        earlier, later = datetime(2026, 8, 9, 14, 55), datetime(2026, 8, 9, 15, 0)
+
+        assert dashboard.format_age(earlier, later) == "5m ago"
 
     def test_hours(self):
-        assert dashboard._ago(datetime(2026, 8, 9, 12, 0), datetime(2026, 8, 9, 15, 0)) == "3h ago"
+        earlier, later = datetime(2026, 8, 9, 12, 0), datetime(2026, 8, 9, 15, 0)
+
+        assert dashboard.format_age(earlier, later) == "3h ago"
 
     def test_days(self):
-        assert dashboard._ago(datetime(2026, 8, 7, 15, 0), datetime(2026, 8, 9, 15, 0)) == "2d ago"
+        earlier, later = datetime(2026, 8, 7, 15, 0), datetime(2026, 8, 9, 15, 0)
+
+        assert dashboard.format_age(earlier, later) == "2d ago"
 
     def test_never_negative(self):
         # Clock skew between the writer and this pane must not print "-3s ago".
-        assert dashboard._ago(NOW_UTC.replace(second=50), NOW_UTC.replace(second=45)) == "0s ago"
+        later, earlier = NOW_UTC.replace(second=50), NOW_UTC.replace(second=45)
+
+        assert dashboard.format_age(later, earlier) == "0s ago"
 
 
 class TestRenderStateGrid:
@@ -138,6 +242,33 @@ class TestRenderStateGrid:
         lines = dashboard.render_state_grid(sessions, {}, {}, NOW_UTC)
         row = next(line for line in lines if line.startswith("coder"))
         assert "-" in row
+
+    def test_stateless_panes_get_no_row(self):
+        # They can never report state -- nothing hands them a `--status-script` -- so their
+        # row was permanently dashes in every column. Three of the eight rows in the shipped
+        # `full` profile were pure noise.
+        sessions = [
+            dashboard.RoleSession("coder", "claude", "Coder", "python"),
+            dashboard.RoleSession("inbox", "claude", "Inbox", "inbox"),
+            dashboard.RoleSession("dashboard", "claude", "Dashboard", "dashboard"),
+            dashboard.RoleSession("cockpit", "claude", "Cockpit", "cockpit"),
+        ]
+
+        lines = dashboard.render_state_grid(sessions, {}, {}, NOW_UTC)
+
+        assert any(line.startswith("coder") for line in lines)
+        for hidden in ("inbox", "dashboard", "cockpit"):
+            assert not any(line.startswith(hidden) for line in lines), hidden
+
+    def test_a_partial_cost_total_still_counts_a_hidden_pane_s_backend(self):
+        # `render_dashboard` hands the *unfiltered* list to `cost_is_partial`, which is why
+        # the filtering lives in the grid rather than one level up.
+        sessions = [
+            dashboard.RoleSession("coder", "codex", "Coder", "python"),
+            dashboard.RoleSession("cockpit", "claude", "Cockpit", "cockpit"),
+        ]
+
+        assert dashboard.cost_is_partial(sessions, {"coder": {"state": "idle"}}) is True
 
     def test_shows_queue_depth(self):
         sessions = [dashboard.RoleSession("coder", "claude", "Coder")]

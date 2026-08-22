@@ -34,6 +34,11 @@ class PaneSpec:
     cmd: str
     mode: str = "auto"
     agent: str = "claude"
+    #: Runs no agent and reports no state (inbox, dashboard, cockpit). The pane is still
+    #: spawned; this only keeps it out of the tab-bar status badges, where a stateless pane
+    #: was rendered as `waiting` -- the Lua's fallback for a `manual` role with no status
+    #: file, and a claim that was simply untrue of a healthy cockpit.
+    passive: bool = False
 
     def as_role_data(self) -> dict:
         """Shape consumed by the WezTerm Lua config's `KILN_ROLES_JSON`."""
@@ -44,6 +49,7 @@ class PaneSpec:
             "cmd": self.cmd,
             "mode": self.mode,
             "agent": self.agent,
+            "passive": self.passive,
         }
 
 

@@ -1,0 +1,114 @@
+"""
+The cockpit page itself — the parts of it that are mechanically checkable.
+
+A single self-contained HTML file has no build step and no type checker, so the one class of
+mistake it invites is a rule reading a custom property that no palette defines: the colour
+silently falls back to nothing and an element renders invisible, or unstyled, in one theme
+only. That is exactly the kind of claim a test can hold, so it does.
+
+Layout and taste are not tested here, and should not be.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+from cockpit.server import STATIC_DIR
+
+pytestmark = pytest.mark.integration
+
+#: Every theme the switcher offers. `dark` is the base `:root` palette and deliberately has
+#: no `[data-theme]` block -- it is expressed by removing the attribute.
+THEMES = ("dark", "light", "neon")
+
+#: Tokens an alternate theme must restate. A "light" theme that inherited the dark
+#: background because it forgot one of these would be broken in the most visible way
+#: possible, and every one of them is a surface a reader looks straight at.
+CORE_TOKENS = ("--bg", "--panel", "--line", "--ink", "--dim", "--accent", "--surface")
+
+
+@pytest.fixture(scope="module")
+def page() -> str:
+    return (STATIC_DIR / "cockpit.html").read_text(encoding="utf-8")
+
+
+def _declared_in(page: str, selector: str) -> set[str]:
+    """Custom properties declared in one rule block, e.g. `:root` or a theme's block."""
+    match = re.search(re.escape(selector) + r"\s*\{(?P<body>[^}]*)\}", page)
+    return set(re.findall(r"(--[a-z-]+)\s*:", match.group("body"))) if match else set()
+
+
+class TestThemeTokens:
+    def test_every_token_the_page_reads_is_defined_in_the_base_palette(self, page):
+        # The base `:root` set is the fallback for all three themes, so a token missing from
+        # it is undefined in whichever theme does not restate it.
+        declared = _declared_in(page, ":root")
+        used = set(re.findall(r"var\((--[a-z-]+)", page))
+
+        assert not used - declared, (
+            f"CSS reads custom properties nothing defines: {sorted(used - declared)}"
+        )
+
+    @pytest.mark.parametrize("theme", ["light", "neon"])
+    def test_an_alternate_theme_restates_every_core_surface(self, page, theme):
+        declared = _declared_in(page, f':root[data-theme="{theme}"]')
+
+        missing = [token for token in CORE_TOKENS if token not in declared]
+
+        assert not missing, f"the {theme} theme inherits {missing} from the dark palette"
+
+    def test_dark_is_the_base_palette_rather_than_a_block(self, page):
+        # If `dark` ever grows its own block, `applyTheme` must stop expressing it by
+        # deleting the attribute — the two have to agree or the default silently breaks.
+        assert ':root[data-theme="dark"]' not in page
+
+
+class TestThemeSwitcher:
+    def test_the_header_offers_every_theme(self, page):
+        offered = set(re.findall(r'data-theme-choice="([a-z]+)"', page))
+
+        assert offered == set(THEMES)
+
+    def test_the_stored_preference_is_applied_before_the_page_paints(self, page):
+        # A theme applied from the script at the bottom renders one frame of the default
+        # palette first, so a light-theme user sees a dark flash on every reload.
+        head, _, tail = page.partition("<header>")
+
+        assert "kiln-cockpit-theme" in head, (
+            "the saved theme must be applied by the inline script above <header>"
+        )
+        assert "kiln-cockpit-theme" in tail  # and persisted by the main script
+
+    def test_reading_the_stored_preference_is_guarded(self, page):
+        # Private windows and blocked site data throw on `localStorage` *access*, not only
+        # on write. An unguarded read there would leave the page blank.
+        inline = page.partition("<header>")[0]
+        script = inline[inline.rindex("<script>"):]
+
+        assert "try" in script and "catch" in script
+
+    def test_an_unrecognised_stored_theme_cannot_reach_the_dom(self, page):
+        # Whatever is in localStorage is attacker-free but not trustworthy — a stale name
+        # from an older build must fall back, not stamp an attribute nothing styles.
+        inline = page.partition("<header>")[0]
+
+        for theme in THEMES:
+            assert f'"{theme}"' in inline
+
+
+class TestPageIsSelfContained:
+    def test_it_loads_nothing_from_the_network(self, page):
+        # The cockpit is served by a stdlib HTTP server on a machine that may well be
+        # offline, and it is the surface an operator reaches for when a run is going wrong.
+        offenders = re.findall(r'(?:src|href)="(https?:|//)', page)
+
+        assert not offenders, f"the page would fetch remote assets: {offenders}"
+
+
+def test_the_static_directory_is_where_the_server_looks():
+    # `STATIC_DIR` is resolved from the module's own location, so a moved package that left
+    # the page behind would 500 on `GET /` rather than fail at import.
+    assert (STATIC_DIR / "cockpit.html").is_file()
+    assert Path(STATIC_DIR).name == "static"

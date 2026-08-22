@@ -22,6 +22,10 @@ from scheduler.routing import format_routing_rules
 from .config import Profile, RoleConfig
 from .paths import KilnPaths, python_command
 
+#: Fallback for the cockpit's `--human-role` when a profile declares no manual role. The
+#: conventional name every shipped profile and the routing table already use.
+DEFAULT_HUMAN_ROLE = "human-in-the-loop"
+
 #: Opening prompt handed to an interactive wrapper session.
 START_PROMPT = "Start your role session."
 
@@ -328,6 +332,97 @@ def _dashboard_command(role: RoleConfig, paths: KilnPaths, branch: str) -> Agent
     )
 
 
+def _cockpit_command(
+    role: RoleConfig, paths: KilnPaths, branch: str, profile: Profile | None
+) -> AgentCommand:
+    """
+    Launch the local web cockpit pane (issue #22).
+
+    Reads the same shared DB, status directory and sessions file the dashboard pane does --
+    it is a second front end over one set of numbers, not a second source of them.
+
+    Two things it needs that the dashboard does not, and both come from the profile because
+    the cockpit deliberately does not parse profiles itself:
+
+    * `--lanes`, the roles that get a swimlane. Taken from the routing table rather than from
+      every role in the profile: `inbox`, `dashboard` and the cockpit itself hand nothing off,
+      so a lane for them would be permanently empty by construction.
+    * `--intake-role`, where `New Task` sends. That is exactly what routing says the human
+      hands off to, so asking the table is the only answer that cannot disagree with the
+      swarm's actual first hop.
+    """
+    human_role = _human_role(profile)
+    argv = [
+        python_command(), "-m", "cockpit.server",
+        "--branch", branch,
+        "--db-path", str(paths.db_path),
+        "--status-dir", str(paths.status_dir),
+        "--sessions-file", str(paths.sessions_file),
+        "--project-name", paths.project_root.name,
+        "--url-file", str(paths.cockpit_url_file),
+        "--pid-file", str(paths.cockpit_pid_file),
+        "--log-file", str(paths.scheduler_log(role.role)),
+        # As with the dashboard: always passed, and hidden by the cockpit when the store is
+        # absent, so a swarm launched without the proxy is not a different cockpit.
+        "--traffic-db", str(paths.traffic_db),
+        "--human-role", human_role,
+    ]
+    lanes = _cockpit_lanes(profile)
+    if lanes:
+        argv += ["--lanes", ",".join(lanes)]
+    intake = profile.routing.resolve(human_role) if profile else None
+    if intake:
+        argv += ["--intake-role", intake]
+    argv += _tuning_args(role, {
+        "--port": role.port,
+        "--activity-limit": role.activity_limit,
+    })
+    if not role.open_browser:
+        argv.append("--no-browser")
+    return AgentCommand(
+        argv=argv,
+        env={
+            "PYTHONPATH": str(paths.python_package_root),
+            "PYTHONIOENCODING": "utf-8",
+        },
+    )
+
+
+def _human_role(profile: Profile | None) -> str:
+    """
+    Whose queue the cockpit treats as the human's.
+
+    The first manual, non-passive role in the profile, which is what "the person operating
+    this swarm" means structurally -- a manual role is one that holds conversations and needs
+    approval each cycle. Falls back to the conventional name so a profile with no manual role
+    still produces a cockpit that runs rather than one that refuses to start.
+    """
+    if profile:
+        for candidate in profile.roles:
+            if candidate.mode == "manual" and not candidate.is_passive:
+                return candidate.role
+    return DEFAULT_HUMAN_ROLE
+
+
+def _cockpit_lanes(profile: Profile | None) -> list[str]:
+    """
+    Board lanes, in profile order, restricted to roles that participate in routing.
+
+    Profile order rather than routing order: the profile lists roles in the direction work
+    flows, while the routing table is a set of rules whose iteration order is an accident of
+    how the JSON was written.
+    """
+    if not profile:
+        return []
+    participating = set(profile.routing.roles())
+    for rule in profile.routing.rules:
+        participating.add(rule.target)
+    return [
+        role.role for role in profile.roles
+        if not role.is_passive and role.role in participating
+    ]
+
+
 def _worktree_for(role: RoleConfig, paths: KilnPaths) -> Path:
     return paths.project_root if role.uses_current_dir else paths.worktree_path(role.worktree)
 
@@ -354,6 +449,9 @@ def build_agent_command(
 
     if role.is_dashboard:
         return _dashboard_command(role, paths, branch)
+
+    if role.is_cockpit:
+        return _cockpit_command(role, paths, branch, profile)
 
     if role.uses_scheduler:
         return _scheduler_command(role, paths, branch, profile).with_env(
