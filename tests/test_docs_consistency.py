@@ -17,7 +17,7 @@ from typing import ClassVar
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-FRAMEWORK_PROFILES = REPO / "kiln" / "framework" / "profiles.json"
+FRAMEWORK_PROFILES = REPO / "src" / "kiln" / "resources" / "profiles.json"
 CONSTITUTION = REPO / "kiln" / "project" / "constitution.md"
 
 
@@ -40,7 +40,7 @@ class TestConstitutionLoadOrder:
         # Worse than unreachable: skill-orchestration.md was absent from CONSTITUTION_FILES,
         # so no scaffolded project ever received it. Listing it in the load order without
         # copying it would have pointed every project at a file that is not there.
-        from launcher.scaffold import CONSTITUTION_FILES
+        from kiln.launcher.scaffold import CONSTITUTION_FILES
 
         present = {p.name for p in (REPO / "kiln" / "project" / "constitution").glob("*.md")}
 
@@ -274,7 +274,7 @@ class TestReadmeProfileExample:
         shipped = json.loads(FRAMEWORK_PROFILES.read_text(encoding="utf-8"))
 
         assert documented["profiles"]["full"] == shipped["profiles"]["full"], (
-            "README.md's 'full' profile block no longer matches kiln/framework/profiles.json"
+            "README.md's 'full' profile block no longer matches src/kiln/resources/profiles.json"
         )
 
     def test_the_readme_block_names_the_real_default(self):
@@ -312,7 +312,7 @@ class TestWrapperTemplateSets:
 
     def _expected(self, agent: str) -> set[str]:
         """Every template `generate.render_instructions` can ask for, for one agent."""
-        from launcher.generate import DELEGATING_AGENTS
+        from kiln.launcher.generate import DELEGATING_AGENTS
 
         names = {
             f"loop-auto-{agent}.md",
@@ -325,9 +325,9 @@ class TestWrapperTemplateSets:
         return names
 
     def test_every_accepted_agent_has_a_complete_template_set(self):
-        from launcher.config import VALID_AGENTS
+        from kiln.launcher.config import VALID_AGENTS
 
-        present = {p.name for p in (REPO / "kiln" / "framework" / "templates").glob("*.md")}
+        present = {p.name for p in (REPO / "src" / "kiln" / "resources" / "templates").glob("*.md")}
 
         missing = {
             agent: sorted(self._expected(agent) - present) for agent in VALID_AGENTS
@@ -349,7 +349,7 @@ class TestDocumentedTerminalKeys:
     """
 
     def test_every_accepted_terminal_key_is_documented(self):
-        from launcher.config import TERMINAL_KEYS
+        from kiln.launcher.config import TERMINAL_KEYS
 
         readme = (REPO / "README.md").read_text(encoding="utf-8")
 

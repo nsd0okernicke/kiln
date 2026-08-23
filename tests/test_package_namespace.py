@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).parents[1] / "kiln" / "framework"
+ROOT = Path(__file__).parents[1] / "src"
+
+
+def package_environment() -> dict[str, str]:
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(ROOT)
+    return env
 
 
 def test_legacy_scheduler_package_has_no_source_modules():
@@ -28,6 +35,7 @@ def test_namespaced_scheduler_entrypoint_is_executable():
         [sys.executable, "-m", "kiln.scheduler.infrastructure.cli.role_scheduler", "--help"],
         capture_output=True,
         check=False,
+        env=package_environment(),
         text=True,
     )
 
@@ -40,6 +48,7 @@ def test_namespaced_status_contract_is_executable():
         [sys.executable, "-m", "kiln.scheduler.domain.status_contract", "--instruction"],
         capture_output=True,
         check=False,
+        env=package_environment(),
         text=True,
     )
 

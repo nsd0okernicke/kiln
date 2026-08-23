@@ -131,7 +131,7 @@ parameter.
 
 ## Verification
 
-1. `python -m pytest -p no:cacheprovider` and `python -m ruff check kiln/framework tests`.
+1. `python -m pytest -p no:cacheprovider` and `python -m ruff check src tests`.
 2. Against a scratch project: write a known line into `.kiln/logs/scheduler-coder.log`, poll
    `GET /api/logs/coder`, append another line, and confirm the second poll returns only the
    new one.

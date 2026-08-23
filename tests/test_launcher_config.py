@@ -9,8 +9,9 @@ import json
 import os
 
 import pytest
-from launcher import config
-from launcher.config import (
+
+from kiln.launcher import config
+from kiln.launcher.config import (
     Profile,
     ProfileError,
     RoleConfig,
@@ -450,7 +451,7 @@ class TestAgentOverride:
 
         repo = Path(__file__).resolve().parents[1]
         config = json.loads(
-            (repo / "kiln" / "framework" / "profiles.json").read_text("utf-8")
+            (repo / "src" / "kiln" / "resources" / "profiles.json").read_text("utf-8")
         )
         overridden = apply_agent_override(parse_profile(config, config["default"]), "codex")
 
@@ -501,7 +502,7 @@ class TestUnknownKeys:
 
         repo = Path(__file__).resolve().parents[1]
         config = json.loads(
-            (repo / "kiln" / "framework" / "profiles.json").read_text("utf-8")
+            (repo / "src" / "kiln" / "resources" / "profiles.json").read_text("utf-8")
         )
         for name in config["profiles"]:
             assert parse_profile(config, name).roles
@@ -592,8 +593,8 @@ class TestFileLoading:
 
     def test_falls_back_to_the_framework_config(self, tmp_path):
         framework = tmp_path / "fw"
-        (framework / "kiln" / "framework").mkdir(parents=True)
-        target = framework / "kiln" / "framework" / "profiles.json"
+        target = framework / "src" / "kiln" / "resources" / "profiles.json"
+        target.parent.mkdir(parents=True)
         target.write_text(json.dumps(CONFIG), encoding="utf-8")
         assert find_profiles_config(tmp_path / "empty", framework) == target
 
@@ -612,7 +613,7 @@ class TestSearchPaths:
     """
 
     def _paths(self, tmp_path):
-        from launcher.config import _search_paths
+        from kiln.launcher.config import _search_paths
 
         return [str(p).replace("\\", "/") for p in _search_paths(tmp_path, tmp_path / "fw")]
 
@@ -622,7 +623,7 @@ class TestSearchPaths:
             "kiln.profiles.json",
             "kiln/profiles.json",
             ".kiln/profiles.json",
-            "kiln/framework/profiles.json",
+            "src/kiln/resources/profiles.json",
             ".kiln/profiles.json",
         ):
             assert any(path.endswith(expected) for path in found), f"{expected} not searched"
@@ -630,11 +631,11 @@ class TestSearchPaths:
     def test_project_override_is_searched_before_the_framework(self, tmp_path):
         found = self._paths(tmp_path)
         override = next(i for i, p in enumerate(found) if p.endswith("kiln.profiles.json"))
-        framework = next(i for i, p in enumerate(found) if "kiln/framework/" in p)
+        framework = next(i for i, p in enumerate(found) if "src/" in p)
         assert override < framework
 
     def test_the_system_path_matches_the_platform(self, tmp_path):
-        from launcher.config import SYSTEM_PROFILES_PATH
+        from kiln.launcher.config import SYSTEM_PROFILES_PATH
 
         expected = (
             "C:/ProgramData/kiln/profiles.json" if os.name == "nt"
@@ -673,7 +674,7 @@ class TestShippedProfiles:
 
         repo_root = Path(__file__).resolve().parents[1]
         config = json.loads(
-            (repo_root / "kiln" / "framework" / "profiles.json").read_text(encoding="utf-8")
+            (repo_root / "src" / "kiln" / "resources" / "profiles.json").read_text(encoding="utf-8")
         )
         for name in config["profiles"]:
             profile = parse_profile(config, name)
@@ -685,7 +686,7 @@ class TestShippedProfiles:
 
         repo_root = Path(__file__).resolve().parents[1]
         config = json.loads(
-            (repo_root / "kiln" / "framework" / "profiles.json").read_text(encoding="utf-8")
+            (repo_root / "src" / "kiln" / "resources" / "profiles.json").read_text(encoding="utf-8")
         )
         assert config["default"] in config["profiles"]
 
@@ -709,13 +710,13 @@ class TestProfileRouting:
         assert parse_profile(CONFIG, "compact").routing.rules == ()
 
     def test_launching_a_profile_without_routing_is_refused(self):
-        from launcher.config import check_launchable
+        from kiln.launcher.config import check_launchable
 
         with pytest.raises(ProfileError, match="routing"):
             check_launchable(parse_profile(CONFIG, "compact"))
 
     def test_a_passive_only_profile_needs_no_routing(self):
-        from launcher.config import check_launchable
+        from kiln.launcher.config import check_launchable
 
         passive = {"profiles": {"p": {"terminals": [
             {"role": "dashboard", "scheduler": "dashboard", "worktree": "@current"},
@@ -725,11 +726,11 @@ class TestProfileRouting:
     def test_every_shipped_profile_is_launchable(self):
         from pathlib import Path
 
-        from launcher.config import check_launchable
+        from kiln.launcher.config import check_launchable
 
         repo_root = Path(__file__).resolve().parents[1]
         config = json.loads(
-            (repo_root / "kiln" / "framework" / "profiles.json").read_text(encoding="utf-8")
+            (repo_root / "src" / "kiln" / "resources" / "profiles.json").read_text(encoding="utf-8")
         )
         for name in config["profiles"]:
             check_launchable(parse_profile(config, name))
@@ -775,7 +776,7 @@ class TestWorkflowShapedProfiles:
         from pathlib import Path
 
         repo_root = Path(__file__).resolve().parents[1]
-        path = repo_root / "kiln" / "framework" / "profiles.json"
+        path = repo_root / "src" / "kiln" / "resources" / "profiles.json"
         return json.loads(path.read_text(encoding="utf-8"))
 
     @pytest.mark.parametrize("name", ["full", "fix", "spike", "harden", "dry-run"])

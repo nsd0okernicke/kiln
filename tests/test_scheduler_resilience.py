@@ -12,15 +12,16 @@ from __future__ import annotations
 import logging
 
 import pytest
+
+from kiln.launcher import workspace
+from kiln.launcher.config import parse_profile
+from kiln.launcher.paths import KilnPaths
 from kiln.scheduler.infrastructure.agents.worker_runner import CallableWorkerRunner
 from kiln.scheduler.infrastructure.cli import role_scheduler
 from kiln.scheduler.infrastructure.cli.role_scheduler import CycleResult
 from kiln.scheduler.infrastructure.diagnostics import FileWorkerDebugSink
 from kiln.scheduler.infrastructure.persistence import SQLiteMessageQueue
 from kiln.scheduler.infrastructure.vcs import GitWorktree
-from launcher import workspace
-from launcher.config import parse_profile
-from launcher.paths import KilnPaths
 
 pytestmark = pytest.mark.integration
 
@@ -323,8 +324,8 @@ class TestLogFile:
         role_scheduler.configure_logging(None)  # must not raise
 
     def test_launcher_passes_a_log_file(self, tmp_path):
-        from launcher.commands import build_agent_command
-        from launcher.config import RoleConfig
+        from kiln.launcher.commands import build_agent_command
+        from kiln.launcher.config import RoleConfig
 
         paths = KilnPaths.create(tmp_path / "p", tmp_path / "f")
         argv = build_agent_command(
@@ -432,7 +433,7 @@ def _shipped_profile(name: str | None = None):
     from pathlib import Path
 
     repo = Path(__file__).resolve().parents[1]
-    config = json.loads((repo / "kiln" / "framework" / "profiles.json").read_text("utf-8"))
+    config = json.loads((repo / "src" / "kiln" / "resources" / "profiles.json").read_text("utf-8"))
     return parse_profile(config, name or config["default"])
 
 

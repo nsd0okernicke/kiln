@@ -11,6 +11,7 @@ from __future__ import annotations
 import sys
 
 import pytest
+
 from kiln.scheduler.infrastructure.diagnostics import verification as verify
 
 pytestmark = pytest.mark.integration
@@ -53,7 +54,7 @@ class TestRun:
         assert result.output
 
     def test_it_does_not_pass_an_llm_base_url_through(self, tmp_path, monkeypatch):
-        # A worker may have left these pointing at the capture proxy. Verification is not an
+        # A worker may have left these pointing at the capture kiln.proxy. Verification is not an
         # agent call and has no business inheriting one.
         monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:8787")
         command = (

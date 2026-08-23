@@ -12,10 +12,11 @@ import logging
 from pathlib import Path
 
 import pytest
+
+from kiln.launcher import workspace
+from kiln.launcher.config import parse_profile
+from kiln.launcher.paths import KilnPaths
 from kiln.scheduler.infrastructure.vcs import git as git_ops
-from launcher import workspace
-from launcher.config import parse_profile
-from launcher.paths import KilnPaths
 
 pytestmark = pytest.mark.integration
 
@@ -41,8 +42,8 @@ def paths(tmp_path):
     framework = tmp_path / "fw"
     (framework / "kiln" / ".claude").mkdir(parents=True)
     (framework / "kiln" / ".claude" / "settings.json").write_text("{}", encoding="utf-8")
-    (framework / "kiln" / "framework" / "tools").mkdir(parents=True)
-    (framework / "kiln" / "framework" / "tools" / "set-status.py").write_text(
+    (framework / "src" / "kiln" / "resources" / "tools").mkdir(parents=True)
+    (framework / "src" / "kiln" / "resources" / "tools" / "set-status.py").write_text(
         "print('status')\n", encoding="utf-8"
     )
     return KilnPaths.create(project, framework)

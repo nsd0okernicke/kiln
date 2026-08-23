@@ -7,10 +7,10 @@ def test_crap_formula_rewards_covered_complexity():
 
 
 def test_report_combines_function_lines_and_sorts_hotspots():
-    coverage = {"files": {"kiln/framework/a.py": {
+    coverage = {"files": {"src/a.py": {
         "executed_lines": [1, 2, 10], "missing_lines": [3, 11, 12],
     }}}
-    complexity = {"kiln/framework/a.py": [
+    complexity = {"src/a.py": [
         {"type": "function", "name": "covered", "lineno": 1, "endline": 3,
          "complexity": 2},
         {"type": "method", "name": "risky", "lineno": 10, "endline": 12,

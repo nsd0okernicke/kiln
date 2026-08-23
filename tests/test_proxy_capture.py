@@ -13,8 +13,8 @@ import json
 import sqlite3
 
 import pytest
-from kiln.scheduler.domain.models import TokenUsage
-from proxy.capture import (
+
+from kiln.proxy.capture import (
     BODY_BUDGET_CHECK_EVERY,
     DEFAULT_BODY_LIMIT_BYTES,
     REDACTED,
@@ -29,6 +29,7 @@ from proxy.capture import (
     extract_usage,
     redact_headers,
 )
+from kiln.scheduler.domain.models import TokenUsage
 
 
 def _sse(*events):
@@ -84,7 +85,7 @@ class TestRedactHeaders:
 
     def test_presence_is_preserved(self):
         # `<redacted>` rather than dropping the key: "present and withheld" and "absent"
-        # mean different things when debugging an auth failure through the proxy.
+        # mean different things when debugging an auth failure through the kiln.proxy.
         assert "Authorization" in redact_headers({"Authorization": "Bearer x"})
 
 
@@ -225,7 +226,7 @@ class TestResponsesApiUsage:
     """
 
     def test_the_live_codex_shape_reproduces_the_cli_s_own_total(self):
-        # Captured verbatim from a real `codex exec` through the proxy. Codex printed
+        # Captured verbatim from a real `codex exec` through the kiln.proxy. Codex printed
         # "tokens used 10.895"; input + output must come to exactly that.
         usage = extract_usage(_sse(_response_completed(
             input_tokens=10_890,

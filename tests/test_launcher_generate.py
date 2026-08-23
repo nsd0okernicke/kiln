@@ -11,10 +11,11 @@ from __future__ import annotations
 import json
 
 import pytest
+
+from kiln.launcher import generate
+from kiln.launcher.config import RoleConfig, parse_profile
+from kiln.launcher.paths import KilnPaths
 from kiln.scheduler.domain.status_contract import SENTINEL_PREFIX
-from launcher import generate
-from launcher.config import RoleConfig, parse_profile
-from launcher.paths import KilnPaths
 
 CONSTITUTION = {
     "workflow.md": "# Workflow Rules\n\n## Handoff Routing\n\n| Role | Sends to |\n"
@@ -66,7 +67,7 @@ def paths(tmp_path):
     for name, body in ROLES.items():
         (roles / name).write_text(body, encoding="utf-8")
 
-    templates = framework / "kiln" / "framework" / "templates"
+    templates = framework / "src" / "kiln" / "resources" / "templates"
     templates.mkdir(parents=True)
     for name, body in TEMPLATES.items():
         (templates / name).write_text(body, encoding="utf-8")
@@ -457,8 +458,8 @@ class TestRoutingTableInjection:
     """
 
     def _profile(self, routing):
+        from kiln.launcher.config import Profile, RoleConfig
         from kiln.scheduler.domain.routing import parse_profile_routing
-        from launcher.config import Profile, RoleConfig
 
         return Profile(
             name="p",
@@ -478,7 +479,7 @@ class TestRoutingTableInjection:
         )
 
     def test_the_placeholder_is_replaced(self, paths):
-        from launcher.config import RoleConfig
+        from kiln.launcher.config import RoleConfig
 
         self._workflow_with_placeholder(paths)
         content = generate.render_instructions(
@@ -488,7 +489,7 @@ class TestRoutingTableInjection:
         assert "{{ROUTING_TABLE}}" not in content
 
     def test_the_agent_sees_its_own_profile_s_routing(self, paths):
-        from launcher.config import RoleConfig
+        from kiln.launcher.config import RoleConfig
 
         self._workflow_with_placeholder(paths)
         content = generate.render_instructions(
@@ -501,7 +502,7 @@ class TestRoutingTableInjection:
     def test_it_never_shows_a_route_the_profile_does_not_have(self, paths):
         # The trap this closes: instructions telling a wrapper role to hand off to a role
         # its own swarm never launches.
-        from launcher.config import RoleConfig
+        from kiln.launcher.config import RoleConfig
 
         self._workflow_with_placeholder(paths)
         content = generate.render_instructions(
@@ -511,7 +512,7 @@ class TestRoutingTableInjection:
         assert "refactorer" not in content
 
     def test_a_conditional_row_survives_into_the_instructions(self, paths):
-        from launcher.config import RoleConfig
+        from kiln.launcher.config import RoleConfig
 
         self._workflow_with_placeholder(paths)
         content = generate.render_instructions(

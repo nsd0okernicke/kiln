@@ -11,6 +11,7 @@ import json
 from datetime import UTC, datetime
 
 import pytest
+
 from kiln.scheduler.domain import handoff
 from kiln.scheduler.infrastructure.cli import dashboard
 from kiln.scheduler.infrastructure.persistence import db
@@ -171,13 +172,13 @@ class TestVisibleRoles:
 class TestPassiveKindsMatchTheLauncher:
     """
     `scheduler` may not import `launcher` -- the dependency runs the other way -- so
-    `PASSIVE_KINDS` restates strings that `launcher.config` owns and writes into the
+    `PASSIVE_KINDS` restates strings that `kiln.launcher.config` owns and writes into the
     sessions file. A test may import both, which is what makes the restatement safe rather
     than a copy waiting to drift.
     """
 
     def test_the_two_definitions_agree(self):
-        from launcher import config
+        from kiln.launcher import config
 
         owned_by_the_launcher = {
             config.SCHEDULER_INBOX, config.SCHEDULER_DASHBOARD, config.SCHEDULER_COCKPIT,
@@ -187,7 +188,7 @@ class TestPassiveKindsMatchTheLauncher:
 
     def test_the_scheduled_kind_is_not_passive(self):
         # `python` roles are the ones that report the most state of all.
-        from launcher import config
+        from kiln.launcher import config
 
         assert config.SCHEDULER_PYTHON not in dashboard.PASSIVE_KINDS
 
@@ -634,7 +635,7 @@ class TestPromptWeightScope:
         assert "all history" in heading
 
     def test_rows_older_than_the_window_are_excluded(self, tmp_path):
-        from proxy.capture import TrafficRecord, TrafficStore
+        from kiln.proxy.capture import TrafficRecord, TrafficStore
 
         store = TrafficStore(tmp_path / "traffic.db")
         store.ensure_schema()
@@ -650,7 +651,7 @@ class TestPromptWeightScope:
         assert this_run["avg_bytes"] == 1_000, "the older, much larger row must not skew it"
 
     def test_a_window_matching_nothing_hides_the_panel(self, tmp_path):
-        from proxy.capture import TrafficRecord, TrafficStore
+        from kiln.proxy.capture import TrafficRecord, TrafficStore
 
         store = TrafficStore(tmp_path / "traffic.db")
         store.ensure_schema()
