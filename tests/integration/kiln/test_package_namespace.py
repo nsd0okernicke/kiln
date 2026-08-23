@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).parents[1] / "src"
+ROOT = Path(__file__).parents[3] / "src"
 
 
 def package_environment() -> dict[str, str]:

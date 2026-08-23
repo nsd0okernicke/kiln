@@ -261,7 +261,11 @@ kiln/
 │       └── tools/                    # Re-seeded into .kiln/tools/ every launch
 │
 ├── examples/                     # Example project briefs
-├── tests/                        # pytest suite for launcher/ and scheduler/
+├── tests/
+│   ├── unit/kiln/               # Fast tests mirroring src/kiln/
+│   ├── integration/kiln/        # Real SQLite, Git, subprocess and HTTP adapters
+│   ├── conftest.py              # Shared fixtures
+│   └── mutation/                # Cosmic Ray configurations
 └── docs/                         # Documentation & assets
 ```
 
@@ -1241,7 +1245,8 @@ gets wrong:
 - **`workerTimeout`** is raised per role because the module default of 900s is sized for an LLM
   session, not for the toolchain each role actually runs — see **Terminal fields** below.
 
-This block is kept honest by `tests/test_docs_consistency.py`, which parses it out of this file
+This block is kept honest by `tests/integration/kiln/test_docs_consistency.py`, which parses it
+out of this file
 and compares it to `src/kiln/resources/profiles.json`.
 
 ### Other Bundled Profiles

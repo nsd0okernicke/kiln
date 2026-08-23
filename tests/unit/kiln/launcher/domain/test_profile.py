@@ -449,7 +449,7 @@ class TestAgentOverride:
         import json
         from pathlib import Path
 
-        repo = Path(__file__).resolve().parents[1]
+        repo = Path(__file__).resolve().parents[5]
         config = json.loads(
             (repo / "src" / "kiln" / "resources" / "profiles.json").read_text("utf-8")
         )
@@ -500,7 +500,7 @@ class TestUnknownKeys:
         import json
         from pathlib import Path
 
-        repo = Path(__file__).resolve().parents[1]
+        repo = Path(__file__).resolve().parents[5]
         config = json.loads(
             (repo / "src" / "kiln" / "resources" / "profiles.json").read_text("utf-8")
         )
@@ -672,7 +672,7 @@ class TestShippedProfiles:
         """Guards the real profiles.json against drifting out of the parser's grammar."""
         from pathlib import Path
 
-        repo_root = Path(__file__).resolve().parents[1]
+        repo_root = Path(__file__).resolve().parents[5]
         config = json.loads(
             (repo_root / "src" / "kiln" / "resources" / "profiles.json").read_text(encoding="utf-8")
         )
@@ -684,7 +684,7 @@ class TestShippedProfiles:
     def test_declared_default_profile_exists(self):
         from pathlib import Path
 
-        repo_root = Path(__file__).resolve().parents[1]
+        repo_root = Path(__file__).resolve().parents[5]
         config = json.loads(
             (repo_root / "src" / "kiln" / "resources" / "profiles.json").read_text(encoding="utf-8")
         )
@@ -728,7 +728,7 @@ class TestProfileRouting:
 
         from kiln.launcher.domain.profile import check_launchable
 
-        repo_root = Path(__file__).resolve().parents[1]
+        repo_root = Path(__file__).resolve().parents[5]
         config = json.loads(
             (repo_root / "src" / "kiln" / "resources" / "profiles.json").read_text(encoding="utf-8")
         )
@@ -775,7 +775,7 @@ class TestWorkflowShapedProfiles:
     def shipped(self):
         from pathlib import Path
 
-        repo_root = Path(__file__).resolve().parents[1]
+        repo_root = Path(__file__).resolve().parents[5]
         path = repo_root / "src" / "kiln" / "resources" / "profiles.json"
         return json.loads(path.read_text(encoding="utf-8"))
 

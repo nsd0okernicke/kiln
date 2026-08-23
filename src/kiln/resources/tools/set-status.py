@@ -9,7 +9,7 @@ Usage: python set-status.py <role> <state> [detail]
   detail: optional detail string (e.g., role name of delegated worker, or "-" to clear)
 
 `STATE_EMOJIS`'s keys must match `scheduler.pane_status.STATE_COLORS_HEX`'s exactly (see
-`tests/test_set_status.py`'s parity test) — this script is copied verbatim into every
+the set-status integration parity test) — this script is copied verbatim into every
 worktree by `workspace.copy_framework_tools()` and can't import that module at runtime (it
 may not be on `sys.path` there, and this file's hyphenated name means it can't be imported
 either), so the two dicts are kept in sync by hand, guarded by that test rather than code.

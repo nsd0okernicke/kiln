@@ -432,7 +432,7 @@ def _shipped_profile(name: str | None = None):
     import json
     from pathlib import Path
 
-    repo = Path(__file__).resolve().parents[1]
+    repo = Path(__file__).resolve().parents[4]
     config = json.loads((repo / "src" / "kiln" / "resources" / "profiles.json").read_text("utf-8"))
     return parse_profile(config, name or config["default"])
 

@@ -231,7 +231,7 @@ class TestFileLoading:
     def _shipped_workflow(self):
         from pathlib import Path
 
-        repo_root = Path(__file__).resolve().parents[1]
+        repo_root = Path(__file__).resolve().parents[5]
         path = repo_root / "kiln" / "project" / "constitution" / "workflow.md"
         return path.read_text(encoding="utf-8")
 

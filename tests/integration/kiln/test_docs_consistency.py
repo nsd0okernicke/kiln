@@ -16,7 +16,7 @@ from typing import ClassVar
 
 import pytest
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[3]
 FRAMEWORK_PROFILES = REPO / "src" / "kiln" / "resources" / "profiles.json"
 CONSTITUTION = REPO / "kiln" / "project" / "constitution.md"
 

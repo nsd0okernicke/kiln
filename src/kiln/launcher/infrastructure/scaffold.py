@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 #: literal list rather than a directory walk so a stray file cannot become constitution by
 #: accident -- but it must stay complete: `skill-orchestration.md` was missing from it, so no
 #: scaffolded project had the document that defines which role owns which quality gate.
-#: `tests/test_docs_consistency.py` pins the list against the bundled directory.
+#: The integration docs-consistency test pins the list against the bundled directory.
 CONSTITUTION_FILES = (
     "engineering.md",
     "workflow.md",

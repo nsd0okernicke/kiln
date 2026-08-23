@@ -53,11 +53,13 @@ kiln = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests/unit", "tests/integration"]
 pythonpath = ["src"]
 addopts = "-q --strict-markers"
 markers = [
-    "integration: exercises real SQLite + real git (slower; no live LLM)",
+    "integration: exercises multiple components or real infrastructure adapters",
+    "system: exercises a complete Kiln process topology",
+    "live: invokes external agent services or CLIs",
 ]
 
 [tool.ruff]

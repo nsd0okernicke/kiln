@@ -23,7 +23,7 @@ import pytest
 from kiln.scheduler.infrastructure.persistence import db
 
 CHANNEL_PY = (
-    Path(__file__).resolve().parents[1] / "src" / "kiln" / "mcp_server" / "channel.py"
+    Path(__file__).resolve().parents[4] / "src" / "kiln" / "mcp_server" / "channel.py"
 )
 
 pytestmark = pytest.mark.integration

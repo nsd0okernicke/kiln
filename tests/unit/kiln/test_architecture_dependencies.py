@@ -3,7 +3,7 @@
 import ast
 from pathlib import Path
 
-ROOT = Path(__file__).parents[1] / "src" / "kiln"
+ROOT = Path(__file__).parents[3] / "src" / "kiln"
 SCHEDULER = ROOT / "scheduler"
 
 

@@ -11,7 +11,7 @@
 module-path = "src/kiln/scheduler/infrastructure/persistence/db.py"
 timeout = 60.0
 excluded-modules = []
-test-command = "python -m pytest -x -q tests/test_db.py tests/test_channel_server.py"
+test-command = "python -m pytest -x -q tests/integration/kiln/scheduler/infrastructure/persistence/test_db.py tests/integration/kiln/mcp_server/test_channel_server.py"
 
 [cosmic-ray.distributor]
 name = "local"

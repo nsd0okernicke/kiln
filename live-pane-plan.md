@@ -76,7 +76,7 @@ parameter.
      any log viewer needs, and the reason not to simply re-render the whole panel each tick.
    - Reuse the existing `--code-bg` token so all three themes are covered for free.
 
-3. **Tests** in `tests/test_cockpit_server.py`
+3. **Tests** in `tests/integration/kiln/cockpit/infrastructure/http/test_cockpit_server.py`
    - New bytes only are returned for a non-zero `after`; the offset advances.
    - A role not in the sessions file is refused; a traversal attempt in the role name is
      refused (mirroring the existing `/api/status/<role>` cases).

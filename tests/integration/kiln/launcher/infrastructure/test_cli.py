@@ -237,7 +237,7 @@ class TestChannelPreflight:
         # If channel.py's import changes and the probe does not, the preflight check starts
         # passing while the server still fails to start.
         source = (
-            Path(__file__).resolve().parents[1]
+            Path(__file__).resolve().parents[5]
             / "src" / "kiln" / "mcp_server" / "channel.py"
         ).read_text(encoding="utf-8")
         for line in cli.CHANNEL_IMPORT_PROBE.strip().splitlines():
