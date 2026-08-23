@@ -24,8 +24,9 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 
-from . import db, git_ops, handoff, pane_status, status_contract, verify
+from . import db, git_ops, handoff, pane_status, policies, status_contract, verify
 from .adapters import DEFAULT_IDLE_TIMEOUT_SEC, TokenUsage, WorkerInvocation
+from .ports import GitWorktree, MessageQueue, SQLiteMessageQueue, Worktree
 from .routing import RoutingTable, load_routing_table, parse_routing_arguments
 from .worker_prompt import WorkerDefinition, build_task_prompt, load_worker_definition
 
@@ -122,6 +123,8 @@ class SchedulerContext:
     routing: RoutingTable
     definition: WorkerDefinition
     run_worker: Callable[..., WorkerInvocation]
+    queue: MessageQueue | None = None
+    worktree_port: Worktree | None = None
     clock: Callable[[], datetime] = datetime.now
     set_status: Callable[..., None] = lambda _state, **_kwargs: None
     #: One retry, then escalate — matches loop-auto-*.md step 4.
@@ -221,9 +224,17 @@ def should_retry(invocations: Sequence[WorkerInvocation], max_attempts: int) -> 
     Kept separate from run_once so the retry/escalate rule can be tested as a function over
     a sequence of results, with no DB, git or worker involved.
     """
-    if not invocations or invocations[-1].is_done:
-        return False
-    return len(invocations) < max_attempts
+    return policies.should_retry(invocations, max_attempts)
+
+
+def _queue(ctx: SchedulerContext) -> MessageQueue:
+    """Resolve the queue port, retaining source compatibility for direct context users."""
+    return ctx.queue or SQLiteMessageQueue(ctx.db_path)
+
+
+def _worktree(ctx: SchedulerContext) -> Worktree:
+    """Resolve the Git port, retaining source compatibility for direct context users."""
+    return ctx.worktree_port or GitWorktree(ctx.worktree)
 
 
 def run_once(ctx: SchedulerContext, state: SchedulerState) -> CycleResult:
@@ -234,7 +245,7 @@ def run_once(ctx: SchedulerContext, state: SchedulerState) -> CycleResult:
     # it at all -- a re-queued message for a dead scheduler goes into a queue nobody reads.
     if state.halted:
         ctx.set_status("halted")
-        message = db.fetch_resume(ctx.db_path, ctx.role, ctx.branch)
+        message = _queue(ctx).fetch_resume(ctx.role, ctx.branch)
         if not message:
             return CycleResult(HALTED, detail=f"{ctx.role} halted; waiting for `kiln retry`")
         log.warning(
@@ -245,14 +256,14 @@ def run_once(ctx: SchedulerContext, state: SchedulerState) -> CycleResult:
         state.consecutive_escalations = 0
     else:
         ctx.set_status("waiting")
-        message = db.fetch_and_deliver(ctx.db_path, ctx.role, ctx.branch)
+        message = _queue(ctx).fetch(ctx.role, ctx.branch)
         if not message:
             return CycleResult(IDLE)
 
     message_id = str(message["id"])
     content = str(message["content"])
     ctx.set_status("receiving")
-    db.mark_processing(ctx.db_path, message_id)
+    _queue(ctx).mark_processing(message_id)
     _persist_inbound(ctx, content)
 
     inbound = handoff.parse_handoff(content)
@@ -289,17 +300,15 @@ def run_once(ctx: SchedulerContext, state: SchedulerState) -> CycleResult:
     # `squash_anchor`, and merging something we already have produces no commit and therefore
     # no anchor.
     merge_target = inbound.merge_target
-    if merge_target and not git_ops.already_contains(merge_target, ctx.worktree):
+    if merge_target and not _worktree(ctx).already_contains(merge_target):
         log.info(f"{ICON_MERGE} merging %s from %s", merge_target[:8], inbound.branch or "?")
-        merged = git_ops.merge_commit(
-            merge_target, ctx.worktree, message=merge_commit_message(ctx.role, inbound)
-        )
+        merged = _worktree(ctx).merge(merge_target, merge_commit_message(ctx.role, inbound))
         if not merged.ok:
             detail = f"merge of {merge_target} failed: {merged.output}"
             log.error(detail)
             return _escalate(ctx, state, message_id, inbound, detail, MERGE_FAILED)
 
-    anchor = git_ops.squash_anchor(ctx.worktree)
+    anchor = _worktree(ctx).squash_anchor()
     attempts = _delegate(ctx, state, inbound)
 
     if not attempts.last.is_done:
@@ -449,7 +458,7 @@ def _hand_off(
 
     log.info(f"{ICON_SQUASH} squashing work since %s", anchor[:8] if anchor else "(root)")
 
-    squashed = git_ops.squash_since(anchor, f"{commit_prefix(ctx.role)} {summary}", ctx.worktree)
+    squashed = _worktree(ctx).squash_since(anchor, f"{commit_prefix(ctx.role)} {summary}")
     if not squashed.ok:
         detail = f"squash failed: {squashed.output}"
         log.error(detail)
@@ -471,7 +480,7 @@ def _hand_off(
     # are the same fact, and the whole point of the column is that it can be trusted to
     # match what a human reads in the message.
     _insert_verified(ctx, target, outbound, work_item=work_item_of(work_item))
-    db.mark_processed(ctx.db_path, message_id)
+    _queue(ctx).mark_processed(message_id)
 
     state.consecutive_escalations = 0  # a clean cycle re-arms the circuit breaker
     ctx.set_status("idle")
@@ -583,12 +592,12 @@ def _cycle_limit_breach(ctx: SchedulerContext, inbound: handoff.InboundHandoff) 
     if ctx.max_cycles is None or not work_item:
         return ""
 
-    arrivals = db.count_work_item_arrivals(ctx.db_path, work_item, ctx.branch, ctx.role)
-    if arrivals <= ctx.max_cycles:
-        return ""
-    return (
-        f"work item {work_item!r} has reached {ctx.role} {arrivals} times, over the "
-        f"limit of {ctx.max_cycles}; stopping instead of running another cycle"
+    arrivals = _queue(ctx).count_arrivals(work_item, ctx.branch, ctx.role)
+    return policies.cycle_limit_breach(
+        arrivals=arrivals,
+        max_cycles=ctx.max_cycles,
+        work_item=work_item,
+        role=ctx.role,
     )
 
 
@@ -611,12 +620,10 @@ def _budget_breach(
 
     work_item = work_item_of(inbound.handoff)
     spent = state.spend_on(work_item)
-    if spent < ctx.max_budget_usd:
-        return ""
-    return (
-        f"work item {work_item or '(unnamed)'!r} has cost ${spent:.2f} at {ctx.role}, "
-        f"at or over the ${ctx.max_budget_usd:.2f} cap; stopping instead of spending more"
+    reason = policies.budget_breach(
+        spent=spent, maximum=ctx.max_budget_usd, work_item=work_item
     )
+    return reason.replace("at this role", f"at {ctx.role}")
 
 
 def _produced_work(ctx: SchedulerContext, anchor: str) -> bool:
@@ -629,9 +636,7 @@ def _produced_work(ctx: SchedulerContext, anchor: str) -> bool:
     containing none of its own work. Any other rule here would make the two disagree about
     what an empty cycle is.
     """
-    return git_ops.has_commits_since(anchor, ctx.worktree) or git_ops.has_pending_changes(
-        ctx.worktree
-    )
+    return _worktree(ctx).has_commits_since(anchor) or _worktree(ctx).has_pending_changes()
 
 
 def _no_op(
@@ -667,7 +672,7 @@ def _no_op(
             sender=ctx.role,
             handoff=inbound.handoff,
             branch=ctx.branch,
-            commit=git_ops.head_commit(ctx.worktree) or inbound.commit,
+            commit=_worktree(ctx).head_commit() or inbound.commit,
             summary=(
                 f"{ctx.role.capitalize()} reviewed the inbound handoff and produced no "
                 f"additional changes. The chain ended without creating another role "
@@ -679,7 +684,7 @@ def _no_op(
         work_item=work_item_of(inbound.handoff),
         priority=INFORMATIONAL_PRIORITY,
     )
-    db.mark_processed(ctx.db_path, message_id)
+    _queue(ctx).mark_processed(message_id)
     ctx.set_status("idle")
     return CycleResult(
         NO_OP,
@@ -710,7 +715,7 @@ def _forward_ping(
         sender=ctx.role,
         handoff=inbound.handoff,
         branch=ctx.branch,
-        commit=git_ops.head_commit(ctx.worktree) or inbound.commit,
+        commit=_worktree(ctx).head_commit() or inbound.commit,
         summary="Health-check ping forwarded.",
         next_role=target,
         timestamp=ctx.timestamp(),
@@ -718,7 +723,7 @@ def _forward_ping(
         trail=trail,
     )
     _insert_verified(ctx, target, outbound, work_item=work_item_of(inbound.handoff))
-    db.mark_processed(ctx.db_path, message_id)
+    _queue(ctx).mark_processed(message_id)
     ctx.set_status("idle")
     return CycleResult(PING_FORWARDED, message_id=message_id, target=target)
 
@@ -745,7 +750,7 @@ def _escalate(
         sender=ctx.role,
         handoff=inbound.handoff,
         branch=ctx.branch,
-        commit=git_ops.head_commit(ctx.worktree) or inbound.commit,
+        commit=_worktree(ctx).head_commit() or inbound.commit,
         summary=f"ESCALATION from {ctx.role}: {detail}",
         next_role=ESCALATION_TARGET,
         timestamp=ctx.timestamp(),
@@ -759,13 +764,13 @@ def _escalate(
     # having to start a new work item carrying none of the failed cycle's context. It is
     # still out of `processing`, which is what marking it processed was protecting against,
     # and `fetch_and_deliver` does not select `failed`, so nothing re-serves it by accident.
-    db.mark_failed(ctx.db_path, message_id, detail)
+    _queue(ctx).mark_failed(message_id, detail)
 
     state.consecutive_escalations += 1
     ctx.set_status("blocked")
     log.error(f"{ICON_ESCALATE} escalated to %s: %s", ESCALATION_TARGET, detail)
 
-    if state.consecutive_escalations >= ctx.escalation_limit:
+    if policies.escalation_halts(state.consecutive_escalations, ctx.escalation_limit):
         state.halted = True
         halt_detail = (
             f"{ctx.role} halted after {state.consecutive_escalations} consecutive escalations"
@@ -778,7 +783,7 @@ def _escalate(
                 sender=ctx.role,
                 handoff=inbound.handoff,
                 branch=ctx.branch,
-                commit=git_ops.head_commit(ctx.worktree) or inbound.commit,
+                commit=_worktree(ctx).head_commit() or inbound.commit,
                 summary=f"CIRCUIT BREAKER: {halt_detail}. This role has stopped polling.",
                 next_role=ESCALATION_TARGET,
                 timestamp=ctx.timestamp(),
@@ -818,11 +823,11 @@ def _insert_verified(
     this step -- see `db.message_exists`.
     """
     for attempt in (1, 2):
-        message_id = db.insert_handoff(
-            ctx.db_path, ctx.role, target, content, ctx.branch,
+        message_id = _queue(ctx).insert(
+            ctx.role, target, content, ctx.branch,
             priority=priority, work_item=work_item,
         )
-        if db.message_exists(ctx.db_path, message_id):
+        if _queue(ctx).exists(message_id):
             return message_id
         log.warning("handoff insert not visible after attempt %d; retrying", attempt)
     log.error("handoff to %s could not be verified after 2 attempts", target)
@@ -1062,6 +1067,8 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
         ),
         definition=definition,
         run_worker=run_worker,
+        queue=SQLiteMessageQueue(args.db_path),
+        worktree_port=GitWorktree(args.worktree),
         set_status=make_status_writer(
             args.role, args.status_script, worker_timeout=args.worker_timeout,
             # `resolve_model`, not `args.model`: the same value the worker is actually
@@ -1290,7 +1297,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     # The launcher normally covers this, but a scheduler started by hand — or in a project
     # scaffolded before these entries existed — would otherwise commit its own scaffolding.
-    git_ops.ensure_generated_ignored(ctx.worktree)
+    _worktree(ctx).ensure_generated_ignored()
 
     # The bar owns the pane's scrolling region, so it must be released on every exit path
     # — including a crash. A region that outlives the process leaves the shell prompt
@@ -1324,7 +1331,7 @@ def recover_stale_messages(ctx: SchedulerContext) -> int:
     it ever reaches that machinery.
     """
     try:
-        recovered = db.recover_stale_processing(ctx.db_path, ctx.role, ctx.branch)
+        recovered = _queue(ctx).recover_processing(ctx.role, ctx.branch)
     except sqlite3.Error as exc:
         log.warning("could not check for messages left mid-cycle: %s", exc)
         return 0

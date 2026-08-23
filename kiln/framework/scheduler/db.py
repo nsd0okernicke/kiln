@@ -16,18 +16,26 @@ import logging
 import sqlite3
 from contextlib import closing
 from pathlib import Path
+from typing import cast
+
+from .models import MessageStatus, QueueMessage, can_transition
 
 log = logging.getLogger(__name__)
 
-STATUS_QUEUED = "queued"
-STATUS_DELIVERED = "delivered"
-STATUS_PROCESSING = "processing"
-STATUS_PROCESSED = "processed"
+
+def _message(row: sqlite3.Row) -> QueueMessage:
+    """Give SQLite's runtime mapping the queue contract known from each SELECT."""
+    return cast(QueueMessage, dict(row))
+
+STATUS_QUEUED = MessageStatus.QUEUED.value
+STATUS_DELIVERED = MessageStatus.DELIVERED.value
+STATUS_PROCESSING = MessageStatus.PROCESSING.value
+STATUS_PROCESSED = MessageStatus.PROCESSED.value
 #: An escalated message: the cycle failed and a human was told. Deliberately *not* a state
 #: `fetch_and_deliver` selects, so a failure is never silently re-served -- it comes back only
 #: when someone runs `kiln retry`. Escalations used to be marked `processed`, which stopped
 #: them wedging in `processing` but also made them indistinguishable from work that succeeded.
-STATUS_FAILED = "failed"
+STATUS_FAILED = MessageStatus.FAILED.value
 
 #: Normal handoff priority. 0-9 is high (architect handoffs, critical tasks), 100+ is
 #: informational — see constitution/workflow.md "Priority values".
@@ -102,7 +110,7 @@ def ensure_schema(db_path: str | Path) -> None:
         conn.commit()
 
 
-def fetch_and_deliver(db_path: str | Path, role: str, branch: str) -> dict | None:
+def fetch_and_deliver(db_path: str | Path, role: str, branch: str) -> QueueMessage | None:
     """
     Return the next queued-or-delivered message for a role and mark it delivered.
 
@@ -113,7 +121,7 @@ def fetch_and_deliver(db_path: str | Path, role: str, branch: str) -> dict | Non
     return _fetch_and_deliver(db_path, role, branch, resumed_only=False)
 
 
-def fetch_resume(db_path: str | Path, role: str, branch: str) -> dict | None:
+def fetch_resume(db_path: str | Path, role: str, branch: str) -> QueueMessage | None:
     """
     As `fetch_and_deliver`, but only messages a human explicitly sent back.
 
@@ -128,7 +136,7 @@ def fetch_resume(db_path: str | Path, role: str, branch: str) -> dict | None:
 
 def _fetch_and_deliver(
     db_path: str | Path, role: str, branch: str, resumed_only: bool
-) -> dict | None:
+) -> QueueMessage | None:
     kind = "resumed" if resumed_only else "queued/delivered"
     log.debug("polling DB for %s messages (role=%s branch=%s)", kind, role, branch)
     with closing(connect(db_path)) as conn:
@@ -160,10 +168,12 @@ def _fetch_and_deliver(
         )
         conn.commit()
         log.info("marked id=%s as delivered", row["id"])
-        return dict(row)
+        return _message(row)
 
 
-def recover_stale_processing(db_path: str | Path, role: str, branch: str) -> list[dict]:
+def recover_stale_processing(
+    db_path: str | Path, role: str, branch: str
+) -> list[QueueMessage]:
     """
     Reset this role's abandoned `processing` rows to `delivered`, returning what was reset.
 
@@ -206,7 +216,7 @@ def recover_stale_processing(db_path: str | Path, role: str, branch: str) -> lis
             """,
             (STATUS_DELIVERED, role, branch, STATUS_PROCESSING),
         )
-        rows = [dict(row) for row in cur.fetchall()]
+        rows = [_message(row) for row in cur.fetchall()]
         conn.commit()
     return rows
 
@@ -303,7 +313,7 @@ def count_work_item_arrivals(
         return int(cur.fetchone()[0])
 
 
-def recent_messages(db_path: str | Path, branch: str, limit: int = 10) -> list[dict]:
+def recent_messages(db_path: str | Path, branch: str, limit: int = 10) -> list[QueueMessage]:
     """The most recent messages on a branch, newest first -- the dashboard's activity feed."""
     with closing(connect(db_path)) as conn:
         cur = conn.cursor()
@@ -312,7 +322,7 @@ def recent_messages(db_path: str | Path, branch: str, limit: int = 10) -> list[d
             "WHERE branch=? ORDER BY created_at DESC LIMIT ?",
             (branch, limit),
         )
-        return [dict(row) for row in cur.fetchall()]
+        return [_message(row) for row in cur.fetchall()]
 
 
 #: How many recent work-item messages the board reads in one poll.
@@ -326,7 +336,7 @@ WORK_ITEM_WINDOW = 120
 
 def work_item_messages(
     db_path: str | Path, branch: str, limit: int = WORK_ITEM_WINDOW
-) -> list[dict]:
+) -> list[QueueMessage]:
     """
     Recent messages on a branch, newest first — the cockpit board's input.
 
@@ -355,10 +365,10 @@ def work_item_messages(
             "ORDER BY created_at DESC, rowid DESC LIMIT ?",
             (branch, limit),
         )
-        return [dict(row) for row in cur.fetchall()]
+        return [_message(row) for row in cur.fetchall()]
 
 
-def pending_for_role(db_path: str | Path, branch: str, role: str) -> list[dict]:
+def pending_for_role(db_path: str | Path, branch: str, role: str) -> list[QueueMessage]:
     """
     Everything one role has not explicitly acknowledged — what Attention reads.
 
@@ -376,12 +386,12 @@ def pending_for_role(db_path: str | Path, branch: str, role: str) -> list[dict]:
             "ORDER BY created_at DESC",
             (branch, role, STATUS_QUEUED, STATUS_DELIVERED, STATUS_PROCESSED),
         )
-        return [dict(row) for row in cur.fetchall()]
+        return [_message(row) for row in cur.fetchall()]
 
 
 def acknowledge_message(
     db_path: str | Path, message_id: str, role: str, branch: str
-) -> dict | None:
+) -> QueueMessage | None:
     """Acknowledge one message addressed to `role`; return it, or None if out of scope."""
     with closing(connect(db_path)) as conn:
         cur = conn.cursor()
@@ -395,7 +405,7 @@ def acknowledge_message(
         )
         row = cur.fetchone()
         conn.commit()
-    return dict(row) if row else None
+    return _message(row) if row else None
 
 
 def mark_processing(db_path: str | Path, message_id: str) -> bool:
@@ -419,6 +429,23 @@ def mark_failed(db_path: str | Path, message_id: str, error: str) -> bool:
     """
     with closing(connect(db_path)) as conn:
         cur = conn.cursor()
+        cur.execute("SELECT status FROM messages WHERE id=?", (message_id,))
+        row = cur.fetchone()
+        if row is None:
+            log.warning("no message found with id=%s", message_id)
+            return False
+        try:
+            current = MessageStatus(row["status"])
+        except ValueError:
+            log.warning("message id=%s has unknown status %r", message_id, row["status"])
+            return False
+        if not can_transition(current, MessageStatus.FAILED):
+            log.warning(
+                "refusing invalid message transition %s -> failed for id=%s",
+                current,
+                message_id,
+            )
+            return False
         cur.execute(
             "UPDATE messages SET status=?, error=? WHERE id=?",
             (STATUS_FAILED, error, message_id),
@@ -433,7 +460,7 @@ def mark_failed(db_path: str | Path, message_id: str, error: str) -> bool:
     return changed
 
 
-def failed_messages(db_path: str | Path, branch: str) -> list[dict]:
+def failed_messages(db_path: str | Path, branch: str) -> list[QueueMessage]:
     """Every escalated message on a branch, newest first -- what `kiln retry` lists."""
     with closing(connect(db_path)) as conn:
         cur = conn.cursor()
@@ -442,10 +469,12 @@ def failed_messages(db_path: str | Path, branch: str) -> list[dict]:
             "WHERE branch=? AND status=? ORDER BY created_at DESC",
             (branch, STATUS_FAILED),
         )
-        return [dict(row) for row in cur.fetchall()]
+        return [_message(row) for row in cur.fetchall()]
 
 
-def resume_failed(db_path: str | Path, message_id: str, content: str) -> dict | None:
+def resume_failed(
+    db_path: str | Path, message_id: str, content: str
+) -> QueueMessage | None:
     """
     Put one failed message back in its own role's queue, with the human's guidance attached.
 
@@ -478,16 +507,16 @@ def resume_failed(db_path: str | Path, message_id: str, content: str) -> dict | 
         log.warning("no failed message with id=%s to resume", message_id)
         return None
     log.info("resumed id=%s for %s", message_id, row["target"])
-    return dict(row)
+    return _message(row)
 
 
-def get_message(db_path: str | Path, message_id: str) -> dict | None:
+def get_message(db_path: str | Path, message_id: str) -> QueueMessage | None:
     """One message by id, or None. For callers that need its content before rewriting it."""
     with closing(connect(db_path)) as conn:
         cur = conn.cursor()
         cur.execute("SELECT * FROM messages WHERE id=?", (message_id,))
         row = cur.fetchone()
-        return dict(row) if row else None
+        return _message(row) if row else None
 
 
 def _set_status(
@@ -496,6 +525,7 @@ def _set_status(
     status: str,
     stamp_column: str | None = None,
 ) -> bool:
+    target = MessageStatus(status)
     assignments = "status=?"
     if stamp_column:
         # stamp_column is a module-controlled literal, never caller input.
@@ -503,14 +533,30 @@ def _set_status(
 
     with closing(connect(db_path)) as conn:
         cur = conn.cursor()
+        cur.execute("SELECT status FROM messages WHERE id=?", (message_id,))
+        row = cur.fetchone()
+        if row is None:
+            log.warning("no message found with id=%s", message_id)
+            return False
+        try:
+            current = MessageStatus(row["status"])
+        except ValueError:
+            log.warning("message id=%s has unknown status %r", message_id, row["status"])
+            return False
+        if not can_transition(current, target):
+            log.warning(
+                "refusing invalid message transition %s -> %s for id=%s",
+                current,
+                target,
+                message_id,
+            )
+            return False
         cur.execute(f"UPDATE messages SET {assignments} WHERE id=?", (status, message_id))
         conn.commit()
         changed = cur.rowcount > 0
 
     if changed:
         log.info("marked id=%s as %s", message_id, status)
-    else:
-        log.warning("no message found with id=%s", message_id)
     return changed
 
 

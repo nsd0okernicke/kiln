@@ -18,7 +18,14 @@ def imports(path: Path) -> set[str]:
 
 def test_pure_scheduler_policy_does_not_import_infrastructure():
     forbidden = {"sqlite3", "subprocess", "http", "socket", "launcher"}
-    for name in ("routing.py", "handoff.py", "status_contract.py", "worker_prompt.py"):
+    for name in (
+        "routing.py",
+        "handoff.py",
+        "status_contract.py",
+        "worker_prompt.py",
+        "models.py",
+        "policies.py",
+    ):
         assert not imports(ROOT / "scheduler" / name) & forbidden, name
 
 

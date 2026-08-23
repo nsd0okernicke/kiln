@@ -1,11 +1,47 @@
 # Tooling configuration for Kiln's OWN framework code (kiln/framework/**).
 #
-# This is deliberately NOT a packaging manifest — Kiln ships as scripts, not a wheel.
-# It exists so pytest/ruff/mutmut have a single project-local config, per
+# This now also carries editable-install metadata while the existing scripts remain
+# compatibility entry points. Tool configuration stays project-local, per
 # constitution/engineering.md's "prefer project-local cache/configuration paths".
 #
 # Note: the constitution under kiln/project/ is scaffolding Kiln writes into projects
 # it orchestrates. The thresholds below apply that same discipline to Kiln itself.
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kiln-swarm"
+version = "0.1.0"
+description = "A local, role-based agent orchestration framework"
+readme = "kiln/README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "coverage[toml]>=7.6",
+    "ruff>=0.9",
+    "radon>=6.0",
+    "pyright>=1.1.390",
+    "cosmic-ray>=8.4",
+]
+
+[project.scripts]
+kiln = "launcher.cli:main"
+kiln-scheduler = "scheduler.role_scheduler:main"
+kiln-dashboard = "scheduler.dashboard:main"
+kiln-cockpit = "cockpit.server:main"
+
+[tool.setuptools]
+package-dir = {"" = "kiln/framework"}
+
+[tool.setuptools.packages.find]
+where = ["kiln/framework"]
+include = ["launcher*", "scheduler*", "cockpit*", "proxy*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -49,6 +85,10 @@ show_contexts = true
 pythonVersion = "3.11"
 typeCheckingMode = "basic"
 include = [
+    "kiln/framework/scheduler/models.py",
+    "kiln/framework/scheduler/policies.py",
+    "kiln/framework/scheduler/ports.py",
+    "kiln/framework/scheduler/db.py",
     "kiln/framework/scheduler/routing.py",
     "kiln/framework/scheduler/handoff.py",
     "kiln/framework/scheduler/status_contract.py",
