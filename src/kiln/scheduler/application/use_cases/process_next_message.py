@@ -9,7 +9,13 @@ from datetime import datetime
 from pathlib import Path
 
 from ...domain import handoff, policies, status_contract
-from ...domain.models import DEFAULT_PRIORITY, TokenUsage, WorkerInvocation, WorkerRequest
+from ...domain.models import (
+    DEFAULT_PRIORITY,
+    InboundMessage,
+    TokenUsage,
+    WorkerInvocation,
+    WorkerRequest,
+)
 from ...domain.routing import RoutingTable
 from ...domain.worker_prompt import WorkerDefinition, build_task_prompt
 from ..ports import MessageQueue, VerificationResult, WorkerDebugSink, WorkerRunner, Worktree
@@ -165,26 +171,10 @@ def _worktree(ctx: SchedulerContext) -> Worktree:
 
 def run_once(ctx: SchedulerContext, state: SchedulerState) -> CycleResult:
     """Perform one cycle. Returns IDLE when the inbox is empty — the caller sleeps."""
-    # A halted role keeps polling, but only for a message a human explicitly sent back. It
-    # has already failed three cycles in a row; taking the next ordinary handoff would fail a
-    # fourth time. Waiting here rather than exiting is what makes `kiln retry` able to reach
-    # it at all -- a re-queued message for a dead scheduler goes into a queue nobody reads.
-    if state.halted:
-        ctx.set_status("halted")
-        message = _queue(ctx).fetch_resume(ctx.role, ctx.branch)
-        if not message:
-            return CycleResult(HALTED, detail=f"{ctx.role} halted; waiting for `kiln retry`")
-        log.warning(
-            f"{ICON_RETRY} resumed by a human; clearing %d consecutive escalation(s)",
-            state.consecutive_escalations,
-        )
-        state.halted = False
-        state.consecutive_escalations = 0
-    else:
-        ctx.set_status("waiting")
-        message = _queue(ctx).fetch(ctx.role, ctx.branch)
-        if not message:
-            return CycleResult(IDLE)
+    message, empty_result = _fetch_next_message(ctx, state)
+    if empty_result is not None:
+        return empty_result
+    assert message is not None
 
     message_id = str(message["id"])
     content = str(message["content"])
@@ -195,8 +185,6 @@ def run_once(ctx: SchedulerContext, state: SchedulerState) -> CycleResult:
     inbound = handoff.parse_handoff(content)
     if inbound.is_resume:
         log.info("human guidance attached: %s", inbound.guidance.replace("\n", " ")[:160])
-    # Narrate the cycle: this pane is the operator's only window into work that used to be
-    # visible as a running chat session.
     log.info(
         f"{ICON_RECEIVED} received handoff %s from %s (name=%s)",
         message_id[:8],
@@ -205,36 +193,13 @@ def run_once(ctx: SchedulerContext, state: SchedulerState) -> CycleResult:
     )
     target = ctx.routing.resolve(ctx.role, inbound.sender)
 
-    if not target:
-        detail = f"no routing rule for role {ctx.role!r} with sender {inbound.sender!r}"
-        log.error(detail)
-        return _escalate(ctx, state, message_id, inbound, detail, NO_ROUTE)
+    early_result = _pre_delegate_outcome(ctx, state, message_id, inbound, target)
+    if early_result is not None:
+        return early_result
 
-    if inbound.is_ping:
-        return _forward_ping(ctx, message_id, inbound, target)
-
-    breach = _cycle_limit_breach(ctx, inbound)
-    if breach:
-        log.error(breach)
-        return _escalate(ctx, state, message_id, inbound, breach, MAX_CYCLES)
-
-    breach = _budget_breach(ctx, state, inbound)
-    if breach:
-        log.error(breach)
-        return _escalate(ctx, state, message_id, inbound, breach, COST_CAP)
-
-    # Merge whatever the sender pointed at -- their commit, or failing that the branch they
-    # named. `already_contains` first: `merge_commit`'s `--no-ff` is what leaves an anchor for
-    # `squash_anchor`, and merging something we already have produces no commit and therefore
-    # no anchor.
-    merge_target = inbound.merge_target
-    if merge_target and not _worktree(ctx).already_contains(merge_target):
-        log.info(f"{ICON_MERGE} merging %s from %s", merge_target[:8], inbound.branch or "?")
-        merged = _worktree(ctx).merge(merge_target, merge_commit_message(ctx.role, inbound))
-        if not merged.ok:
-            detail = f"merge of {merge_target} failed: {merged.output}"
-            log.error(detail)
-            return _escalate(ctx, state, message_id, inbound, detail, MERGE_FAILED)
+    merge_result = _merge_inbound(ctx, state, message_id, inbound)
+    if merge_result is not None:
+        return merge_result
 
     anchor = _worktree(ctx).squash_anchor()
     attempts = _delegate(ctx, state, inbound)
@@ -255,7 +220,83 @@ def run_once(ctx: SchedulerContext, state: SchedulerState) -> CycleResult:
             tokens=attempts.tokens,
         )
 
+    assert target is not None
     return _hand_off(ctx, state, message_id, inbound, target, anchor, attempts)
+
+
+def _fetch_next_message(
+    ctx: SchedulerContext, state: SchedulerState
+) -> tuple[InboundMessage | None, CycleResult | None]:
+    # A halted role keeps polling, but only for a message a human explicitly sent back. It
+    # has already failed three cycles in a row; taking the next ordinary handoff would fail a
+    # fourth time. Waiting here rather than exiting is what makes `kiln retry` able to reach
+    # it at all -- a re-queued message for a dead scheduler goes into a queue nobody reads.
+    if state.halted:
+        ctx.set_status("halted")
+        message = _queue(ctx).fetch_resume(ctx.role, ctx.branch)
+        if not message:
+            result = CycleResult(HALTED, detail=f"{ctx.role} halted; waiting for `kiln retry`")
+            return None, result
+        log.warning(
+            f"{ICON_RETRY} resumed by a human; clearing %d consecutive escalation(s)",
+            state.consecutive_escalations,
+        )
+        state.halted = False
+        state.consecutive_escalations = 0
+    else:
+        ctx.set_status("waiting")
+        message = _queue(ctx).fetch(ctx.role, ctx.branch)
+        if not message:
+            return None, CycleResult(IDLE)
+    return message, None
+
+
+def _pre_delegate_outcome(
+    ctx: SchedulerContext,
+    state: SchedulerState,
+    message_id: str,
+    inbound: handoff.InboundHandoff,
+    target: str | None,
+) -> CycleResult | None:
+    if not target:
+        detail = f"no routing rule for role {ctx.role!r} with sender {inbound.sender!r}"
+        log.error(detail)
+        return _escalate(ctx, state, message_id, inbound, detail, NO_ROUTE)
+
+    if inbound.is_ping:
+        return _forward_ping(ctx, message_id, inbound, target)
+
+    breach = _cycle_limit_breach(ctx, inbound)
+    if breach:
+        log.error(breach)
+        return _escalate(ctx, state, message_id, inbound, breach, MAX_CYCLES)
+
+    breach = _budget_breach(ctx, state, inbound)
+    if breach:
+        log.error(breach)
+        return _escalate(ctx, state, message_id, inbound, breach, COST_CAP)
+    return None
+
+
+def _merge_inbound(
+    ctx: SchedulerContext,
+    state: SchedulerState,
+    message_id: str,
+    inbound: handoff.InboundHandoff,
+) -> CycleResult | None:
+    # Merge whatever the sender pointed at -- their commit, or failing that the branch they
+    # named. `already_contains` first: `merge_commit`'s `--no-ff` is what leaves an anchor for
+    # `squash_anchor`, and merging something we already have produces no commit and therefore
+    # no anchor.
+    merge_target = inbound.merge_target
+    if merge_target and not _worktree(ctx).already_contains(merge_target):
+        log.info(f"{ICON_MERGE} merging %s from %s", merge_target[:8], inbound.branch or "?")
+        merged = _worktree(ctx).merge(merge_target, merge_commit_message(ctx.role, inbound))
+        if not merged.ok:
+            detail = f"merge of {merge_target} failed: {merged.output}"
+            log.error(detail)
+            return _escalate(ctx, state, message_id, inbound, detail, MERGE_FAILED)
+    return None
 
 
 def _persist_inbound(ctx: SchedulerContext, content: str) -> None:

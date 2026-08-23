@@ -126,9 +126,12 @@ class TestParseArgv:
     def test_each_token_kind_is_parsed_into_the_breakdown(self, set_status):
         tokens = set_status.parse_argv(
             [
-                "coder", "working",
-                "--tokens-in=10", "--tokens-out=20",
-                "--tokens-cache-read=30", "--tokens-cache-write=40",
+                "coder",
+                "working",
+                "--tokens-in=10",
+                "--tokens-out=20",
+                "--tokens-cache-read=30",
+                "--tokens-cache-write=40",
             ]
         )[6]
         assert tokens == {"input": 10, "output": 20, "cache_read": 30, "cache_write": 40}
@@ -146,12 +149,25 @@ class TestParseArgv:
     def test_all_flags_together(self, set_status):
         parsed = set_status.parse_argv(
             [
-                "coder", "working", "-", "--mode=auto", "--cycles=3", "--cost=0.5",
-                "--tokens-in=99", "--tokens-cache-read=1",
+                "coder",
+                "working",
+                "-",
+                "--mode=auto",
+                "--cycles=3",
+                "--cost=0.5",
+                "--tokens-in=99",
+                "--tokens-cache-read=1",
             ]
         )
         assert parsed == (
-            "coder", "working", None, "auto", 3, 0.5, {"input": 99, "cache_read": 1}, {},
+            "coder",
+            "working",
+            None,
+            "auto",
+            3,
+            0.5,
+            {"input": 99, "cache_read": 1},
+            {},
         )
 
     def test_missing_arguments_raise(self, set_status):
@@ -208,7 +224,9 @@ class TestEndToEnd:
         monkeypatch.setenv("KILN_PROJECT_DIR", str(tmp_path))
         result = subprocess.run(
             [sys.executable, str(SET_STATUS_PY), "coder", "halted"],
-            capture_output=True, text=True, timeout=15,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
         assert result.returncode == 0, result.stderr
 
@@ -228,7 +246,9 @@ class TestEndToEnd:
 
         result = subprocess.run(
             [sys.executable, str(installed), "coder", "working"],
-            capture_output=True, text=True, timeout=15,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
         assert result.returncode == 0, result.stderr
         status = json.loads((tmp_path / ".kiln" / "status" / "coder.json").read_text())
@@ -245,7 +265,10 @@ class TestEndToEnd:
 
         subprocess.run(
             [sys.executable, str(installed), "coder", "working"],
-            capture_output=True, text=True, timeout=15, check=True,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=True,
         )
         assert (elsewhere / ".kiln" / "status" / "coder.json").exists()
         assert not (tmp_path / ".kiln" / "status" / "coder.json").exists()
@@ -254,7 +277,9 @@ class TestEndToEnd:
         monkeypatch.setenv("KILN_PROJECT_DIR", str(tmp_path))
         result = subprocess.run(
             [sys.executable, str(SET_STATUS_PY), "coder", "nonsense"],
-            capture_output=True, text=True, timeout=15,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
         assert result.returncode == 1
         assert not (tmp_path / ".kiln" / "status" / "coder.json").exists()
@@ -265,13 +290,61 @@ class TestEndToEnd:
         monkeypatch.setenv("KILN_PROJECT_DIR", str(tmp_path))
         result = subprocess.run(
             [
-                sys.executable, str(SET_STATUS_PY), "coder", "working",
-                "-", "--cycles=4", "--cost=2.5",
+                sys.executable,
+                str(SET_STATUS_PY),
+                "coder",
+                "working",
+                "-",
+                "--cycles=4",
+                "--cost=2.5",
             ],
-            capture_output=True, text=True, timeout=15,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
         assert result.returncode == 0, result.stderr
 
         status = json.loads((tmp_path / ".kiln" / "status" / "coder.json").read_text())
         assert status["cycles"] == 4
         assert status["cost_usd"] == 2.5
+
+
+class TestMainInProcess:
+    """Entrypoint branches measured in this process rather than a child interpreter."""
+
+    def test_writes_status_and_terminal_title(self, set_status, tmp_path, monkeypatch):
+        monkeypatch.setenv("KILN_PROJECT_DIR", str(tmp_path))
+        monkeypatch.setattr(set_status.sys, "argv", ["set-status.py", "coder", "working"])
+
+        set_status.main()
+
+        payload = json.loads(
+            (tmp_path / ".kiln" / "status" / "coder.json").read_text(encoding="utf-8")
+        )
+        assert payload["state"] == "working"
+
+    def test_bad_arguments_exit_cleanly(self, set_status, monkeypatch, capsys):
+        monkeypatch.setattr(set_status.sys, "argv", ["set-status.py", "coder"])
+        with pytest.raises(SystemExit) as caught:
+            set_status.main()
+        assert caught.value.code == 1
+        assert capsys.readouterr().err
+
+    def test_invalid_state_exit_is_clean(self, set_status, tmp_path, monkeypatch, capsys):
+        monkeypatch.setenv("KILN_PROJECT_DIR", str(tmp_path))
+        monkeypatch.setattr(set_status.sys, "argv", ["set-status.py", "coder", "not-a-state"])
+        with pytest.raises(SystemExit) as caught:
+            set_status.main()
+        assert caught.value.code == 1
+        assert "Error:" in capsys.readouterr().err
+
+    def test_missing_project_location_exit_explains_environment(
+        self, set_status, monkeypatch, capsys
+    ):
+        monkeypatch.delenv("KILN_PROJECT_DIR", raising=False)
+        monkeypatch.setattr(set_status, "project_root_from_own_path", lambda: None)
+        monkeypatch.setattr(set_status.sys, "argv", ["set-status.py", "coder", "working"])
+        with pytest.raises(SystemExit) as caught:
+            set_status.main()
+        assert caught.value.code == 1
+        assert "KILN_PROJECT_DIR" in capsys.readouterr().err

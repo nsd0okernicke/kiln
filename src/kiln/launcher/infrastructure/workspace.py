@@ -513,7 +513,15 @@ def prepare_skills(profile: Profile, paths: KilnPaths) -> int:
     if not skills:
         return 0
 
-    targets: list[tuple[Path, bool]] = [
+    return sum(
+        _prepare_skill_directory(root / parent / name, skills, uses_scheduler)
+        for root, uses_scheduler in _skill_targets(profile, paths)
+        for parent, name in SKILL_DIR_CONVENTIONS
+    )
+
+
+def _skill_targets(profile: Profile, paths: KilnPaths) -> list[tuple[Path, bool]]:
+    targets = [
         (
             paths.project_root if role.uses_current_dir else paths.worktree_path(role.worktree),
             role.uses_scheduler,
@@ -523,25 +531,25 @@ def prepare_skills(profile: Profile, paths: KilnPaths) -> int:
     ]
     if targets:
         targets.append((paths.project_root, False))
+    return targets
+
+
+def _prepare_skill_directory(skills_dir: Path, skills: list[Path], uses_scheduler: bool) -> int:
+    # Always recreate so removed skills -- and stale ones from an earlier agent -- do not
+    # linger after a profile change.
+    if skills_dir.exists():
+        shutil.rmtree(skills_dir, ignore_errors=True)
+    skills_dir.mkdir(parents=True, exist_ok=True)
 
     linked = 0
-    for root, uses_scheduler in targets:
-        for parent, name in SKILL_DIR_CONVENTIONS:
-            skills_dir = root / parent / name
-            # Always recreate so removed skills -- and stale ones from an earlier agent --
-            # do not linger.
-            if skills_dir.exists():
-                shutil.rmtree(skills_dir, ignore_errors=True)
-            skills_dir.mkdir(parents=True, exist_ok=True)
-            for skill in skills:
-                if uses_scheduler and skill.name in WRAPPER_ONLY_SKILLS:
-                    continue
-                try:
-                    (skills_dir / skill.name).symlink_to(skill, target_is_directory=True)
-                    linked += 1
-                except (OSError, NotImplementedError):
-                    copy_template_tree(skill, skills_dir / skill.name)
-                    linked += 1
+    for skill in skills:
+        if uses_scheduler and skill.name in WRAPPER_ONLY_SKILLS:
+            continue
+        try:
+            (skills_dir / skill.name).symlink_to(skill, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            copy_template_tree(skill, skills_dir / skill.name)
+        linked += 1
     return linked
 
 

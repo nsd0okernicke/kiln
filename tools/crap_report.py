@@ -40,24 +40,29 @@ def build_report(coverage: dict[str, Any], complexity: dict[str, Any]) -> list[d
             covered = len(relevant & executed)
             ratio = covered / len(relevant) if relevant else 1.0
             score = crap_score(int(block["complexity"]), ratio)
-            rows.append({
-                "file": filename,
-                "name": block["name"],
-                "line": start,
-                "end_line": end,
-                "complexity": int(block["complexity"]),
-                "coverage": round(ratio, 4),
-                "crap": round(score, 2),
-            })
+            rows.append(
+                {
+                    "file": filename,
+                    "name": block["name"],
+                    "line": start,
+                    "end_line": end,
+                    "complexity": int(block["complexity"]),
+                    "coverage": round(ratio, 4),
+                    "crap": round(score, 2),
+                }
+            )
     return sorted(rows, key=lambda row: (-row["crap"], row["file"], row["line"]))
 
 
 def markdown(rows: list[dict[str, Any]], threshold: float = 6.0) -> str:
     above = sum(row["crap"] > threshold for row in rows)
     lines = [
-        "# CRAP hotspots", "",
-        f"Functions: {len(rows)} · above {threshold:g}: {above}", "",
-        "| CRAP | Complexity | Coverage | Function |", "|---:|---:|---:|---|",
+        "# CRAP hotspots",
+        "",
+        f"Functions: {len(rows)} · above {threshold:g}: {above}",
+        "",
+        "| CRAP | Complexity | Coverage | Function |",
+        "|---:|---:|---:|---|",
     ]
     for row in rows:
         lines.append(
@@ -80,12 +85,19 @@ def main(argv: list[str] | None = None) -> int:
         json.loads(args.complexity.read_text(encoding="utf-8")),
     )
     args.json.parent.mkdir(parents=True, exist_ok=True)
-    args.json.write_text(json.dumps({
-        "formula": "complexity^2 * (1 - coverage)^3 + complexity",
-        "threshold": args.threshold,
-        "above_threshold": sum(row["crap"] > args.threshold for row in rows),
-        "functions": rows,
-    }, indent=2) + "\n", encoding="utf-8")
+    args.json.write_text(
+        json.dumps(
+            {
+                "formula": "complexity^2 * (1 - coverage)^3 + complexity",
+                "threshold": args.threshold,
+                "above_threshold": sum(row["crap"] > args.threshold for row in rows),
+                "functions": rows,
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     args.markdown.write_text(markdown(rows, args.threshold), encoding="utf-8")
     return 0
 

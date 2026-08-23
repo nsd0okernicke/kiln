@@ -106,7 +106,9 @@ class TestTerminateTree:
     def test_it_does_not_shell_out_for_a_process_that_already_exited(self, monkeypatch):
         called: list[list[str]] = []
         monkeypatch.setattr(
-            subprocess, "run", lambda argv, **kw: called.append(argv)  # type: ignore[arg-type]
+            subprocess,
+            "run",
+            lambda argv, **kw: called.append(argv),  # type: ignore[arg-type]
         )
         process = subprocess.Popen([sys.executable, "-c", "pass"], stdout=subprocess.PIPE)
         process.communicate()
@@ -131,7 +133,9 @@ class TestWatchdog:
         code = f"print('hello', flush=True); import time; time.sleep({SLEEP_SEC})"
         return subprocess.Popen(
             [sys.executable, "-c", code],
-            stdout=subprocess.PIPE, text=True, start_new_session=True,
+            stdout=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
         )
 
     def test_it_kills_a_worker_that_has_gone_quiet(self):
@@ -173,10 +177,7 @@ class TestWatchdog:
         # It must not fire on healthy work. A worker emitting events resets the clock, so a
         # long-but-productive cycle runs to its real cap.
         code = (
-            "import time\n"
-            "for _ in range(20):\n"
-            "    print('tick', flush=True)\n"
-            "    time.sleep(0.1)\n"
+            "import time\nfor _ in range(20):\n    print('tick', flush=True)\n    time.sleep(0.1)\n"
         )
         process = subprocess.Popen(
             [sys.executable, "-c", code], stdout=subprocess.PIPE, text=True, start_new_session=True

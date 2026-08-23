@@ -8,23 +8,23 @@
     "python": "3.14"
   },
   "tests": {
-    "passed": 1864,
+    "passed": 1942,
     "skipped": 2,
     "warnings": 0,
-    "duration_seconds": 274.4
+    "duration_seconds": 331.48
   },
   "coverage": {
-    "statement_percent": 91.36,
-    "branch_percent": 86.07,
-    "covered_lines": 5242,
-    "missing_lines": 496,
-    "covered_branches": 1341,
-    "missing_branches": 217
+    "statement_percent": 96.33,
+    "branch_percent": 91.44,
+    "covered_lines": 5692,
+    "missing_lines": 217,
+    "covered_branches": 1432,
+    "missing_branches": 134
   },
   "complexity": {
-    "functions_measured": 624,
-    "c_or_worse": 27,
-    "d_or_worse": 3,
+    "functions_measured": 693,
+    "c_or_worse": 0,
+    "d_or_worse": 0,
     "lowest_maintainability_modules": [
       "src/kiln/scheduler/infrastructure/cli/dashboard.py",
       "src/kiln/launcher/domain/profile.py",
@@ -35,13 +35,13 @@
   },
   "crap": {
     "threshold": 6,
-    "above_threshold": 101,
+    "above_threshold": 93,
     "top_hotspots": [
-      "src/kiln/launcher/infrastructure/cli.py:401 run_launch",
-      "src/kiln/cockpit/infrastructure/http/server.py:533 main",
-      "src/kiln/launcher/infrastructure/cli.py:661 resolve_queue_context",
-      "src/kiln/resources/tools/set-status.py:209 main",
-      "src/kiln/launcher/infrastructure/cli.py:706 main"
+      "src/kiln/launcher/infrastructure/workspace.py:556 _trust_copilot_worktrees",
+      "src/kiln/launcher/domain/profile.py:603 _validate_layout",
+      "src/kiln/launcher/infrastructure/cli.py:414 _capture_url",
+      "src/kiln/scheduler/application/use_cases/process_next_message.py:172 run_once",
+      "src/kiln/scheduler/domain/routing.py:204 parse_profile_routing"
     ]
   },
   "typing": {
@@ -54,7 +54,7 @@
   },
   "formatting": {
     "status": "observe-only",
-    "files_would_reformat": 67
+    "files_would_reformat": 0
   },
   "mutation": {
     "status": "existing Cosmic Ray tiers retained; execution remains on-demand",

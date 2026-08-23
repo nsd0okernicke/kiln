@@ -27,19 +27,20 @@ def framework(tmp_path):
     """A minimal but structurally real framework checkout."""
     root = tmp_path / "framework"
     bundled = root / "kiln"
+    scaffold_resources = root / "src" / "kiln" / "resources" / "project"
 
-    constitution = bundled / "project" / "constitution"
+    constitution = scaffold_resources / "constitution"
     constitution.mkdir(parents=True)
     for name in scaffold.CONSTITUTION_FILES:
         (constitution / name).write_text(f"# {name}\n", encoding="utf-8")
-    (bundled / "project" / "constitution.md").write_text("# Constitution\n", encoding="utf-8")
+    (scaffold_resources / "constitution.md").write_text("# Constitution\n", encoding="utf-8")
 
-    roles = bundled / "project" / "roles"
+    roles = scaffold_resources / "roles"
     roles.mkdir(parents=True)
     for role in ("coder", "specifier"):
         (roles / f"{role}.md").write_text(f"# {role}\n", encoding="utf-8")
 
-    skill = bundled / "project" / "skills" / "kiln-handoff"
+    skill = scaffold_resources / "skills" / "kiln-handoff"
     skill.mkdir(parents=True)
     (skill / "SKILL.md").write_text("---\nname: kiln-handoff\n---\n", encoding="utf-8")
 
@@ -81,9 +82,9 @@ class TestScaffold:
         scaffold.scaffold(target, framework)
 
         assert "logbook.md merge=union" in (target / ".gitattributes").read_text("utf-8")
-        assert "logbook.md merge=union" in (
-            target / ".git" / "info" / "attributes"
-        ).read_text("utf-8")
+        assert "logbook.md merge=union" in (target / ".git" / "info" / "attributes").read_text(
+            "utf-8"
+        )
 
     def test_copies_skills_as_real_directories(self, tmp_path, framework):
         # Copied, not linked: they become the user's own editable content.
@@ -185,7 +186,8 @@ class TestChannelPreflight:
     def test_warns_when_the_sdk_cannot_be_imported(self, monkeypatch, caplog):
         monkeypatch.setattr(cli.shutil, "which", lambda _c: "python")
         monkeypatch.setattr(
-            cli.subprocess, "run",
+            cli.subprocess,
+            "run",
             lambda *a, **k: subprocess.CompletedProcess(
                 a[0], 1, "", "ModuleNotFoundError: No module named 'mcp.server.fastmcp'"
             ),
@@ -198,7 +200,8 @@ class TestChannelPreflight:
         # A warning that does not say what broke or how to fix it is barely better than none.
         monkeypatch.setattr(cli.shutil, "which", lambda _c: "python")
         monkeypatch.setattr(
-            cli.subprocess, "run",
+            cli.subprocess,
+            "run",
             lambda *a, **k: subprocess.CompletedProcess(a[0], 1, "", "boom"),
         )
         with caplog.at_level(logging.WARNING):
@@ -237,8 +240,7 @@ class TestChannelPreflight:
         # If channel.py's import changes and the probe does not, the preflight check starts
         # passing while the server still fails to start.
         source = (
-            Path(__file__).resolve().parents[5]
-            / "src" / "kiln" / "mcp_server" / "channel.py"
+            Path(__file__).resolve().parents[5] / "src" / "kiln" / "mcp_server" / "channel.py"
         ).read_text(encoding="utf-8")
         for line in cli.CHANNEL_IMPORT_PROBE.strip().splitlines():
             statement = line.strip()
@@ -346,15 +348,27 @@ class TestPanesCarryPassivity:
                 "profiles": {
                     "p": {
                         "terminals": [
-                            {"role": "human-in-the-loop", "worktree": "@current",
-                             "mode": "manual"},
+                            {"role": "human-in-the-loop", "worktree": "@current", "mode": "manual"},
                             {"role": "coder", "worktree": "coder", "scheduler": "python"},
-                            {"role": "inbox", "worktree": "@current", "mode": "manual",
-                             "scheduler": "inbox", "watches": "human-in-the-loop"},
-                            {"role": "dashboard", "worktree": "@current", "mode": "manual",
-                             "scheduler": "dashboard"},
-                            {"role": "cockpit", "worktree": "@current", "mode": "manual",
-                             "scheduler": "cockpit"},
+                            {
+                                "role": "inbox",
+                                "worktree": "@current",
+                                "mode": "manual",
+                                "scheduler": "inbox",
+                                "watches": "human-in-the-loop",
+                            },
+                            {
+                                "role": "dashboard",
+                                "worktree": "@current",
+                                "mode": "manual",
+                                "scheduler": "dashboard",
+                            },
+                            {
+                                "role": "cockpit",
+                                "worktree": "@current",
+                                "mode": "manual",
+                                "scheduler": "cockpit",
+                            },
                         ],
                         "routing": {"human-in-the-loop": "coder", "coder": "human-in-the-loop"},
                     }
@@ -369,8 +383,11 @@ class TestPanesCarryPassivity:
         panes = cli.build_panes(self._profile(), paths, "main", "wezterm")
 
         assert {pane.role: pane.passive for pane in panes} == {
-            "human-in-the-loop": False, "coder": False,
-            "inbox": True, "dashboard": True, "cockpit": True,
+            "human-in-the-loop": False,
+            "coder": False,
+            "inbox": True,
+            "dashboard": True,
+            "cockpit": True,
         }
 
     def test_every_pane_is_still_launched(self, tmp_path):
@@ -401,10 +418,16 @@ class TestReclaimingLeftoverProxies:
         from kiln.launcher.infrastructure import stop
 
         db = tmp_path / ".kiln" / "traffic.db"
-        self._processes(monkeypatch, [
-            (11, "python -m kiln.proxy.infrastructure.http.server "
-             f"--db-path {db} --port 8787 --mode metadata"),
-        ])
+        self._processes(
+            monkeypatch,
+            [
+                (
+                    11,
+                    "python -m kiln.proxy.infrastructure.http.server "
+                    f"--db-path {db} --port 8787 --mode metadata",
+                ),
+            ],
+        )
         assert [pid for pid, _ in stop.find_project_proxies(db)] == [11]
 
     def test_another_project_s_proxy_is_left_alone(self, monkeypatch, tmp_path):
@@ -414,29 +437,44 @@ class TestReclaimingLeftoverProxies:
 
         mine = tmp_path / "mine" / "traffic.db"
         theirs = tmp_path / "theirs" / "traffic.db"
-        self._processes(monkeypatch, [
-            (22, "python -m kiln.proxy.infrastructure.http.server "
-             f"--db-path {theirs} --port 8787 --mode metadata"),
-        ])
+        self._processes(
+            monkeypatch,
+            [
+                (
+                    22,
+                    "python -m kiln.proxy.infrastructure.http.server "
+                    f"--db-path {theirs} --port 8787 --mode metadata",
+                ),
+            ],
+        )
         assert stop.find_project_proxies(mine) == []
 
     def test_other_kiln_processes_are_not_mistaken_for_proxies(self, monkeypatch, tmp_path):
         from kiln.launcher.infrastructure import stop
 
         db = tmp_path / ".kiln" / "traffic.db"
-        self._processes(monkeypatch, [
-            (33, f"python -m kiln.scheduler.infrastructure.cli.dashboard --traffic-db {db}"),
-        ])
+        self._processes(
+            monkeypatch,
+            [
+                (33, f"python -m kiln.scheduler.infrastructure.cli.dashboard --traffic-db {db}"),
+            ],
+        )
         assert stop.find_project_proxies(db) == []
 
     def test_the_leftover_is_killed(self, monkeypatch, tmp_path):
         from kiln.launcher.infrastructure import stop
 
         db = tmp_path / ".kiln" / "traffic.db"
-        self._processes(monkeypatch, [
-            (44, "python -m kiln.proxy.infrastructure.http.server "
-             f"--db-path {db} --port 8787 --mode metadata"),
-        ])
+        self._processes(
+            monkeypatch,
+            [
+                (
+                    44,
+                    "python -m kiln.proxy.infrastructure.http.server "
+                    f"--db-path {db} --port 8787 --mode metadata",
+                ),
+            ],
+        )
         killed = []
         monkeypatch.setattr(stop, "kill_process", lambda pid: killed.append(pid) or True)
         assert stop.stop_project_proxies(db) == [44]
@@ -539,8 +577,7 @@ class TestProxyRoutes:
     def _profile(self, *agents):
         from kiln.launcher.domain.profile import Profile, RoleConfig
 
-        roles = [RoleConfig(role=f"r{index}", agent=agent)
-                 for index, agent in enumerate(agents)]
+        roles = [RoleConfig(role=f"r{index}", agent=agent) for index, agent in enumerate(agents)]
         return Profile(name="p", description="", roles=roles, layout={})
 
     def test_a_claude_only_profile_needs_no_routes(self):
@@ -587,8 +624,11 @@ class TestCliParsing:
     @pytest.mark.parametrize(
         ("flag", "attribute"),
         [
-            ("-Stop", "stop"), ("-Init", "init"), ("-NoGit", "no_git"),
-            ("-ListProfiles", "list_profiles"), ("-Debug", "verbose"),
+            ("-Stop", "stop"),
+            ("-Init", "init"),
+            ("-NoGit", "no_git"),
+            ("-ListProfiles", "list_profiles"),
+            ("-Debug", "verbose"),
         ],
     )
     def test_every_powershell_switch_survives(self, flag, attribute):

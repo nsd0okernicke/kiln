@@ -87,9 +87,7 @@ def cycles_by_work_item(db_path: str | Path, branch: str) -> dict[str, int]:
         return {row["work_item"]: int(row["n"]) for row in cur.fetchall()}
 
 
-def count_work_item_arrivals(
-    db_path: str | Path, work_item: str, branch: str, target: str
-) -> int:
+def count_work_item_arrivals(db_path: str | Path, work_item: str, branch: str, target: str) -> int:
     """
     How many times this work item has been addressed to `target`.
 

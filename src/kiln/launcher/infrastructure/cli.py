@@ -398,6 +398,64 @@ def start_proxy(
     return f"http://127.0.0.1:{port}"
 
 
+def _profile_for_launch(profile: Profile, args: argparse.Namespace) -> Profile:
+    """Apply a requested backend override and report the resulting launch policy."""
+    if not args.agent_override:
+        return profile
+    overridden = apply_agent_override(profile, args.agent_override, args.model_override)
+    log.info(
+        "agent override: every agent-bearing role runs on %s (model: %s)",
+        args.agent_override,
+        args.model_override or "the backend's own default",
+    )
+    return overridden
+
+
+def _capture_url(args: argparse.Namespace, paths: KilnPaths, profile: Profile) -> str | None:
+    """Start or describe capture for this launch and report which roles are routed."""
+    if not args.proxy:
+        return None
+    if args.dry_run:
+        url = f"http://127.0.0.1:{args.proxy_port}"
+        log.info("capture proxy: would start on %s", url)
+        return url
+
+    url = start_proxy(
+        paths,
+        args.proxy_port,
+        args.capture,
+        profile,
+        port_is_explicit=args.proxy_port != DEFAULT_PROXY_PORT,
+    )
+    log.info("capture proxy: %s (%s) -> %s", url, args.capture, paths.traffic_db)
+    routed = [role.role for role in profile.roles if proxy_env(role, url)]
+    log.info("  routing: %s", ", ".join(routed) or "(no proxy-capable roles)")
+    unrouted = [
+        role.role
+        for role in profile.roles
+        if not role.is_passive and role.agent not in PROXY_CAPABLE_AGENTS
+    ]
+    if unrouted:
+        log.warning("  not routed (no verified base-URL override): %s", ", ".join(unrouted))
+    return url
+
+
+def _log_role_kinds(profile: Profile) -> None:
+    """Describe what process each profile role contributes to the terminal layout."""
+    for role in profile.roles:
+        if role.is_inbox:
+            kind = f"inbox -> {role.watched_role}"
+        elif role.is_dashboard:
+            kind = "dashboard"
+        elif role.is_cockpit:
+            kind = "cockpit (browser)"
+        elif role.uses_scheduler:
+            kind = f"{role.agent} [scheduler]"
+        else:
+            kind = role.agent
+        log.info("  %-20s %s", role.role, kind)
+
+
 def run_launch(args: argparse.Namespace) -> int:
     project_root = Path(args.working_dir).expanduser().resolve()
     if not project_root.is_dir():
@@ -406,14 +464,9 @@ def run_launch(args: argparse.Namespace) -> int:
     paths = KilnPaths.create(project_root, resolve_framework_root())
     check_dependencies()
 
-    profile = load_profile(paths.project_root, paths.framework_root, args.profile)
-    if args.agent_override:
-        profile = apply_agent_override(profile, args.agent_override, args.model_override)
-        log.info(
-            "agent override: every agent-bearing role runs on %s (model: %s)",
-            args.agent_override,
-            args.model_override or "the backend's own default",
-        )
+    profile = _profile_for_launch(
+        load_profile(paths.project_root, paths.framework_root, args.profile), args
+    )
     check_launchable(profile)
     log.info("profile: %s (%d roles)", profile.name, len(profile.roles))
     warn_if_channel_unavailable(profile)
@@ -424,43 +477,10 @@ def run_launch(args: argparse.Namespace) -> int:
     branch = prepare(profile, paths)
     log.info("branch: %s", branch)
 
-    proxy_url = None
-    if args.proxy and not args.dry_run:
-        proxy_url = start_proxy(
-            paths,
-            args.proxy_port,
-            args.capture,
-            profile,
-            port_is_explicit=args.proxy_port != DEFAULT_PROXY_PORT,
-        )
-        log.info("capture proxy: %s (%s) -> %s", proxy_url, args.capture, paths.traffic_db)
-        routed = [role.role for role in profile.roles if proxy_env(role, proxy_url)]
-        log.info("  routing: %s", ", ".join(routed) or "(no proxy-capable roles)")
-        unrouted = [
-            role.role
-            for role in profile.roles
-            if not role.is_passive and role.agent not in PROXY_CAPABLE_AGENTS
-        ]
-        if unrouted:
-            # Silence here would look like a capture bug later.
-            log.warning("  not routed (no verified base-URL override): %s", ", ".join(unrouted))
-    elif args.proxy and args.dry_run:
-        proxy_url = f"http://127.0.0.1:{args.proxy_port}"
-        log.info("capture proxy: would start on %s", proxy_url)
+    proxy_url = _capture_url(args, paths, profile)
 
     panes = build_panes(profile, paths, branch, backend, proxy_url=proxy_url)
-    for role in profile.roles:
-        if role.is_inbox:
-            kind = f"inbox -> {role.watched_role}"  # runs no agent at all
-        elif role.is_dashboard:
-            kind = "dashboard"  # runs no agent at all, aggregates every role
-        elif role.is_cockpit:
-            kind = "cockpit (browser)"  # serves one page on 127.0.0.1
-        elif role.uses_scheduler:
-            kind = f"{role.agent} [scheduler]"
-        else:
-            kind = role.agent
-        log.info("  %-20s %s", role.role, kind)
+    _log_role_kinds(profile)
 
     command = launch_terminal(
         backend, panes, profile.layout, paths.project_root, dry_run=args.dry_run
@@ -656,6 +676,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 #: Human entry points, delegated to the scheduler package rather than parsed here.
 SUBCOMMANDS = ("send", "inbox", "retry")
+CLI_ERRORS = (
+    LaunchError,
+    ProfileError,
+    TemplateError,
+    TerminalError,
+    workspace.WorkspaceError,
+    scaffold.ScaffoldError,
+)
 
 
 def resolve_queue_context(argv: list[str]) -> list[str]:
@@ -703,15 +731,22 @@ def run_subcommand(name: str, argv: list[str]) -> int:
     return handlers[name](resolve_queue_context(argv))
 
 
+def _subcommand_result(raw: list[str]) -> int | None:
+    if not raw or raw[0] not in SUBCOMMANDS:
+        return None
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    try:
+        return run_subcommand(raw[0], raw[1:])
+    except (LaunchError, ProfileError, TemplateError) as exc:
+        log.error("Error: %s", exc)
+        return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
-    if raw and raw[0] in SUBCOMMANDS:
-        logging.basicConfig(level=logging.INFO, format="%(message)s")
-        try:
-            return run_subcommand(raw[0], raw[1:])
-        except (LaunchError, ProfileError, TemplateError) as exc:
-            log.error("Error: %s", exc)
-            return 1
+    subcommand_result = _subcommand_result(raw)
+    if subcommand_result is not None:
+        return subcommand_result
 
     args = build_parser().parse_args(raw)
     logging.basicConfig(
@@ -737,26 +772,23 @@ def main(argv: list[str] | None = None) -> int:
         args.working_dir = args.init_target
 
     try:
-        if args.list_profiles:
-            return run_list_profiles(args)
-        if args.init or args.command == "init":
-            return run_init(args)
-        if args.stop:
-            return run_stop(args)
-        return run_launch(args)
-    except (
-        LaunchError,
-        ProfileError,
-        TemplateError,
-        TerminalError,
-        workspace.WorkspaceError,
-        scaffold.ScaffoldError,
-    ) as exc:
+        return _run_parsed_command(args)
+    except CLI_ERRORS as exc:
         log.error("Error: %s", exc)
         return 1
     except KeyboardInterrupt:
         log.error("interrupted")
         return 130
+
+
+def _run_parsed_command(args: argparse.Namespace) -> int:
+    if args.list_profiles:
+        return run_list_profiles(args)
+    if args.init or args.command == "init":
+        return run_init(args)
+    if args.stop:
+        return run_stop(args)
+    return run_launch(args)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

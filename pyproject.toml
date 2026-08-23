@@ -4,7 +4,7 @@
 # compatibility entry points. Tool configuration stays project-local, per
 # constitution/engineering.md's "prefer project-local cache/configuration paths".
 #
-# Note: the constitution under kiln/project/ is scaffolding Kiln writes into projects
+# Note: resources/project is scaffolding Kiln writes to each project's kiln/project/
 # it orchestrates. The thresholds below apply that same discipline to Kiln itself.
 
 [build-system]
@@ -50,6 +50,10 @@ kiln = [
     "resources/*.json",
     "resources/templates/*.md",
     "resources/tools/*.py",
+    "resources/project/*.md",
+    "resources/project/constitution/*.md",
+    "resources/project/roles/*.md",
+    "resources/project/skills/*/*.md",
 ]
 
 [tool.pytest.ini_options]

@@ -29,34 +29,35 @@ def detect_role(cwd: str):
         return None
 
 
-def main():
-    payload = json.load(sys.stdin)
-
+def infer_status(payload):
+    """Return the state/detail transition represented by one Claude hook payload."""
     event = payload.get("hook_event_name")
     tool_name = payload.get("tool_name", "")
     tool_input = payload.get("tool_input") or {}
-    tool_response = payload.get("tool_response") or {}
-    cwd = payload.get("cwd") or os.getcwd()
-
-    state = None
-    detail = None
-
-    subagent = str(tool_input.get("subagent_type", ""))
-
     if event == "PreToolUse":
-        if tool_name == "mcp__kiln-channel__wait_for_message":
-            state = "waiting"
-        elif tool_name in ("Task", "Agent") and subagent.endswith("-worker"):
-            state = "delegating"
-            detail = tool_input.get("subagent_type")
-        elif tool_name == "Skill" and tool_input.get("skill") == "kiln-handoff":
-            state = "handoff"
-    elif (
-        event == "PostToolUse"
-        and tool_name == "mcp__kiln-channel__wait_for_message"
-        and tool_response.get("received")
-    ):
-        state = "receiving"
+        return _pre_tool_status(tool_name, tool_input)
+    if event == "PostToolUse":
+        response = payload.get("tool_response") or {}
+        if tool_name == "mcp__kiln-channel__wait_for_message" and response.get("received"):
+            return "receiving", None
+    return None, None
+
+
+def _pre_tool_status(tool_name, tool_input):
+    if tool_name == "mcp__kiln-channel__wait_for_message":
+        return "waiting", None
+    subagent = str(tool_input.get("subagent_type", ""))
+    if tool_name in ("Task", "Agent") and subagent.endswith("-worker"):
+        return "delegating", tool_input.get("subagent_type")
+    if tool_name == "Skill" and tool_input.get("skill") == "kiln-handoff":
+        return "handoff", None
+    return None, None
+
+
+def main():
+    payload = json.load(sys.stdin)
+    cwd = payload.get("cwd") or os.getcwd()
+    state, detail = infer_status(payload)
 
     if not state:
         return

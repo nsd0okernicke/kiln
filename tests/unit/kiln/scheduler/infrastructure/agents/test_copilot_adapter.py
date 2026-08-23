@@ -230,7 +230,8 @@ class TestRunWorker:
             # `terminate_tree` shells out to taskkill (Windows) or signals a process group
             # (POSIX); neither belongs in a unit test holding a fake process.
             monkeypatch.setattr(
-                copilot_adapter.subprocess, "run",
+                copilot_adapter.subprocess,
+                "run",
                 lambda argv, **kwargs: subprocess.CompletedProcess(argv, 0, b"", b""),
             )
             return calls
@@ -246,7 +247,10 @@ class TestRunWorker:
         )
         seen = []
         copilot_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=seen.append,
         )
         assert f"  {copilot_adapter.ICON_TOOL} create" in seen
@@ -255,8 +259,12 @@ class TestRunWorker:
     def test_timeout_kills_the_process(self, fake_run, tmp_path):
         calls = fake_run(hang=True)
         invocation = copilot_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
-            timeout=1, on_output=lambda _line: None,
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
+            timeout=1,
+            on_output=lambda _line: None,
         )
         assert invocation.timed_out is True
         assert invocation.is_done is False
@@ -265,7 +273,10 @@ class TestRunWorker:
     def test_parses_a_successful_worker(self, fake_run, tmp_path):
         fake_run(stdout=_stream(_message_event("KILN-STATUS: done implemented feature")))
         invocation = copilot_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.is_done
@@ -275,8 +286,12 @@ class TestRunWorker:
         calls = fake_run(stdout=_stream(_message_event("KILN-STATUS: done x")))
         debug_base = tmp_path / "logs" / "agent-debug-coder-attempt1"
         copilot_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
-            on_output=lambda _l: None, debug_base=debug_base,
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
+            on_output=lambda _l: None,
+            debug_base=debug_base,
         )
         assert debug_base.is_dir()
         command = calls["command"]
@@ -285,7 +300,10 @@ class TestRunWorker:
     def test_redirects_stdin_and_separates_streams(self, fake_run, tmp_path):
         calls = fake_run(stdout=_stream(_message_event("KILN-STATUS: done x")))
         copilot_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert calls["kwargs"]["stdin"] is subprocess.DEVNULL
@@ -295,7 +313,10 @@ class TestRunWorker:
     def test_blocked_worker_is_reported_not_raised(self, fake_run, tmp_path):
         fake_run(stdout=_stream(_message_event("KILN-STATUS: blocked missing fixtures")))
         invocation = copilot_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.is_done is False
@@ -304,7 +325,10 @@ class TestRunWorker:
     def test_missing_binary_is_treated_as_blocked(self, fake_run, tmp_path):
         fake_run(exc=OSError("copilot not found"))
         invocation = copilot_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.is_done is False
@@ -317,7 +341,10 @@ class TestRunWorker:
             returncode=1,
         )
         invocation = copilot_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.is_done is False
@@ -327,7 +354,10 @@ class TestRunWorker:
     def test_unparseable_output_is_treated_as_blocked(self, fake_run, tmp_path):
         fake_run(stdout="total garbage", stderr="something broke")
         invocation = copilot_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.is_done is False
@@ -344,7 +374,10 @@ class TestRunWorker:
         )
         fake_run(stdout=events, stderr="Changes    +0 -0\nAI Credits 136 (8m 22s)")
         invocation = copilot_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.is_done is False
@@ -355,7 +388,10 @@ class TestRunWorker:
     def test_missing_sentinel_is_blocked(self, fake_run, tmp_path):
         fake_run(stdout=_stream(_message_event("I finished but forgot the sentinel.")))
         invocation = copilot_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.is_done is False
@@ -365,7 +401,10 @@ class TestRunWorker:
         # No dollar figure exists anywhere in Copilot's output -- confirmed live.
         fake_run(stdout=_stream(_message_event("KILN-STATUS: done x")))
         invocation = copilot_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.cost_usd == 0.0

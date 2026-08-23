@@ -3,9 +3,8 @@ Project scaffolding — `kiln init`.
 
 Ports New-KilnInitScaffold and its Copy-KilnInit* / Initialize-KilnInit* helpers.
 
-Everything under `kiln/project/` is *copied* rather than referenced: it becomes the user's
-own editable constitution, roles and skills. Only `src/` stays framework-owned
-and is read in place.
+Everything under `src/kiln/resources/project/` is copied to the user's editable
+`kiln/project/` directory. The remaining package resources stay framework-owned.
 """
 
 from __future__ import annotations
@@ -24,7 +23,7 @@ from . import workspace
 
 log = logging.getLogger(__name__)
 
-#: Every file under kiln/project/constitution/ that a scaffolded project gets. This is a
+#: Every bundled constitution file that a scaffolded project gets. This is a
 #: literal list rather than a directory walk so a stray file cannot become constitution by
 #: accident -- but it must stay complete: `skill-orchestration.md` was missing from it, so no
 #: scaffolded project had the document that defines which role owns which quality gate.
@@ -68,7 +67,7 @@ def create_directories(paths: KilnPaths, result: ScaffoldResult) -> None:
 
 
 def copy_constitution(paths: KilnPaths, result: ScaffoldResult) -> None:
-    source_dir = paths.bundled_dir / "project" / "constitution"
+    source_dir = paths.scaffold_resources_dir / "constitution"
     copied = 0
     for name in CONSTITUTION_FILES:
         source = source_dir / name
@@ -77,8 +76,8 @@ def copy_constitution(paths: KilnPaths, result: ScaffoldResult) -> None:
             copied += 1
 
     # The framework's own constitution.md is copied rather than synthesised, so there is one
-    # source of truth for it like everything else under kiln/project/.
-    header = paths.bundled_dir / "project" / "constitution.md"
+    # source of truth for it like the other bundled scaffold resources.
+    header = paths.scaffold_resources_dir / "constitution.md"
     if header.is_file():
         workspace.copy_template_file(header, paths.kiln_project_dir / "constitution.md")
         copied += 1
@@ -87,7 +86,7 @@ def copy_constitution(paths: KilnPaths, result: ScaffoldResult) -> None:
 
 
 def copy_roles(paths: KilnPaths, result: ScaffoldResult) -> None:
-    source_dir = paths.bundled_dir / "project" / "roles"
+    source_dir = paths.scaffold_resources_dir / "roles"
     if not source_dir.is_dir():
         result.warn("no framework roles directory found")
         return
@@ -99,7 +98,7 @@ def copy_roles(paths: KilnPaths, result: ScaffoldResult) -> None:
 
 
 def copy_skills(paths: KilnPaths, result: ScaffoldResult) -> None:
-    source_dir = paths.bundled_dir / "project" / "skills"
+    source_dir = paths.scaffold_resources_dir / "skills"
     if not source_dir.is_dir():
         return
     count = 0
@@ -225,8 +224,8 @@ def scaffold(
     project_root.mkdir(parents=True, exist_ok=True)
     paths = KilnPaths.create(project_root, framework_root)
 
-    if not paths.bundled_dir.is_dir():
-        raise ScaffoldError(f"framework content not found at {paths.bundled_dir}")
+    if not paths.scaffold_resources_dir.is_dir():
+        raise ScaffoldError(f"framework content not found at {paths.scaffold_resources_dir}")
 
     result = ScaffoldResult(target=project_root)
     log.info("Scaffolding Kiln project at %s", project_root)

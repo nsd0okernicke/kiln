@@ -275,9 +275,7 @@ def render_routing_table(table: RoutingTable) -> str:
     means an agent is never told to hand off somewhere its own swarm does not route.
     """
     header = ["| Role | Sends to | When Sender |", "| ---- | -------- | ----------- |"]
-    rows = [
-        f"| {rule.role} | {rule.target} | {rule.when_sender or ''} |" for rule in table.rules
-    ]
+    rows = [f"| {rule.role} | {rule.target} | {rule.when_sender or ''} |" for rule in table.rules]
     if not rows:
         return "\n".join([*header, "| _(no routing configured)_ | | |"])
     return "\n".join([*header, *rows])

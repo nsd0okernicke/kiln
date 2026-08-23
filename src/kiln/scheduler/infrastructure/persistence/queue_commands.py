@@ -86,7 +86,10 @@ def _fetch_and_deliver(
 
         log.info(
             "message found: id=%s sender=%s priority=%s created_at=%s",
-            row["id"], row["sender"], row["priority"], row["created_at"],
+            row["id"],
+            row["sender"],
+            row["priority"],
+            row["created_at"],
         )
         log.debug("content preview: %s", row["content"][:120].replace("\n", " "))
         cur.execute(
@@ -98,9 +101,7 @@ def _fetch_and_deliver(
         return _inbound_message(row)
 
 
-def recover_stale_processing(
-    db_path: str | Path, role: str, branch: str
-) -> list[QueueMessage]:
+def recover_stale_processing(db_path: str | Path, role: str, branch: str) -> list[QueueMessage]:
     """
     Reset this role's abandoned `processing` rows to `delivered`, returning what was reset.
 
@@ -231,9 +232,7 @@ def failed_messages(db_path: str | Path, branch: str) -> list[QueueMessage]:
         return [_message(row) for row in cur.fetchall()]
 
 
-def resume_failed(
-    db_path: str | Path, message_id: str, content: str
-) -> QueueMessage | None:
+def resume_failed(db_path: str | Path, message_id: str, content: str) -> QueueMessage | None:
     """
     Put one failed message back in its own role's queue, with the human's guidance attached.
 

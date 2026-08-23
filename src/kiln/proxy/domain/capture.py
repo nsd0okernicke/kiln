@@ -366,36 +366,35 @@ class StreamingUsageTracker:
             self._consume_line(line)
 
     def _consume_line(self, line: str) -> None:
-        if not line.startswith("data:"):
-            return
-        payload_text = line[len("data:") :].strip()
-        if not payload_text or payload_text == "[DONE]":
-            return
-        try:
-            event = json.loads(payload_text)
-        except ValueError:
-            return
-        if not isinstance(event, dict):
+        event = _sse_event(line)
+        if event is None:
             return
 
         kind = event.get("type")
         if kind == "message_start":
-            message = event.get("message")
-            usage = message.get("usage") if isinstance(message, dict) else None
-            if isinstance(usage, dict):
-                self._started = _usage_from(usage)
+            self._consume_message_start(event)
         elif kind == "message_delta":
-            usage = event.get("usage")
-            if isinstance(usage, dict) and isinstance(usage.get("output_tokens"), int):
-                self._output_tokens = int(usage["output_tokens"])
+            self._consume_message_delta(event)
         elif isinstance(kind, str) and kind.startswith("response."):
-            # Responses API. `response.completed` is the normal ending, but `.incomplete`
-            # and `.failed` also carry usage -- and a turn that burned tokens and then
-            # failed is exactly the one worth having a number for.
-            response = event.get("response")
-            usage = response.get("usage") if isinstance(response, dict) else None
-            if isinstance(usage, dict):
-                self._complete = _usage_from_responses(usage)
+            self._consume_response(event)
+
+    def _consume_message_start(self, event: dict) -> None:
+        message = event.get("message")
+        usage = message.get("usage") if isinstance(message, dict) else None
+        if isinstance(usage, dict):
+            self._started = _usage_from(usage)
+
+    def _consume_message_delta(self, event: dict) -> None:
+        usage = event.get("usage")
+        if isinstance(usage, dict) and isinstance(usage.get("output_tokens"), int):
+            self._output_tokens = int(usage["output_tokens"])
+
+    def _consume_response(self, event: dict) -> None:
+        # Completed is the normal ending, but incomplete and failed events also carry usage.
+        response = event.get("response")
+        usage = response.get("usage") if isinstance(response, dict) else None
+        if isinstance(usage, dict):
+            self._complete = _usage_from_responses(usage)
 
     @property
     def usage(self) -> TokenUsage | None:
@@ -411,6 +410,19 @@ class StreamingUsageTracker:
             cache_read_tokens=base.cache_read_tokens,
             cache_creation_tokens=base.cache_creation_tokens,
         )
+
+
+def _sse_event(line: str) -> dict | None:
+    if not line.startswith("data:"):
+        return None
+    payload = line[len("data:") :].strip()
+    if not payload or payload == "[DONE]":
+        return None
+    try:
+        event = json.loads(payload)
+    except ValueError:
+        return None
+    return event if isinstance(event, dict) else None
 
 
 @dataclass

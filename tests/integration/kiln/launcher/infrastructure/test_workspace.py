@@ -247,6 +247,27 @@ class TestSkills:
     def test_no_skills_directory_is_not_an_error(self, paths):
         assert workspace.prepare_skills(PROFILE, paths) == 0
 
+    def test_empty_skills_directory_is_not_an_error(self, paths):
+        paths.skills_dir.mkdir(parents=True)
+        assert workspace.prepare_skills(PROFILE, paths) == 0
+
+    def test_native_symlink_path_counts_each_created_link(self, repo, monkeypatch):
+        self._add_skill(repo)
+        linked = []
+        monkeypatch.setattr(
+            Path,
+            "symlink_to",
+            lambda target, source, target_is_directory: linked.append(
+                (target, source, target_is_directory)
+            ),
+        )
+
+        count = workspace.prepare_skills(PROFILE, repo)
+
+        assert count == len(linked)
+        assert count > 0
+        assert all(is_directory for _, _, is_directory in linked)
+
     def test_links_skills_for_every_role(self, repo):
         self._add_skill(repo)
         workspace.prepare_state_dirs(repo)
@@ -420,9 +441,7 @@ class TestGrokWorktreeSetup:
         workspace.prepare_state_dirs(repo)
         workspace.prepare_worktrees(GROK_PROFILE, repo, "main")
 
-        config = json.loads(
-            (repo.worktree_path("coder") / ".mcp.json").read_text(encoding="utf-8")
-        )
+        config = json.loads((repo.worktree_path("coder") / ".mcp.json").read_text(encoding="utf-8"))
         assert "kiln-db" in config["mcpServers"]
 
     def test_the_worktree_mcp_config_withholds_the_blocking_channel(self, repo):
@@ -434,9 +453,7 @@ class TestGrokWorktreeSetup:
         workspace.prepare_state_dirs(repo)
         workspace.prepare_worktrees(GROK_PROFILE, repo, "main")
 
-        config = json.loads(
-            (repo.worktree_path("coder") / ".mcp.json").read_text(encoding="utf-8")
-        )
+        config = json.loads((repo.worktree_path("coder") / ".mcp.json").read_text(encoding="utf-8"))
         assert "kiln-channel" not in config["mcpServers"]
 
     def test_a_claude_wrapper_role_still_gets_the_channel(self, repo):
@@ -446,9 +463,7 @@ class TestGrokWorktreeSetup:
         workspace.prepare_state_dirs(repo)
         workspace.prepare_worktrees(PROFILE, repo, "main")
 
-        config = json.loads(
-            (repo.worktree_path("coder") / ".mcp.json").read_text(encoding="utf-8")
-        )
+        config = json.loads((repo.worktree_path("coder") / ".mcp.json").read_text(encoding="utf-8"))
         assert "kiln-channel" in config["mcpServers"]
 
     def test_grok_needs_no_backend_config_of_its_own(self, repo):
@@ -608,10 +623,17 @@ class TestCodexAuthSeeding:
     def test_a_launch_seeds_every_codex_role(self, paths, tmp_path, monkeypatch):
         self._fake_real_home(tmp_path, monkeypatch)
         profile = parse_profile(
-            {"profiles": {"p": {"terminals": [
-                {"role": "coder", "agent": "codex"},
-                {"role": "architect", "agent": "codex"},
-            ]}}}, "p",
+            {
+                "profiles": {
+                    "p": {
+                        "terminals": [
+                            {"role": "coder", "agent": "codex"},
+                            {"role": "architect", "agent": "codex"},
+                        ]
+                    }
+                }
+            },
+            "p",
         )
 
         workspace.prepare_agent_configs(profile, paths)
@@ -676,7 +698,7 @@ class TestTrustCopilotWorktrees:
         import json
 
         text = self._config_path(home).read_text(encoding="utf-8")
-        return json.loads(text[text.index("{"):])["trustedFolders"]
+        return json.loads(text[text.index("{") :])["trustedFolders"]
 
     def _profile_with_copilot(self, paths, role="coder"):
         return parse_profile(
@@ -754,7 +776,13 @@ class TestSessionsFile:
         # Trailing empty model: this fixture's roles configure none, which is a real state
         # meaning "the backend's CLI chooses", not a missing value.
         assert lines[0].split("\t") == [
-            "1", "specifier", "claude", "Specifier", "agent", "", "@current",
+            "1",
+            "specifier",
+            "claude",
+            "Specifier",
+            "agent",
+            "",
+            "@current",
         ]
 
     def test_it_records_each_panes_kind(self, paths):
@@ -766,13 +794,21 @@ class TestSessionsFile:
                 "profiles": {
                     "p": {
                         "terminals": [
-                            {"role": "human-in-the-loop", "worktree": "@current",
-                             "mode": "manual"},
+                            {"role": "human-in-the-loop", "worktree": "@current", "mode": "manual"},
                             {"role": "coder", "worktree": "coder", "scheduler": "python"},
-                            {"role": "inbox", "worktree": "@current", "mode": "manual",
-                             "scheduler": "inbox", "watches": "human-in-the-loop"},
-                            {"role": "cockpit", "worktree": "@current", "mode": "manual",
-                             "scheduler": "cockpit"},
+                            {
+                                "role": "inbox",
+                                "worktree": "@current",
+                                "mode": "manual",
+                                "scheduler": "inbox",
+                                "watches": "human-in-the-loop",
+                            },
+                            {
+                                "role": "cockpit",
+                                "worktree": "@current",
+                                "mode": "manual",
+                                "scheduler": "cockpit",
+                            },
                         ]
                     }
                 }
@@ -795,8 +831,7 @@ class TestSessionsFile:
                     "p": {
                         "defaults": {"model": "claude-sonnet-5"},
                         "terminals": [
-                            {"role": "human-in-the-loop", "worktree": "@current",
-                             "mode": "manual"},
+                            {"role": "human-in-the-loop", "worktree": "@current", "mode": "manual"},
                             {"role": "coder", "worktree": "coder", "model": ""},
                         ],
                     }
@@ -859,9 +894,7 @@ class TestTemplateCopying:
         monkeypatch.setattr(os, "chmod", deny)
         monkeypatch.setattr(os, "utime", deny)
 
-    def test_file_copy_survives_a_filesystem_refusing_metadata(
-        self, tmp_path, no_metadata_calls
-    ):
+    def test_file_copy_survives_a_filesystem_refusing_metadata(self, tmp_path, no_metadata_calls):
         source = tmp_path / "engineering.md"
         source.write_text("rules\n", encoding="utf-8")
         destination = tmp_path / "out" / "engineering.md"
@@ -870,9 +903,7 @@ class TestTemplateCopying:
         workspace.copy_template_file(source, destination)
         assert destination.read_text(encoding="utf-8") == "rules\n"
 
-    def test_tree_copy_survives_a_filesystem_refusing_metadata(
-        self, tmp_path, no_metadata_calls
-    ):
+    def test_tree_copy_survives_a_filesystem_refusing_metadata(self, tmp_path, no_metadata_calls):
         # shutil.copytree fails here even with copy_function=copyfile: it always finishes by
         # calling copystat on every directory it created.
         source = tmp_path / "skill"
@@ -942,9 +973,7 @@ class TestExecutableBit:
         assert "could not make" in caplog.text
         assert "silently skip" in caplog.text
 
-    def test_hook_install_survives_a_filesystem_refusing_chmod(
-        self, paths, monkeypatch, repo
-    ):
+    def test_hook_install_survives_a_filesystem_refusing_chmod(self, paths, monkeypatch, repo):
         import os
 
         self._deny_chmod(monkeypatch)

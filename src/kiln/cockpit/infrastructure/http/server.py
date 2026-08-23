@@ -148,6 +148,16 @@ def gather_state(config: CockpitConfig) -> dict:
     )
 
 
+def _log_query(query: dict[str, list[str]]) -> tuple[str, int] | str:
+    stream = (query.get("stream") or ["scheduler"])[0]
+    if stream not in {"scheduler", "worker"}:
+        return "stream must be scheduler or worker"
+    try:
+        return stream, max(0, int((query.get("after") or ["0"])[0]))
+    except ValueError:
+        return "after must be a non-negative integer"
+
+
 class CockpitHandler(BaseHTTPRequestHandler):
     """Routes. `config` is injected by `serve` onto a subclass of this."""
 
@@ -315,13 +325,10 @@ class CockpitHandler(BaseHTTPRequestHandler):
         if role not in known:
             return self._send_json(404, {"error": f"{role!r} is not a role in this swarm"})
 
-        stream = (query.get("stream") or ["scheduler"])[0]
-        if stream not in {"scheduler", "worker"}:
-            return self._send_json(400, {"error": "stream must be scheduler or worker"})
-        try:
-            after = max(0, int((query.get("after") or ["0"])[0]))
-        except ValueError:
-            return self._send_json(400, {"error": "after must be a non-negative integer"})
+        parsed = _log_query(query)
+        if isinstance(parsed, str):
+            return self._send_json(400, {"error": parsed})
+        stream, after = parsed
 
         path = self.config.dashboard.db_path.parent / "logs" / f"{stream}-{role}.log"
         if not path.is_file():

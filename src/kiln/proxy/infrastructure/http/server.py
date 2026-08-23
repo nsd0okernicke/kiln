@@ -366,10 +366,24 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 encoding,
             )
 
+        captured, total, usage = self._stream_body(response, readable)
+        self._finish_chunked_response()
+        self._record(
+            role,
+            method,
+            path,
+            request_bytes,
+            captured,
+            total,
+            started,
+            status=response.status,
+            usage=usage,
+        )
+
+    def _stream_body(self, response, readable: bool):
         tracker = StreamingUsageTracker()
         captured = bytearray()
         total = 0
-
         while True:
             # `read1`, never `read`: `HTTPResponse.read(n)` blocks until it has all n bytes
             # or the connection closes, which would hold every SSE event until the buffer
@@ -383,32 +397,27 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 tracker.feed(chunk)
                 if len(captured) < self.config.body_limit:
                     captured.extend(chunk[: self.config.body_limit - len(captured)])
-            try:
-                self.wfile.write(f"{len(chunk):X}\r\n".encode("ascii"))
-                self.wfile.write(chunk)
-                self.wfile.write(b"\r\n")
-                self.wfile.flush()  # the whole point: no buffering between model and pane
-            except (BrokenPipeError, ConnectionResetError):
-                log.warning("client disconnected mid-response; abandoning relay")
+            if not self._write_chunk(chunk):
                 break
+        return bytes(captured), total, tracker.usage
 
+    def _finish_chunked_response(self) -> None:
         try:
             self.wfile.write(b"0\r\n\r\n")
             self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
             pass
 
-        self._record(
-            role,
-            method,
-            path,
-            request_bytes,
-            bytes(captured),
-            total,
-            started,
-            status=response.status,
-            usage=tracker.usage,
-        )
+    def _write_chunk(self, chunk: bytes) -> bool:
+        try:
+            self.wfile.write(f"{len(chunk):X}\r\n".encode("ascii"))
+            self.wfile.write(chunk)
+            self.wfile.write(b"\r\n")
+            self.wfile.flush()
+            return True
+        except (BrokenPipeError, ConnectionResetError):
+            log.warning("client disconnected mid-response; abandoning relay")
+            return False
 
     def _record(
         self,

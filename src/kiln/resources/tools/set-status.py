@@ -103,7 +103,7 @@ def parse_argv(argv):
 
     role = argv[0]
     state = argv[1]
-    detail = argv[2] if len(argv) > 2 and argv[2] != "-" and not argv[2].startswith("--") else None
+    detail = _detail(argv)
 
     mode = "auto"
     cycles = None
@@ -112,29 +112,40 @@ def parse_argv(argv):
     extras = {}
     for arg in argv[2:]:
         if arg.startswith("--mode="):
-            mode = arg.split("=", 1)[1]
+            mode = _flag_value(arg)
         elif arg.startswith("--cycles="):
-            cycles = int(arg.split("=", 1)[1])
+            cycles = int(_flag_value(arg))
         elif arg.startswith("--cost="):
-            cost_usd = float(arg.split("=", 1)[1])
+            cost_usd = float(_flag_value(arg))
         else:
-            for flag, key in EXTRA_TEXT_FLAGS.items():
-                if arg.startswith(flag):
-                    value = arg.split("=", 1)[1].strip()
-                    # Empty means "the CLI picks its own default" for copilot/codex/grok --
-                    # absent from the file rather than an empty string, matching the
-                    # omit-when-unknown rule the numeric extras already follow.
-                    if value:
-                        extras[key] = value
-                    break
-            else:
-                for flag, key in {**TOKEN_FLAGS, **EXTRA_INT_FLAGS}.items():
-                    if arg.startswith(flag):
-                        target = tokens if flag in TOKEN_FLAGS else extras
-                        target[key] = int(arg.split("=", 1)[1])
-                        break
+            _parse_extra_flag(arg, tokens, extras)
 
     return role, state, detail, mode, cycles, cost_usd, tokens or None, extras
+
+
+def _flag_value(arg):
+    return arg.split("=", 1)[1]
+
+
+def _detail(argv):
+    if len(argv) <= 2 or argv[2] == "-" or argv[2].startswith("--"):
+        return None
+    return argv[2]
+
+
+def _parse_extra_flag(arg, tokens, extras):
+    """Apply one optional model, usage, or scheduler-status flag when recognized."""
+    name, separator, value = arg.partition("=")
+    if not separator:
+        return
+    flag = f"{name}="
+    if flag in EXTRA_TEXT_FLAGS:
+        if value.strip():
+            extras[EXTRA_TEXT_FLAGS[flag]] = value.strip()
+    elif flag in TOKEN_FLAGS:
+        tokens[TOKEN_FLAGS[flag]] = int(value)
+    elif flag in EXTRA_INT_FLAGS:
+        extras[EXTRA_INT_FLAGS[flag]] = int(value)
 
 
 def build_status(
@@ -243,6 +254,7 @@ def main():
     osc_sequence = f"\033]0;{status['title']}\007"
     sys.stdout.buffer.write(osc_sequence.encode("utf-8"))
     sys.stdout.buffer.flush()
+
 
 if __name__ == "__main__":
     main()

@@ -166,6 +166,11 @@ class KilnPaths:
         return self.package_dir / "resources"
 
     @property
+    def scaffold_resources_dir(self) -> Path:
+        """Bundled defaults copied into a project's editable ``kiln/project`` directory."""
+        return self.resources_dir / "project"
+
+    @property
     def templates_dir(self) -> Path:
         return self.resources_dir / "templates"
 

@@ -34,9 +34,7 @@ class TestSchema:
     def test_defaults_are_applied_when_columns_are_omitted(self, db_path):
         # The schema's own defaults matter: agents historically omitted created_at.
         with closing(db.connect(db_path)) as conn:
-            conn.execute(
-                "INSERT INTO messages (sender, target, content) VALUES ('a', 'b', 'c')"
-            )
+            conn.execute("INSERT INTO messages (sender, target, content) VALUES ('a', 'b', 'c')")
             conn.commit()
             row = conn.execute("SELECT * FROM messages").fetchone()
         assert row["id"]
@@ -204,8 +202,9 @@ class TestRecoverStaleProcessing:
     def test_it_reports_what_it_recovered(self, db_path, add_message):
         # Returned rather than counted so the scheduler can log each one: an operator who
         # sees a handoff processed twice needs to know which message was replayed.
-        add_message(target="coder", status=db.STATUS_PROCESSING,
-                    sender="specifier", work_item="add-login")
+        add_message(
+            target="coder", status=db.STATUS_PROCESSING, sender="specifier", work_item="add-login"
+        )
 
         recovered = db.recover_stale_processing(db_path, "coder", "main")
 
@@ -228,9 +227,7 @@ class TestRecoverStaleProcessing:
         db.recover_stale_processing(db_path, "coder", "main")
         assert read_message(other)["status"] == db.STATUS_PROCESSING
 
-    @pytest.mark.parametrize(
-        "status", [db.STATUS_QUEUED, db.STATUS_DELIVERED, db.STATUS_PROCESSED]
-    )
+    @pytest.mark.parametrize("status", [db.STATUS_QUEUED, db.STATUS_DELIVERED, db.STATUS_PROCESSED])
     def test_it_touches_nothing_else(self, db_path, add_message, read_message, status):
         # Resurrecting a *processed* message would re-run finished work every restart.
         message_id = add_message(target="coder", status=status)
@@ -469,9 +466,9 @@ class TestWorkItem:
     def test_the_column_and_its_index_exist(self, db_path):
         with closing(db.connect(db_path)) as conn:
             columns = {r[1] for r in conn.execute("PRAGMA table_info(messages)")}
-            indexes = {r[0] for r in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='index'"
-            )}
+            indexes = {
+                r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")
+            }
         assert "work_item" in columns
         assert "idx_work_item" in indexes
 

@@ -181,9 +181,7 @@ def retry_message(ctx: ActionContext, *, message_id: str, guidance: str = "") ->
     be a guess. Every Attention row carries the id, so the browser has it either way.
     """
     message_id = _resolve_message_id(ctx, message_id)
-    row = ctx.gateway.retry(
-        db_path=ctx.db_path, message_id=message_id, guidance=guidance.strip()
-    )
+    row = ctx.gateway.retry(db_path=ctx.db_path, message_id=message_id, guidance=guidance.strip())
     if row is None:
         raise ActionError(
             f"{message_id[:8]} is not a failed message, so there is nothing to send back."

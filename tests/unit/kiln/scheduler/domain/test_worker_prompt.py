@@ -235,9 +235,7 @@ class TestAgentsPayloadTools:
             "",
         )
         definition = worker_prompt.parse_worker_definition(text)
-        payload = json.loads(
-            worker_prompt.build_agents_payload(definition, include_tools=True)
-        )
+        payload = json.loads(worker_prompt.build_agents_payload(definition, include_tools=True))
         assert "tools" not in payload["coder-worker"]
 
     def test_the_prompt_and_description_still_travel(self):

@@ -108,9 +108,7 @@ class TestSchedulerOptIn:
             parse_profile(config, "p")
 
     def test_scheduler_accepted_for_claude(self):
-        config = {
-            "profiles": {"p": {"terminals": [{"role": "coder", "scheduler": "python"}]}}
-        }
+        config = {"profiles": {"p": {"terminals": [{"role": "coder", "scheduler": "python"}]}}}
         assert parse_profile(config, "p").roles[0].uses_scheduler is True
 
     @pytest.mark.parametrize("agent", ["copilot", "codex", "grok"])
@@ -192,9 +190,7 @@ class TestParsing:
         assert role.worker_debug is False
 
     def test_worker_debug_opts_in(self):
-        config = {
-            "profiles": {"p": {"terminals": [{"role": "coder", "workerDebug": True}]}}
-        }
+        config = {"profiles": {"p": {"terminals": [{"role": "coder", "workerDebug": True}]}}}
         assert parse_profile(config, "p").roles[0].worker_debug is True
 
     def test_unknown_profile_lists_the_alternatives(self):
@@ -309,8 +305,12 @@ class TestProfileKnobs:
 
     def test_every_knob_parses(self):
         role = self._role(
-            pollInterval=10, workerTimeout=60, maxAttempts=5, escalationLimit=2,
-            activityLimit=20, bell=False,
+            pollInterval=10,
+            workerTimeout=60,
+            maxAttempts=5,
+            escalationLimit=2,
+            activityLimit=20,
+            bell=False,
         )
         assert role.poll_interval == 10
         assert role.worker_timeout == 60
@@ -348,9 +348,7 @@ class TestProfileDefaults:
         return parse_profile(config, "p")
 
     def test_terminals_inherit_the_defaults(self):
-        profile = self._profile(
-            {"agent": "codex"}, [{"role": "coder"}, {"role": "architect"}]
-        )
+        profile = self._profile({"agent": "codex"}, [{"role": "coder"}, {"role": "architect"}])
         assert [r.agent for r in profile.roles] == ["codex", "codex"]
 
     def test_a_terminals_own_key_wins(self):
@@ -391,14 +389,18 @@ class TestAgentOverride:
     """
 
     def _profile(self, **defaults):
-        config = {"profiles": {"p": {
-            "defaults": {"agent": "claude", "model": "claude-sonnet-5", **defaults},
-            "terminals": [
-                {"role": "human-in-the-loop"},
-                {"role": "coder", "scheduler": "python"},
-                {"role": "inbox", "scheduler": "inbox", "watches": "human-in-the-loop"},
-            ],
-        }}}
+        config = {
+            "profiles": {
+                "p": {
+                    "defaults": {"agent": "claude", "model": "claude-sonnet-5", **defaults},
+                    "terminals": [
+                        {"role": "human-in-the-loop"},
+                        {"role": "coder", "scheduler": "python"},
+                        {"role": "inbox", "scheduler": "inbox", "watches": "human-in-the-loop"},
+                    ],
+                }
+            }
+        }
         return parse_profile(config, "p")
 
     def test_every_agent_bearing_role_moves(self):
@@ -410,8 +412,9 @@ class TestAgentOverride:
         # `agent` hands every role a model its backend rejects -- and the error blames the
         # model rather than the override that caused it. An empty model is the correct
         # configuration, which `resolve_model` already reads as "let the CLI choose".
-        agents = [r for r in apply_agent_override(self._profile(), "codex").roles
-                  if not r.is_passive]
+        agents = [
+            r for r in apply_agent_override(self._profile(), "codex").roles if not r.is_passive
+        ]
         assert agents, "the fixture must contain roles that actually run an agent"
         assert all(r.model == "" for r in agents)
         assert all(r.worker_model == "" for r in agents)
@@ -438,9 +441,7 @@ class TestAgentOverride:
 
     def test_everything_else_about_the_profile_survives(self):
         overridden = apply_agent_override(self._profile(), "codex")
-        assert [r.role for r in overridden.roles] == [
-            "human-in-the-loop", "coder", "inbox"
-        ]
+        assert [r.role for r in overridden.roles] == ["human-in-the-loop", "coder", "inbox"]
         assert overridden.role("coder").scheduler == "python"
 
     def test_it_reproduces_what_codex_only_used_to_ship(self):
@@ -512,35 +513,55 @@ class TestCrossReferences:
     def test_watching_a_role_that_does_not_exist_fails(self):
         # `watched_role` falls back to the pane's own name, so a typo silently makes the
         # inbox watch its own queue -- empty forever, and indistinguishable from working.
-        config = {"profiles": {"p": {"terminals": [
-            {"role": "inbox", "scheduler": "inbox", "watches": "hooman"},
-            {"role": "human-in-the-loop"},
-        ]}}}
+        config = {
+            "profiles": {
+                "p": {
+                    "terminals": [
+                        {"role": "inbox", "scheduler": "inbox", "watches": "hooman"},
+                        {"role": "human-in-the-loop"},
+                    ]
+                }
+            }
+        }
         with pytest.raises(ProfileError, match="watches 'hooman'"):
             parse_profile(config, "p")
 
     def test_watching_a_real_role_is_fine(self):
-        config = {"profiles": {"p": {"terminals": [
-            {"role": "inbox", "scheduler": "inbox", "watches": "human-in-the-loop"},
-            {"role": "human-in-the-loop"},
-        ]}}}
+        config = {
+            "profiles": {
+                "p": {
+                    "terminals": [
+                        {"role": "inbox", "scheduler": "inbox", "watches": "human-in-the-loop"},
+                        {"role": "human-in-the-loop"},
+                    ]
+                }
+            }
+        }
         assert parse_profile(config, "p").role("inbox").watched_role == "human-in-the-loop"
 
     def test_a_layout_referencing_an_unknown_role_fails(self):
         # The WezTerm Lua matches panes by name and skips a miss silently, so a typo here
         # produced a launch simply missing a pane, with no error anywhere.
-        config = {"profiles": {"p": {
-            "terminals": [{"role": "coder"}],
-            "layout": {"tabs": [{"panes": [{"role": "codr"}]}]},
-        }}}
+        config = {
+            "profiles": {
+                "p": {
+                    "terminals": [{"role": "coder"}],
+                    "layout": {"tabs": [{"panes": [{"role": "codr"}]}]},
+                }
+            }
+        }
         with pytest.raises(ProfileError, match="layout references role 'codr'"):
             parse_profile(config, "p")
 
     def test_a_layout_referencing_real_roles_is_fine(self):
-        config = {"profiles": {"p": {
-            "terminals": [{"role": "coder"}],
-            "layout": {"tabs": [{"panes": [{"role": "coder"}]}]},
-        }}}
+        config = {
+            "profiles": {
+                "p": {
+                    "terminals": [{"role": "coder"}],
+                    "layout": {"tabs": [{"panes": [{"role": "coder"}]}]},
+                }
+            }
+        }
         assert parse_profile(config, "p").layout["tabs"]
 
 
@@ -638,8 +659,7 @@ class TestSearchPaths:
         from kiln.launcher.domain.profile import SYSTEM_PROFILES_PATH
 
         expected = (
-            "C:/ProgramData/kiln/profiles.json" if os.name == "nt"
-            else "/etc/kiln/profiles.json"
+            "C:/ProgramData/kiln/profiles.json" if os.name == "nt" else "/etc/kiln/profiles.json"
         )
         assert str(SYSTEM_PROFILES_PATH).replace("\\", "/") == expected
         assert self._paths(tmp_path)[-1] == expected, "system-wide config must be last resort"
@@ -695,9 +715,8 @@ def _profile_with_routing(routing, terminals=None):
     return {
         "profiles": {
             "p": {
-                "terminals": terminals or [
-                    {"role": "human-in-the-loop"}, {"role": "coder"}, {"role": "architect"}
-                ],
+                "terminals": terminals
+                or [{"role": "human-in-the-loop"}, {"role": "coder"}, {"role": "architect"}],
                 "routing": routing,
             }
         }
@@ -718,9 +737,15 @@ class TestProfileRouting:
     def test_a_passive_only_profile_needs_no_routing(self):
         from kiln.launcher.domain.profile import check_launchable
 
-        passive = {"profiles": {"p": {"terminals": [
-            {"role": "dashboard", "scheduler": "dashboard", "worktree": "@current"},
-        ]}}}
+        passive = {
+            "profiles": {
+                "p": {
+                    "terminals": [
+                        {"role": "dashboard", "scheduler": "dashboard", "worktree": "@current"},
+                    ]
+                }
+            }
+        }
         check_launchable(parse_profile(passive, "p"))  # must not raise
 
     def test_every_shipped_profile_is_launchable(self):
@@ -751,9 +776,7 @@ class TestProfileRouting:
 
     def test_a_sender_condition_outside_the_profile_is_rejected(self):
         with pytest.raises(ProfileError, match="specifier"):
-            parse_profile(
-                _profile_with_routing({"coder": {"specifier": "architect"}}), "p"
-            )
+            parse_profile(_profile_with_routing({"coder": {"specifier": "architect"}}), "p")
 
     def test_the_error_names_the_roles_that_do_exist(self):
         with pytest.raises(ProfileError, match="coder"):

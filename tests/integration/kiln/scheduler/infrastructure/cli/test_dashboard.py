@@ -23,7 +23,12 @@ NOW_LOCAL = datetime(2026, 8, 9, 17, 0, 0)
 
 
 def _status(
-    state="working", since=None, cycles=None, cost_usd=None, tokens=None, token_usage=None,
+    state="working",
+    since=None,
+    cycles=None,
+    cost_usd=None,
+    tokens=None,
+    token_usage=None,
     **extra,
 ):
     status = {"role": "coder", "state": state, "since": since or "2026-08-09T14:59:30Z"}
@@ -47,8 +52,13 @@ def _message(
     created_at="2026-08-09 16:59:00",
 ):
     content = handoff.format_handoff(
-        sender=sender, handoff="pending", branch="main", commit="abc1234",
-        summary=summary, next_role=target, timestamp="2026-08-09 16:59:00",
+        sender=sender,
+        handoff="pending",
+        branch="main",
+        commit="abc1234",
+        summary=summary,
+        next_role=target,
+        timestamp="2026-08-09 16:59:00",
         escalation=escalation,
     )
     return {
@@ -181,7 +191,9 @@ class TestPassiveKindsMatchTheLauncher:
         from kiln.launcher.domain import profile as config
 
         owned_by_the_launcher = {
-            config.SCHEDULER_INBOX, config.SCHEDULER_DASHBOARD, config.SCHEDULER_COCKPIT,
+            config.SCHEDULER_INBOX,
+            config.SCHEDULER_DASHBOARD,
+            config.SCHEDULER_COCKPIT,
         }
 
         assert owned_by_the_launcher == dashboard.PASSIVE_KINDS
@@ -210,8 +222,12 @@ class TestReadStatus:
 class TestExtractSummary:
     def test_pulls_the_line_after_the_banner(self):
         content = handoff.format_handoff(
-            sender="coder", handoff="pending", branch="main", commit="abc",
-            summary="Implemented the create-book endpoint.", next_role="refactorer",
+            sender="coder",
+            handoff="pending",
+            branch="main",
+            commit="abc",
+            summary="Implemented the create-book endpoint.",
+            next_role="refactorer",
             timestamp="2026-08-09 16:00:00",
         )
         assert dashboard.extract_summary(content) == "Implemented the create-book endpoint."
@@ -434,8 +450,12 @@ class TestQueueWait:
     def test_it_reaches_the_grid(self):
         sessions = [dashboard.RoleSession("coder", "claude", "Coder")]
         lines = dashboard.render_state_grid(
-            sessions, {}, {"coder": 1}, NOW_UTC,
-            oldest_queued={"coder": "2026-08-09 16:30:00"}, now_local=NOW_LOCAL,
+            sessions,
+            {},
+            {"coder": 1},
+            NOW_UTC,
+            oldest_queued={"coder": "2026-08-09 16:30:00"},
+            now_local=NOW_LOCAL,
         )
         assert any("30m" in line for line in lines)
 
@@ -484,7 +504,9 @@ class TestTokenBreakdown:
             "refactorer": _status(token_usage={"input": 5, "output": 2}),
         }
         assert dashboard.total_token_usage(statuses) == {
-            "input": 15, "cache_read": 100, "output": 2
+            "input": 15,
+            "cache_read": 100,
+            "output": 2,
         }
 
     def test_roles_without_a_breakdown_are_skipped(self):
@@ -544,32 +566,54 @@ class TestPromptWeight:
     """The proxy panel: what each role actually puts on the wire."""
 
     def _stats(self, **overrides):
-        stats = {"coder": {"requests": 12, "avg_bytes": 104_200,
-                           "max_bytes": 118_900, "total_bytes": 1_250_400,
-                           "avg_tools": 33_300, "avg_system": 5_900,
-                           "avg_messages": 80_200}}
+        stats = {
+            "coder": {
+                "requests": 12,
+                "avg_bytes": 104_200,
+                "max_bytes": 118_900,
+                "total_bytes": 1_250_400,
+                "avg_tools": 33_300,
+                "avg_system": 5_900,
+                "avg_messages": 80_200,
+            }
+        }
         stats.update(overrides)
         return stats
 
     def test_shows_the_composition_split(self):
         # The split is the actionable part: system (the worker instructions) is ~5% of a
         # request while messages is 60-70%, which redirects where to optimise.
-        row = next(line for line in dashboard.render_prompt_weight(self._stats())
-                   if line.startswith("coder"))
+        row = next(
+            line
+            for line in dashboard.render_prompt_weight(self._stats())
+            if line.startswith("coder")
+        )
         assert "33.3k" in row and "5.9k" in row and "80.2k" in row
 
     def test_shows_the_message_share(self):
-        row = next(line for line in dashboard.render_prompt_weight(self._stats())
-                   if line.startswith("coder"))
+        row = next(
+            line
+            for line in dashboard.render_prompt_weight(self._stats())
+            if line.startswith("coder")
+        )
         assert "77%" in row  # 80200 / 104200
 
     def test_rows_without_composition_show_placeholders(self):
         # Captured before the columns existed, or an unparseable body.
-        stats = {"coder": {"requests": 3, "avg_bytes": 1000, "max_bytes": 1000,
-                           "total_bytes": 3000, "avg_tools": None,
-                           "avg_system": None, "avg_messages": None}}
-        row = next(line for line in dashboard.render_prompt_weight(stats)
-                   if line.startswith("coder"))
+        stats = {
+            "coder": {
+                "requests": 3,
+                "avg_bytes": 1000,
+                "max_bytes": 1000,
+                "total_bytes": 3000,
+                "avg_tools": None,
+                "avg_system": None,
+                "avg_messages": None,
+            }
+        }
+        row = next(
+            line for line in dashboard.render_prompt_weight(stats) if line.startswith("coder")
+        )
         assert row.count("-") >= 3
 
     def test_shows_a_row_per_role(self):
@@ -578,8 +622,11 @@ class TestPromptWeight:
 
     def test_sizes_are_abbreviated(self):
         # Request sizes are read at a glance, not to the byte.
-        row = next(line for line in dashboard.render_prompt_weight(self._stats())
-                   if line.startswith("coder"))
+        row = next(
+            line
+            for line in dashboard.render_prompt_weight(self._stats())
+            if line.startswith("coder")
+        )
         assert "104.2k" in row and "118.9k" in row
 
     def test_no_data_renders_no_panel(self):
@@ -587,27 +634,39 @@ class TestPromptWeight:
         assert dashboard.render_prompt_weight({}) == []
 
     def test_roles_are_ordered_predictably(self):
-        stats = self._stats(architect={"requests": 1, "avg_bytes": 1, "max_bytes": 1,
-                                       "total_bytes": 1})
-        roles = [line.split()[0] for line in dashboard.render_prompt_weight(stats)
-                 if line and line[0].isalpha() and not line.startswith(("ROLE", "Prompt"))]
+        stats = self._stats(
+            architect={"requests": 1, "avg_bytes": 1, "max_bytes": 1, "total_bytes": 1}
+        )
+        roles = [
+            line.split()[0]
+            for line in dashboard.render_prompt_weight(stats)
+            if line and line[0].isalpha() and not line.startswith(("ROLE", "Prompt"))
+        ]
         assert roles == sorted(roles)
 
     def test_the_panel_is_absent_from_a_dashboard_with_no_proxy(self):
         lines = dashboard.render_dashboard(
-            project_name="p", branch="main",
+            project_name="p",
+            branch="main",
             sessions=[dashboard.RoleSession("coder", "claude", "Coder")],
-            statuses={}, queue_depth={}, messages=[],
-            now_utc=NOW_UTC, now_local=NOW_LOCAL,
+            statuses={},
+            queue_depth={},
+            messages=[],
+            now_utc=NOW_UTC,
+            now_local=NOW_LOCAL,
         )
         assert not any("Prompt weight" in line for line in lines)
 
     def test_the_panel_appears_when_there_is_traffic(self):
         lines = dashboard.render_dashboard(
-            project_name="p", branch="main",
+            project_name="p",
+            branch="main",
             sessions=[dashboard.RoleSession("coder", "claude", "Coder")],
-            statuses={}, queue_depth={}, messages=[],
-            now_utc=NOW_UTC, now_local=NOW_LOCAL,
+            statuses={},
+            queue_depth={},
+            messages=[],
+            now_utc=NOW_UTC,
+            now_local=NOW_LOCAL,
             request_stats=self._stats(),
         )
         assert any("Prompt weight" in line for line in lines)
@@ -623,9 +682,17 @@ class TestPromptWeightScope:
     """
 
     def _stats(self):
-        return {"coder": {"requests": 1, "avg_bytes": 1000, "max_bytes": 1000,
-                          "total_bytes": 1000, "avg_tools": None,
-                          "avg_system": None, "avg_messages": None}}
+        return {
+            "coder": {
+                "requests": 1,
+                "avg_bytes": 1000,
+                "max_bytes": 1000,
+                "total_bytes": 1000,
+                "avg_tools": None,
+                "avg_system": None,
+                "avg_messages": None,
+            }
+        }
 
     def test_the_default_scope_is_stated(self):
         assert "this run" in dashboard.render_prompt_weight(self._stats())[1]
@@ -640,10 +707,24 @@ class TestPromptWeightScope:
 
         store = TrafficStore(tmp_path / "traffic.db")
         store.ensure_schema()
-        store.record(TrafficRecord(role="coder", method="POST", path="/v1/messages",
-                                   request_bytes=999_000, ts="2026-08-01T00:00:00Z"))
-        store.record(TrafficRecord(role="coder", method="POST", path="/v1/messages",
-                                   request_bytes=1_000, ts="2026-08-13T00:00:00Z"))
+        store.record(
+            TrafficRecord(
+                role="coder",
+                method="POST",
+                path="/v1/messages",
+                request_bytes=999_000,
+                ts="2026-08-01T00:00:00Z",
+            )
+        )
+        store.record(
+            TrafficRecord(
+                role="coder",
+                method="POST",
+                path="/v1/messages",
+                request_bytes=1_000,
+                ts="2026-08-13T00:00:00Z",
+            )
+        )
 
         everything = store.request_stats_by_role()["coder"]
         this_run = store.request_stats_by_role(since="2026-08-12T00:00:00Z")["coder"]
@@ -657,8 +738,11 @@ class TestPromptWeightScope:
 
         store = TrafficStore(tmp_path / "traffic.db")
         store.ensure_schema()
-        store.record(TrafficRecord(role="coder", method="POST", path="/v1/messages",
-                                   ts="2026-08-01T00:00:00Z"))
+        store.record(
+            TrafficRecord(
+                role="coder", method="POST", path="/v1/messages", ts="2026-08-01T00:00:00Z"
+            )
+        )
         assert store.request_stats_by_role(since="2026-08-13T00:00:00Z") == {}
 
 
@@ -785,8 +869,11 @@ class TestSnapshot:
         db.insert_handoff(db_path, "specifier", "coder", _message()["content"], "main")
 
         ctx = dashboard.DashboardContext(
-            db_path=db_path, branch="main", status_dir=status_dir,
-            sessions_file=sessions_file, project_name="proj",
+            db_path=db_path,
+            branch="main",
+            status_dir=status_dir,
+            sessions_file=sessions_file,
+            project_name="proj",
         )
         frame = dashboard.snapshot(ctx)
         text = "\n".join(frame)
@@ -801,14 +888,79 @@ class TestCli:
         status_dir = tmp_path / "status"
         status_dir.mkdir()
 
-        exit_code = dashboard.main([
-            "--db-path", str(db_path), "--branch", "main",
-            "--status-dir", str(status_dir), "--sessions-file", str(sessions_file),
-            "--project-name", "proj", "--once",
-        ])
+        exit_code = dashboard.main(
+            [
+                "--db-path",
+                str(db_path),
+                "--branch",
+                "main",
+                "--status-dir",
+                str(status_dir),
+                "--sessions-file",
+                str(sessions_file),
+                "--project-name",
+                "proj",
+                "--once",
+            ]
+        )
         assert exit_code == 0
         assert "Kiln Dashboard" in capsys.readouterr().out
 
     def test_required_arguments(self):
         with pytest.raises(SystemExit):
             dashboard.build_parser().parse_args([])
+
+    def _args(self, tmp_path, db_path, *extra):
+        status_dir = tmp_path / "status"
+        status_dir.mkdir(exist_ok=True)
+        sessions = tmp_path / "sessions"
+        sessions.touch(exist_ok=True)
+        return [
+            "--db-path",
+            str(db_path),
+            "--status-dir",
+            str(status_dir),
+            "--sessions-file",
+            str(sessions),
+            *extra,
+        ]
+
+    def test_render_failure_shows_retry_frame_in_once_mode(
+        self, tmp_path, db_path, monkeypatch, capsys
+    ):
+        monkeypatch.setattr(
+            dashboard, "snapshot", lambda ctx: (_ for _ in ()).throw(ValueError("bad frame"))
+        )
+        assert dashboard.main(self._args(tmp_path, db_path, "--once")) == 0
+        assert "render failed" in capsys.readouterr().out
+
+    def test_interrupt_during_snapshot_returns_130(self, tmp_path, db_path, monkeypatch):
+        monkeypatch.setattr(
+            dashboard, "snapshot", lambda ctx: (_ for _ in ()).throw(KeyboardInterrupt())
+        )
+        assert dashboard.main(self._args(tmp_path, db_path)) == 130
+
+    def test_interrupt_during_poll_sleep_returns_130(self, tmp_path, db_path, monkeypatch):
+        monkeypatch.setattr(dashboard, "snapshot", lambda ctx: ["frame"])
+        monkeypatch.setattr(
+            dashboard.time, "sleep", lambda seconds: (_ for _ in ()).throw(KeyboardInterrupt())
+        )
+        assert dashboard.main(self._args(tmp_path, db_path)) == 130
+
+    def test_traffic_history_scope_is_fixed_at_startup(self, tmp_path, db_path, monkeypatch):
+        contexts = []
+        monkeypatch.setattr(dashboard, "snapshot", lambda ctx: contexts.append(ctx) or ["frame"])
+
+        dashboard.main(
+            self._args(
+                tmp_path,
+                db_path,
+                "--traffic-db",
+                str(tmp_path / "traffic.db"),
+                "--traffic-all-history",
+                "--once",
+            )
+        )
+
+        assert contexts[0].traffic_since is None
+        assert contexts[0].traffic_db == tmp_path / "traffic.db"

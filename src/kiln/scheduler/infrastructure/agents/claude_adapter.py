@@ -29,10 +29,10 @@ from ...domain.status_contract import STATUS_BLOCKED, WorkerResult, parse_worker
 from ...domain.worker_prompt import WorkerDefinition, build_agents_payload
 from . import (
     DEFAULT_IDLE_TIMEOUT_SEC,
-    REAP_TIMEOUT_SEC,
     TokenUsage,
     Watchdog,
     WorkerInvocation,
+    capture_json_stream,
     terminate_tree,
 )
 
@@ -107,14 +107,20 @@ def build_command(
     command = [
         "claude",
         "-p",
-        "--output-format", "stream-json",
+        "--output-format",
+        "stream-json",
         "--verbose",
-        "--model", model,
-        "--agents", agents_json,
-        "--agent", agent_name,
+        "--model",
+        model,
+        "--agents",
+        agents_json,
+        "--agent",
+        agent_name,
         "--strict-mcp-config",
-        "--setting-sources", "project",
-        "--permission-mode", permission_mode,
+        "--setting-sources",
+        "project",
+        "--permission-mode",
+        permission_mode,
     ]
     if max_budget_usd is not None:
         command += ["--max-budget-usd", str(max_budget_usd)]
@@ -138,9 +144,7 @@ def summarise_tool_use(name: str, payload: dict) -> str:
         field = TOOL_DETAIL_FIELD[name]
         detail = payload.get(field) if field else None
     else:
-        detail = next(
-            (payload[key] for key in _FALLBACK_FIELDS if payload.get(key)), None
-        )
+        detail = next((payload[key] for key in _FALLBACK_FIELDS if payload.get(key)), None)
     return f"{name}  {_condense(detail)}" if detail else name
 
 
@@ -158,29 +162,10 @@ def render_event(event: dict) -> list[str]:
         return [f"{ICON_SESSION} worker session started"]
 
     if kind == "assistant":
-        lines: list[str] = []
-        for block in event.get("message", {}).get("content", []):
-            block_type = block.get("type")
-            if block_type == "text":
-                text = str(block.get("text", "")).strip()
-                if text:
-                    # Plain indent, no glyph: prose is the bulk of the output and a marker
-                    # on every line would be noise rather than signal.
-                    lines.extend(f"    {line}" for line in text.splitlines())
-            elif block_type == "tool_use":
-                name = str(block.get("name", "tool"))
-                lines.append(f"  {ICON_TOOL} {summarise_tool_use(name, block.get('input') or {})}")
-        return lines
+        return _render_assistant(event)
 
     if kind == "user":
-        # Tool results are far too voluminous to show wholesale, but a *failing* tool is
-        # exactly what an operator needs to see: it is usually why the worker ends up
-        # blocked, and without this the pane shows a silent retry loop.
-        lines = []
-        for block in event.get("message", {}).get("content", []):
-            if block.get("type") == "tool_result" and block.get("is_error"):
-                lines.append(f"  {ICON_TOOL_ERROR} {_condense(_result_text(block))}")
-        return lines
+        return _render_tool_errors(event)
 
     if kind == "result":
         cost = event.get("total_cost_usd") or 0.0
@@ -190,13 +175,38 @@ def render_event(event: dict) -> list[str]:
     return []
 
 
+def _render_assistant(event: dict) -> list[str]:
+    lines: list[str] = []
+    for block in event.get("message", {}).get("content", []):
+        block_type = block.get("type")
+        if block_type == "text":
+            text = str(block.get("text", "")).strip()
+            if text:
+                # Plain indent, no glyph: prose is the bulk of the output and a marker
+                # on every line would be noise rather than signal.
+                lines.extend(f"    {line}" for line in text.splitlines())
+        elif block_type == "tool_use":
+            name = str(block.get("name", "tool"))
+            summary = summarise_tool_use(name, block.get("input") or {})
+            lines.append(f"  {ICON_TOOL} {summary}")
+    return lines
+
+
+def _render_tool_errors(event: dict) -> list[str]:
+    # Successful results are too voluminous to show wholesale. A failure is usually why
+    # the worker becomes blocked, and omitting it would make retries look unexplained.
+    lines = []
+    for block in event.get("message", {}).get("content", []):
+        if block.get("type") == "tool_result" and block.get("is_error"):
+            lines.append(f"  {ICON_TOOL_ERROR} {_condense(_result_text(block))}")
+    return lines
+
+
 def _result_text(block: dict) -> str:
     """Tool result content is either a plain string or a list of typed blocks."""
     content = block.get("content")
     if isinstance(content, list):
-        return " ".join(
-            str(part.get("text", "")) for part in content if isinstance(part, dict)
-        )
+        return " ".join(str(part.get("text", "")) for part in content if isinstance(part, dict))
     return str(content or "tool failed")
 
 
@@ -288,6 +298,33 @@ def _default_emit(line: str) -> None:
     print(line, flush=True)
 
 
+def _invocation_from_stream(definition, stdout: str, stderr: str) -> WorkerInvocation:
+    try:
+        envelope = parse_cli_output(stdout)
+    except ValueError:
+        detail = stderr.strip() or "claude produced no parseable output"
+        log.error("worker %s produced no result event: %s", definition.name, detail)
+        return _blocked(detail, stdout, is_error=True)
+    text = str(envelope.get("result", ""))
+    cost = float(envelope.get("total_cost_usd") or 0.0)
+    tokens = parse_usage(envelope)
+    if envelope.get("is_error"):
+        log.error("worker %s reported an error: %s", definition.name, text)
+        return _blocked(
+            text or "claude reported is_error", text, cost_usd=cost, is_error=True, tokens=tokens
+        )
+    result = parse_worker_report(text)
+    log.info(
+        "worker %s finished: status=%s sentinel=%s cost=$%.4f tokens=%s",
+        definition.name,
+        result.status,
+        result.sentinel_found,
+        cost,
+        tokens.total if tokens else "-",
+    )
+    return WorkerInvocation(result=result, raw_output=text, cost_usd=cost, tokens=tokens)
+
+
 def run_worker(
     *,
     definition: WorkerDefinition,
@@ -350,64 +387,19 @@ def run_worker(
     # Two limits: `timeout` for a worker that is slow, `idle_timeout` for one that
     # has stopped. Only the first existed, and it charged the full hour for a
     # worker that had already gone quiet.
-    watchdog = Watchdog(process, timeout, idle_timeout).start()
-
-    captured: list[str] = []
-    try:
-        for line in process.stdout:  # type: ignore[union-attr]
-            watchdog.saw_output()
-            captured.append(line)
-            stripped = line.strip()
-            if not stripped.startswith("{"):
-                continue
-            try:
-                event = json.loads(stripped)
-            except json.JSONDecodeError:
-                continue
-            for rendered in render_event(event):
-                emit(rendered)
-        try:
-            # Bounded: the pipe closing means the child is finishing, not that it has
-            # finished. An unbounded wait here reintroduces exactly the hang the
-            # watchdog exists to end.
-            process.wait(timeout=REAP_TIMEOUT_SEC)
-        except subprocess.TimeoutExpired:
-            terminate_tree(process)
-    finally:
-        watchdog.stop()
-
-    stdout = "".join(captured)
-
-    if watchdog.reason:
-        log.error("worker %s killed: %s", definition.name, watchdog.reason)
-        return _blocked(watchdog.reason, stdout, timed_out=True)
+    capture = capture_json_stream(
+        process,
+        timeout=timeout,
+        idle_timeout=idle_timeout,
+        render_event=render_event,
+        emit=emit,
+        watchdog_factory=Watchdog,
+        terminate=terminate_tree,
+    )
+    stdout = capture.stdout
+    if capture.timeout_reason:
+        log.error("worker %s killed: %s", definition.name, capture.timeout_reason)
+        return _blocked(capture.timeout_reason, stdout, timed_out=True)
 
     stderr = (process.stderr.read() if process.stderr else "") or ""
-    try:
-        envelope = parse_cli_output(stdout)
-    except ValueError:
-        detail = stderr.strip() or "claude produced no parseable output"
-        log.error("worker %s produced no result event: %s", definition.name, detail)
-        return _blocked(detail, stdout, is_error=True)
-
-    text = str(envelope.get("result", ""))
-    cost = float(envelope.get("total_cost_usd") or 0.0)
-    # A failed turn still burned tokens, so usage is read before the error branch rather
-    # than only on the success path -- otherwise the most expensive cycles (the ones that
-    # retry) would be the ones missing from the totals.
-    tokens = parse_usage(envelope)
-
-    if envelope.get("is_error"):
-        log.error("worker %s reported an error: %s", definition.name, text)
-        return _blocked(
-            text or "claude reported is_error", text,
-            cost_usd=cost, is_error=True, tokens=tokens,
-        )
-
-    result = parse_worker_report(text)
-    log.info(
-        "worker %s finished: status=%s sentinel=%s cost=$%.4f tokens=%s",
-        definition.name, result.status, result.sentinel_found, cost,
-        tokens.total if tokens else "-",
-    )
-    return WorkerInvocation(result=result, raw_output=text, cost_usd=cost, tokens=tokens)
+    return _invocation_from_stream(definition, stdout, stderr)

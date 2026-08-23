@@ -48,11 +48,17 @@ def swarm(tmp_path, db_path):
         encoding="utf-8",
     )
     (status_dir / "coder.json").write_text(
-        json.dumps({
-            "role": "coder", "state": "working", "since": "2026-08-09T14:59:30Z",
-            "cycles": 2, "cost_usd": 1.25, "tokens": 1000,
-            "token_usage": {"input": 400, "cache_read": 600},
-        }),
+        json.dumps(
+            {
+                "role": "coder",
+                "state": "working",
+                "since": "2026-08-09T14:59:30Z",
+                "cycles": 2,
+                "cost_usd": 1.25,
+                "tokens": 1000,
+                "token_usage": {"input": 400, "cache_read": 600},
+            }
+        ),
         encoding="utf-8",
     )
     return {"db_path": db_path, "status_dir": status_dir, "sessions": sessions}
@@ -69,12 +75,17 @@ def config(swarm):
             project_name="demo",
         ),
         cockpit=cockpit_state.CockpitContext(
-            project_name="demo", branch="main",
-            lanes=("specifier", "coder"), intake_role="specifier",
+            project_name="demo",
+            branch="main",
+            lanes=("specifier", "coder"),
+            intake_role="specifier",
         ),
         actions=actions.ActionContext(
-            db_path=swarm["db_path"], branch="main", human_role="human-in-the-loop",
-            intake_role="specifier", sessions_file=swarm["sessions"],
+            db_path=swarm["db_path"],
+            branch="main",
+            human_role="human-in-the-loop",
+            intake_role="specifier",
+            sessions_file=swarm["sessions"],
             gateway=KilnActionGateway(),
         ),
     )
@@ -134,7 +145,9 @@ class TestState:
         _, payload = client.get("/api/state")
 
         assert [row["role"] for row in payload["roles"]] == [
-            "human-in-the-loop", "specifier", "coder",
+            "human-in-the-loop",
+            "specifier",
+            "coder",
         ]
 
     def test_a_queued_handoff_becomes_a_card_in_its_targets_lane(self, client, add_message):
@@ -152,7 +165,11 @@ class TestState:
         # them out in SQL -- showed nothing for the eight minutes until the specifier
         # named it.
         add = db.insert_handoff(
-            db_path, "human-in-the-loop", "specifier", "handoff the next userstory", "main",
+            db_path,
+            "human-in-the-loop",
+            "specifier",
+            "handoff the next userstory",
+            "main",
         )
 
         _, payload = client.get("/api/state")
@@ -169,11 +186,11 @@ class TestState:
         assert status == 200
         assert payload["board"]["lanes"] == ["specifier", "coder", "done"]
 
-    def test_inbox_delivery_does_not_clear_human_attention(
-        self, client, add_message, db_path
-    ):
+    def test_inbox_delivery_does_not_clear_human_attention(self, client, add_message, db_path):
         message_id = add_message(
-            sender="architect", target="human-in-the-loop", work_item="CAT-5",
+            sender="architect",
+            target="human-in-the-loop",
+            work_item="CAT-5",
             content="completed CAT-5",
         )
         db.mark_processed(db_path, message_id)  # what the inbox does after displaying it
@@ -182,11 +199,11 @@ class TestState:
 
         assert [item["work_item"] for item in payload["attention"]] == ["CAT-5"]
 
-    def test_acknowledging_a_review_clears_it_from_attention(
-        self, client, add_message, db_path
-    ):
+    def test_acknowledging_a_review_clears_it_from_attention(self, client, add_message, db_path):
         message_id = add_message(
-            sender="architect", target="human-in-the-loop", work_item="CAT-5",
+            sender="architect",
+            target="human-in-the-loop",
+            work_item="CAT-5",
             content="completed CAT-5",
         )
         db.mark_processed(db_path, message_id)
@@ -300,9 +317,7 @@ class TestLogs:
 
 class TestGuardHeader:
     def test_a_mutating_request_without_the_guard_header_is_refused(self, client, db_path):
-        status, payload = client.post(
-            "/api/tasks", {"summary": "add order intake"}, guarded=False
-        )
+        status, payload = client.post("/api/tasks", {"summary": "add order intake"}, guarded=False)
 
         assert status == 403
         assert GUARD_HEADER in payload["error"]
@@ -372,7 +387,10 @@ class TestTasks:
 
     def test_a_body_that_is_not_json_is_refused(self, client):
         status, payload = client.request(
-            "POST", "/api/tasks", headers={GUARD_HEADER: "1"}, body=None,
+            "POST",
+            "/api/tasks",
+            headers={GUARD_HEADER: "1"},
+            body=None,
         )
 
         # No body at all is an empty object, which fails the same way an empty summary does.
@@ -419,7 +437,9 @@ class TestTeardown:
         # the exact moment the operator needs to know what happened.
         done = threading.Event()
         monkeypatch.setattr(
-            actions_gateway.stop, "stop_all", lambda roles: done.set() or [],
+            actions_gateway.stop,
+            "stop_all",
+            lambda roles: done.set() or [],
         )
 
         status, payload = client.post("/api/teardown", {"confirm": "TEARDOWN"})

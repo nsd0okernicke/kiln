@@ -36,8 +36,8 @@ UNNAMED_TITLE = "new request"
 WORKING_STATES = frozenset({"working", "retrying", "delegating"})
 COST_REPORTING_AGENTS = frozenset({"claude", "grok"})
 _SUMMARY_RE = re.compile(
-    re.escape(handoff.SEPARATOR) + r".*\n" + re.escape(handoff.SEPARATOR)
-    + r"\n(?P<summary>.*)", re.DOTALL,
+    re.escape(handoff.SEPARATOR) + r".*\n" + re.escape(handoff.SEPARATOR) + r"\n(?P<summary>.*)",
+    re.DOTALL,
 )
 
 
@@ -187,39 +187,36 @@ def role_rows(snapshot: SwarmSnapshot, work_items: list[dict]) -> list[dict]:
     nothing but a row of dashes.
     """
     holding = _work_item_by_role(work_items)
-    rows = []
-    for session in visible_roles(snapshot.sessions):
-        status = snapshot.statuses.get(session.role)
-        queue = snapshot.queue_depth.get(session.role, 0)
-        rows.append(
-            {
-                "role": session.role,
-                "agent": session.agent,
-                "display_name": session.display_name,
-                # The status file first: that is the model the scheduler actually resolved,
-                # including the worker definition's frontmatter, which no other source knows.
-                # The sessions file is the fallback, and the only answer a *wrapper* role has --
-                # nothing writes a status model for a role with no scheduler behind it.
-                "model": (status or {}).get("model") or session.model or None,
-                "worktree": session.worktree or None,
-                "state": status["state"] if status else None,
-                "since": (status or {}).get("since"),
-                "since_ago": _since_ago(status, snapshot.now_utc),
-                "stalled": is_stalled(status, snapshot.now_utc),
-                "attempt": attempt_suffix(status).strip(),
-                "queue": queue,
-                "wait": _queue_wait(snapshot, session.role),
-                "cycles": (status or {}).get("cycles"),
-                "cost_usd": (status or {}).get("cost_usd"),
-                "tokens": (status or {}).get("tokens"),
-                "token_usage": (status or {}).get("token_usage") or {},
-                "cache_share": cache_share((status or {}).get("token_usage")),
-                "worker_timeout_sec": (status or {}).get("worker_timeout_sec"),
-                "heat": activity_heat(status, queue),
-                "work_item": holding.get(session.role),
-            }
-        )
-    return rows
+    return [_role_row(snapshot, session, holding) for session in visible_roles(snapshot.sessions)]
+
+
+def _role_row(snapshot: SwarmSnapshot, session: RoleSession, holding: dict[str, str]) -> dict:
+    status = snapshot.statuses.get(session.role)
+    values = status or {}
+    queue = snapshot.queue_depth.get(session.role, 0)
+    return {
+        "role": session.role,
+        "agent": session.agent,
+        "display_name": session.display_name,
+        # Status is authoritative because it includes worker-frontmatter model resolution.
+        "model": values.get("model") or session.model or None,
+        "worktree": session.worktree or None,
+        "state": status["state"] if status else None,
+        "since": values.get("since"),
+        "since_ago": _since_ago(status, snapshot.now_utc),
+        "stalled": is_stalled(status, snapshot.now_utc),
+        "attempt": attempt_suffix(status).strip(),
+        "queue": queue,
+        "wait": _queue_wait(snapshot, session.role),
+        "cycles": values.get("cycles"),
+        "cost_usd": values.get("cost_usd"),
+        "tokens": values.get("tokens"),
+        "token_usage": values.get("token_usage") or {},
+        "cache_share": cache_share(values.get("token_usage")),
+        "worker_timeout_sec": values.get("worker_timeout_sec"),
+        "heat": activity_heat(status, queue),
+        "work_item": holding.get(session.role),
+    }
 
 
 def activity_heat(status: dict | None, queue_depth: int) -> float:

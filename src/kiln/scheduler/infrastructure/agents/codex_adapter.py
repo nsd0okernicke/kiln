@@ -53,10 +53,10 @@ from ...domain.status_contract import STATUS_BLOCKED, WorkerResult, parse_worker
 from ...domain.worker_prompt import WorkerDefinition
 from . import (
     DEFAULT_IDLE_TIMEOUT_SEC,
-    REAP_TIMEOUT_SEC,
     TokenUsage,
     Watchdog,
     WorkerInvocation,
+    capture_json_stream,
     terminate_tree,
 )
 
@@ -111,10 +111,14 @@ def proxy_config_args(base_url: str | None) -> list[str]:
         return []
     provider = f"model_providers.{PROXY_PROVIDER}"
     return [
-        "-c", f"model_provider={PROXY_PROVIDER}",
-        "-c", f'{provider}.name="{PROXY_PROVIDER}"',
-        "-c", f'{provider}.base_url="{base_url.rstrip("/")}"',
-        "-c", f'{provider}.wire_api="responses"',
+        "-c",
+        f"model_provider={PROXY_PROVIDER}",
+        "-c",
+        f'{provider}.name="{PROXY_PROVIDER}"',
+        "-c",
+        f'{provider}.base_url="{base_url.rstrip("/")}"',
+        "-c",
+        f'{provider}.wire_api="responses"',
     ]
 
 
@@ -133,7 +137,8 @@ def build_command(
         "--json",
         "--dangerously-bypass-approvals-and-sandbox",
         "--ignore-user-config",
-        "-o", str(output_file),
+        "-o",
+        str(output_file),
     ]
     if model:
         command += ["-m", model]
@@ -153,29 +158,7 @@ def render_event(event: dict) -> list[str]:
     kind = event.get("type")
 
     if kind == "item.completed":
-        item = event.get("item") or {}
-        item_type = item.get("type")
-
-        if item_type == "command_execution":
-            exit_code = item.get("exit_code")
-            if exit_code not in (0, None):
-                output = item.get("aggregated_output", "")
-                return [f"  {ICON_TOOL_ERROR} {_condense(output or 'command failed')}"]
-            return [f"  {ICON_TOOL} {_condense(item.get('command', 'command'))}"]
-
-        if item_type == "file_change":
-            paths = ", ".join(
-                f"{change.get('kind', '?')} {change.get('path', '?')}"
-                for change in item.get("changes", [])
-            )
-            return [f"  {ICON_TOOL} file_change  {_condense(paths)}"]
-
-        if item_type == "agent_message":
-            text = str(item.get("text", "")).strip()
-            return [f"    {line}" for line in text.splitlines()] if text else []
-
-        if item_type == "error":
-            return [f"  {ICON_TOOL_ERROR} {_condense(item.get('message', 'error'))}"]
+        return _render_completed_item(event.get("item") or {})
 
     if kind == "turn.failed":
         message = (event.get("error") or {}).get("message", "turn failed")
@@ -185,6 +168,31 @@ def render_event(event: dict) -> list[str]:
         return [f"{ICON_FINISHED} worker finished"]
 
     return []
+
+
+def _render_completed_item(item: dict) -> list[str]:
+    item_type = item.get("type")
+    if item_type == "command_execution":
+        return _render_command(item)
+    if item_type == "file_change":
+        paths = ", ".join(
+            f"{change.get('kind', '?')} {change.get('path', '?')}"
+            for change in item.get("changes", [])
+        )
+        return [f"  {ICON_TOOL} file_change  {_condense(paths)}"]
+    if item_type == "agent_message":
+        text = str(item.get("text", "")).strip()
+        return [f"    {line}" for line in text.splitlines()] if text else []
+    if item_type == "error":
+        return [f"  {ICON_TOOL_ERROR} {_condense(item.get('message', 'error'))}"]
+    return []
+
+
+def _render_command(item: dict) -> list[str]:
+    if item.get("exit_code") not in (0, None):
+        output = item.get("aggregated_output", "")
+        return [f"  {ICON_TOOL_ERROR} {_condense(output or 'command failed')}"]
+    return [f"  {ICON_TOOL} {_condense(item.get('command', 'command'))}"]
 
 
 def find_turn_failure(stdout: str) -> str | None:
@@ -317,6 +325,61 @@ def _default_emit(line: str) -> None:
     print(line, flush=True)
 
 
+def _output_file() -> Path:
+    output_fd, output_path = tempfile.mkstemp(prefix="kiln-codex-", suffix=".txt")
+    os.close(output_fd)
+    return Path(output_path)
+
+
+def _worker_command(
+    definition: WorkerDefinition, prompt: str, model: str, output: Path
+) -> list[str]:
+    command = build_command(
+        prompt=build_full_prompt(definition, prompt),
+        output_file=output,
+        model=model,
+        proxy_base_url=os.environ.get(PROXY_BASE_URL_ENV),
+    )
+    resolved = shutil.which(command[0])
+    if resolved:
+        command[0] = resolved
+    return command
+
+
+def _completed_process_invocation(
+    definition: WorkerDefinition,
+    process: subprocess.Popen,
+    output_file: Path,
+    stdout: str,
+) -> WorkerInvocation:
+    stderr = (process.stderr.read() if process.stderr else "") or ""
+    tokens = find_usage(stdout)
+    failure = find_turn_failure(stdout)
+    if failure:
+        log.error("worker %s reported a failed turn: %s", definition.name, failure)
+        return _blocked(failure, stdout, is_error=True, tokens=tokens)
+    if process.returncode != 0:
+        detail = stderr.strip() or f"codex exited {process.returncode}"
+        log.error("worker %s failed: %s", definition.name, detail)
+        return _blocked(detail, stdout, is_error=True, tokens=tokens)
+
+    text = output_file.read_text(encoding="utf-8").strip() if output_file.is_file() else ""
+    if not text:
+        detail = stderr.strip() or "codex produced no output message"
+        log.error("worker %s produced no output message: %s", definition.name, detail)
+        return _blocked(detail, stdout, is_error=True, tokens=tokens)
+
+    result = parse_worker_report(text)
+    log.info(
+        "worker %s finished: status=%s sentinel=%s tokens=%s",
+        definition.name,
+        result.status,
+        result.sentinel_found,
+        tokens.total if tokens else "-",
+    )
+    return WorkerInvocation(result=result, raw_output=text, tokens=tokens)
+
+
 def run_worker(
     *,
     definition: WorkerDefinition,
@@ -344,23 +407,8 @@ def run_worker(
     (see module docstring) means Codex already logs every invocation unconditionally to
     `$CODEX_HOME/logs_2.sqlite` regardless of any flag this adapter passes.
     """
-    full_prompt = build_full_prompt(definition, prompt)
-    output_fd, output_path = tempfile.mkstemp(prefix="kiln-codex-", suffix=".txt")
-    os.close(output_fd)
-    output_file = Path(output_path)
-
-    command = build_command(
-        prompt=full_prompt,
-        output_file=output_file,
-        model=model,
-        # Read from the environment rather than taken as an argument: the pane already
-        # carries it and this worker is that pane's subprocess, so the scheduler never has
-        # to know whether the proxy is on.
-        proxy_base_url=os.environ.get(PROXY_BASE_URL_ENV),
-    )
-    resolved = shutil.which(command[0])
-    if resolved:
-        command[0] = resolved
+    output_file = _output_file()
+    command = _worker_command(definition, prompt, model, output_file)
 
     emit = on_output or _default_emit
 
@@ -387,65 +435,20 @@ def run_worker(
         # Two limits: `timeout` for a worker that is slow, `idle_timeout` for one that
         # has stopped. Only the first existed, and it charged the full hour for a
         # worker that had already gone quiet.
-        watchdog = Watchdog(process, timeout, idle_timeout).start()
-
-        captured: list[str] = []
-        try:
-            for line in process.stdout:  # type: ignore[union-attr]
-                watchdog.saw_output()
-                captured.append(line)
-                stripped = line.strip()
-                if not stripped.startswith("{"):
-                    continue
-                try:
-                    event = json.loads(stripped)
-                except json.JSONDecodeError:
-                    continue
-                for rendered in render_event(event):
-                    emit(rendered)
-            try:
-                # Bounded: the pipe closing means the child is finishing, not that it has
-                # finished. An unbounded wait here reintroduces exactly the hang the
-                # watchdog exists to end.
-                process.wait(timeout=REAP_TIMEOUT_SEC)
-            except subprocess.TimeoutExpired:
-                terminate_tree(process)
-        finally:
-            watchdog.stop()
-
-        stdout = "".join(captured)
-
-        if watchdog.reason:
-            log.error("worker %s killed: %s", definition.name, watchdog.reason)
-            return _blocked(watchdog.reason, stdout, timed_out=True)
-
-        stderr = (process.stderr.read() if process.stderr else "") or ""
-        # Read once, up front: every path below this point ends in a WorkerInvocation, and a
-        # turn that failed or produced no message still burned tokens worth counting.
-        tokens = find_usage(stdout)
-
-        failure = find_turn_failure(stdout)
-        if failure:
-            log.error("worker %s reported a failed turn: %s", definition.name, failure)
-            return _blocked(failure, stdout, is_error=True, tokens=tokens)
-
-        if process.returncode != 0:
-            detail = stderr.strip() or f"codex exited {process.returncode}"
-            log.error("worker %s failed: %s", definition.name, detail)
-            return _blocked(detail, stdout, is_error=True, tokens=tokens)
-
-        text = output_file.read_text(encoding="utf-8").strip() if output_file.is_file() else ""
-        if not text:
-            detail = stderr.strip() or "codex produced no output message"
-            log.error("worker %s produced no output message: %s", definition.name, detail)
-            return _blocked(detail, stdout, is_error=True, tokens=tokens)
-
-        result = parse_worker_report(text)
-        log.info(
-            "worker %s finished: status=%s sentinel=%s tokens=%s",
-            definition.name, result.status, result.sentinel_found,
-            tokens.total if tokens else "-",
+        capture = capture_json_stream(
+            process,
+            timeout=timeout,
+            idle_timeout=idle_timeout,
+            render_event=render_event,
+            emit=emit,
+            watchdog_factory=Watchdog,
+            terminate=terminate_tree,
         )
-        return WorkerInvocation(result=result, raw_output=text, tokens=tokens)
+        stdout = capture.stdout
+        if capture.timeout_reason:
+            log.error("worker %s killed: %s", definition.name, capture.timeout_reason)
+            return _blocked(capture.timeout_reason, stdout, timed_out=True)
+
+        return _completed_process_invocation(definition, process, output_file, stdout)
     finally:
         output_file.unlink(missing_ok=True)

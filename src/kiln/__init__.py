@@ -1,2 +1,1 @@
 """Installable Kiln package namespace."""
-

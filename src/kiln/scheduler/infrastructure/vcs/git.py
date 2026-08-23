@@ -250,7 +250,8 @@ def record_provenance(commit: str, cwd: str | Path) -> GitResult:
         log.warning(
             "could not record provenance for %s: %s -- later merges against this branch will "
             "compute an older merge base and may conflict on files both sides touched",
-            commit[:8], first_line,
+            commit[:8],
+            first_line,
         )
     return result
 
@@ -313,9 +314,7 @@ def _clear_generated_blockers(output: str, cwd: str | Path) -> list[str]:
             log.warning("could not remove %s: %s", relative, exc)
 
     if removed:
-        log.warning(
-            "cleared launcher-generated file(s) blocking the merge: %s", ", ".join(removed)
-        )
+        log.warning("cleared launcher-generated file(s) blocking the merge: %s", ", ".join(removed))
     return removed
 
 
@@ -347,17 +346,17 @@ def ensure_ignored(pattern: str, cwd: str | Path) -> None:
         log.warning("could not locate info/exclude; %s may be committed accidentally", pattern)
         return
 
-    exclude_path = Path(cwd) / located.stdout if not Path(located.stdout).is_absolute() else Path(
-        located.stdout
+    exclude_path = (
+        Path(cwd) / located.stdout
+        if not Path(located.stdout).is_absolute()
+        else Path(located.stdout)
     )
     try:
         exclude_path.parent.mkdir(parents=True, exist_ok=True)
         existing = exclude_path.read_text(encoding="utf-8") if exclude_path.exists() else ""
         if pattern not in existing.splitlines():
             separator = "" if existing.endswith("\n") or not existing else "\n"
-            exclude_path.write_text(
-                f"{existing}{separator}{pattern}\n", encoding="utf-8"
-            )
+            exclude_path.write_text(f"{existing}{separator}{pattern}\n", encoding="utf-8")
             log.info("added %r to %s", pattern, exclude_path)
     except OSError as exc:
         log.warning("could not update %s: %s", exclude_path, exc)
@@ -412,18 +411,10 @@ def ensure_union_merge(cwd: str | Path, paths: tuple[str, ...] = UNION_MERGE_PAT
         log.warning("could not locate info/attributes; %s may conflict on merge", paths)
         return
 
-    attributes_path = (
-        Path(located.stdout)
-        if Path(located.stdout).is_absolute()
-        else Path(cwd) / located.stdout
-    )
+    attributes_path = _git_path(cwd, located.stdout)
     try:
-        existing = (
-            attributes_path.read_text(encoding="utf-8") if attributes_path.exists() else ""
-        )
-        lines = existing.splitlines()
-        missing = [f"{path} merge=union" for path in paths]
-        missing = [line for line in missing if line not in lines]
+        existing = attributes_path.read_text(encoding="utf-8") if attributes_path.exists() else ""
+        missing = _missing_union_rules(existing, paths)
         if not missing:
             return
         attributes_path.parent.mkdir(parents=True, exist_ok=True)
@@ -434,6 +425,16 @@ def ensure_union_merge(cwd: str | Path, paths: tuple[str, ...] = UNION_MERGE_PAT
         log.info("declared %s union-merged in %s", ", ".join(paths), attributes_path)
     except OSError as exc:
         log.warning("could not update %s: %s", attributes_path, exc)
+
+
+def _git_path(cwd: str | Path, path: str) -> Path:
+    candidate = Path(path)
+    return candidate if candidate.is_absolute() else Path(cwd) / candidate
+
+
+def _missing_union_rules(existing: str, paths: tuple[str, ...]) -> list[str]:
+    lines = existing.splitlines()
+    return [f"{path} merge=union" for path in paths if f"{path} merge=union" not in lines]
 
 
 def squash_anchor(cwd: str | Path) -> str:

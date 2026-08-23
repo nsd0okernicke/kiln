@@ -22,9 +22,7 @@ import pytest
 
 from kiln.scheduler.infrastructure.persistence import db
 
-CHANNEL_PY = (
-    Path(__file__).resolve().parents[4] / "src" / "kiln" / "mcp_server" / "channel.py"
-)
+CHANNEL_PY = Path(__file__).resolve().parents[4] / "src" / "kiln" / "mcp_server" / "channel.py"
 
 pytestmark = pytest.mark.integration
 
@@ -56,8 +54,13 @@ def load_channel(monkeypatch):
         stub.FastMCP = _StubFastMCP
         monkeypatch.setitem(sys.modules, "mcp.server.fastmcp", stub)
 
-        for key in ("KILN_ROLE", "KILN_DB_PATH", "KILN_BRANCH", "KILN_POLL_INTERVAL",
-                    "KILN_CHANNEL_LOG"):
+        for key in (
+            "KILN_ROLE",
+            "KILN_DB_PATH",
+            "KILN_BRANCH",
+            "KILN_POLL_INTERVAL",
+            "KILN_CHANNEL_LOG",
+        ):
             monkeypatch.delenv(key, raising=False)
         for key, value in env.items():
             monkeypatch.setenv(key, str(value))

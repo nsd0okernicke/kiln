@@ -117,8 +117,15 @@ class TestFormatTokens:
 class TestColours:
     def test_each_reported_state_has_its_own_colour(self):
         # Every state role_scheduler passes to set_status must be distinguishable.
-        for state in ("waiting", "receiving", "working", "retrying", "handing-off",
-                      "blocked", "idle"):
+        for state in (
+            "waiting",
+            "receiving",
+            "working",
+            "retrying",
+            "handing-off",
+            "blocked",
+            "idle",
+        ):
             assert state in pane_status.STATE_COLORS_HEX, f"{state} would render as unknown"
 
     def test_failure_states_are_visually_distinct_from_working_ones(self):
@@ -339,7 +346,8 @@ class TestWindowsVtShim:
 
         monkeypatch.setattr(pane_status.os, "name", "posix")
         monkeypatch.setattr(
-            ctypes.windll.kernel32, "GetStdHandle",
+            ctypes.windll.kernel32,
+            "GetStdHandle",
             lambda _h: pytest.fail("must not touch the Windows console API"),
         )
         pane_status._enable_windows_vt(io.StringIO())
@@ -351,11 +359,13 @@ class TestWindowsVtShim:
         applied = {}
         monkeypatch.setattr(ctypes.windll.kernel32, "GetStdHandle", lambda _h: 7)
         monkeypatch.setattr(
-            ctypes.windll.kernel32, "GetConsoleMode",
+            ctypes.windll.kernel32,
+            "GetConsoleMode",
             lambda _handle, mode: applied.setdefault("read", True) or 1,
         )
         monkeypatch.setattr(
-            ctypes.windll.kernel32, "SetConsoleMode",
+            ctypes.windll.kernel32,
+            "SetConsoleMode",
             lambda handle, mode: applied.update(handle=handle, mode=mode) or 1,
         )
 

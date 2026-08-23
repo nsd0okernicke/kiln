@@ -33,9 +33,7 @@ def paths(tmp_path):
 
 def build(paths, proxy_url=None, **role_kwargs):
     role_kwargs.setdefault("role", "coder")
-    return build_agent_command(
-        RoleConfig(**role_kwargs), paths, branch="main", proxy_url=proxy_url
-    )
+    return build_agent_command(RoleConfig(**role_kwargs), paths, branch="main", proxy_url=proxy_url)
 
 
 PROXY = "http://127.0.0.1:8787"
@@ -133,11 +131,13 @@ class TestCockpitPane:
             RoleConfig(role="dashboard", scheduler="dashboard", mode="manual"),
             RoleConfig(role="cockpit", scheduler="cockpit", mode="manual"),
         )
-        routing = overrides.pop("routing", None) or parse_profile_routing({
-            "human-in-the-loop": "specifier",
-            "specifier": "coder",
-            "coder": "human-in-the-loop",
-        })
+        routing = overrides.pop("routing", None) or parse_profile_routing(
+            {
+                "human-in-the-loop": "specifier",
+                "specifier": "coder",
+                "coder": "human-in-the-loop",
+            }
+        )
         return Profile(name="test", roles=roles, routing=routing, **overrides)
 
     def _cockpit(self, paths, profile=None, **role_kwargs):
@@ -145,7 +145,9 @@ class TestCockpitPane:
         role_kwargs.setdefault("scheduler", "cockpit")
         role_kwargs.setdefault("mode", "manual")
         return build_agent_command(
-            RoleConfig(**role_kwargs), paths, branch="main",
+            RoleConfig(**role_kwargs),
+            paths,
+            branch="main",
             profile=profile if profile is not None else self._profile(),
         )
 
@@ -177,11 +179,14 @@ class TestCockpitPane:
         assert argv[argv.index("--intake-role") + 1] == "specifier"
 
     def test_the_human_role_is_the_profiles_manual_role(self, paths):
-        profile = self._profile(roles=(
-            RoleConfig(role="operator", worktree="@current", mode="manual"),
-            RoleConfig(role="coder", scheduler="python"),
-            RoleConfig(role="cockpit", scheduler="cockpit", mode="manual"),
-        ), routing=parse_profile_routing({"operator": "coder", "coder": "operator"}))
+        profile = self._profile(
+            roles=(
+                RoleConfig(role="operator", worktree="@current", mode="manual"),
+                RoleConfig(role="coder", scheduler="python"),
+                RoleConfig(role="cockpit", scheduler="cockpit", mode="manual"),
+            ),
+            routing=parse_profile_routing({"operator": "coder", "coder": "operator"}),
+        )
 
         argv = self._cockpit(paths, profile=profile).argv
 
@@ -190,10 +195,13 @@ class TestCockpitPane:
     def test_a_profile_with_no_manual_role_still_launches(self, paths):
         # A cockpit that refused to start over a naming convention would be worse than one
         # that falls back to the conventional name.
-        profile = self._profile(roles=(
-            RoleConfig(role="coder", scheduler="python"),
-            RoleConfig(role="cockpit", scheduler="cockpit", mode="manual"),
-        ), routing=parse_profile_routing({"coder": "coder"}))
+        profile = self._profile(
+            roles=(
+                RoleConfig(role="coder", scheduler="python"),
+                RoleConfig(role="cockpit", scheduler="cockpit", mode="manual"),
+            ),
+            routing=parse_profile_routing({"coder": "coder"}),
+        )
 
         argv = self._cockpit(paths, profile=profile).argv
 
@@ -358,7 +366,12 @@ class TestScheduler:
     def test_passes_every_required_scheduler_argument(self, paths):
         argv = self._scheduler(paths).argv
         for flag in (
-            "--role", "--branch", "--db-path", "--worktree", "--workflow", "--worker-agent"
+            "--role",
+            "--branch",
+            "--db-path",
+            "--worktree",
+            "--workflow",
+            "--worker-agent",
         ):
             assert flag in argv, f"{flag} missing"
         assert argv[argv.index("--role") + 1] == "coder"
@@ -405,8 +418,7 @@ class TestScheduler:
 
     def test_unset_knobs_are_not_passed_so_the_module_default_applies(self, paths):
         argv = self._scheduler(paths).argv
-        for flag in ("--poll-interval", "--worker-timeout", "--max-attempts",
-                     "--escalation-limit"):
+        for flag in ("--poll-interval", "--worker-timeout", "--max-attempts", "--escalation-limit"):
             assert flag not in argv
 
     def test_unset_guards_are_not_passed_at_all(self, paths):
@@ -454,8 +466,12 @@ class TestInboxPane:
         from kiln.launcher.domain.profile import RoleConfig
 
         role = RoleConfig(
-            role="inbox", worktree="@current", mode="manual",
-            scheduler="inbox", watches="human-in-the-loop", **overrides
+            role="inbox",
+            worktree="@current",
+            mode="manual",
+            scheduler="inbox",
+            watches="human-in-the-loop",
+            **overrides,
         )
         return build_agent_command(role, paths, "main")
 
@@ -511,7 +527,10 @@ class TestDashboardPane:
         from kiln.launcher.domain.profile import RoleConfig
 
         role = RoleConfig(
-            role="dashboard", worktree="@current", mode="manual", scheduler="dashboard",
+            role="dashboard",
+            worktree="@current",
+            mode="manual",
+            scheduler="dashboard",
             **overrides,
         )
         return build_agent_command(role, paths, "main")
@@ -560,8 +579,11 @@ class TestInboxIsNotAnAgent:
         from kiln.launcher.domain.profile import RoleConfig
 
         return RoleConfig(
-            role="inbox", worktree="@current", mode="manual",
-            scheduler="inbox", watches="human-in-the-loop",
+            role="inbox",
+            worktree="@current",
+            mode="manual",
+            scheduler="inbox",
+            watches="human-in-the-loop",
         )
 
     def test_no_worker_definition_is_written(self, paths):
@@ -699,9 +721,7 @@ class TestPosixRendering:
         assert render_posix(AgentCommand(argv=["echo", "hi"]), clear=True) == "clear; echo hi"
 
     def test_scheduler_command_renders_for_tmux(self, paths):
-        rendered = render_posix(
-            build(paths, scheduler="python", mode="auto", worktree="coder")
-        )
+        rendered = render_posix(build(paths, scheduler="python", mode="auto", worktree="coder"))
         assert "export PYTHONPATH=" in rendered
         assert f"{python_command()} -m kiln.scheduler.infrastructure.cli.role_scheduler" in rendered
 
@@ -722,15 +742,16 @@ class TestProfileRoutingReachesTheScheduler:
             RoleConfig(role="human-in-the-loop"),
         )
         return Profile(
-            name="p", description="", roles=roles, layout={},
+            name="p",
+            description="",
+            roles=roles,
+            layout={},
             routing=parse_profile_routing(routing),
         )
 
     def test_declared_routing_becomes_route_arguments(self, paths):
         profile = self._profile({"architect": "human-in-the-loop"})
-        command = build_agent_command(
-            profile.role("architect"), paths, "main", profile=profile
-        )
+        command = build_agent_command(profile.role("architect"), paths, "main", profile=profile)
         assert "--route" in command.argv
         assert "architect=human-in-the-loop" in command.argv
 
@@ -746,15 +767,11 @@ class TestProfileRoutingReachesTheScheduler:
         # The scheduler needs it for the no-routing case, and dropping it would make the
         # two paths diverge in a way nothing else would catch.
         profile = self._profile({"architect": "human-in-the-loop"})
-        command = build_agent_command(
-            profile.role("architect"), paths, "main", profile=profile
-        )
+        command = build_agent_command(profile.role("architect"), paths, "main", profile=profile)
         assert "--workflow" in command.argv
 
     def test_a_scheduler_role_still_launches_without_a_profile(self, paths):
         # build_agent_command's profile argument is optional; callers that predate it must
         # keep working rather than raising.
-        command = build_agent_command(
-            self._profile().role("coder"), paths, "main"
-        )
+        command = build_agent_command(self._profile().role("coder"), paths, "main")
         assert "kiln.scheduler.infrastructure.cli.role_scheduler" in " ".join(command.argv)

@@ -206,41 +206,12 @@ class TrafficStore:
                 # store written by a proxy that predated the composition columns. Degrading
                 # per column keeps the request-size figures, which need nothing new.
                 available = {row[1] for row in conn.execute("PRAGMA table_info(traffic)")}
-                optional = {
-                    name: (f"AVG({name})" if name in available else "NULL")
-                    for name in ("tools_bytes", "system_bytes", "messages_bytes")
-                }
-                window = "AND ts >= ?" if since else ""
-                rows = conn.execute(
-                    f"""
-                    SELECT role, COUNT(*), AVG(request_bytes), MAX(request_bytes),
-                           SUM(request_bytes),
-                           {optional["tools_bytes"]}, {optional["system_bytes"]},
-                           {optional["messages_bytes"]}
-                    FROM traffic WHERE role IS NOT NULL {window}
-                    GROUP BY role ORDER BY role
-                    """,
-                    (since,) if since else (),
-                ).fetchall()
+                rows = _request_stats_rows(conn, available, since)
             except sqlite3.DatabaseError:
                 # Not a usable store at all: a half-created file, or something that is not
                 # SQLite. The dashboard must not die over an optional panel.
                 return {}
-        return {
-            row[0]: {
-                "requests": int(row[1]),
-                "avg_bytes": int(row[2] or 0),
-                "max_bytes": int(row[3] or 0),
-                "total_bytes": int(row[4] or 0),
-                # None (not 0) when nothing recorded it -- rows captured before these
-                # columns existed, or bodies that could not be parsed. The dashboard shows
-                # `-` rather than claiming a section was empty.
-                "avg_tools": int(row[5]) if row[5] is not None else None,
-                "avg_system": int(row[6]) if row[6] is not None else None,
-                "avg_messages": int(row[7]) if row[7] is not None else None,
-            }
-            for row in rows
-        }
+        return {row[0]: _request_stats(row) for row in rows}
 
     def totals_by_role(self) -> dict[str, TokenUsage]:
         """Token usage per role — the proxy's own answer to Phase A's dashboard columns."""
@@ -264,3 +235,38 @@ class TrafficStore:
             )
             for row in rows
         }
+
+
+def _request_stats_rows(conn, available: set[str], since: str | None):
+    optional = {
+        name: (f"AVG({name})" if name in available else "NULL")
+        for name in ("tools_bytes", "system_bytes", "messages_bytes")
+    }
+    window = "AND ts >= ?" if since else ""
+    return conn.execute(
+        f"""
+        SELECT role, COUNT(*), AVG(request_bytes), MAX(request_bytes), SUM(request_bytes),
+               {optional["tools_bytes"]}, {optional["system_bytes"]},
+               {optional["messages_bytes"]}
+        FROM traffic WHERE role IS NOT NULL {window}
+        GROUP BY role ORDER BY role
+        """,
+        (since,) if since else (),
+    ).fetchall()
+
+
+def _optional_int(value) -> int | None:
+    return int(value) if value is not None else None
+
+
+def _request_stats(row) -> dict[str, int | None]:
+    return {
+        "requests": int(row[1]),
+        "avg_bytes": int(row[2] or 0),
+        "max_bytes": int(row[3] or 0),
+        "total_bytes": int(row[4] or 0),
+        # None means the column was absent or no captured row recorded a composition.
+        "avg_tools": _optional_int(row[5]),
+        "avg_system": _optional_int(row[6]),
+        "avg_messages": _optional_int(row[7]),
+    }

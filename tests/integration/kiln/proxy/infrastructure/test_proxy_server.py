@@ -70,8 +70,12 @@ class _FakeUpstream(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/event-stream")
         self.end_headers()
         self.wfile.write(
-            _sse({"type": "message_start",
-                  "message": {"usage": {"input_tokens": 120, "cache_read_input_tokens": 900}}})
+            _sse(
+                {
+                    "type": "message_start",
+                    "message": {"usage": {"input_tokens": 120, "cache_read_input_tokens": 900}},
+                }
+            )
         )
         self.wfile.flush()
         time.sleep(STREAM_GAP_SEC)
@@ -94,13 +98,20 @@ class _SecondUpstream(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.end_headers()
-        self.wfile.write(_sse({
-            "type": "response.completed",
-            "response": {"usage": {
-                "input_tokens": 1_000, "output_tokens": 25,
-                "input_tokens_details": {"cached_tokens": 900},
-            }},
-        }))
+        self.wfile.write(
+            _sse(
+                {
+                    "type": "response.completed",
+                    "response": {
+                        "usage": {
+                            "input_tokens": 1_000,
+                            "output_tokens": 25,
+                            "input_tokens_details": {"cached_tokens": 900},
+                        }
+                    },
+                }
+            )
+        )
         self.wfile.flush()
 
 
@@ -119,8 +130,11 @@ def proxy(tmp_path, upstream):
     store = TrafficStore(tmp_path / "traffic.db")
     host, port = upstream.server_address[0], upstream.server_address[1]
     server = serve(
-        store=store, port=0, upstream=f"{host}:{port}",
-        mode=CaptureMode.METADATA, use_tls=False,
+        store=store,
+        port=0,
+        upstream=f"{host}:{port}",
+        mode=CaptureMode.METADATA,
+        use_tls=False,
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -134,7 +148,8 @@ def proxy(tmp_path, upstream):
 def _post(server, path, payload=None, headers=None):
     connection = http.client.HTTPConnection(*server.server_address, timeout=10)
     connection.request(
-        "POST", path,
+        "POST",
+        path,
         body=json.dumps(payload or {"model": "claude-sonnet-5", "messages": []}),
         headers={"Content-Type": "application/json", **(headers or {})},
     )
@@ -158,7 +173,8 @@ class TestSplitRole:
     def test_hyphenated_roles_survive(self):
         # `human-in-the-loop` has broken naive role parsing before (see routing.py).
         assert split_role("/kiln/human-in-the-loop/v1/messages") == (
-            "human-in-the-loop", "/v1/messages"
+            "human-in-the-loop",
+            "/v1/messages",
         )
 
 
@@ -212,12 +228,14 @@ class TestPerRoleUpstream:
         thread.start()
         store = TrafficStore(tmp_path / "traffic.db")
         server = serve(
-            store=store, port=0,
+            store=store,
+            port=0,
             upstream="{}:{}".format(*upstream.server_address),
-            mode=CaptureMode.METADATA, use_tls=False,
-            routes={"architect": parse_upstream(
-                "{}:{}/backend-api/codex".format(*other.server_address)
-            )},
+            mode=CaptureMode.METADATA,
+            use_tls=False,
+            routes={
+                "architect": parse_upstream("{}:{}/backend-api/codex".format(*other.server_address))
+            },
         )
         proxy_thread = threading.Thread(target=server.serve_forever, daemon=True)
         proxy_thread.start()
@@ -291,6 +309,7 @@ class TestStreaming:
 
 def _rows(store):
     import sqlite3
+
     with sqlite3.connect(store.db_path) as conn:
         conn.row_factory = sqlite3.Row
         return [dict(row) for row in conn.execute("SELECT * FROM traffic")]
@@ -389,8 +408,12 @@ class _GzipUpstream(BaseHTTPRequestHandler):
         self.rfile.read(length)
         type(self).received = {"accept_encoding": self.headers.get("Accept-Encoding")}
 
-        body = _sse({"type": "message_start",
-                     "message": {"usage": {"input_tokens": 77, "output_tokens": 0}}})
+        body = _sse(
+            {
+                "type": "message_start",
+                "message": {"usage": {"input_tokens": 77, "output_tokens": 0}},
+            }
+        )
         body += _sse({"type": "message_delta", "usage": {"output_tokens": 5}})
 
         self.send_response(200)
@@ -422,8 +445,11 @@ class TestCompressedUpstream:
         store = TrafficStore(tmp_path / "traffic.db")
         host, port = upstream.server_address
         server = serve(
-            store=store, port=0, upstream=f"{host}:{port}",
-            mode=CaptureMode.FULL, use_tls=False,
+            store=store,
+            port=0,
+            upstream=f"{host}:{port}",
+            mode=CaptureMode.FULL,
+            use_tls=False,
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -439,7 +465,8 @@ class TestCompressedUpstream:
         # compression -- the outcome wanted, stated positively.
         server, _ = gzip_proxy
         _post(
-            server, "/kiln/coder/v1/messages",
+            server,
+            "/kiln/coder/v1/messages",
             headers={"Accept-Encoding": "gzip, deflate, br, zstd"},
         ).getresponse().read()
         offered = (_GzipUpstream.received["accept_encoding"] or "identity").lower()
@@ -448,7 +475,8 @@ class TestCompressedUpstream:
     def test_usage_is_parsed_when_the_client_asked_for_gzip(self, gzip_proxy):
         server, store = gzip_proxy
         _post(
-            server, "/kiln/coder/v1/messages",
+            server,
+            "/kiln/coder/v1/messages",
             headers={"Accept-Encoding": "gzip, deflate, br, zstd"},
         ).getresponse().read()
         row = _wait_for_rows(store)[0]
@@ -458,7 +486,8 @@ class TestCompressedUpstream:
     def test_the_captured_body_is_readable_text(self, gzip_proxy):
         server, store = gzip_proxy
         _post(
-            server, "/kiln/coder/v1/messages",
+            server,
+            "/kiln/coder/v1/messages",
             headers={"Accept-Encoding": "gzip"},
         ).getresponse().read()
         row = _wait_for_rows(store)[0]
@@ -480,8 +509,12 @@ class TestStubMode:
         # Upstream deliberately points at a port with nothing on it: if stub mode ever
         # forwarded, the test would fail rather than silently pass.
         server = serve(
-            store=store, port=0, upstream="127.0.0.1:1", mode=CaptureMode.METADATA,
-            use_tls=False, stub=True,
+            store=store,
+            port=0,
+            upstream="127.0.0.1:1",
+            mode=CaptureMode.METADATA,
+            use_tls=False,
+            stub=True,
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -501,7 +534,7 @@ class TestStubMode:
         server, _ = stub_proxy
         body = _post(server, "/kiln/spike/v1/messages").getresponse().read().decode("utf-8")
         kinds = [
-            json.loads(line[len("data:"):])["type"]
+            json.loads(line[len("data:") :])["type"]
             for line in body.splitlines()
             if line.startswith("data:")
         ]
@@ -524,7 +557,7 @@ class TestStubMode:
             lines = block.strip().splitlines()
             assert lines[0].startswith("event: "), f"missing event line in: {block!r}"
             assert lines[1].startswith("data: ")
-            assert lines[0][len("event: "):] == json.loads(lines[1][len("data: "):])["type"]
+            assert lines[0][len("event: ") :] == json.loads(lines[1][len("data: ") :])["type"]
 
     def test_the_request_is_still_captured(self, stub_proxy):
         server, store = stub_proxy
@@ -551,8 +584,11 @@ class TestFullCaptureMode:
         store = TrafficStore(tmp_path / "traffic.db")
         host, port = upstream.server_address
         server = serve(
-            store=store, port=0, upstream=f"{host}:{port}",
-            mode=CaptureMode.FULL, use_tls=False,
+            store=store,
+            port=0,
+            upstream=f"{host}:{port}",
+            mode=CaptureMode.FULL,
+            use_tls=False,
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()

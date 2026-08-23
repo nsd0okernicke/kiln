@@ -112,8 +112,7 @@ def test_cockpit_application_does_not_import_any_concrete_infrastructure_package
         concrete = {
             node.module
             for node in ast.walk(tree)
-            if isinstance(node, ast.ImportFrom) and node.module
-            and ".infrastructure" in node.module
+            if isinstance(node, ast.ImportFrom) and node.module and ".infrastructure" in node.module
         }
         assert not concrete, f"{path.name} imports {concrete}"
 
@@ -124,8 +123,7 @@ def test_launcher_application_does_not_import_scheduler_infrastructure():
         concrete = {
             node.module
             for node in ast.walk(tree)
-            if isinstance(node, ast.ImportFrom) and node.module
-            and ".infrastructure" in node.module
+            if isinstance(node, ast.ImportFrom) and node.module and ".infrastructure" in node.module
         }
         assert not concrete, f"{path.name} imports {concrete}"
 

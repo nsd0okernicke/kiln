@@ -63,31 +63,41 @@ def build_layout(panes: list[PaneSpec], layout: dict | None) -> list[str]:
         return build_tabs_layout(panes)
 
     args: list[str] = []
-    tab_index = 0
-
     for tab_def in layout["tabs"]:
-        pane_defs = tab_def.get("panes") or []
-        members = [
-            pane for pane in (_pane_by_role(panes, p.get("role")) for p in pane_defs) if pane
-        ]
+        members = _tab_members(panes, tab_def)
         if not members:
             continue
 
         if args:
             args.append(SEPARATOR)
-        args.append("new-tab")
-        args += _new_tab_args(members[0], tab_index, title=tab_def.get("title"))
-
-        rows = tab_def.get("gridRows") or 1
-        for position, pane in enumerate(members[1:], start=1):
-            args += [SEPARATOR, "split-pane"]
-            # A grid alternates orientation; a linear row is all vertical splits.
-            args.append("-H" if rows > 1 and position % rows else "-V")
-            args += ["-d", pane.path, "pwsh", "-NoExit", "-Command", pane.cmd]
-
-        tab_index += 1
+        args += _tab_args(members, tab_def, args.count("new-tab"))
 
     return args or build_tabs_layout(panes)
+
+
+def _tab_members(panes: list[PaneSpec], tab_def: dict) -> list[PaneSpec]:
+    candidates = (_pane_by_role(panes, item.get("role")) for item in tab_def.get("panes") or [])
+    return [pane for pane in candidates if pane]
+
+
+def _tab_args(members: list[PaneSpec], tab_def: dict, tab_index: int) -> list[str]:
+    args = ["new-tab", *_new_tab_args(members[0], tab_index, title=tab_def.get("title"))]
+    rows = tab_def.get("gridRows") or 1
+    for position, pane in enumerate(members[1:], start=1):
+        # A grid alternates orientation; a linear row is all vertical splits.
+        orientation = "-H" if rows > 1 and position % rows else "-V"
+        args += [
+            SEPARATOR,
+            "split-pane",
+            orientation,
+            "-d",
+            pane.path,
+            "pwsh",
+            "-NoExit",
+            "-Command",
+            pane.cmd,
+        ]
+    return args
 
 
 def launch(panes: list[PaneSpec], layout: dict | None, dry_run: bool = False) -> list[str]:

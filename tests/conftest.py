@@ -72,8 +72,15 @@ def add_message(db_path):
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    message_id, sender, target, priority, status, content, created_at,
-                    branch, work_item,
+                    message_id,
+                    sender,
+                    target,
+                    priority,
+                    status,
+                    content,
+                    created_at,
+                    branch,
+                    work_item,
                 ),
             )
             conn.commit()

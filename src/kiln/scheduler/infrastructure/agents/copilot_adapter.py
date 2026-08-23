@@ -45,10 +45,10 @@ from ...domain.status_contract import STATUS_BLOCKED, WorkerResult, parse_worker
 from ...domain.worker_prompt import WorkerDefinition
 from . import (
     DEFAULT_IDLE_TIMEOUT_SEC,
-    REAP_TIMEOUT_SEC,
     TokenUsage,
     Watchdog,
     WorkerInvocation,
+    capture_json_stream,
     terminate_tree,
 )
 
@@ -90,12 +90,18 @@ def build_command(
     """
     command = [
         "copilot",
-        "-p", prompt,
-        "--agent", agent_name,
+        "-p",
+        prompt,
+        "--agent",
+        agent_name,
         "--allow-all",
-        "--allow-tool=read", "--allow-tool=write", "--allow-tool=shell",
-        "--output-format", "json",
-        "--disable-mcp-server", "kiln-db",
+        "--allow-tool=read",
+        "--allow-tool=write",
+        "--allow-tool=shell",
+        "--output-format",
+        "json",
+        "--disable-mcp-server",
+        "kiln-db",
         "--disable-builtin-mcps",
     ]
     if model:
@@ -125,11 +131,7 @@ def render_event(event: dict) -> list[str]:
     data = event.get("data") or {}
 
     if kind == "tool.execution_start":
-        name = str(data.get("toolName", "tool"))
-        arguments = data.get("arguments") or {}
-        detail = next(iter(arguments.values()), None) if arguments else None
-        label = f"{name}  {_condense(detail)}" if detail else name
-        return [f"  {ICON_TOOL} {label}"]
+        return [_tool_start_line(data)]
 
     if kind == "tool.execution_complete" and not data.get("success", True):
         result = data.get("result") or {}
@@ -143,6 +145,14 @@ def render_event(event: dict) -> list[str]:
         return [f"{ICON_FINISHED} worker finished"]
 
     return []
+
+
+def _tool_start_line(data: dict) -> str:
+    name = str(data.get("toolName", "tool"))
+    arguments = data.get("arguments") or {}
+    detail = next(iter(arguments.values()), None) if arguments else None
+    label = f"{name}  {_condense(detail)}" if detail else name
+    return f"  {ICON_TOOL} {label}"
 
 
 def parse_cli_output(stdout: str) -> dict:
@@ -162,9 +172,10 @@ def parse_cli_output(stdout: str) -> dict:
             event = json.loads(candidate)
         except json.JSONDecodeError:
             continue
-        if event.get("type") == "assistant.message" and str(
-            (event.get("data") or {}).get("content", "")
-        ).strip():
+        if (
+            event.get("type") == "assistant.message"
+            and str((event.get("data") or {}).get("content", "")).strip()
+        ):
             result = event
 
     if result is not None:
@@ -252,6 +263,49 @@ def _default_emit(line: str) -> None:
     print(line, flush=True)
 
 
+def _missing_result(
+    definition: WorkerDefinition, stdout: str, stderr: str, tokens: TokenUsage | None
+) -> WorkerInvocation:
+    event_count = sum(1 for line in stdout.splitlines() if line.strip().startswith("{"))
+    detail = f"copilot's session ended with no final reply ({event_count} stream events seen)"
+    if stderr.strip():
+        detail += f" -- its own summary: {stderr.strip()}"
+    log.error("worker %s produced no result event: %s", definition.name, detail)
+    return _blocked(detail, stdout, is_error=True, tokens=tokens)
+
+
+def _completed_invocation(
+    definition: WorkerDefinition, envelope: dict, tokens: TokenUsage | None
+) -> WorkerInvocation:
+    text = str((envelope.get("data") or {}).get("content", ""))
+    result = parse_worker_report(text)
+    log.info(
+        "worker %s finished: status=%s sentinel=%s tokens=%s",
+        definition.name,
+        result.status,
+        result.sentinel_found,
+        tokens.total if tokens else "-",
+    )
+    return WorkerInvocation(result=result, raw_output=text, tokens=tokens)
+
+
+def _worker_command(
+    definition: WorkerDefinition,
+    prompt: str,
+    model: str,
+    debug_base: Path | str | None,
+) -> list[str]:
+    if debug_base is not None:
+        Path(debug_base).mkdir(parents=True, exist_ok=True)
+    command = build_command(
+        agent_name=definition.name, prompt=prompt, model=model, log_dir=debug_base
+    )
+    resolved = shutil.which(command[0])
+    if resolved:
+        command[0] = resolved
+    return command
+
+
 def run_worker(
     *,
     definition: WorkerDefinition,
@@ -277,14 +331,7 @@ def run_worker(
     `debug_base` (when set) becomes the `--log-dir` -- Copilot writes its own filename inside
     it, unlike Claude's `--debug-file` which wants an exact file path.
     """
-    if debug_base is not None:
-        Path(debug_base).mkdir(parents=True, exist_ok=True)
-    command = build_command(
-        agent_name=definition.name, prompt=prompt, model=model, log_dir=debug_base
-    )
-    resolved = shutil.which(command[0])
-    if resolved:
-        command[0] = resolved
+    command = _worker_command(definition, prompt, model, debug_base)
 
     emit = on_output or _default_emit
 
@@ -310,37 +357,19 @@ def run_worker(
     # Two limits: `timeout` for a worker that is slow, `idle_timeout` for one that
     # has stopped. Only the first existed, and it charged the full hour for a
     # worker that had already gone quiet.
-    watchdog = Watchdog(process, timeout, idle_timeout).start()
-
-    captured: list[str] = []
-    try:
-        for line in process.stdout:  # type: ignore[union-attr]
-            watchdog.saw_output()
-            captured.append(line)
-            stripped = line.strip()
-            if not stripped.startswith("{"):
-                continue
-            try:
-                event = json.loads(stripped)
-            except json.JSONDecodeError:
-                continue
-            for rendered in render_event(event):
-                emit(rendered)
-        try:
-            # Bounded: the pipe closing means the child is finishing, not that it has
-            # finished. An unbounded wait here reintroduces exactly the hang the
-            # watchdog exists to end.
-            process.wait(timeout=REAP_TIMEOUT_SEC)
-        except subprocess.TimeoutExpired:
-            terminate_tree(process)
-    finally:
-        watchdog.stop()
-
-    stdout = "".join(captured)
-
-    if watchdog.reason:
-        log.error("worker %s killed: %s", definition.name, watchdog.reason)
-        return _blocked(watchdog.reason, stdout, timed_out=True)
+    capture = capture_json_stream(
+        process,
+        timeout=timeout,
+        idle_timeout=idle_timeout,
+        render_event=render_event,
+        emit=emit,
+        watchdog_factory=Watchdog,
+        terminate=terminate_tree,
+    )
+    stdout = capture.stdout
+    if capture.timeout_reason:
+        log.error("worker %s killed: %s", definition.name, capture.timeout_reason)
+        return _blocked(capture.timeout_reason, stdout, timed_out=True)
 
     stderr = (process.stderr.read() if process.stderr else "") or ""
     # Read once, up front: a session that exits nonzero or never produces a final reply
@@ -360,19 +389,6 @@ def run_worker(
         # copilot's own end-of-session summary (Changes/AI Credits/Tokens/Resume) lands on
         # stderr; showing the raw stat block with no framing reads as a crash, not "it ran and
         # gave up" -- the event count says whether it did anything at all before that.
-        event_count = sum(1 for line in stdout.splitlines() if line.strip().startswith("{"))
-        stats = stderr.strip()
-        detail = f"copilot's session ended with no final reply ({event_count} stream events seen)"
-        if stats:
-            detail += f" -- its own summary: {stats}"
-        log.error("worker %s produced no result event: %s", definition.name, detail)
-        return _blocked(detail, stdout, is_error=True, tokens=tokens)
+        return _missing_result(definition, stdout, stderr, tokens)
 
-    text = str((envelope.get("data") or {}).get("content", ""))
-    result = parse_worker_report(text)
-    log.info(
-        "worker %s finished: status=%s sentinel=%s tokens=%s",
-        definition.name, result.status, result.sentinel_found,
-        tokens.total if tokens else "-",
-    )
-    return WorkerInvocation(result=result, raw_output=text, tokens=tokens)
+    return _completed_invocation(definition, envelope, tokens)

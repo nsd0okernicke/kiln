@@ -156,9 +156,7 @@ class TestInstructionFiles:
         ],
     )
     def test_each_backend_gets_its_own_filename(self, paths, agent, expected):
-        written = generate.write_instructions(
-            role(agent=agent), paths, "main", paths.project_root
-        )
+        written = generate.write_instructions(role(agent=agent), paths, "main", paths.project_root)
         assert written.name == expected
 
     def test_a_grok_auto_role_delegates_rather_than_carrying_its_own_work_rules(self, paths):
@@ -186,7 +184,9 @@ class TestInstructionFiles:
 
         generate.write_instructions(
             role(agent="grok", scheduler="python", mode="auto"),
-            paths, "main", paths.project_root,
+            paths,
+            "main",
+            paths.project_root,
         )
         assert not (paths.project_root / "AGENTS.md").exists()
 
@@ -303,9 +303,7 @@ class TestWorkerFiles:
         assert "model: claude-sonnet-5" in rendered.content
 
     def test_worker_model_overrides_the_wrapper_model(self, paths):
-        rendered = generate.render_worker_file(
-            role(model="opus", worker_model="sonnet"), paths
-        )
+        rendered = generate.render_worker_file(role(model="opus", worker_model="sonnet"), paths)
         assert "model: sonnet" in rendered.content
 
     def test_copilot_worker_uses_a_strict_tool_allowlist(self, paths):
@@ -413,9 +411,10 @@ class TestBlockingChannelAgents:
         assert generate.channel_is_available(role(agent="grok", mode="manual")) is False
 
     def test_a_scheduler_role_does_not_even_on_claude(self):
-        assert generate.channel_is_available(
-            role(agent="claude", mode="auto", scheduler="python")
-        ) is False
+        assert (
+            generate.channel_is_available(role(agent="claude", mode="auto", scheduler="python"))
+            is False
+        )
 
     def test_no_role_means_no_channel(self):
         # The server is role-scoped by env var, so a config with no owner would hand one
@@ -483,7 +482,10 @@ class TestRoutingTableInjection:
 
         self._workflow_with_placeholder(paths)
         content = generate.render_instructions(
-            RoleConfig(role="coder", mode="manual"), paths, "main", paths.project_root,
+            RoleConfig(role="coder", mode="manual"),
+            paths,
+            "main",
+            paths.project_root,
             self._profile({"coder": "architect", "architect": "human-in-the-loop"}),
         )
         assert "{{ROUTING_TABLE}}" not in content
@@ -493,7 +495,10 @@ class TestRoutingTableInjection:
 
         self._workflow_with_placeholder(paths)
         content = generate.render_instructions(
-            RoleConfig(role="coder", mode="manual"), paths, "main", paths.project_root,
+            RoleConfig(role="coder", mode="manual"),
+            paths,
+            "main",
+            paths.project_root,
             self._profile({"coder": "architect", "architect": "human-in-the-loop"}),
         )
         assert "| coder | architect |" in content
@@ -506,7 +511,10 @@ class TestRoutingTableInjection:
 
         self._workflow_with_placeholder(paths)
         content = generate.render_instructions(
-            RoleConfig(role="coder", mode="manual"), paths, "main", paths.project_root,
+            RoleConfig(role="coder", mode="manual"),
+            paths,
+            "main",
+            paths.project_root,
             self._profile({"coder": "human-in-the-loop"}),
         )
         assert "refactorer" not in content
@@ -516,7 +524,10 @@ class TestRoutingTableInjection:
 
         self._workflow_with_placeholder(paths)
         content = generate.render_instructions(
-            RoleConfig(role="coder", mode="manual"), paths, "main", paths.project_root,
+            RoleConfig(role="coder", mode="manual"),
+            paths,
+            "main",
+            paths.project_root,
             self._profile({"coder": {"default": "architect", "architect": "human-in-the-loop"}}),
         )
         assert "| coder | human-in-the-loop | architect |" in content

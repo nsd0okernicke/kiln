@@ -42,6 +42,7 @@ class TestTrafficStore:
         `scheduler.db.ensure_schema` documents for the message queue.
         """
         import sqlite3
+
         path = tmp_path / "traffic.db"
         with sqlite3.connect(path) as conn:
             conn.execute(
@@ -61,10 +62,14 @@ class TestTrafficStore:
 
         store = TrafficStore(path)
         store.ensure_schema()
-        store.record(TrafficRecord(
-            role="coder", method="POST", path="/v1/messages",
-            composition={"tools": 10, "system": 20, "messages": 30},
-        ))
+        store.record(
+            TrafficRecord(
+                role="coder",
+                method="POST",
+                path="/v1/messages",
+                composition={"tools": 10, "system": 20, "messages": 30},
+            )
+        )
 
         stats = store.request_stats_by_role()["coder"]
         assert stats["requests"] == 2, "the pre-existing row must survive the migration"
@@ -74,8 +79,12 @@ class TestTrafficStore:
         store = self._store(tmp_path)
         row_id = store.record(
             TrafficRecord(
-                role="coder", method="POST", path="/v1/messages",
-                status_code=200, request_bytes=120, response_bytes=4096,
+                role="coder",
+                method="POST",
+                path="/v1/messages",
+                status_code=200,
+                request_bytes=120,
+                response_bytes=4096,
                 model="claude-sonnet-5",
                 tokens=TokenUsage(input_tokens=100, cache_read_tokens=900),
             )
@@ -89,23 +98,28 @@ class TestTrafficStore:
             ("coder", TokenUsage(input_tokens=5)),
             ("refactorer", TokenUsage(output_tokens=7)),
         ):
-            store.record(TrafficRecord(role=role, method="POST", path="/v1/messages",
-                                       tokens=tokens))
+            store.record(
+                TrafficRecord(role=role, method="POST", path="/v1/messages", tokens=tokens)
+            )
         totals = store.totals_by_role()
         assert totals["coder"] == TokenUsage(input_tokens=15, cache_read_tokens=100)
         assert totals["refactorer"] == TokenUsage(output_tokens=7)
 
     def test_unattributed_traffic_is_excluded_from_totals(self, tmp_path):
         store = self._store(tmp_path)
-        store.record(TrafficRecord(role=None, method="POST", path="/v1/messages",
-                                   tokens=TokenUsage(input_tokens=99)))
+        store.record(
+            TrafficRecord(
+                role=None, method="POST", path="/v1/messages", tokens=TokenUsage(input_tokens=99)
+            )
+        )
         assert store.totals_by_role() == {}
 
     def test_request_stats_summarise_prompt_weight_per_role(self, tmp_path):
         store = self._store(tmp_path)
         for size in (100, 300):
-            store.record(TrafficRecord(role="coder", method="POST", path="/v1/messages",
-                                       request_bytes=size))
+            store.record(
+                TrafficRecord(role="coder", method="POST", path="/v1/messages", request_bytes=size)
+            )
         stats = store.request_stats_by_role()["coder"]
         assert stats["requests"] == 2
         assert stats["avg_bytes"] == 200
@@ -128,6 +142,7 @@ class TestTrafficStore:
         need nothing new.
         """
         import sqlite3
+
         path = tmp_path / "traffic.db"
         with sqlite3.connect(path) as conn:
             conn.execute(
@@ -141,8 +156,8 @@ class TestTrafficStore:
 
         stats = TrafficStore(path).request_stats_by_role()["coder"]
         assert stats["requests"] == 1
-        assert stats["avg_bytes"] == 1500      # still available
-        assert stats["avg_tools"] is None      # honestly absent
+        assert stats["avg_bytes"] == 1500  # still available
+        assert stats["avg_tools"] is None  # honestly absent
 
     def test_request_stats_on_an_unreadable_store_are_empty(self, tmp_path):
         # An optional panel must not be able to take the dashboard down.
@@ -153,10 +168,15 @@ class TestTrafficStore:
     def test_composition_is_recorded_and_averaged(self, tmp_path):
         store = self._store(tmp_path)
         for tools in (1000, 3000):
-            store.record(TrafficRecord(
-                role="coder", method="POST", path="/v1/messages", request_bytes=10_000,
-                composition={"tools": tools, "system": 500, "messages": 4000},
-            ))
+            store.record(
+                TrafficRecord(
+                    role="coder",
+                    method="POST",
+                    path="/v1/messages",
+                    request_bytes=10_000,
+                    composition={"tools": tools, "system": 500, "messages": 4000},
+                )
+            )
         stats = store.request_stats_by_role()["coder"]
         assert stats["avg_tools"] == 2000
         assert stats["avg_system"] == 500
@@ -166,13 +186,22 @@ class TestTrafficStore:
         # The point of computing it at capture time: the most useful analysis costs nothing
         # in stored prompt text.
         store = self._store(tmp_path)
-        secret = json.dumps({"tools": [{"name": "Read"}], "system": "PROPRIETARY",
-                             "messages": [{"content": "SECRET SOURCE"}]})
-        store.record(TrafficRecord(
-            role="coder", method="POST", path="/v1/messages",
-            composition=extract_composition(secret),
-            request_body=capture_body(secret, CaptureMode.METADATA),
-        ))
+        secret = json.dumps(
+            {
+                "tools": [{"name": "Read"}],
+                "system": "PROPRIETARY",
+                "messages": [{"content": "SECRET SOURCE"}],
+            }
+        )
+        store.record(
+            TrafficRecord(
+                role="coder",
+                method="POST",
+                path="/v1/messages",
+                composition=extract_composition(secret),
+                request_body=capture_body(secret, CaptureMode.METADATA),
+            )
+        )
         assert store.request_stats_by_role()["coder"]["avg_system"] > 0
         assert "SECRET SOURCE" not in (tmp_path / "traffic.db").read_bytes().decode("latin-1")
 
@@ -186,7 +215,9 @@ class TestTrafficStore:
         secret = "PROPRIETARY SOURCE CODE"
         store.record(
             TrafficRecord(
-                role="coder", method="POST", path="/v1/messages",
+                role="coder",
+                method="POST",
+                path="/v1/messages",
                 request_body=capture_body(secret, CaptureMode.METADATA),
                 response_body=capture_body(secret, CaptureMode.METADATA),
             )
@@ -209,12 +240,16 @@ class TestBodyBudget:
         return store
 
     def _record(self, store, body, role="coder"):
-        return store.record(TrafficRecord(
-            role=role, method="POST", path="/v1/messages",
-            composition={"tools": 10, "system": 20, "messages": 30},
-            tokens=TokenUsage(input_tokens=5, output_tokens=1),
-            request_body=body,
-        ))
+        return store.record(
+            TrafficRecord(
+                role=role,
+                method="POST",
+                path="/v1/messages",
+                composition={"tools": 10, "system": 20, "messages": 30},
+                tokens=TokenUsage(input_tokens=5, output_tokens=1),
+                request_body=body,
+            )
+        )
 
     def test_a_store_inside_its_budget_is_untouched(self, tmp_path):
         store = self._store(tmp_path, budget=10_000)
@@ -227,9 +262,12 @@ class TestBodyBudget:
             self._record(store, "x" * 100)
         store.enforce_body_budget()
         with sqlite3.connect(tmp_path / "traffic.db") as conn:
-            kept = [row[0] for row in conn.execute(
-                "SELECT id FROM traffic WHERE request_body IS NOT NULL ORDER BY id"
-            )]
+            kept = [
+                row[0]
+                for row in conn.execute(
+                    "SELECT id FROM traffic WHERE request_body IS NOT NULL ORDER BY id"
+                )
+            ]
         # 400 bytes stored against a 250 budget: the two oldest are cleared, not the newest.
         assert kept == [3, 4]
 

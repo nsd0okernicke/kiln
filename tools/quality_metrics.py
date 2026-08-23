@@ -30,8 +30,14 @@ def run(name: str, command: list[str], output: Path) -> int:
     """Run one report command, preserving combined human-readable output."""
     try:
         result = subprocess.run(
-            command, cwd=ROOT, text=True, encoding="utf-8", errors="replace",
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+            command,
+            cwd=ROOT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
         )
         rendered = result.stdout
         code = result.returncode
@@ -45,13 +51,23 @@ def run(name: str, command: list[str], output: Path) -> int:
 def metadata(commands: dict[str, list[str]], results: dict[str, int]) -> None:
     try:
         sha = subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True,
-            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False,
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
         ).stdout.strip()
-        dirty = bool(subprocess.run(
-            ["git", "status", "--porcelain"], cwd=ROOT, text=True,
-            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False,
-        ).stdout.strip())
+        dirty = bool(
+            subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            ).stdout.strip()
+        )
     except OSError:
         sha, dirty = "", None
     versions = {}
@@ -61,10 +77,14 @@ def metadata(commands: dict[str, list[str]], results: dict[str, int]) -> None:
         except PackageNotFoundError:
             versions[tool] = None
     payload = {
-        "generated_at": datetime.now(UTC).isoformat(), "git_commit": sha,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "git_commit": sha,
         "worktree_dirty": dirty,
-        "python": sys.version, "platform": platform.platform(),
-        "tools": versions, "commands": commands, "results": results,
+        "python": sys.version,
+        "platform": platform.platform(),
+        "tools": versions,
+        "commands": commands,
+        "results": results,
     }
     _write(REPORTS / "metadata.json", json.dumps(payload, indent=2) + "\n")
 
@@ -84,14 +104,26 @@ def duplication_report() -> None:
                 ast.Module(body=node.body, type_ignores=[]), include_attributes=False
             )
             digest = hashlib.sha256(normalized.encode()).hexdigest()
-            groups.setdefault(digest, []).append({
-                "file": str(path.relative_to(ROOT)).replace("\\", "/"),
-                "function": node.name, "line": node.lineno, "lines": lines,
-            })
+            groups.setdefault(digest, []).append(
+                {
+                    "file": str(path.relative_to(ROOT)).replace("\\", "/"),
+                    "function": node.name,
+                    "line": node.lineno,
+                    "lines": lines,
+                }
+            )
     duplicates = [items for items in groups.values() if len(items) > 1]
-    _write(REPORTS / "duplication" / "duplication.json", json.dumps({
-        "minimum_function_lines": 8, "duplicate_groups": duplicates,
-    }, indent=2) + "\n")
+    _write(
+        REPORTS / "duplication" / "duplication.json",
+        json.dumps(
+            {
+                "minimum_function_lines": 8,
+                "duplicate_groups": duplicates,
+            },
+            indent=2,
+        )
+        + "\n",
+    )
 
 
 def summary() -> None:
@@ -103,9 +135,9 @@ def summary() -> None:
     types = json.loads((REPORTS / "types" / "typecheck.json").read_text(encoding="utf-8"))
     totals = coverage["totals"]
     scheduler_files = [
-        payload for name, payload in coverage["files"].items()
-        if "/scheduler/" in name.replace("\\", "/")
-        and "/adapters/" not in name.replace("\\", "/")
+        payload
+        for name, payload in coverage["files"].items()
+        if "/scheduler/" in name.replace("\\", "/") and "/adapters/" not in name.replace("\\", "/")
     ]
     scheduler = {
         key: sum(item["summary"].get(key, 0) for item in scheduler_files)
@@ -113,11 +145,13 @@ def summary() -> None:
     }
     scheduler["statement_percent"] = (
         100 * scheduler["covered_lines"] / scheduler["num_statements"]
-        if scheduler["num_statements"] else None
+        if scheduler["num_statements"]
+        else None
     )
     scheduler["branch_percent"] = (
         100 * scheduler["covered_branches"] / scheduler["num_branches"]
-        if scheduler["num_branches"] else None
+        if scheduler["num_branches"]
+        else None
     )
     _write(
         REPORTS / "coverage" / "scheduler-core.json",
@@ -149,15 +183,23 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     py = sys.executable
     commands: dict[str, list[str]] = {
-        "tests": [py, "-m", "pytest", "-p", "no:cacheprovider",
-                  "--junitxml=reports/tests/junit.xml", "--durations=25",
-                  "--cov=src", "--cov-branch",
-                  "--cov-report=term-missing", "--cov-report=xml:reports/coverage/coverage.xml",
-                  "--cov-report=json:reports/coverage/coverage.json",
-                  "--cov-report=html:reports/coverage/html"],
+        "tests": [
+            py,
+            "-m",
+            "pytest",
+            "-p",
+            "no:cacheprovider",
+            "--junitxml=reports/tests/junit.xml",
+            "--durations=25",
+            "--cov=src",
+            "--cov-branch",
+            "--cov-report=term-missing",
+            "--cov-report=xml:reports/coverage/coverage.xml",
+            "--cov-report=json:reports/coverage/coverage.json",
+            "--cov-report=html:reports/coverage/html",
+        ],
         "ruff": [py, "-m", "ruff", "check", "src", "tests", "tools"],
-        "ruff_json": [py, "-m", "ruff", "check", "--output-format=json",
-                      "src", "tests", "tools"],
+        "ruff_json": [py, "-m", "ruff", "check", "--output-format=json", "src", "tests", "tools"],
         "format": [py, "-m", "ruff", "format", "--check", "src", "tests", "tools"],
         "radon_cc_json": [py, "-m", "radon", "cc", "-j", "src"],
         "radon_cc_text": [py, "-m", "radon", "cc", "-s", "-a", "src"],
@@ -184,15 +226,27 @@ def main(argv: list[str] | None = None) -> int:
         and results.get("radon_cc_json") == 0
         and coverage_json.is_file()
     ):
-        run("crap", [py, "-m", "tools.crap_report",
-            "--coverage", "reports/coverage/coverage.json",
-            "--complexity", "reports/complexity/radon-cc.json",
-            "--json", "reports/complexity/crap.json",
-            "--markdown", "reports/complexity/crap.md"],
-            REPORTS / "complexity" / "crap-driver.txt")
+        run(
+            "crap",
+            [
+                py,
+                "-m",
+                "tools.crap_report",
+                "--coverage",
+                "reports/coverage/coverage.json",
+                "--complexity",
+                "reports/complexity/radon-cc.json",
+                "--json",
+                "reports/complexity/crap.json",
+                "--markdown",
+                "reports/complexity/crap.md",
+            ],
+            REPORTS / "complexity" / "crap-driver.txt",
+        )
         duplication_report()
         required = (
-            REPORTS / "tests" / "junit.xml", REPORTS / "complexity" / "crap.json",
+            REPORTS / "tests" / "junit.xml",
+            REPORTS / "complexity" / "crap.json",
             REPORTS / "types" / "typecheck.json",
         )
         if all(path.is_file() for path in required):

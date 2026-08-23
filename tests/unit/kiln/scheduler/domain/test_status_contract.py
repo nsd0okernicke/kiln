@@ -242,9 +242,9 @@ class TestInstructionText:
         "name",
         [
             "please restart this with the CAT-3 spec, thanks!",  # a sentence
-            "-leading-hyphen",                                   # must start alphanumeric
+            "-leading-hyphen",  # must start alphanumeric
             "",
-            "x" * 81,                                            # over the 80-char budget
+            "x" * 81,  # over the 80-char budget
             'quote"inside',
         ],
     )

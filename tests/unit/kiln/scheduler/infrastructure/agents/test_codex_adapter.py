@@ -136,7 +136,9 @@ class TestEventRendering:
         event = {
             "type": "item.completed",
             "item": {
-                "type": "command_execution", "command": "pytest -q", "exit_code": 1,
+                "type": "command_execution",
+                "command": "pytest -q",
+                "exit_code": 1,
                 "aggregated_output": "1 failed, 2 passed",
             },
         }
@@ -254,7 +256,8 @@ class TestRunWorker:
             # `terminate_tree` shells out to taskkill (Windows) or signals a process group
             # (POSIX); neither belongs in a unit test holding a fake process.
             monkeypatch.setattr(
-                codex_adapter.subprocess, "run",
+                codex_adapter.subprocess,
+                "run",
                 lambda argv, **kwargs: subprocess.CompletedProcess(argv, 0, b"", b""),
             )
             return calls
@@ -270,7 +273,10 @@ class TestRunWorker:
         )
         seen = []
         codex_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=seen.append,
         )
         assert "    Working" in seen
@@ -278,8 +284,12 @@ class TestRunWorker:
     def test_timeout_kills_the_process(self, fake_run, tmp_path):
         calls = fake_run(hang=True)
         invocation = codex_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
-            timeout=1, on_output=lambda _line: None,
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
+            timeout=1,
+            on_output=lambda _line: None,
         )
         assert invocation.timed_out is True
         assert invocation.is_done is False
@@ -288,7 +298,10 @@ class TestRunWorker:
     def test_parses_a_successful_worker(self, fake_run, tmp_path):
         fake_run(output_text="KILN-STATUS: done implemented feature")
         invocation = codex_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.is_done
@@ -297,7 +310,10 @@ class TestRunWorker:
     def test_redirects_stdin_and_separates_streams(self, fake_run, tmp_path):
         calls = fake_run(output_text="KILN-STATUS: done x")
         codex_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert calls["kwargs"]["stdin"] is subprocess.DEVNULL
@@ -307,7 +323,10 @@ class TestRunWorker:
     def test_blocked_worker_is_reported_not_raised(self, fake_run, tmp_path):
         fake_run(output_text="KILN-STATUS: blocked missing fixtures")
         invocation = codex_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.is_done is False
@@ -316,7 +335,10 @@ class TestRunWorker:
     def test_missing_binary_is_treated_as_blocked(self, fake_run, tmp_path):
         fake_run(exc=OSError("codex not found"))
         invocation = codex_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.is_done is False
@@ -329,7 +351,10 @@ class TestRunWorker:
             output_text="KILN-STATUS: done x",  # must not be trusted once turn.failed fires
         )
         invocation = codex_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.is_done is False
@@ -339,7 +364,10 @@ class TestRunWorker:
     def test_nonzero_exit_is_treated_as_blocked(self, fake_run, tmp_path):
         fake_run(stderr="crashed", returncode=1)
         invocation = codex_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.is_done is False
@@ -350,7 +378,10 @@ class TestRunWorker:
         # output_text=None: the process never writes the -o file at all.
         fake_run(stderr="no output produced")
         invocation = codex_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.is_done is False
@@ -359,7 +390,10 @@ class TestRunWorker:
     def test_missing_sentinel_is_blocked(self, fake_run, tmp_path):
         fake_run(output_text="I finished but forgot the sentinel.")
         invocation = codex_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.is_done is False
@@ -370,7 +404,10 @@ class TestRunWorker:
         # usage.
         fake_run(output_text="KILN-STATUS: done x")
         invocation = codex_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.cost_usd == 0.0
@@ -378,7 +415,10 @@ class TestRunWorker:
     def test_the_output_file_is_cleaned_up(self, fake_run, tmp_path):
         calls = fake_run(output_text="KILN-STATUS: done x")
         codex_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         output_path = Path(calls["command"][calls["command"].index("-o") + 1])

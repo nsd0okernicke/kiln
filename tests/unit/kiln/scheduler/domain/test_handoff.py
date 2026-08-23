@@ -58,13 +58,16 @@ class TestParsing:
         assert parsed.commit == ""
         assert parsed.is_mergeable is False
 
-    @pytest.mark.parametrize("value", [
-        "(none — human request, no prior commit)",
-        "none",
-        "n/a",
-        "-",
-        "TBD",
-    ])
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "(none — human request, no prior commit)",
+            "none",
+            "n/a",
+            "-",
+            "TBD",
+        ],
+    )
     def test_prose_placeholder_commit_is_not_mergeable(self, value):
         # A sender with nothing to merge often writes prose instead of leaving the field
         # empty; feeding that to `git merge` escalated an otherwise healthy cycle.

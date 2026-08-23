@@ -31,9 +31,7 @@ from ..persistence import db
 log = logging.getLogger(__name__)
 
 
-def resume(
-    *, db_path: str | Path, message_id: str, guidance: str
-) -> dict | None:
+def resume(*, db_path: str | Path, message_id: str, guidance: str) -> dict | None:
     """
     Re-queue one failed message with guidance attached. Returns the row, or None.
 
@@ -55,17 +53,21 @@ def build_parser() -> argparse.ArgumentParser:
         description="Send an escalated message back to the role that failed on it.",
     )
     parser.add_argument(
-        "message_id", nargs="?",
+        "message_id",
+        nargs="?",
         help="the failed message to resume; omit to list what failed",
     )
     parser.add_argument(
-        "--guidance", default="",
+        "--guidance",
+        default="",
         help="what the role should do differently — reaches the worker as its retry brief",
     )
     parser.add_argument("--db-path", required=True)
     parser.add_argument("--branch", default="main")
     parser.add_argument(
-        "--list", action="store_true", help="list failed messages and exit",
+        "--list",
+        action="store_true",
+        help="list failed messages and exit",
     )
     return parser
 
@@ -80,7 +82,7 @@ def _print_failures(db_path: Path, branch: str) -> int:
         work_item = row["work_item"] or "-"
         print(f"  {str(row['id'])[:8]}  {row['sender']} -> {row['target']}  [{work_item}]")
         print(f"            {row['error'] or '(no reason recorded)'}")
-    print("\nresume one with: kiln retry <id> --guidance \"...\"")
+    print('\nresume one with: kiln retry <id> --guidance "..."')
     return 0
 
 
@@ -92,7 +94,8 @@ def _resolve_id(db_path: Path, branch: str, prefix: str) -> str | None:
     a human to then type all 32 would make the listing useless.
     """
     matches = [
-        str(row["id"]) for row in db.failed_messages(db_path, branch)
+        str(row["id"])
+        for row in db.failed_messages(db_path, branch)
         if str(row["id"]).startswith(prefix)
     ]
     if len(matches) == 1:

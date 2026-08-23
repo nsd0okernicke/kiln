@@ -128,10 +128,18 @@ class TestCodexUsage:
 
     def test_the_live_shape_is_read_field_for_field(self):
         # Captured verbatim from a real `codex exec --json` run.
-        stream = _stream({"type": "turn.completed", "usage": {
-            "input_tokens": 13781, "cached_input_tokens": 11008,
-            "cache_write_input_tokens": 0, "output_tokens": 5, "reasoning_output_tokens": 0,
-        }})
+        stream = _stream(
+            {
+                "type": "turn.completed",
+                "usage": {
+                    "input_tokens": 13781,
+                    "cached_input_tokens": 11008,
+                    "cache_write_input_tokens": 0,
+                    "output_tokens": 5,
+                    "reasoning_output_tokens": 0,
+                },
+            }
+        )
         assert codex_adapter.find_usage(stream) == TokenUsage(
             input_tokens=2773, output_tokens=5, cache_read_tokens=11008
         )
@@ -141,9 +149,16 @@ class TestCodexUsage:
         # `input_tokens` is the total *including* the cached part. Anthropic's means the
         # fresh remainder. Storing Codex's number under Anthropic's meaning would report
         # 24,789 input tokens for the turn above instead of 13,781, and halve its cache rate.
-        stream = _stream({"type": "turn.completed", "usage": {
-            "input_tokens": 1000, "cached_input_tokens": 600, "cache_write_input_tokens": 300,
-        }})
+        stream = _stream(
+            {
+                "type": "turn.completed",
+                "usage": {
+                    "input_tokens": 1000,
+                    "cached_input_tokens": 600,
+                    "cache_write_input_tokens": 300,
+                },
+            }
+        )
         assert codex_adapter.find_usage(stream) == TokenUsage(
             input_tokens=100, cache_read_tokens=600, cache_creation_tokens=300
         )
@@ -151,9 +166,7 @@ class TestCodexUsage:
     def test_cache_writes_are_no_longer_dropped(self):
         # `cache_write_input_tokens` was absent from the alias table until a live capture
         # showed it, so every Codex cycle reported zero cache writes.
-        stream = _stream(
-            {"type": "turn.completed", "usage": {"cache_write_input_tokens": 4096}}
-        )
+        stream = _stream({"type": "turn.completed", "usage": {"cache_write_input_tokens": 4096}})
         assert codex_adapter.find_usage(stream).cache_creation_tokens == 4096
 
     def test_a_total_that_would_go_negative_is_clamped(self):
@@ -196,9 +209,7 @@ class TestCopilotUsage:
             {"type": "assistant.message", "data": {"content": "done"}},
             {"type": "result", "data": {"usage": {"inputTokens": 40, "outputTokens": 9}}},
         )
-        assert copilot_adapter.find_usage(stream) == TokenUsage(
-            input_tokens=40, output_tokens=9
-        )
+        assert copilot_adapter.find_usage(stream) == TokenUsage(input_tokens=40, output_tokens=9)
 
     def test_does_not_look_at_the_assistant_message_event(self):
         # parse_cli_output returns the last assistant.message, a *different* event -- reading
@@ -219,7 +230,9 @@ class TestCopilotUsage:
         assert copilot_adapter.find_usage(stream) is None
 
     def test_survives_non_json_lines(self):
-        stream = "starting\n" + json.dumps(
-            {"type": "result", "data": {"usage": {"inputTokens": 4}}}
-        ) + "\n"
+        stream = (
+            "starting\n"
+            + json.dumps({"type": "result", "data": {"usage": {"inputTokens": 4}}})
+            + "\n"
+        )
         assert copilot_adapter.find_usage(stream) == TokenUsage(input_tokens=4)

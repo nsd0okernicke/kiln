@@ -72,8 +72,13 @@ def send(
 ) -> str:
     """Queue one handoff. Returns the new message id."""
     content = build_message(
-        sender=sender, target=target, summary=summary, branch=branch,
-        handoff_name=handoff_name, commit=commit, escalation=escalation,
+        sender=sender,
+        target=target,
+        summary=summary,
+        branch=branch,
+        handoff_name=handoff_name,
+        commit=commit,
+        escalation=escalation,
     )
     # `pending` is the placeholder a human uses for a brand-new request: the specifier is
     # what invents the real name, so there is nothing to group by yet and NULL is correct.
@@ -97,7 +102,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--db-path", required=True)
     parser.add_argument("--branch", default="main")
     parser.add_argument(
-        "--handoff", default=PENDING_HANDOFF,
+        "--handoff",
+        default=PENDING_HANDOFF,
         help=f"specifier handoff name; leave as {PENDING_HANDOFF!r} for a new request",
     )
     parser.add_argument("--commit", default="", help="commit to merge, if you have one")

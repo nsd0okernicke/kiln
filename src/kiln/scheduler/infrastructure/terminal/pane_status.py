@@ -203,6 +203,7 @@ def paint(status: PaneStatus, width: int) -> str:
 
 # --- terminal driver ----------------------------------------------------------------
 
+
 def _enable_windows_vt(stream: TextIO) -> None:
     """
     Turn on ENABLE_VIRTUAL_TERMINAL_PROCESSING for a Windows console.

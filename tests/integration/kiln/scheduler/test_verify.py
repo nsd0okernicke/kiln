@@ -59,7 +59,7 @@ class TestRun:
         monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:8787")
         command = (
             f'"{sys.executable}" -c '
-            '"import os,sys; sys.exit(1 if os.environ.get(\'ANTHROPIC_BASE_URL\') else 0)"'
+            "\"import os,sys; sys.exit(1 if os.environ.get('ANTHROPIC_BASE_URL') else 0)\""
         )
         assert verify.run(command, tmp_path).ok is True
 

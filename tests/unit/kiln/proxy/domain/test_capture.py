@@ -51,10 +51,12 @@ class TestRedactHeaders:
     def test_codex_identity_headers_are_withheld(self):
         # Not bearer credentials, but a stable account identifier and an installation/session
         # id block, found in a live Codex capture. Nothing in Kiln reads them.
-        headers = redact_headers({
-            "chatgpt-account-id": "9016869b-67b8-45fb-8441-75d7da2f1b06",
-            "x-codex-turn-metadata": '{"installation_id":"314c0fad"}',
-        })
+        headers = redact_headers(
+            {
+                "chatgpt-account-id": "9016869b-67b8-45fb-8441-75d7da2f1b06",
+                "x-codex-turn-metadata": '{"installation_id":"314c0fad"}',
+            }
+        )
         assert set(headers.values()) == {REDACTED}
 
     def test_api_key_never_survives(self):
@@ -134,12 +136,14 @@ class TestExtractComposition:
     """
 
     def test_measures_each_section(self):
-        body = json.dumps({
-            "model": "claude-sonnet-5",
-            "tools": [{"name": "Read", "description": "x" * 100}],
-            "system": "y" * 50,
-            "messages": [{"role": "user", "content": "z" * 200}],
-        })
+        body = json.dumps(
+            {
+                "model": "claude-sonnet-5",
+                "tools": [{"name": "Read", "description": "x" * 100}],
+                "system": "y" * 50,
+                "messages": [{"role": "user", "content": "z" * 200}],
+            }
+        )
         composition = extract_composition(body)
         assert set(composition) == {"tools", "system", "messages"}
         assert composition["messages"] > composition["system"]
@@ -223,22 +227,29 @@ class TestResponsesApiUsage:
     def test_the_live_codex_shape_reproduces_the_cli_s_own_total(self):
         # Captured verbatim from a real `codex exec` through the kiln.proxy. Codex printed
         # "tokens used 10.895"; input + output must come to exactly that.
-        usage = extract_usage(_sse(_response_completed(
-            input_tokens=10_890,
-            input_tokens_details={"cache_write_tokens": 0, "cached_tokens": 0},
-            output_tokens=5,
-            output_tokens_details={"reasoning_tokens": 0},
-            total_tokens=10_895,
-        )))
+        usage = extract_usage(
+            _sse(
+                _response_completed(
+                    input_tokens=10_890,
+                    input_tokens_details={"cache_write_tokens": 0, "cached_tokens": 0},
+                    output_tokens=5,
+                    output_tokens_details={"reasoning_tokens": 0},
+                    total_tokens=10_895,
+                )
+            )
+        )
         assert usage.total == 10_895
 
     def test_cached_tokens_are_subtracted_from_the_input_total(self):
         # OpenAI's `input_tokens` INCLUDES the cached portion; Anthropic's excludes it.
         # Storing the raw number would double-count and halve the reported cache hit rate.
-        body = _sse(_response_completed(
-            input_tokens=10_000, output_tokens=50,
-            input_tokens_details={"cached_tokens": 9_000},
-        ))
+        body = _sse(
+            _response_completed(
+                input_tokens=10_000,
+                output_tokens=50,
+                input_tokens_details={"cached_tokens": 9_000},
+            )
+        )
         assert extract_usage(body) == TokenUsage(
             input_tokens=1_000, output_tokens=50, cache_read_tokens=9_000
         )
@@ -251,19 +262,24 @@ class TestResponsesApiUsage:
         # Found by a live Codex call, which sent
         # `{"cached_tokens": 0, "cache_write_tokens": 0}` when this reader assumed the API
         # had no cache-write concept at all.
-        body = _sse(_response_completed(
-            input_tokens=1_000, output_tokens=3,
-            input_tokens_details={"cached_tokens": 600, "cache_write_tokens": 300},
-        ))
+        body = _sse(
+            _response_completed(
+                input_tokens=1_000,
+                output_tokens=3,
+                input_tokens_details={"cached_tokens": 600, "cache_write_tokens": 300},
+            )
+        )
         assert extract_usage(body) == TokenUsage(
-            input_tokens=100, output_tokens=3,
-            cache_read_tokens=600, cache_creation_tokens=300,
+            input_tokens=100,
+            output_tokens=3,
+            cache_read_tokens=600,
+            cache_creation_tokens=300,
         )
 
     def test_cache_creation_stays_zero_when_not_reported(self):
-        body = _sse(_response_completed(
-            input_tokens=500, input_tokens_details={"cached_tokens": 400}
-        ))
+        body = _sse(
+            _response_completed(input_tokens=500, input_tokens_details={"cached_tokens": 400})
+        )
         assert extract_usage(body).cache_creation_tokens == 0
 
     def test_a_failed_turn_still_reports_what_it_burned(self):
@@ -271,13 +287,16 @@ class TestResponsesApiUsage:
         assert extract_usage(body) == TokenUsage(input_tokens=77)
 
     def test_a_non_streamed_responses_reply_is_read_too(self):
-        body = json.dumps({
-            "object": "response",
-            "usage": {
-                "input_tokens": 300, "output_tokens": 12,
-                "input_tokens_details": {"cached_tokens": 250},
-            },
-        })
+        body = json.dumps(
+            {
+                "object": "response",
+                "usage": {
+                    "input_tokens": 300,
+                    "output_tokens": 12,
+                    "input_tokens_details": {"cached_tokens": 250},
+                },
+            }
+        )
         assert extract_usage(body) == TokenUsage(
             input_tokens=50, output_tokens=12, cache_read_tokens=250
         )
@@ -295,15 +314,17 @@ class TestResponsesApiComposition:
     """
 
     def _request(self):
-        return json.dumps({
-            "model": "gpt-5.6-sol",
-            "input": [
-                {"type": "additional_tools", "role": "developer", "tools": ["x" * 500]},
-                {"type": "message", "role": "developer", "content": "i" * 200},
-                {"type": "message", "role": "user", "content": "u" * 50},
-            ],
-            "stream": True,
-        })
+        return json.dumps(
+            {
+                "model": "gpt-5.6-sol",
+                "input": [
+                    {"type": "additional_tools", "role": "developer", "tools": ["x" * 500]},
+                    {"type": "message", "role": "developer", "content": "i" * 200},
+                    {"type": "message", "role": "user", "content": "u" * 50},
+                ],
+                "stream": True,
+            }
+        )
 
     def test_each_bucket_is_measured(self):
         composition = extract_composition(self._request())
@@ -336,7 +357,7 @@ class TestStreamingUsageTracker:
         body = _sse(_message_start(input_tokens=7), _message_delta(3))
         tracker = StreamingUsageTracker()
         for index in range(0, len(body), 5):
-            tracker.feed(body[index:index + 5].encode("utf-8"))
+            tracker.feed(body[index : index + 5].encode("utf-8"))
         assert tracker.usage == TokenUsage(input_tokens=7, output_tokens=3)
 
     def test_matches_the_whole_body_parser(self):
@@ -361,19 +382,27 @@ class TestStreamingUsageTracker:
         tracker.feed(_sse(_message_delta(4)).encode("utf-8"))
         assert tracker.usage == TokenUsage(output_tokens=4)
 
+    def test_valid_json_that_is_not_an_event_object_is_ignored(self):
+        tracker = StreamingUsageTracker()
+        tracker.feed(b'data: ["not", "an", "event"]\n\n')
+        assert tracker.usage is None
+
     def test_invalid_utf8_does_not_raise(self):
         tracker = StreamingUsageTracker()
         tracker.feed(b"data: \xff\xfe garbage\n\n")
         assert tracker.usage is None
 
     def test_a_responses_stream_is_parsed_across_chunk_boundaries_too(self):
-        body = _sse(_response_completed(
-            input_tokens=8_000, output_tokens=40,
-            input_tokens_details={"cached_tokens": 7_500},
-        ))
+        body = _sse(
+            _response_completed(
+                input_tokens=8_000,
+                output_tokens=40,
+                input_tokens_details={"cached_tokens": 7_500},
+            )
+        )
         tracker = StreamingUsageTracker()
         for index in range(0, len(body), 7):
-            tracker.feed(body[index:index + 7].encode("utf-8"))
+            tracker.feed(body[index : index + 7].encode("utf-8"))
         assert tracker.usage == TokenUsage(
             input_tokens=500, output_tokens=40, cache_read_tokens=7_500
         )
@@ -392,7 +421,9 @@ class TestTrafficRecord:
         # Belt and braces: the server redacts at the boundary, but a record built anywhere
         # else must not be able to smuggle a credential into the store.
         entry = TrafficRecord(
-            role="coder", method="POST", path="/v1/messages",
+            role="coder",
+            method="POST",
+            path="/v1/messages",
             request_headers={"Authorization": "Bearer leak"},
         )
         assert entry.request_headers["Authorization"] == REDACTED

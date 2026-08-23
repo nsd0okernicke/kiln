@@ -39,9 +39,7 @@ ICON_TITLE = "\N{BAR CHART}"
 #: Everything after a handoff message's closing banner rule, up to the next blank line --
 #: matches `handoff.format_handoff`'s layout exactly (SEPARATOR, banner, SEPARATOR, summary).
 _SEPARATOR_RE = re.escape(handoff.SEPARATOR)
-_SUMMARY_RE = re.compile(
-    _SEPARATOR_RE + r".*\n" + _SEPARATOR_RE + r"\n(?P<summary>.*)", re.DOTALL
-)
+_SUMMARY_RE = re.compile(_SEPARATOR_RE + r".*\n" + _SEPARATOR_RE + r"\n(?P<summary>.*)", re.DOTALL)
 
 
 #: Pane kinds that run no agent and report no state.
@@ -113,8 +111,14 @@ def read_sessions(path: Path) -> list[RoleSession]:
         model = parts[5].strip() if len(parts) > 5 else ""
         worktree = parts[6].strip() if len(parts) > 6 else ""
         sessions.append(
-            RoleSession(role=role, agent=agent, display_name=display_name, kind=kind,
-                        model=model, worktree=worktree)
+            RoleSession(
+                role=role,
+                agent=agent,
+                display_name=display_name,
+                kind=kind,
+                model=model,
+                worktree=worktree,
+            )
         )
     return sessions
 
@@ -244,40 +248,57 @@ def render_state_grid(
     # hands `sessions` to `cost_is_partial`, which needs the full inventory to judge whether
     # a non-cost-reporting backend is in play.
     for session in visible_roles(sessions):
-        status = statuses.get(session.role)
-        state = status["state"] if status else "-"
-        since = (
-            format_age(parse_status_since(status["since"]), now_utc)
-            if status and status.get("since")
-            else "-"
-        )
-        if is_stalled(status, now_utc):
-            since = f"{STALL_MARKER} {since}"
-        cycles = status.get("cycles") if status else None
-        cost = status.get("cost_usd") if status else None
-        tokens = status.get("tokens") if status else None
-        label = f"{pane_status.STATE_GLYPH} {state}{attempt_suffix(status)}"
-        state_cell = _colorize(label.ljust(20), state)
-        cycles_display = "-" if cycles is None else str(cycles)
-        cost_display = "-" if cost is None else f"${cost:.2f}"
-        # `-` for both "no status file yet" and "this backend reported no usage" -- the same
-        # treatment CYCLES/COST already give a role that never tracked them.
-        tokens_display = "-" if not tokens else pane_status.format_tokens(tokens)
-        share = cache_share(status.get("token_usage") if status else None)
-        cache_display = "-" if share is None else f"{share:.0%}"
         lines.append(
-            f"{session.role:<20} {state_cell} {since:<12} "
-            f"{queue_depth.get(session.role, 0):>5} "
-            f"{queue_wait(oldest_queued, session.role, now_local):>8} "
-            f"{cycles_display:>7} {cost_display:>8} "
-            f"{tokens_display:>9} {cache_display:>6}"
+            _state_row(
+                session,
+                statuses.get(session.role),
+                queue_depth,
+                now_utc,
+                oldest_queued,
+                now_local,
+            )
         )
     return lines
 
 
-def queue_wait(
-    oldest_queued: dict[str, str] | None, role: str, now_local: datetime | None
+def _state_row(
+    session: RoleSession,
+    status: dict | None,
+    queue_depth: dict[str, int],
+    now_utc: datetime,
+    oldest_queued: dict[str, str] | None,
+    now_local: datetime | None,
 ) -> str:
+    values = status or {}
+    state = status["state"] if status else "-"
+    since = _status_age(status, now_utc)
+    label = f"{pane_status.STATE_GLYPH} {state}{attempt_suffix(status)}"
+    state_cell = _colorize(label.ljust(20), state)
+    cycles = values.get("cycles")
+    cost = values.get("cost_usd")
+    tokens = values.get("tokens")
+    share = cache_share(values.get("token_usage"))
+    return (
+        f"{session.role:<20} {state_cell} {since:<12} "
+        f"{queue_depth.get(session.role, 0):>5} "
+        f"{queue_wait(oldest_queued, session.role, now_local):>8} "
+        f"{('-' if cycles is None else cycles):>7} "
+        f"{('-' if cost is None else f'${cost:.2f}'):>8} "
+        f"{('-' if not tokens else pane_status.format_tokens(tokens)):>9} "
+        f"{('-' if share is None else f'{share:.0%}'):>6}"
+    )
+
+
+def _status_age(status: dict | None, now_utc: datetime) -> str:
+    since = (
+        format_age(parse_status_since(status["since"]), now_utc)
+        if status and status.get("since")
+        else "-"
+    )
+    return f"{STALL_MARKER} {since}" if is_stalled(status, now_utc) else since
+
+
+def queue_wait(oldest_queued: dict[str, str] | None, role: str, now_local: datetime | None) -> str:
     """
     How long this role's oldest queued message has waited, or `-` when nothing is waiting.
 
@@ -348,8 +369,12 @@ def total_token_usage(statuses: dict[str, dict]) -> dict[str, int]:
 
 def format_token_breakdown(totals: dict[str, int]) -> str:
     """`in 120k · out 45k · cache-read 8.8M` -- omits kinds nobody reported."""
-    labels = (("input", "in"), ("output", "out"), ("cache_read", "cache-read"),
-              ("cache_write", "cache-write"))
+    labels = (
+        ("input", "in"),
+        ("output", "out"),
+        ("cache_read", "cache-read"),
+        ("cache_write", "cache-write"),
+    )
     parts = [
         f"{label} {pane_status.format_tokens(totals[kind]).removesuffix(' tok')}"
         for kind, label in labels
@@ -388,9 +413,7 @@ def read_request_stats(
         return {}
 
 
-def render_prompt_weight(
-    stats: dict[str, dict[str, int]], scope: str = "this run"
-) -> list[str]:
+def render_prompt_weight(stats: dict[str, dict[str, int]], scope: str = "this run") -> list[str]:
     """
     What each role actually puts on the wire — the number Phase A cannot produce.
 
@@ -476,8 +499,12 @@ def render_dashboard(
     title_line = f"{header}{' ' * padding}{timestamp}"
 
     grid = render_state_grid(
-        sessions, statuses, queue_depth, now_utc,
-        oldest_queued=oldest_queued, now_local=now_local,
+        sessions,
+        statuses,
+        queue_depth,
+        now_utc,
+        oldest_queued=oldest_queued,
+        now_local=now_local,
     )
     # Sized to the widest thing it has to underline, not to the title alone: the grid grew
     # past a title-width rule when the TOKENS column was added, leaving the table visibly
@@ -503,9 +530,7 @@ def render_dashboard(
     if breakdown:
         lines.append(f"  tokens by kind: {breakdown}")
     if cost_is_partial(sessions, statuses):
-        lines.append(
-            "  + partial: codex/copilot roles report tokens but no cost"
-        )
+        lines.append("  + partial: codex/copilot roles report tokens but no cost")
     # Only when it applies: a permanent legend for a condition that is usually absent trains
     # people to stop reading the line, which is the opposite of an early warning.
     stalled = [s.role for s in sessions if is_stalled(statuses.get(s.role), now_utc)]
@@ -580,9 +605,7 @@ def collect(ctx: DashboardContext) -> SwarmSnapshot:
         # A wider window than activity_limit so escalations outside the visible activity
         # list still have a chance to surface -- this is a recent-window view, not
         # exhaustive history.
-        messages=db.recent_messages(
-            ctx.db_path, ctx.branch, limit=max(ctx.activity_limit, 20)
-        ),
+        messages=db.recent_messages(ctx.db_path, ctx.branch, limit=max(ctx.activity_limit, 20)),
         request_stats=read_request_stats(ctx.traffic_db, since=ctx.traffic_since),
         now_utc=datetime.now(UTC),
         now_local=datetime.now(),
@@ -622,11 +645,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--once", action="store_true", help="render a single frame and exit")
     parser.add_argument("--log-file", default=None)
     parser.add_argument(
-        "--traffic-db", default=None,
+        "--traffic-db",
+        default=None,
         help="proxy capture store; the prompt-weight panel is hidden when absent",
     )
     parser.add_argument(
-        "--traffic-all-history", action="store_true",
+        "--traffic-all-history",
+        action="store_true",
         help=(
             "include captured traffic from previous runs. Off by default: the store "
             "outlives a run, and averaging across runs blends configurations that are not "
@@ -652,7 +677,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         # Stamped once at startup, not per frame: the window must not creep forward as the
         # run proceeds, or early requests would silently drop out of the averages.
         traffic_since=(
-            None if args.traffic_all_history
+            None
+            if args.traffic_all_history
             else datetime.now(UTC).isoformat().replace("+00:00", "Z")
         ),
     )

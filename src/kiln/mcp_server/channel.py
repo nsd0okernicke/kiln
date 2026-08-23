@@ -46,6 +46,7 @@ if not MY_ROLE or not DB_PATH:
     print("ERROR: KILN_ROLE and KILN_DB_PATH env vars required", file=sys.stderr)
     sys.exit(1)
 
+
 # Logging: always stderr; also file if KILN_CHANNEL_LOG is set.
 # Use open/close per write so Windows never holds an exclusive lock on the log file.
 class _NonLockingFileHandler(logging.Handler):
@@ -60,6 +61,7 @@ class _NonLockingFileHandler(logging.Handler):
                 fh.write(self.format(record) + "\n")
         except Exception:
             self.handleError(record)
+
 
 _handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
 if LOG_PATH:
@@ -95,7 +97,9 @@ async def wait_for_message() -> dict:
             if msg:
                 log.info(
                     "returning message to caller: id=%s sender=%s priority=%s",
-                    msg["id"], msg["sender"], msg["priority"],
+                    msg["id"],
+                    msg["sender"],
+                    msg["priority"],
                 )
                 return {"received": True, **msg}
         except sqlite3.OperationalError as exc:
@@ -156,6 +160,10 @@ if __name__ == "__main__":
         # ASCII only: stderr goes to the console codepage (cp1252 here), not UTF-8, and
         # .mcp.json cannot set PYTHONIOENCODING for a server the agent CLI spawns.
         "starting - role=%s branch=%s poll=%.1fs db=%s log=%s",
-        MY_ROLE, BRANCH, POLL_INTERVAL, DB_PATH, LOG_PATH or "(stderr only)",
+        MY_ROLE,
+        BRANCH,
+        POLL_INTERVAL,
+        DB_PATH,
+        LOG_PATH or "(stderr only)",
     )
     mcp.run()

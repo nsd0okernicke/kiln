@@ -9,7 +9,9 @@ variables, and a missing one fails silently rather than erroring.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -54,6 +56,29 @@ class TestBackendDetection:
     def test_request_beats_environment(self):
         assert detect_backend("tmux", env={"KILN_TERMINAL": "wt"}) == TMUX
 
+    def test_running_inside_wezterm_reuses_it_when_installed(self, monkeypatch):
+        monkeypatch.setattr("shutil.which", lambda name: "wezterm")
+        assert detect_backend(env={"WEZTERM_PANE": "3"}) == WEZTERM
+
+    def test_installed_wezterm_is_preferred_outside_wezterm(self, monkeypatch):
+        monkeypatch.setattr("shutil.which", lambda name: "wezterm")
+        assert detect_backend(env={}) == WEZTERM
+
+    def test_windows_terminal_is_the_windows_fallback(self, monkeypatch):
+        monkeypatch.setattr("shutil.which", lambda name: None)
+        monkeypatch.setattr(os, "name", "nt")
+        assert detect_backend(env={}) == WINDOWS_TERMINAL
+
+    def test_tmux_is_the_posix_fallback_when_installed(self, monkeypatch):
+        monkeypatch.setattr("shutil.which", lambda name: "tmux" if name == "tmux" else None)
+        monkeypatch.setattr(os, "name", "posix")
+        assert detect_backend(env={}) == TMUX
+
+    def test_no_supported_binary_selects_log_only_backend(self, monkeypatch):
+        monkeypatch.setattr("shutil.which", lambda name: None)
+        monkeypatch.setattr(os, "name", "posix")
+        assert detect_backend(env={}) == NONE
+
 
 class TestWezTermEnvironment:
     def test_exports_project_dir(self):
@@ -77,16 +102,24 @@ class TestWezTermEnvironment:
     def test_roles_json_marks_stateless_panes(self):
         # The Lua cannot work this out for itself -- it never sees a profile -- so the flag
         # has to ride along with the pane it describes.
-        panes = [*PANES, PaneSpec(
-            role="cockpit", name="Cockpit", path="C:/proj",
-            cmd="python -m kiln.cockpit.infrastructure.http.server",
-            mode="manual", passive=True,
-        )]
+        panes = [
+            *PANES,
+            PaneSpec(
+                role="cockpit",
+                name="Cockpit",
+                path="C:/proj",
+                cmd="python -m kiln.cockpit.infrastructure.http.server",
+                mode="manual",
+                passive=True,
+            ),
+        ]
 
         roles = json.loads(wezterm.build_environment(panes, {}, Path("C:/p"))[wezterm.ENV_ROLES])
 
         assert {r["role"]: r["passive"] for r in roles} == {
-            "specifier": False, "coder": False, "cockpit": True,
+            "specifier": False,
+            "coder": False,
+            "cockpit": True,
         }
 
     def test_layout_is_omitted_when_absent(self):
@@ -108,11 +141,60 @@ class TestWezTermEnvironment:
         env = wezterm.build_environment(PANES, {}, Path("C:/proj"))
         assert json.loads(env[wezterm.ENV_STATE_COLORS]) == STATE_COLORS_HEX
 
+    def test_missing_binary_is_reported(self, monkeypatch):
+        monkeypatch.setattr(wezterm.shutil, "which", lambda name: None)
+        with pytest.raises(TerminalError, match="wezterm not found"):
+            wezterm.launch(PANES, {}, Path("C:/p"))
+
+    def test_existing_user_config_is_restored_after_launch(self, tmp_path, monkeypatch):
+        target = tmp_path / ".wezterm.lua"
+        target.write_text("return user_config\n", encoding="utf-8")
+        calls = []
+        monkeypatch.setattr(wezterm, "config_path", lambda: target)
+        monkeypatch.setattr(wezterm.shutil, "which", lambda name: "wezterm")
+        monkeypatch.setattr(wezterm.time, "sleep", lambda seconds: None)
+        monkeypatch.setattr(
+            wezterm.subprocess, "run", lambda command, **kwargs: calls.append((command, kwargs))
+        )
+
+        assert wezterm.launch(PANES, GRID_LAYOUT, tmp_path) == ["wezterm", "start"]
+        assert target.read_text(encoding="utf-8") == "return user_config\n"
+        assert calls[0][1]["env"][wezterm.ENV_PROJECT_DIR] == tmp_path.as_posix()
+
+    def test_generated_config_is_removed_when_user_had_none(self, tmp_path, monkeypatch):
+        target = tmp_path / ".wezterm.lua"
+        monkeypatch.setattr(wezterm, "config_path", lambda: target)
+        monkeypatch.setattr(wezterm.shutil, "which", lambda name: "wezterm")
+        monkeypatch.setattr(wezterm.time, "sleep", lambda seconds: None)
+        monkeypatch.setattr(wezterm.subprocess, "run", lambda *args, **kwargs: None)
+
+        wezterm.launch(PANES, {}, tmp_path)
+
+        assert not target.exists()
+
+    def test_user_config_is_restored_even_when_start_raises(self, tmp_path, monkeypatch):
+        target = tmp_path / ".wezterm.lua"
+        target.write_text("user config", encoding="utf-8")
+        monkeypatch.setattr(wezterm, "config_path", lambda: target)
+        monkeypatch.setattr(wezterm.shutil, "which", lambda name: "wezterm")
+        monkeypatch.setattr(wezterm.time, "sleep", lambda seconds: None)
+        monkeypatch.setattr(
+            wezterm.subprocess,
+            "run",
+            lambda *args, **kwargs: (_ for _ in ()).throw(OSError("start failed")),
+        )
+
+        with pytest.raises(OSError, match="start failed"):
+            wezterm.launch(PANES, {}, tmp_path)
+        assert target.read_text(encoding="utf-8") == "user config"
+
 
 class TestWezTermLua:
     def test_reads_the_environment_variables_the_launcher_sets(self):
         for name in (
-            wezterm.ENV_ROLES, wezterm.ENV_LAYOUT, wezterm.ENV_PROJECT_DIR,
+            wezterm.ENV_ROLES,
+            wezterm.ENV_LAYOUT,
+            wezterm.ENV_PROJECT_DIR,
             wezterm.ENV_STATE_COLORS,
         ):
             assert f"os.getenv('{name}')" in wezterm.LUA_CONFIG
@@ -264,6 +346,47 @@ class TestTmux:
         planned = tmux.launch(PANES, None, dry_run=True)
         assert any("kiln-specifier" in line for line in planned)
         assert any("kiln-coder" in line for line in planned)
+
+    def test_missing_binary_is_reported(self, monkeypatch):
+        monkeypatch.setattr(tmux.shutil, "which", lambda name: None)
+        with pytest.raises(TerminalError, match="tmux not found"):
+            tmux.launch(PANES, None)
+
+    def test_existing_session_is_left_untouched(self, monkeypatch):
+        monkeypatch.setattr(tmux.shutil, "which", lambda name: "tmux")
+        monkeypatch.setattr(tmux, "session_exists", lambda role: True)
+        monkeypatch.setattr(tmux, "_run", lambda command: pytest.fail("ran tmux command"))
+
+        assert tmux.launch(PANES, None) == []
+
+    def test_launch_runs_each_planned_command(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(tmux.shutil, "which", lambda name: "tmux")
+        monkeypatch.setattr(tmux, "session_exists", lambda role: False)
+        monkeypatch.setattr(
+            tmux,
+            "_run",
+            lambda command: calls.append(command) or SimpleNamespace(returncode=0, stderr=""),
+        )
+
+        planned = tmux.launch(PANES[:1], None)
+
+        assert len(calls) == 3
+        assert planned == [" ".join(command) for command in calls]
+
+    def test_failed_command_stops_setting_up_only_that_role(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(tmux.shutil, "which", lambda name: "tmux")
+        monkeypatch.setattr(tmux, "session_exists", lambda role: False)
+        monkeypatch.setattr(
+            tmux,
+            "_run",
+            lambda command: calls.append(command) or SimpleNamespace(returncode=1, stderr="broken"),
+        )
+
+        tmux.launch(PANES[:1], None)
+
+        assert len(calls) == 1
 
 
 class TestDispatch:

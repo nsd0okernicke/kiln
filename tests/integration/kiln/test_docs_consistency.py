@@ -18,12 +18,13 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[3]
 FRAMEWORK_PROFILES = REPO / "src" / "kiln" / "resources" / "profiles.json"
-CONSTITUTION = REPO / "kiln" / "project" / "constitution.md"
+SCAFFOLD = REPO / "src" / "kiln" / "resources" / "project"
+CONSTITUTION = SCAFFOLD / "constitution.md"
 
 
 def _shipped_docs() -> list[Path]:
     """Markdown that ships to users: the framework's own docs plus every project template."""
-    roots = [REPO / "kiln" / "project", REPO / "docs", REPO / "examples"]
+    roots = [SCAFFOLD, REPO / "docs", REPO / "examples"]
     files = [path for root in roots for path in root.rglob("*.md")]
     return [*files, REPO / "README.md"]
 
@@ -42,7 +43,7 @@ class TestConstitutionLoadOrder:
         # copying it would have pointed every project at a file that is not there.
         from kiln.launcher.infrastructure.scaffold import CONSTITUTION_FILES
 
-        present = {p.name for p in (REPO / "kiln" / "project" / "constitution").glob("*.md")}
+        present = {p.name for p in (SCAFFOLD / "constitution").glob("*.md")}
 
         assert present - set(CONSTITUTION_FILES) == set(), (
             "bundled constitution files that scaffolding never copies into a project"
@@ -50,7 +51,7 @@ class TestConstitutionLoadOrder:
 
     def test_every_constitution_file_is_in_the_load_order(self):
         listed = CONSTITUTION.read_text(encoding="utf-8")
-        present = sorted(p.name for p in (REPO / "kiln" / "project" / "constitution").glob("*.md"))
+        present = sorted(p.name for p in (SCAFFOLD / "constitution").glob("*.md"))
 
         missing = [name for name in present if name not in listed]
 
@@ -99,7 +100,10 @@ class TestShippedWorkerTimeouts:
     #: Floors, not exact values -- tuning up is fine, dropping back to the default is the
     #: regression. The architect runs a full mutation pass and needs the most.
     MINIMUMS: ClassVar[dict[str, int]] = {
-        "specifier": 1800, "coder": 1800, "refactorer": 1800, "architect": 2400,
+        "specifier": 1800,
+        "coder": 1800,
+        "refactorer": 1800,
+        "architect": 2400,
     }
 
     def test_every_scheduled_heavy_role_raises_it(self):
@@ -133,9 +137,7 @@ class TestHandoffSkillVerification:
     """
 
     def _skill(self) -> str:
-        return (
-            REPO / "kiln" / "project" / "skills" / "kiln-handoff" / "SKILL.md"
-        ).read_text(encoding="utf-8")
+        return (SCAFFOLD / "skills" / "kiln-handoff" / "SKILL.md").read_text(encoding="utf-8")
 
     def test_it_verifies_by_id(self):
         assert "WHERE id=" in self._skill()
@@ -173,7 +175,7 @@ class TestExternalRuntimePrerequisites:
         start = re.search(r"^#+\s*Prerequisites\s*$", text, re.M)
         if start is None:
             return ""
-        rest = text[start.end():]
+        rest = text[start.end() :]
         end = re.search(r"^#+\s", rest, re.M)
         return (rest if end is None else rest[: end.start()]).lower()
 
@@ -218,9 +220,7 @@ class TestVirtualenvInvocation:
             if ("Scripts\\activate" in line or "bin/activate" in line)
             and "not activate" not in text[: text.index(line)][-400:]
         ]
-        assert not offenders, (
-            f"{doc.parents[3].name} still instructs activation: {offenders}"
-        )
+        assert not offenders, f"{doc.parents[3].name} still instructs activation: {offenders}"
 
 
 class TestUnsupportedRoles:
@@ -234,7 +234,7 @@ class TestUnsupportedRoles:
         profiles = json.loads(FRAMEWORK_PROFILES.read_text(encoding="utf-8"))["profiles"]
         routed = any("reviewer" in profile.get("routing", {}) for profile in profiles.values())
 
-        role_file = (REPO / "kiln" / "project" / "roles" / "reviewer.md").read_text("utf-8")
+        role_file = (SCAFFOLD / "roles" / "reviewer.md").read_text("utf-8")
 
         assert routed or "Unsupported" in role_file, (
             "reviewer has no routing row in any profile, so it stalls on its first handoff -- "
@@ -329,9 +329,7 @@ class TestWrapperTemplateSets:
 
         present = {p.name for p in (REPO / "src" / "kiln" / "resources" / "templates").glob("*.md")}
 
-        missing = {
-            agent: sorted(self._expected(agent) - present) for agent in VALID_AGENTS
-        }
+        missing = {agent: sorted(self._expected(agent) - present) for agent in VALID_AGENTS}
         incomplete = {agent: names for agent, names in missing.items() if names}
 
         assert not incomplete, (

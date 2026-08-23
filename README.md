@@ -213,17 +213,12 @@ kiln/
 │   ├── clear-messages.ps1 / .sh  # Empty the message queue (testing utility)
 │   └── kiln-db.ps1               # Inspect/manage messages.db (Windows only)
 │
-├── kiln/
-│   └── project/                  # Copied into every new project's kiln/project/ — customize freely
+├── src/kiln/                     # Installable Python package; never copied into projects
+│   ├── resources/project/        # Scaffold source copied to a new project's kiln/project/
 │   │   ├── constitution.md
 │   │   ├── constitution/         # Shared constitution rules
-│   │   │   ├── workflow.md           # Handoff protocol + the Handoff Routing table
-│   │   │   ├── engineering.md        # Engineering practices & quality standards
-│   │   │   └── project.md            # Project rules starter template
-│   │   ├── roles/                    # Role prompts
-│   │   └── skills/                   # Agent skills (optional)
-│
-├── src/kiln/                     # Installable Python package; never copied into projects
+│   │   ├── roles/                # Role prompts
+│   │   └── skills/               # Agent skills
 │   ├── launcher/                 # Process/worktree/profile orchestration
 │       │   ├── cli.py                    # Argument parsing and the launch sequence
 │       │   ├── config.py                 # Profile loading, inheritance, validation
@@ -269,7 +264,7 @@ kiln/
 └── docs/                         # Documentation & assets
 ```
 
-**`bin/`** holds entry points. The two `kiln` scripts are shims with no logic in them; the rest are standalone utilities that were never part of the kiln.launcher. **`src/kiln/launcher/` and `src/kiln/scheduler/`** are the actual implementation. **`kiln/project/`** is copied to new projects during scaffolding and is meant to be customized. **`src/`** is never copied — it's read directly from this install at launch time, so edits there affect every project using this install.
+**`bin/`** holds entry points. The two `kiln` scripts are shims with no logic in them; the rest are standalone utilities that were never part of the kiln.launcher. **`src/kiln/launcher/` and `src/kiln/scheduler/`** are the actual implementation. **`src/kiln/resources/project/`** is the bundled scaffold copied to a generated project's editable **`kiln/project/`** directory. Runtime implementation is read directly from the install.
 
 > The pre-port implementation lived in `lib/` as parallel PowerShell and shell trees
 > (`profile-loader.{ps1,sh}`, `terminal-adapter.sh`, `terminal-adapters/*`). Those are deleted;

@@ -127,7 +127,8 @@ class TestEventRendering:
             "message": {
                 "content": [
                     {
-                        "type": "tool_use", "name": "run_terminal_command",
+                        "type": "tool_use",
+                        "name": "run_terminal_command",
                         "input": {"command": "pytest -q"},
                     }
                 ]
@@ -264,7 +265,8 @@ class TestRunWorker:
             # `terminate_tree` shells out to taskkill (Windows) or signals a process group
             # (POSIX); neither belongs in a unit test holding a fake process.
             monkeypatch.setattr(
-                grok_adapter.subprocess, "run",
+                grok_adapter.subprocess,
+                "run",
                 lambda argv, **kwargs: subprocess.CompletedProcess(argv, 0, b"", b""),
             )
             return calls
@@ -284,7 +286,10 @@ class TestRunWorker:
         )
         seen = []
         grok_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=seen.append,
         )
         assert f"{grok_adapter.ICON_SESSION} worker session started" in seen
@@ -293,8 +298,12 @@ class TestRunWorker:
     def test_timeout_kills_the_process(self, fake_run, tmp_path):
         calls = fake_run(hang=True)
         invocation = grok_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
-            timeout=1, on_output=lambda _line: None,
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
+            timeout=1,
+            on_output=lambda _line: None,
         )
         assert invocation.timed_out is True
         assert invocation.is_done is False
@@ -303,7 +312,10 @@ class TestRunWorker:
     def test_parses_a_successful_worker(self, fake_run, tmp_path):
         fake_run(stdout=_envelope())
         invocation = grok_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.is_done
@@ -313,7 +325,10 @@ class TestRunWorker:
         # Unlike Copilot/Codex, grok reports a real total_cost_usd -- confirmed live.
         fake_run(stdout=_envelope(total_cost_usd=0.02508))
         invocation = grok_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.cost_usd == pytest.approx(0.02508)
@@ -321,7 +336,10 @@ class TestRunWorker:
     def test_redirects_stdin_and_separates_streams(self, fake_run, tmp_path):
         calls = fake_run(stdout=_envelope())
         grok_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert calls["kwargs"]["stdin"] is subprocess.DEVNULL
@@ -331,7 +349,10 @@ class TestRunWorker:
     def test_blocked_worker_is_reported_not_raised(self, fake_run, tmp_path):
         fake_run(stdout=_envelope(result="KILN-STATUS: blocked missing fixtures"))
         invocation = grok_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.is_done is False
@@ -340,7 +361,10 @@ class TestRunWorker:
     def test_missing_binary_is_treated_as_blocked(self, fake_run, tmp_path):
         fake_run(exc=OSError("grok not found"))
         invocation = grok_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.is_done is False
@@ -349,7 +373,10 @@ class TestRunWorker:
     def test_cli_error_envelope_is_treated_as_blocked(self, fake_run, tmp_path):
         fake_run(stdout=_envelope(is_error=True, result="Not logged in"))
         invocation = grok_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.is_done is False
@@ -359,7 +386,10 @@ class TestRunWorker:
     def test_unparseable_output_is_treated_as_blocked(self, fake_run, tmp_path):
         fake_run(stdout="total garbage", stderr="something broke")
         invocation = grok_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.is_done is False
@@ -368,7 +398,10 @@ class TestRunWorker:
     def test_missing_sentinel_is_blocked(self, fake_run, tmp_path):
         fake_run(stdout=_envelope(result="I finished the work but forgot the sentinel."))
         invocation = grok_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="",
             on_output=lambda _l: None,
         )
         assert invocation.is_done is False

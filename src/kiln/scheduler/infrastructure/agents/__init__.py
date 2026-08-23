@@ -14,12 +14,15 @@ to whichever adapter happened to be written first.
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import os
 import signal
 import subprocess
 import threading
 import time
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 
 from ...domain.models import TokenUsage, WorkerInvocation
 
@@ -104,6 +107,49 @@ class Watchdog:
         terminate_tree(self._process)
 
 
+@dataclass(frozen=True)
+class StreamCapture:
+    """A worker's raw JSON-lines stream plus any watchdog termination reason."""
+
+    stdout: str
+    timeout_reason: str | None
+
+
+def capture_json_stream(
+    process: subprocess.Popen,
+    *,
+    timeout: float,
+    idle_timeout: float | None,
+    render_event: Callable[[dict], Iterable[str]],
+    emit: Callable[[str], None],
+    watchdog_factory=Watchdog,
+    terminate: Callable[[subprocess.Popen], None] | None = None,
+) -> StreamCapture:
+    """Consume one adapter's JSON-lines stream with shared watchdog/reaping semantics."""
+    watchdog = watchdog_factory(process, timeout, idle_timeout).start()
+    captured: list[str] = []
+    try:
+        for line in process.stdout:  # type: ignore[union-attr]
+            watchdog.saw_output()
+            captured.append(line)
+            stripped = line.strip()
+            if not stripped.startswith("{"):
+                continue
+            try:
+                event = json.loads(stripped)
+            except json.JSONDecodeError:
+                continue
+            for rendered in render_event(event):
+                emit(rendered)
+        try:
+            process.wait(timeout=REAP_TIMEOUT_SEC)
+        except subprocess.TimeoutExpired:
+            (terminate or terminate_tree)(process)
+    finally:
+        watchdog.stop()
+    return StreamCapture("".join(captured), watchdog.reason)
+
+
 def terminate_tree(process: subprocess.Popen) -> None:
     """
     Kill the worker *and everything it spawned*.
@@ -128,7 +174,8 @@ def terminate_tree(process: subprocess.Popen) -> None:
         # /T covers the descendant chain; /F because a hung child will not honour a request.
         subprocess.run(
             ["taskkill", "/F", "/T", "/PID", str(process.pid)],
-            capture_output=True, check=False,
+            capture_output=True,
+            check=False,
         )
     else:
         _killpg(process)
@@ -167,8 +214,10 @@ def _killpg(process: subprocess.Popen) -> None:
 __all__ = [
     "DEFAULT_IDLE_TIMEOUT_SEC",
     "REAP_TIMEOUT_SEC",
+    "StreamCapture",
     "TokenUsage",
     "Watchdog",
     "WorkerInvocation",
+    "capture_json_stream",
     "terminate_tree",
 ]

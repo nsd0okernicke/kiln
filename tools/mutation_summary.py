@@ -12,9 +12,12 @@ def summarize(path: Path) -> dict[str, object]:
     """Count outcome-like values in a Cosmic Ray SQLite session."""
     counts: dict[str, int] = {}
     with sqlite3.connect(path) as conn:
-        tables = [row[0] for row in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-        )]
+        tables = [
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+            )
+        ]
         for table in tables:
             columns = [row[1] for row in conn.execute(f'PRAGMA table_info("{table}")')]
             for column in columns:
@@ -31,8 +34,10 @@ def summarize(path: Path) -> dict[str, object]:
     survived = sum(value for key, value in counts.items() if "surviv" in key)
     denominator = killed + survived
     return {
-        "database": str(path), "outcomes": counts,
-        "killed": killed, "survived": survived,
+        "database": str(path),
+        "outcomes": counts,
+        "killed": killed,
+        "survived": survived,
         "mutation_score": killed / denominator if denominator else None,
         "score_formula": "killed / (killed + survived)",
     }

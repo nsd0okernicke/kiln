@@ -106,9 +106,7 @@ class TestInsertVerification:
         assert total == 1, "the handoff must be sent exactly once"
 
     def test_gives_up_after_two_attempts(self, db_path, git_repo, monkeypatch):
-        monkeypatch.setattr(
-            queue_commands, "message_exists", lambda *a, **k: False
-        )
+        monkeypatch.setattr(queue_commands, "message_exists", lambda *a, **k: False)
         ctx = SchedulerContext(
             role="coder",
             branch="main",

@@ -92,9 +92,7 @@ class TestConditionalRouting:
         )
 
     def test_role_with_only_a_conditional_rule_returns_none_for_other_senders(self):
-        table = routing.parse_routing_table(
-            "| coder | architect | refactorer |\n"
-        )
+        table = routing.parse_routing_table("| coder | architect | refactorer |\n")
         assert table.resolve("coder", sender="refactorer") == "architect"
         assert table.resolve("coder", sender="specifier") is None
         assert table.resolve("coder") is None
@@ -232,7 +230,7 @@ class TestFileLoading:
         from pathlib import Path
 
         repo_root = Path(__file__).resolve().parents[5]
-        path = repo_root / "kiln" / "project" / "constitution" / "workflow.md"
+        path = repo_root / "src" / "kiln" / "resources" / "project" / "constitution" / "workflow.md"
         return path.read_text(encoding="utf-8")
 
     def test_shipped_workflow_md_carries_the_placeholder(self):
@@ -303,23 +301,23 @@ class TestRoutingArgumentRoundTrip:
 
     def test_a_default_rule_round_trips(self):
         table = routing.parse_profile_routing({"architect": "human-in-the-loop"})
-        assert routing.parse_routing_arguments(
-            routing.format_routing_rules(table)
-        ).rules == table.rules
+        assert (
+            routing.parse_routing_arguments(routing.format_routing_rules(table)).rules
+            == table.rules
+        )
 
     def test_a_conditional_rule_round_trips(self):
         table = routing.parse_profile_routing(
             {"specifier": {"default": "coder", "architect": "human-in-the-loop"}}
         )
-        assert routing.parse_routing_arguments(
-            routing.format_routing_rules(table)
-        ).rules == table.rules
+        assert (
+            routing.parse_routing_arguments(routing.format_routing_rules(table)).rules
+            == table.rules
+        )
 
     def test_the_wire_format_is_readable(self):
         table = routing.parse_profile_routing({"specifier": {"architect": "human-in-the-loop"}})
-        assert routing.format_routing_rules(table) == [
-            "specifier=human-in-the-loop:architect"
-        ]
+        assert routing.format_routing_rules(table) == ["specifier=human-in-the-loop:architect"]
 
     @pytest.mark.parametrize("bad", ["no-equals", "=target", "role="])
     def test_a_malformed_argument_raises_rather_than_being_skipped(self, bad):

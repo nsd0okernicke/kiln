@@ -21,9 +21,15 @@ pytestmark = pytest.mark.integration
 
 def _message(sender="coder", summary="did the thing", escalation=False, ping=False):
     return handoff.format_handoff(
-        sender=sender, handoff="pending", branch="main", commit="abc1234",
-        summary=summary, next_role="human-in-the-loop", timestamp="2026-08-08 10:00:00",
-        escalation=escalation, ping=ping,
+        sender=sender,
+        handoff="pending",
+        branch="main",
+        commit="abc1234",
+        summary=summary,
+        next_role="human-in-the-loop",
+        timestamp="2026-08-08 10:00:00",
+        escalation=escalation,
+        ping=ping,
     )
 
 
@@ -31,8 +37,11 @@ def _message(sender="coder", summary="did the thing", escalation=False, ping=Fal
 def ctx(db_path):
     lines: list[str] = []
     context = inbox.InboxContext(
-        role="human-in-the-loop", branch="main", db_path=db_path,
-        bell=False, emit=lines.append,
+        role="human-in-the-loop",
+        branch="main",
+        db_path=db_path,
+        bell=False,
+        emit=lines.append,
     )
     context.lines = lines  # type: ignore[attr-defined]
     return context
@@ -78,9 +87,7 @@ class TestDelivery:
 
     def test_messages_on_another_branch_are_ignored(self, ctx):
         # Messages are branch-scoped; an inbox on the wrong branch looks simply empty.
-        db.insert_handoff(
-            ctx.db_path, "coder", "human-in-the-loop", _message(), "feature-x"
-        )
+        db.insert_handoff(ctx.db_path, "coder", "human-in-the-loop", _message(), "feature-x")
         assert inbox.poll_once(ctx) is None
 
 
@@ -125,8 +132,12 @@ class TestReceiveDoesTheWorkNotJustTheNotice:
     def human(self, db_path, git_repo):
         lines: list[str] = []
         ctx = inbox.InboxContext(
-            role="human-in-the-loop", branch="main", db_path=db_path,
-            worktree=git_repo, bell=False, emit=lines.append,
+            role="human-in-the-loop",
+            branch="main",
+            db_path=db_path,
+            worktree=git_repo,
+            bell=False,
+            emit=lines.append,
         )
         ctx.lines = lines  # type: ignore[attr-defined]
         return ctx
@@ -143,13 +154,15 @@ class TestReceiveDoesTheWorkNotJustTheNotice:
         (git_repo / filename).unlink(missing_ok=True)
         return commit
 
-    def test_the_inbound_commit_is_merged_into_the_human_tree(
-        self, human, git_repo, git_cmd
-    ):
+    def test_the_inbound_commit_is_merged_into_the_human_tree(self, human, git_repo, git_cmd):
         commit = self._sender_commit(git_repo, git_cmd)
         content = handoff.format_handoff(
-            sender="architect", handoff="CAT-3", branch="main-architect", commit=commit,
-            summary="cycle complete", next_role="human-in-the-loop",
+            sender="architect",
+            handoff="CAT-3",
+            branch="main-architect",
+            commit=commit,
+            summary="cycle complete",
+            next_role="human-in-the-loop",
             timestamp="2026-08-09 10:00:00",
         )
         _queue(human.db_path, content, sender="architect")
@@ -160,10 +173,19 @@ class TestReceiveDoesTheWorkNotJustTheNotice:
 
     def test_the_merge_is_reported(self, human, git_repo, git_cmd):
         commit = self._sender_commit(git_repo, git_cmd)
-        _queue(human.db_path, handoff.format_handoff(
-            sender="architect", handoff="CAT-3", branch="main-architect", commit=commit,
-            summary="done", next_role="human-in-the-loop", timestamp="t",
-        ), sender="architect")
+        _queue(
+            human.db_path,
+            handoff.format_handoff(
+                sender="architect",
+                handoff="CAT-3",
+                branch="main-architect",
+                commit=commit,
+                summary="done",
+                next_role="human-in-the-loop",
+                timestamp="t",
+            ),
+            sender="architect",
+        )
 
         inbox.poll_once(human)
         assert "merged" in "\n".join(human.lines)
@@ -174,10 +196,19 @@ class TestReceiveDoesTheWorkNotJustTheNotice:
         from kiln.scheduler.infrastructure.vcs import git as git_ops
 
         commit = self._sender_commit(git_repo, git_cmd)
-        _queue(human.db_path, handoff.format_handoff(
-            sender="architect", handoff="CAT-3", branch="main-architect", commit=commit,
-            summary="done", next_role="human-in-the-loop", timestamp="t",
-        ), sender="architect")
+        _queue(
+            human.db_path,
+            handoff.format_handoff(
+                sender="architect",
+                handoff="CAT-3",
+                branch="main-architect",
+                commit=commit,
+                summary="done",
+                next_role="human-in-the-loop",
+                timestamp="t",
+            ),
+            sender="architect",
+        )
 
         inbox.poll_once(human)
 
@@ -196,10 +227,19 @@ class TestReceiveDoesTheWorkNotJustTheNotice:
 
     def test_a_failed_merge_is_shouted_about(self, human, git_repo):
         # An unmergeable commit must not look like a normal delivery.
-        _queue(human.db_path, handoff.format_handoff(
-            sender="architect", handoff="x", branch="main-architect", commit="0" * 40,
-            summary="unmergeable", next_role="human-in-the-loop", timestamp="t",
-        ), sender="architect")
+        _queue(
+            human.db_path,
+            handoff.format_handoff(
+                sender="architect",
+                handoff="x",
+                branch="main-architect",
+                commit="0" * 40,
+                summary="unmergeable",
+                next_role="human-in-the-loop",
+                timestamp="t",
+            ),
+            sender="architect",
+        )
 
         inbox.poll_once(human)
         shown = "\n".join(human.lines)
@@ -208,20 +248,38 @@ class TestReceiveDoesTheWorkNotJustTheNotice:
 
     def test_a_failed_merge_still_leaves_the_queue_clean(self, human):
         # Left queued it would be re-served every poll forever, by nobody.
-        _queue(human.db_path, handoff.format_handoff(
-            sender="architect", handoff="x", branch="b", commit="0" * 40,
-            summary="unmergeable", next_role="human-in-the-loop", timestamp="t",
-        ), sender="architect")
+        _queue(
+            human.db_path,
+            handoff.format_handoff(
+                sender="architect",
+                handoff="x",
+                branch="b",
+                commit="0" * 40,
+                summary="unmergeable",
+                next_role="human-in-the-loop",
+                timestamp="t",
+            ),
+            sender="architect",
+        )
 
         inbox.poll_once(human)
         assert db.count_queued(human.db_path, "human-in-the-loop", "main") == 0
 
     def test_a_message_with_no_commit_needs_no_merge(self, human):
         # A human's own opening request, or a ping, carries nothing to merge.
-        _queue(human.db_path, handoff.format_handoff(
-            sender="specifier", handoff="x", branch="main", commit="",
-            summary="just telling you", next_role="human-in-the-loop", timestamp="t",
-        ), sender="specifier")
+        _queue(
+            human.db_path,
+            handoff.format_handoff(
+                sender="specifier",
+                handoff="x",
+                branch="main",
+                commit="",
+                summary="just telling you",
+                next_role="human-in-the-loop",
+                timestamp="t",
+            ),
+            sender="specifier",
+        )
 
         assert inbox.poll_once(human) is not None
         assert "MERGE FAILED" not in "\n".join(human.lines)
@@ -229,10 +287,19 @@ class TestReceiveDoesTheWorkNotJustTheNotice:
     def test_merging_can_be_turned_off(self, human, git_repo, git_cmd):
         commit = self._sender_commit(git_repo, git_cmd)
         human.merge = False
-        _queue(human.db_path, handoff.format_handoff(
-            sender="architect", handoff="x", branch="b", commit=commit,
-            summary="done", next_role="human-in-the-loop", timestamp="t",
-        ), sender="architect")
+        _queue(
+            human.db_path,
+            handoff.format_handoff(
+                sender="architect",
+                handoff="x",
+                branch="b",
+                commit=commit,
+                summary="done",
+                next_role="human-in-the-loop",
+                timestamp="t",
+            ),
+            sender="architect",
+        )
 
         inbox.poll_once(human)
         assert not (git_repo / "feature.py").exists()
@@ -263,22 +330,85 @@ class TestBell:
 class TestInboxCli:
     def test_once_mode_drains_and_exits(self, db_path, capsys):
         _queue(db_path, _message(summary="drain me"))
-        code = inbox.main([
-            "--db-path", str(db_path), "--branch", "main",
-            "--once", "--no-status-bar", "--no-bell",
-        ])
+        code = inbox.main(
+            [
+                "--db-path",
+                str(db_path),
+                "--branch",
+                "main",
+                "--once",
+                "--no-status-bar",
+                "--no-bell",
+            ]
+        )
         assert code == 0
         assert "drain me" in capsys.readouterr().out
 
     def test_defaults_to_the_human_role(self):
         assert inbox.build_parser().parse_args(["--db-path", "x"]).role == "human-in-the-loop"
 
+    def test_poll_interrupt_returns_130_and_closes_status_bar(self, db_path, monkeypatch):
+        closed = []
+        monkeypatch.setattr(inbox.db, "count_queued", lambda *args: 0)
+        monkeypatch.setattr(
+            inbox, "poll_once", lambda *args: (_ for _ in ()).throw(KeyboardInterrupt())
+        )
+        monkeypatch.setattr(inbox.pane_status.StatusBar, "close", lambda self: closed.append(True))
+
+        assert inbox.main(["--db-path", str(db_path), "--no-status-bar"]) == 130
+        assert closed == [True]
+
+    def test_poll_failure_is_logged_then_once_mode_exits(self, db_path, monkeypatch, capsys):
+        monkeypatch.setattr(inbox.db, "count_queued", lambda *args: 0)
+        monkeypatch.setattr(
+            inbox, "poll_once", lambda *args: (_ for _ in ()).throw(ValueError("bad poll"))
+        )
+
+        assert inbox.main(["--db-path", str(db_path), "--once", "--no-status-bar"]) == 0
+        assert "poll failed" in capsys.readouterr().err
+
+    def test_sleep_interrupt_returns_130(self, db_path, monkeypatch):
+        monkeypatch.setattr(inbox.db, "count_queued", lambda *args: 0)
+        monkeypatch.setattr(inbox, "poll_once", lambda *args: None)
+        monkeypatch.setattr(
+            inbox.time, "sleep", lambda seconds: (_ for _ in ()).throw(KeyboardInterrupt())
+        )
+
+        assert inbox.main(["--db-path", str(db_path), "--no-status-bar"]) == 130
+
+    def test_cli_flags_build_display_only_silent_context(self, tmp_path, db_path, monkeypatch):
+        contexts = []
+        monkeypatch.setattr(inbox.db, "count_queued", lambda *args: 2)
+        monkeypatch.setattr(inbox, "poll_once", lambda ctx, bar: contexts.append(ctx) or None)
+
+        assert (
+            inbox.main(
+                [
+                    "--db-path",
+                    str(db_path),
+                    "--worktree",
+                    str(tmp_path),
+                    "--no-merge",
+                    "--no-bell",
+                    "--once",
+                    "--no-status-bar",
+                ]
+            )
+            == 0
+        )
+        assert contexts[0].worktree == tmp_path
+        assert contexts[0].merge is False
+        assert contexts[0].bell is False
+
 
 class TestSend:
     def test_queues_a_message_the_target_can_fetch(self, db_path):
         send.send(
-            db_path=db_path, sender="human-in-the-loop", target="specifier",
-            summary="build the search feature", branch="main",
+            db_path=db_path,
+            sender="human-in-the-loop",
+            target="specifier",
+            summary="build the search feature",
+            branch="main",
         )
         fetched = db.fetch_and_deliver(db_path, "specifier", "main")
         assert fetched is not None
@@ -288,8 +418,11 @@ class TestSend:
         # The receiving scheduler parses it with the same code as an agent-sent handoff, so
         # a human-authored message must be structurally identical.
         send.send(
-            db_path=db_path, sender="human-in-the-loop", target="specifier",
-            summary="do a thing", branch="main",
+            db_path=db_path,
+            sender="human-in-the-loop",
+            target="specifier",
+            summary="do a thing",
+            branch="main",
         )
         fetched = db.fetch_and_deliver(db_path, "specifier", "main")
         parsed = handoff.parse_handoff(fetched["content"])
@@ -300,15 +433,22 @@ class TestSend:
         # The specifier is what invents the name, so the intake hop legitimately has none.
         # This is the one deliberate NULL; everything after it must carry a value.
         send.send(
-            db_path=db_path, sender="human-in-the-loop", target="specifier",
-            summary="new idea", branch="main",
+            db_path=db_path,
+            sender="human-in-the-loop",
+            target="specifier",
+            summary="new idea",
+            branch="main",
         )
         assert db.cycles_by_work_item(db_path, "main") == {}
 
     def test_a_named_handoff_is_stored_as_the_work_item(self, db_path):
         send.send(
-            db_path=db_path, sender="human-in-the-loop", target="coder",
-            summary="carry on", branch="main", handoff_name="CAT-3 search",
+            db_path=db_path,
+            sender="human-in-the-loop",
+            target="coder",
+            summary="carry on",
+            branch="main",
+            handoff_name="CAT-3 search",
         )
         assert db.cycles_by_work_item(db_path, "main") == {"CAT-3 search": 1}
 
@@ -322,8 +462,11 @@ class TestSend:
         having never seen the CAT-5, LOAN-0 or CAT-2 implementations.
         """
         send.send(
-            db_path=db_path, sender="human-in-the-loop", target="specifier",
-            summary="new idea", branch="main",
+            db_path=db_path,
+            sender="human-in-the-loop",
+            target="specifier",
+            summary="new idea",
+            branch="main",
         )
         fetched = db.fetch_and_deliver(db_path, "specifier", "main")
 
@@ -334,16 +477,24 @@ class TestSend:
 
     def test_a_commit_can_be_attached(self, db_path):
         send.send(
-            db_path=db_path, sender="human-in-the-loop", target="coder",
-            summary="merge this", branch="main", commit="deadbeef",
+            db_path=db_path,
+            sender="human-in-the-loop",
+            target="coder",
+            summary="merge this",
+            branch="main",
+            commit="deadbeef",
         )
         fetched = db.fetch_and_deliver(db_path, "coder", "main")
         assert handoff.parse_handoff(fetched["content"]).is_mergeable is True
 
     def test_escalation_flag_round_trips(self, db_path):
         send.send(
-            db_path=db_path, sender="human-in-the-loop", target="coder",
-            summary="urgent", branch="main", escalation=True,
+            db_path=db_path,
+            sender="human-in-the-loop",
+            target="coder",
+            summary="urgent",
+            branch="main",
+            escalation=True,
         )
         fetched = db.fetch_and_deliver(db_path, "coder", "main")
         assert handoff.is_escalation(fetched["content"]) is True
@@ -351,8 +502,11 @@ class TestSend:
     def test_build_message_is_pure(self):
         # No DB needed to check the wire format.
         rendered = send.build_message(
-            sender="human-in-the-loop", target="specifier",
-            summary="hello", branch="main", timestamp="2026-01-01 00:00:00",
+            sender="human-in-the-loop",
+            target="specifier",
+            summary="hello",
+            branch="main",
+            timestamp="2026-01-01 00:00:00",
         )
         assert "Sender: human-in-the-loop" in rendered
         assert "hello" in rendered
@@ -360,17 +514,29 @@ class TestSend:
 
 class TestSendCli:
     def test_reports_the_queued_message(self, db_path, capsys):
-        code = send.main([
-            "Build the thing", "--to", "specifier", "--db-path", str(db_path),
-        ])
+        code = send.main(
+            [
+                "Build the thing",
+                "--to",
+                "specifier",
+                "--db-path",
+                str(db_path),
+            ]
+        )
         assert code == 0
         assert "specifier" in capsys.readouterr().out
 
     def test_a_missing_queue_is_explained_not_crashed(self, tmp_path, capsys):
         # sqlite would happily create an empty file and the message would vanish.
-        code = send.main([
-            "hi", "--to", "specifier", "--db-path", str(tmp_path / "nope.db"),
-        ])
+        code = send.main(
+            [
+                "hi",
+                "--to",
+                "specifier",
+                "--db-path",
+                str(tmp_path / "nope.db"),
+            ]
+        )
         assert code == 1
         assert "Launch the swarm first" in capsys.readouterr().err
 
@@ -389,13 +555,25 @@ class TestTheBugThisReplaces:
         entire point.
         """
         db.insert_handoff(
-            db_path, "coder", "human-in-the-loop",
-            _message(escalation=True, summary="merge of abc failed"), "main",
+            db_path,
+            "coder",
+            "human-in-the-loop",
+            _message(escalation=True, summary="merge of abc failed"),
+            "main",
         )
 
-        assert inbox.main([
-            "--db-path", str(db_path), "--once", "--no-status-bar", "--no-bell",
-        ]) == 0
+        assert (
+            inbox.main(
+                [
+                    "--db-path",
+                    str(db_path),
+                    "--once",
+                    "--no-status-bar",
+                    "--no-bell",
+                ]
+            )
+            == 0
+        )
 
         shown = capsys.readouterr().out
         assert "merge of abc failed" in shown

@@ -20,8 +20,12 @@ def failed(db_path):
 
     def _fail(*, target="coder", work_item="add-login", error="worker blocked: no fixtures"):
         content = handoff.format_handoff(
-            sender="specifier", handoff=work_item, branch="main", commit="abc1234",
-            summary="Please implement it.", next_role=target,
+            sender="specifier",
+            handoff=work_item,
+            branch="main",
+            commit="abc1234",
+            summary="Please implement it.",
+            next_role=target,
             timestamp="2026-08-07 10:00:00",
         )
         message_id = db.insert_handoff(
@@ -64,9 +68,7 @@ class TestResume:
         retry.resume(db_path=db_path, message_id=message_id, guidance="try X")
 
         assert db.count_work_item_arrivals(db_path, "add-login", "main", "coder") == 1
-        assert message_id in [
-            row["id"] for row in db.recent_messages(db_path, "main", limit=10)
-        ]
+        assert message_id in [row["id"] for row in db.recent_messages(db_path, "main", limit=10)]
 
     def test_a_second_retry_replaces_the_first_guidance(self, db_path, failed, read_message):
         # Stacking would make the worker reconcile advice the human has already superseded.
@@ -123,11 +125,26 @@ class TestCli:
         failed()
         shared = "aaaaaaaa"
         monkeypatch.setattr(
-            db, "failed_messages",
-            lambda *_a, **_k: [{"id": shared + "1", "error": "", "work_item": "",
-                                "sender": "s", "target": "coder", "created_at": ""},
-                               {"id": shared + "2", "error": "", "work_item": "",
-                                "sender": "s", "target": "coder", "created_at": ""}],
+            db,
+            "failed_messages",
+            lambda *_a, **_k: [
+                {
+                    "id": shared + "1",
+                    "error": "",
+                    "work_item": "",
+                    "sender": "s",
+                    "target": "coder",
+                    "created_at": "",
+                },
+                {
+                    "id": shared + "2",
+                    "error": "",
+                    "work_item": "",
+                    "sender": "s",
+                    "target": "coder",
+                    "created_at": "",
+                },
+            ],
         )
 
         assert retry.main(["--db-path", str(db_path), "--branch", "main", shared]) == 1

@@ -65,14 +65,21 @@ def launch(panes: list[PaneSpec], layout: dict | None, dry_run: bool = False) ->
         if not dry_run and session_exists(pane.role):
             log.info("[%s] tmux session already running; leaving it alone", pane.role)
             continue
-        for command in build_session_commands(pane):
-            planned.append(" ".join(command))
-            if not dry_run:
-                result = _run(command)
-                if result.returncode != 0:
-                    log.error("[%s] tmux failed: %s", pane.role, result.stderr.strip())
-                    break
+        planned.extend(_launch_pane(pane, dry_run))
 
     if not dry_run and panes:
         log.info("attach with: tmux attach -t %s", session_name(panes[0].role))
+    return planned
+
+
+def _launch_pane(pane: PaneSpec, dry_run: bool) -> list[str]:
+    planned = []
+    for command in build_session_commands(pane):
+        planned.append(" ".join(command))
+        if dry_run:
+            continue
+        result = _run(command)
+        if result.returncode != 0:
+            log.error("[%s] tmux failed: %s", pane.role, result.stderr.strip())
+            break
     return planned

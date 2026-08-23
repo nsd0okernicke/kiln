@@ -41,7 +41,8 @@ def main(argv: list[str] | None = None) -> int:
     config = TIERS[args.tier]
     if not session.is_file():
         code = subprocess.run(
-            [executable("cosmic-ray"), "init", str(config), str(session)], cwd=ROOT,
+            [executable("cosmic-ray"), "init", str(config), str(session)],
+            cwd=ROOT,
             check=False,
         ).returncode
         if code:
@@ -49,13 +50,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.init_only:
         return 0
     code = subprocess.run(
-        [executable("cosmic-ray"), "exec", str(config), str(session)], cwd=ROOT,
+        [executable("cosmic-ray"), "exec", str(config), str(session)],
+        cwd=ROOT,
         check=False,
     ).returncode
     with (reports / f"{args.tier}.txt").open("w", encoding="utf-8") as output:
         subprocess.run(
-            [executable("cr-report"), str(session)], cwd=ROOT,
-            stdout=output, stderr=subprocess.STDOUT, text=True, check=False,
+            [executable("cr-report"), str(session)],
+            cwd=ROOT,
+            stdout=output,
+            stderr=subprocess.STDOUT,
+            text=True,
+            check=False,
         )
     summarize([str(session), "--output", str(reports / f"{args.tier}-summary.json")])
     return code

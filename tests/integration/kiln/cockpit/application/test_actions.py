@@ -56,16 +56,12 @@ class TestSendTo:
     def test_an_existing_work_item_is_carried_through_unchanged(self, ctx, db_path):
         # The whole point of naming it: `resolve_work_item` returns a non-`pending` inbound
         # name untouched, so the card keeps one identity instead of starting a second.
-        result = actions.send_to(
-            ctx, target="specifier", summary="restart", work_item="CAT-3"
-        )
+        result = actions.send_to(ctx, target="specifier", summary="restart", work_item="CAT-3")
 
         assert db.get_message(db_path, result["message_id"])["work_item"] == "CAT-3"
 
     def test_the_human_is_the_sender_when_directing_a_worker(self, ctx):
-        assert actions.send_to(ctx, target="coder", summary="go")["sender"] == (
-            "human-in-the-loop"
-        )
+        assert actions.send_to(ctx, target="coder", summary="go")["sender"] == ("human-in-the-loop")
 
     def test_the_cockpit_is_the_sender_when_writing_to_the_humans_own_queue(self, ctx):
         # A role must not appear to mail itself, and the inbox pane prints the sender.
@@ -102,7 +98,9 @@ class TestSendTo:
         # are grouped by.
         with pytest.raises(actions.ActionError, match="usable work-item name"):
             actions.send_to(
-                ctx, target="coder", summary="go",
+                ctx,
+                target="coder",
+                summary="go",
                 work_item="please restart this with the CAT-3 spec, thanks!",
             )
 
@@ -150,8 +148,11 @@ class TestNewTask:
         with pytest.raises(actions.ActionError, match="intake role"):
             actions.new_task(
                 actions.ActionContext(
-                    db_path=ctx.db_path, branch="main", human_role="human-in-the-loop",
-                    intake_role="", sessions_file=ctx.sessions_file,
+                    db_path=ctx.db_path,
+                    branch="main",
+                    human_role="human-in-the-loop",
+                    intake_role="",
+                    sessions_file=ctx.sessions_file,
                     gateway=ctx.gateway,
                 ),
                 summary="Add order intake",

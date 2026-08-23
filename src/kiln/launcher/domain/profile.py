@@ -381,37 +381,76 @@ def _parse_role(entry: dict) -> RoleConfig:
 
     _reject_unknown_keys(entry, TERMINAL_KEYS, f"role {role!r}")
 
-    agent = str(entry.get("agent") or "claude").strip()
-    if agent not in VALID_AGENTS:
+    agent = _choice(entry, "agent", "claude", VALID_AGENTS, role)
+    mode = _choice(entry, "mode", "auto", VALID_MODES, role)
+    scheduler = _scheduler(entry, role, agent)
+    budget = _budget(entry, role, agent)
+    limits = _role_limits(entry, role)
+
+    return RoleConfig(
+        role=role,
+        agent=agent,
+        worktree=_text(entry, "worktree", "@current"),
+        title=_text(entry, "title"),
+        mode=mode,
+        model=_text(entry, "model"),
+        worker_model=_text(entry, "workerModel"),
+        scheduler=scheduler,
+        watches=_text(entry, "watches"),
+        worker_debug=bool(entry.get("workerDebug", False)),
+        max_cycles=limits["max_cycles"],
+        max_budget_usd=budget,
+        verify=_text(entry, "verify"),
+        verify_timeout=limits["verify_timeout"],
+        poll_interval=limits["poll_interval"],
+        worker_timeout=limits["worker_timeout"],
+        worker_idle_timeout=limits["worker_idle_timeout"],
+        max_attempts=limits["max_attempts"],
+        escalation_limit=limits["escalation_limit"],
+        activity_limit=limits["activity_limit"],
+        bell=bool(entry.get("bell", True)),
+        port=limits["port"],
+        open_browser=bool(entry.get("openBrowser", True)),
+    )
+
+
+def _choice(entry: dict, key: str, default: str, valid: tuple[str, ...], role: str) -> str:
+    value = str(entry.get(key) or default).strip()
+    if value not in valid:
         raise ProfileError(
-            f"unsupported agent {agent!r} for role {role!r}; expected one of "
-            + ", ".join(VALID_AGENTS)
+            f"unsupported {key} {value!r} for role {role!r}; expected one of " + ", ".join(valid)
+        )
+    return value
+
+
+def _text(entry: dict, key: str, default: str = "") -> str:
+    return str(entry.get(key) or default).strip()
+
+
+def _scheduler(entry: dict, role: str, agent: str) -> str | None:
+    value = entry.get("scheduler")
+    if value is None:
+        return None
+    scheduler = str(value).strip()
+    if scheduler not in VALID_SCHEDULERS:
+        raise ProfileError(
+            f"unsupported scheduler {scheduler!r} for role {role!r}; expected one of "
+            + ", ".join(repr(name) for name in VALID_SCHEDULERS)
+        )
+    _validate_scheduler_agent(scheduler, role, agent)
+    return scheduler
+
+
+def _validate_scheduler_agent(scheduler: str, role: str, agent: str) -> None:
+    if scheduler == SCHEDULER_PYTHON and agent not in SCHEDULER_CAPABLE_AGENTS:
+        raise ProfileError(
+            f"role {role!r} requests the python scheduler with agent {agent!r}, but it "
+            "has no one-shot adapter yet; expected one of "
+            + ", ".join(repr(name) for name in SCHEDULER_CAPABLE_AGENTS)
         )
 
-    mode = str(entry.get("mode") or "auto").strip()
-    if mode not in VALID_MODES:
-        raise ProfileError(
-            f"unsupported mode {mode!r} for role {role!r}; expected one of "
-            + ", ".join(VALID_MODES)
-        )
 
-    scheduler = entry.get("scheduler")
-    if scheduler is not None:
-        scheduler = str(scheduler).strip()
-        if scheduler not in VALID_SCHEDULERS:
-            raise ProfileError(
-                f"unsupported scheduler {scheduler!r} for role {role!r}; expected one of "
-                + ", ".join(repr(name) for name in VALID_SCHEDULERS)
-            )
-        # Fail loudly rather than silently running an unsupported backend's worker through
-        # an adapter that does not exist yet. An inbox runs no agent, so it is exempt.
-        if scheduler == SCHEDULER_PYTHON and agent not in SCHEDULER_CAPABLE_AGENTS:
-            raise ProfileError(
-                f"role {role!r} requests the python scheduler with agent {agent!r}, but it "
-                "has no one-shot adapter yet; expected one of "
-                + ", ".join(repr(name) for name in SCHEDULER_CAPABLE_AGENTS)
-            )
-
+def _budget(entry: dict, role: str, agent: str) -> float | None:
     budget = _positive_or_none(entry.get("maxBudgetUsd"), "maxBudgetUsd", role)
     if budget is not None and agent not in COST_REPORTING_AGENTS:
         raise ProfileError(
@@ -419,36 +458,34 @@ def _parse_role(entry: dict) -> RoleConfig:
             f"adapter always returns $0.00, so the cap could never fire. Cost caps work on: "
             + ", ".join(COST_REPORTING_AGENTS)
         )
+    return budget
 
-    return RoleConfig(
-        role=role,
-        agent=agent,
-        worktree=str(entry.get("worktree") or "@current").strip(),
-        title=str(entry.get("title") or "").strip(),
-        mode=mode,
-        model=str(entry.get("model") or "").strip(),
-        worker_model=str(entry.get("workerModel") or "").strip(),
-        scheduler=scheduler,
-        watches=str(entry.get("watches") or "").strip(),
-        worker_debug=bool(entry.get("workerDebug", False)),
-        max_cycles=_positive_int_or_none(entry.get("maxCycles"), "maxCycles", role),
-        max_budget_usd=budget,
-        verify=str(entry.get("verify") or "").strip(),
-        verify_timeout=_positive_int_or_none(entry.get("verifyTimeout"), "verifyTimeout", role),
-        poll_interval=_positive_or_none(entry.get("pollInterval"), "pollInterval", role),
-        worker_timeout=_positive_int_or_none(entry.get("workerTimeout"), "workerTimeout", role),
-        worker_idle_timeout=_positive_or_none(
-            entry.get("workerIdleTimeout"), "workerIdleTimeout", role
-        ),
-        max_attempts=_positive_int_or_none(entry.get("maxAttempts"), "maxAttempts", role),
-        escalation_limit=_positive_int_or_none(
-            entry.get("escalationLimit"), "escalationLimit", role
-        ),
-        activity_limit=_positive_int_or_none(entry.get("activityLimit"), "activityLimit", role),
-        bell=bool(entry.get("bell", True)),
-        port=_positive_int_or_none(entry.get("port"), "port", role),
-        open_browser=bool(entry.get("openBrowser", True)),
-    )
+
+def _role_limits(entry: dict, role: str) -> dict[str, int | float | None]:
+    """Validated numeric profile fields, translated to RoleConfig attribute names."""
+    integer = {
+        "max_cycles": "maxCycles",
+        "verify_timeout": "verifyTimeout",
+        "worker_timeout": "workerTimeout",
+        "max_attempts": "maxAttempts",
+        "escalation_limit": "escalationLimit",
+        "activity_limit": "activityLimit",
+        "port": "port",
+    }
+    decimal = {
+        "poll_interval": "pollInterval",
+        "worker_idle_timeout": "workerIdleTimeout",
+    }
+    return {
+        **{
+            attribute: _positive_int_or_none(entry.get(key), key, role)
+            for attribute, key in integer.items()
+        },
+        **{
+            attribute: _positive_or_none(entry.get(key), key, role)
+            for attribute, key in decimal.items()
+        },
+    }
 
 
 def _positive_int_or_none(value: object, key: str, role: str) -> int | None:
@@ -479,6 +516,26 @@ def _positive_or_none(value: object, key: str, role: str) -> float | None:
 
 def parse_profile(config: dict, name: str) -> Profile:
     """Build a Profile from already-loaded profiles.json content."""
+    selected = _selected_profile(config, name)
+    defaults = _profile_defaults(selected, name)
+    roles, seen = _profile_roles(selected, defaults, name)
+
+    _validate_watches(roles, seen, name)
+    layout = selected.get("layout") or {}
+    _validate_layout(layout, seen, name)
+    routing = _profile_routing(selected, seen, name)
+
+    return Profile(
+        name=name,
+        description=str(selected.get("description") or ""),
+        roles=tuple(roles),
+        layout=layout,
+        routing=routing,
+        fixture=bool(selected.get("fixture", False)),
+    )
+
+
+def _selected_profile(config: dict, name: str) -> dict:
     profiles = config.get("profiles") or {}
     if name not in profiles:
         available = ", ".join(sorted(profiles)) or "(none)"
@@ -492,15 +549,21 @@ def parse_profile(config: dict, name: str) -> Profile:
     entries = selected.get("terminals") or []
     if not entries:
         raise ProfileError(f"profile {name!r} defines no terminals")
+    return selected
 
+
+def _profile_defaults(selected: dict, name: str) -> dict:
     defaults = selected.get("defaults") or {}
     if not isinstance(defaults, dict):
         raise ProfileError(f"profile {name!r}: 'defaults' must be an object")
     _reject_unknown_keys(defaults, DEFAULTS_KEYS, f"profile {name!r} defaults")
+    return defaults
 
+
+def _profile_roles(selected: dict, defaults: dict, name: str) -> tuple[list[RoleConfig], set[str]]:
     roles: list[RoleConfig] = []
     seen: set[str] = set()
-    for entry in entries:
+    for entry in selected.get("terminals") or []:
         # A terminal's own key always wins. Inheritance is for the values that are the same
         # on every role -- which, in the shipped `full` profile, is the agent and the model
         # repeated five times.
@@ -509,25 +572,16 @@ def parse_profile(config: dict, name: str) -> Profile:
             raise ProfileError(f"duplicate role {parsed.role!r} in profile {name!r}")
         seen.add(parsed.role)
         roles.append(parsed)
+    return roles, seen
 
-    _validate_watches(roles, seen, name)
-    layout = selected.get("layout") or {}
-    _validate_layout(layout, seen, name)
 
+def _profile_routing(selected: dict, seen: set[str], name: str) -> RoutingTable:
     try:
         routing = parse_profile_routing(selected.get("routing"))
     except ValueError as exc:
         raise ProfileError(f"profile {name!r}: {exc}") from exc
     _validate_routing(routing, seen, name)
-
-    return Profile(
-        name=name,
-        description=str(selected.get("description") or ""),
-        roles=tuple(roles),
-        layout=layout,
-        routing=routing,
-        fixture=bool(selected.get("fixture", False)),
-    )
+    return routing
 
 
 def _validate_watches(roles: list[RoleConfig], known: set[str], profile_name: str) -> None:

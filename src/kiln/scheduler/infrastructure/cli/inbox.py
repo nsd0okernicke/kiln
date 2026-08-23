@@ -95,7 +95,8 @@ def format_message(message: dict, kind: str) -> list[str]:
     without reformatting the body and risking losing something.
     """
     icon = {
-        "escalation": ICON_ESCALATION, "ping": ICON_PING,
+        "escalation": ICON_ESCALATION,
+        "ping": ICON_PING,
     }.get(kind, ICON_MESSAGE)
     label = "ESCALATION" if kind == "escalation" else kind.upper()
 
@@ -198,12 +199,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--branch", default="main")
     parser.add_argument("--db-path", required=True)
     parser.add_argument(
-        "--worktree", default=None,
+        "--worktree",
+        default=None,
         help="where to persist tmp/handoff-in.md and merge inbound commits "
-             "(the human's working directory; omit to only display)",
+        "(the human's working directory; omit to only display)",
     )
     parser.add_argument(
-        "--no-merge", action="store_true",
+        "--no-merge",
+        action="store_true",
         help="show messages without merging their commits",
     )
     parser.add_argument("--poll-interval", type=float, default=DEFAULT_POLL_INTERVAL_SEC)

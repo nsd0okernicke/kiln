@@ -105,6 +105,7 @@ def persist_inbound(worktree: str | Path, content: str) -> Path | None:
     """Compatibility wrapper for the human inbox's path-based persistence API."""
     return GitWorktree(worktree).persist_inbound(content)
 
+
 def make_status_writer(
     role: str,
     script: Path | None,
@@ -591,71 +592,85 @@ def _run_loop(
 ) -> int:
     consecutive_errors = 0
     while True:
-        try:
-            result = run_once(ctx, state)
-            consecutive_errors = 0
-        except KeyboardInterrupt:
-            # Ctrl+C in the pane is a deliberate stop, not a crash. Exiting quietly beats
-            # dumping a traceback that looks like the scheduler fell over.
-            log.info("interrupted; shutting down")
-            return 130
-        except Exception:
-            # One bad cycle must not end the role. The wrapper this replaces would have
-            # kept going, and an unattended swarm that dies silently is worse than one
-            # that retries noisily.
-            consecutive_errors += 1
-            log.exception(
-                f"{ICON_BLOCKED} cycle failed (%d/%d consecutive)",
-                consecutive_errors,
-                MAX_CONSECUTIVE_ERRORS,
-            )
-            # Through ctx.set_status, not bar.update directly -- that's what also writes
-            # .kiln/status/<role>.json, which drives the WezTerm tab-bar badge. A direct
-            # bar.update only ever reached this pane's own bottom row; the badge was
-            # silently left showing whatever state was last written successfully.
-            ctx.set_status("blocked")
-            bar.update(detail=f"cycle failed ({consecutive_errors})")
-            if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
-                log.error(f"{ICON_HALT} too many consecutive failures; exiting")
-                ctx.set_status("halted")
-                return 1
-            time.sleep(min(args.poll_interval * consecutive_errors, 30))
+        result, consecutive_errors, exit_code = _try_cycle(
+            ctx, state, args, bar, consecutive_errors
+        )
+        if exit_code is not None:
+            return exit_code
+        if result is None:
             continue
 
         _record_cycle(bar, result)
         _sync_status_totals(ctx, bar, result)
-        if result.outcome != IDLE and result.outcome != HALTED:
-            log.info("cycle -> %s %s", result.outcome, result.detail)
+        _log_cycle_result(result)
         if state.halted:
-            # Park, do not exit. The circuit breaker used to return 1 here, which killed the
-            # pane -- and a `kiln retry` that re-queues a message for a dead scheduler puts
-            # it into a queue nobody reads. A parked scheduler keeps polling but accepts
-            # nothing except an explicitly resumed message (see run_once), so it stays on
-            # screen where the human is already looking, and it stays reachable.
-            if not state.parked:
-                state.parked = True
-                log.error(f"{ICON_HALT} scheduler halted; waiting for `kiln retry <message-id>`")
-            ctx.set_status("halted")
-            if args.once:
-                # A scripted single cycle must not block forever waiting on a human.
-                return 1
-            try:
-                time.sleep(args.poll_interval)
-            except KeyboardInterrupt:
-                log.info("interrupted; shutting down")
-                return 130
+            exit_code = _park_halted(ctx, state, args)
+            if exit_code is not None:
+                return exit_code
             continue
         state.parked = False
         if args.once:
             return 0
-        if result.outcome == IDLE:
-            try:
-                time.sleep(args.poll_interval)
-            except KeyboardInterrupt:
-                # The poll sleep is where an idle scheduler spends nearly all its time, so
-                # it is almost always where Ctrl+C lands.
-                log.info("interrupted; shutting down")
-                return 130
+        if result.outcome == IDLE and _poll_was_interrupted(args.poll_interval):
+            return 130
+
+
+def _try_cycle(
+    ctx: SchedulerContext,
+    state: SchedulerState,
+    args: argparse.Namespace,
+    bar: pane_status.StatusBar,
+    consecutive_errors: int,
+) -> tuple[CycleResult | None, int, int | None]:
+    try:
+        return run_once(ctx, state), 0, None
+    except KeyboardInterrupt:
+        log.info("interrupted; shutting down")
+        return None, consecutive_errors, 130
+    except Exception:
+        consecutive_errors += 1
+        log.exception(
+            f"{ICON_BLOCKED} cycle failed (%d/%d consecutive)",
+            consecutive_errors,
+            MAX_CONSECUTIVE_ERRORS,
+        )
+        # The context callback also writes the status file used by terminal tab badges.
+        ctx.set_status("blocked")
+        bar.update(detail=f"cycle failed ({consecutive_errors})")
+        if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+            log.error(f"{ICON_HALT} too many consecutive failures; exiting")
+            ctx.set_status("halted")
+            return None, consecutive_errors, 1
+        time.sleep(min(args.poll_interval * consecutive_errors, 30))
+        return None, consecutive_errors, None
+
+
+def _log_cycle_result(result: CycleResult) -> None:
+    if result.outcome not in (IDLE, HALTED):
+        log.info("cycle -> %s %s", result.outcome, result.detail)
+
+
+def _park_halted(
+    ctx: SchedulerContext, state: SchedulerState, args: argparse.Namespace
+) -> int | None:
+    # Park instead of exiting so `kiln retry` can still reach this scheduler.
+    if not state.parked:
+        state.parked = True
+        log.error(f"{ICON_HALT} scheduler halted; waiting for `kiln retry <message-id>`")
+    ctx.set_status("halted")
+    if args.once:
+        return 1
+    return 130 if _poll_was_interrupted(args.poll_interval) else None
+
+
+def _poll_was_interrupted(interval: float) -> bool:
+    try:
+        time.sleep(interval)
+        return False
+    except KeyboardInterrupt:
+        # The poll sleep is where an idle scheduler spends nearly all its time.
+        log.info("interrupted; shutting down")
+        return True
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

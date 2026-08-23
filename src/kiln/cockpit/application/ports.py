@@ -19,8 +19,14 @@ class ActionGateway(Protocol):
     def sessions(self, path: Path) -> list[Session]: ...
 
     def send(
-        self, *, db_path: Path, sender: str, target: str, summary: str,
-        branch: str, handoff_name: str,
+        self,
+        *,
+        db_path: Path,
+        sender: str,
+        target: str,
+        summary: str,
+        branch: str,
+        handoff_name: str,
     ) -> str: ...
 
     def retry(self, *, db_path: Path, message_id: str, guidance: str) -> dict | None: ...

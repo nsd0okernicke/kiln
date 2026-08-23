@@ -86,7 +86,7 @@ class TestThemeSwitcher:
         # Private windows and blocked site data throw on `localStorage` *access*, not only
         # on write. An unguarded read there would leave the page blank.
         inline = page.partition("<header>")[0]
-        script = inline[inline.rindex("<script>"):]
+        script = inline[inline.rindex("<script>") :]
 
         assert "try" in script and "catch" in script
 
@@ -174,7 +174,7 @@ class TestAgentColours:
         assert not missing, f"the {theme} theme inherits {missing} from the dark palette"
 
     def test_the_model_is_shown_beside_the_agent(self, page):
-        assert '"model"' in page or 'role.model' in page
+        assert '"model"' in page or "role.model" in page
 
 
 class TestComposer:

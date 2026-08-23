@@ -117,9 +117,7 @@ INDEX_SQL = "CREATE INDEX IF NOT EXISTS idx_target_branch_status ON messages(tar
 #: shares, so grouping by it groups everything into one bucket. Without a real grouping key
 #: nothing can answer "what did this feature cost" or "how many cycles has it been round",
 #: and loop detection has nothing to count.
-WORK_ITEM_INDEX_SQL = (
-    "CREATE INDEX IF NOT EXISTS idx_work_item ON messages(work_item,created_at)"
-)
+WORK_ITEM_INDEX_SQL = "CREATE INDEX IF NOT EXISTS idx_work_item ON messages(work_item,created_at)"
 
 
 def ensure_schema(db_path: str | Path) -> None:

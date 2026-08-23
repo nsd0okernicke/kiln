@@ -207,6 +207,37 @@ def _codex_proxy_config_args(base_url: str | None) -> list[str]:
     ]
 
 
+def _scheduler_options(role: RoleConfig, profile: Profile | None) -> list[str]:
+    options = _routing_options(profile)
+    options += _optional_arg("--model", role.worker_model or role.model)
+    options += ["--worker-debug"] if role.worker_debug else []
+    options += _optional_arg("--max-cycles", role.max_cycles)
+    options += _optional_arg("--max-budget-usd", role.max_budget_usd)
+    options += _verification_options(role)
+    return options
+
+
+def _routing_options(profile: Profile | None) -> list[str]:
+    options = []
+    if profile is not None and profile.routing.rules:
+        for rule in format_routing_rules(profile.routing):
+            options += ["--route", rule]
+    return options
+
+
+def _optional_arg(flag: str, value: object) -> list[str]:
+    return [] if value is None or value == "" else [flag, str(value)]
+
+
+def _verification_options(role: RoleConfig) -> list[str]:
+    options = []
+    if role.verify:
+        options += ["--verify", role.verify]
+        if role.verify_timeout is not None:
+            options += ["--verify-timeout", str(role.verify_timeout)]
+    return options
+
+
 def _scheduler_command(
     role: RoleConfig, paths: KilnPaths, branch: str, profile: Profile | None = None
 ) -> AgentCommand:
@@ -242,25 +273,7 @@ def _scheduler_command(
     # runs in its own process and cannot read the launcher's parsed profile, so the resolved
     # rules travel as arguments. `--workflow` stays either way: a profile with no routing of
     # its own keeps reading the file, which is what every role-complete profile does.
-    if profile is not None and profile.routing.rules:
-        for rule in format_routing_rules(profile.routing):
-            argv += ["--route", rule]
-
-    model = role.worker_model or role.model
-    if model:
-        argv += ["--model", model]
-    if role.worker_debug:
-        argv += ["--worker-debug"]
-    # Termination guards. Passed only when configured, so an unset knob leaves the
-    # scheduler's own "no ceiling" default rather than encoding a number here.
-    if role.max_cycles is not None:
-        argv += ["--max-cycles", str(role.max_cycles)]
-    if role.max_budget_usd is not None:
-        argv += ["--max-budget-usd", str(role.max_budget_usd)]
-    if role.verify:
-        argv += ["--verify", role.verify]
-        if role.verify_timeout is not None:
-            argv += ["--verify-timeout", str(role.verify_timeout)]
+    argv += _scheduler_options(role, profile)
     argv += _tuning_args(
         role,
         {

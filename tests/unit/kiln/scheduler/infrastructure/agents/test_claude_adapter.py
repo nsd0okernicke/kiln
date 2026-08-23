@@ -158,9 +158,7 @@ class TestEventRendering:
         event = {
             "type": "assistant",
             "message": {
-                "content": [
-                    {"type": "tool_use", "name": "Bash", "input": {"command": "pytest -q"}}
-                ]
+                "content": [{"type": "tool_use", "name": "Bash", "input": {"command": "pytest -q"}}]
             },
         }
         assert claude_adapter.render_event(event) == [
@@ -347,7 +345,8 @@ class TestRunWorker:
             # `terminate_tree` shells out to taskkill (Windows) or signals a process group
             # (POSIX); neither belongs in a unit test holding a fake process.
             monkeypatch.setattr(
-                claude_adapter.subprocess, "run",
+                claude_adapter.subprocess,
+                "run",
                 lambda argv, **kwargs: subprocess.CompletedProcess(argv, 0, b"", b""),
             )
             return calls
@@ -367,7 +366,10 @@ class TestRunWorker:
         )
         seen = []
         claude_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="sonnet",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="sonnet",
             on_output=seen.append,
         )
         assert f"{claude_adapter.ICON_SESSION} worker session started" in seen
@@ -376,8 +378,12 @@ class TestRunWorker:
     def test_timeout_kills_the_process(self, fake_run, tmp_path):
         calls = fake_run(hang=True)
         invocation = claude_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="sonnet",
-            timeout=1, on_output=lambda _line: None,
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="sonnet",
+            timeout=1,
+            on_output=lambda _line: None,
         )
         assert invocation.timed_out is True
         assert invocation.is_done is False
@@ -386,7 +392,10 @@ class TestRunWorker:
     def test_parses_a_successful_worker(self, fake_run, tmp_path):
         fake_run(stdout=_envelope())
         invocation = claude_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="sonnet",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="sonnet",
             on_output=lambda _l: None,
         )
         assert invocation.is_done
@@ -398,7 +407,10 @@ class TestRunWorker:
         # stderr into the event stream and corrupt parsing.
         calls = fake_run(stdout=_envelope())
         claude_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="sonnet",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="sonnet",
             on_output=lambda _l: None,
         )
         assert calls["kwargs"]["stdin"] is subprocess.DEVNULL
@@ -408,7 +420,10 @@ class TestRunWorker:
     def test_blocked_worker_is_reported_not_raised(self, fake_run, tmp_path):
         fake_run(stdout=_envelope(result="KILN-STATUS: blocked missing fixtures"))
         invocation = claude_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="sonnet",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="sonnet",
             on_output=lambda _l: None,
         )
         assert invocation.is_done is False
@@ -417,7 +432,10 @@ class TestRunWorker:
     def test_missing_binary_is_treated_as_blocked(self, fake_run, tmp_path):
         fake_run(exc=OSError("claude not found"))
         invocation = claude_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="sonnet",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="sonnet",
             on_output=lambda _l: None,
         )
         assert invocation.is_done is False
@@ -426,7 +444,10 @@ class TestRunWorker:
     def test_cli_error_envelope_is_treated_as_blocked(self, fake_run, tmp_path):
         fake_run(stdout=_envelope(is_error=True, result="Not logged in"))
         invocation = claude_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="sonnet",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="sonnet",
             on_output=lambda _l: None,
         )
         assert invocation.is_done is False
@@ -436,7 +457,10 @@ class TestRunWorker:
     def test_unparseable_output_is_treated_as_blocked(self, fake_run, tmp_path):
         fake_run(stdout="total garbage", stderr="something broke")
         invocation = claude_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="sonnet",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="sonnet",
             on_output=lambda _l: None,
         )
         assert invocation.is_done is False
@@ -445,7 +469,10 @@ class TestRunWorker:
     def test_missing_sentinel_is_blocked(self, fake_run, tmp_path):
         fake_run(stdout=_envelope(result="I finished the work but forgot the sentinel."))
         invocation = claude_adapter.run_worker(
-            definition=DEFINITION, prompt="p", cwd=tmp_path, model="sonnet",
+            definition=DEFINITION,
+            prompt="p",
+            cwd=tmp_path,
+            model="sonnet",
             on_output=lambda _l: None,
         )
         assert invocation.is_done is False
