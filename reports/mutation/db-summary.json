@@ -1,0 +1,15 @@
+{
+  "db": {
+    "database": "C:\\projekte\\kiln\\.kiln-mutation\\db.sqlite",
+    "outcomes": {
+      "normal": 443,
+      "incompetent": 1,
+      "killed": 29,
+      "survived": 413
+    },
+    "killed": 29,
+    "survived": 413,
+    "mutation_score": 0.06561085972850679,
+    "score_formula": "killed / (killed + survived)"
+  }
+}

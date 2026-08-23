@@ -1,0 +1,2115 @@
+[job-id] 314f8611a29e4d7193ae615fe9f1938a
+src\kiln\scheduler\domain\handoff.py core/ReplaceBinaryOperator_Mul_Add 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 65b14bef7dc640ad886e7f9a7905cc1b
+src\kiln\scheduler\domain\handoff.py core/ReplaceBinaryOperator_Mul_Add 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 85282cf4c5914c3e9a489db6e6270c5d
+src\kiln\scheduler\domain\handoff.py core/ReplaceBinaryOperator_Mul_Sub 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] c268c3a422d345a7af98dea3d3166bd4
+src\kiln\scheduler\domain\handoff.py core/ReplaceBinaryOperator_Mul_Sub 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] cd1dbeebc5b9415aba99695b42889caa
+src\kiln\scheduler\domain\handoff.py core/ReplaceBinaryOperator_Mul_Div 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 8ef2d524fedf4f6283d2d0fea843f814
+src\kiln\scheduler\domain\handoff.py core/ReplaceBinaryOperator_Mul_Div 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 968591f379f64d35a459b0130d41b517
+src\kiln\scheduler\domain\handoff.py core/ReplaceBinaryOperator_Mul_FloorDiv 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] cfba8af5c92c4cc99c5e90e408857c30
+src\kiln\scheduler\domain\handoff.py core/ReplaceBinaryOperator_Mul_FloorDiv 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] ce0272fad62b41fb9b110a999bfacd2e
+src\kiln\scheduler\domain\handoff.py core/ReplaceBinaryOperator_Mul_Mod 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 53595789145f44398bed9ff99e6f2288
+src\kiln\scheduler\domain\handoff.py core/ReplaceBinaryOperator_Mul_Mod 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] dd09955e1bea46318c6321dcbf2ba3cb
+src\kiln\scheduler\domain\handoff.py core/ReplaceBinaryOperator_Mul_Pow 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 811a2971fcc34382bd728bcdb9b95768
+src\kiln\scheduler\domain\handoff.py core/ReplaceBinaryOperator_Mul_Pow 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] b8d0d59dc5cf413a9ea483092a8898d3
+src\kiln\scheduler\domain\handoff.py core/ReplaceBinaryOperator_Mul_RShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] d8801897168b4f21b303400f3b855c66
+src\kiln\scheduler\domain\handoff.py core/ReplaceBinaryOperator_Mul_RShift 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 0d1399e8b75a4b9a8c10702749419b3d
+src\kiln\scheduler\domain\handoff.py core/ReplaceBinaryOperator_Mul_LShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 25e58066d09a41b6a67be96500a2dc01
+src\kiln\scheduler\domain\handoff.py core/ReplaceBinaryOperator_Mul_LShift 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f1d015c484644ea8ac817fcb758cf818
+src\kiln\scheduler\domain\handoff.py core/ReplaceBinaryOperator_Mul_BitOr 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 34376cd4667c43d9baea49ff5f6751d6
+src\kiln\scheduler\domain\handoff.py core/ReplaceBinaryOperator_Mul_BitOr 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 5f2fa60dacc04ac69336e9ff066122e2
+src\kiln\scheduler\domain\handoff.py core/ReplaceBinaryOperator_Mul_BitAnd 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 52eec8644a10456599c54e78469fc37c
+src\kiln\scheduler\domain\handoff.py core/ReplaceBinaryOperator_Mul_BitAnd 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] c95a227e3ec74859aa3b0921c91c12ec
+src\kiln\scheduler\domain\handoff.py core/ReplaceBinaryOperator_Mul_BitXor 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] b1457076fd3e40b3ba711898f9054f8b
+src\kiln\scheduler\domain\handoff.py core/ReplaceBinaryOperator_Mul_BitXor 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 68565c7f901c480e8e49b9ff64eb008d
+src\kiln\scheduler\domain\handoff.py core/ReplaceUnaryOperator_Delete_Not 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] a9db8ff153f24ab08400fd151a97aad1
+src\kiln\scheduler\domain\handoff.py core/ReplaceUnaryOperator_Delete_Not 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] ce60ae1c27f949ea81ee9ec4965b9b0f
+src\kiln\scheduler\domain\handoff.py core/ReplaceUnaryOperator_Delete_Not 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] d07a23f4212d40d590619cb66b6705b7
+src\kiln\scheduler\domain\handoff.py core/AddNot 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f750b359a38a40e19cb8693f7b6c718c
+src\kiln\scheduler\domain\handoff.py core/AddNot 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.INCOMPETENT
+[job-id] 8970cc02d92e45e79b7e4c1687c8ba72
+src\kiln\scheduler\domain\handoff.py core/AddNot 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 65f93b4028be47d885158c054eeea31c
+src\kiln\scheduler\domain\handoff.py core/AddNot 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] cc145cf94f2f4b0cb8f46a1cf7a7e2ac
+src\kiln\scheduler\domain\handoff.py core/AddNot 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 72695385b4de43fd86d0216e0e7a0ce5
+src\kiln\scheduler\domain\handoff.py core/AddNot 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 906123f6c18a4fe1ad372dd9517dfa79
+src\kiln\scheduler\domain\handoff.py core/AddNot 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 9900a385b7e84b71bcc7ba081e444570
+src\kiln\scheduler\domain\handoff.py core/AddNot 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] aab27332a93c47188ec8718074f5bc85
+src\kiln\scheduler\domain\handoff.py core/AddNot 8
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 66f4a78ef9464ab387d5694449d00015
+src\kiln\scheduler\domain\handoff.py core/AddNot 9
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 38e602b2b6fb48e1ab431effd511c1db
+src\kiln\scheduler\domain\handoff.py core/AddNot 10
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] d3f2ffe46af84c2da891c16e1de1c75f
+src\kiln\scheduler\domain\handoff.py core/ReplaceTrueWithFalse 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e68138efadbe4c359d13daee5eaa0af1
+src\kiln\scheduler\domain\handoff.py core/ReplaceFalseWithTrue 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 853d48e9ad22409b9e13b6155c598e30
+src\kiln\scheduler\domain\handoff.py core/ReplaceFalseWithTrue 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 1e2bbf1c31014af58185469455a73060
+src\kiln\scheduler\domain\handoff.py core/ReplaceBreakWithContinue 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] de420f9f29a64f54a727b4a6ebbbddff
+src\kiln\scheduler\domain\handoff.py core/ReplaceBreakWithContinue 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f64a0858963a4fe5bc7c4c68aedcfac2
+src\kiln\scheduler\domain\handoff.py core/ReplaceContinueWithBreak 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 08ac935c91bc4d5f88d69f22d832a7b8
+src\kiln\scheduler\domain\handoff.py core/NumberReplacer 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] c526a0c6f5734f708abb4058b74a0326
+src\kiln\scheduler\domain\handoff.py core/NumberReplacer 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 1d29893f73d440d2a9527af6e95f5013
+src\kiln\scheduler\domain\handoff.py core/RemoveDecorator 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f3f85cb8427c4b5493f54c4286bf65e3
+src\kiln\scheduler\domain\handoff.py core/RemoveDecorator 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 229a6999a4a14920a8a7e037a2b751f1
+src\kiln\scheduler\domain\handoff.py core/RemoveDecorator 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] de9f17f8390b40eaa3fdc5416e5ec2b1
+src\kiln\scheduler\domain\handoff.py core/RemoveDecorator 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 18ba8d54efde4aef8ffa530272804613
+src\kiln\scheduler\domain\handoff.py core/ZeroIterationForLoop 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 6c950febc7254fedb4afb18cdfec675d
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_Mul_Add 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 30ba7b6ddf8f4050bedda8ac42b9dc57
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_Mul_Add 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 94e0b2e0cdfc4ba5922e08f74c6a920c
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_Mul_Sub 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 160b0b2cd2f14621a838d2a6a5325835
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_Mul_Sub 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 945a5850f06a45ee9e7d02c9cf616bba
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_Mul_Div 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 275eef552f6440a3afd38309fbff48ed
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_Mul_Div 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 798e85dee6aa47f384b7b192ab30f1a4
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_Mul_FloorDiv 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 0a38af6b747e490e99771a9e3d5ed0ad
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_Mul_FloorDiv 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 33c1c39ed65f4cbfbc967b2252026916
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_Mul_Mod 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 32939243de6649deb46ed46dd730e618
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_Mul_Mod 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 83e30d94a5e24eaba048c3d4c858803a
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_Mul_Pow 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] dca704f730a24f6aa174a39a819a20ed
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_Mul_Pow 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] be2968753151418e976d076421e297c0
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_Mul_RShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 190b7c719a854fcdaf0c8e5bd6620ed1
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_Mul_RShift 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] bc0379e203c64043982ea93bf2951353
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_Mul_LShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 973304524409433392b9fa4e332b333a
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_Mul_LShift 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 6beffd31b6914c43bdeffccab4a89d8c
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_Mul_BitOr 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 30fd7bb4666042b7884d54fa34e5f0f2
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_Mul_BitOr 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 6821815fc1234a8f96ec30db2bfac6fd
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_Mul_BitAnd 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 1051b04545014ca59b6073122ac2deba
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_Mul_BitAnd 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] e37ac7c5f06e42e78a92b1e293c00298
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_Mul_BitXor 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] cce566ff3f224423b76033a30c3e8f1e
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_Mul_BitXor 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 206a7176604a4d67a6b6a02fa1292fa6
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Add 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] baa38beaac0043f5a4064b7e1be449ab
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Add 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 074f55a823374dd9b43efd33e7dff0da
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Add 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 4eb58832284848dba4cc502f91c06d96
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Add 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 84966b14b76a4432b845683da1f6b27c
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Sub 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] bd940b575f6e4cd685fa43deefa35141
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Sub 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b31564f22ee24bc1b26b430a870b82f7
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Sub 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] a0a87daa3eb5463aa5d1bc499a5da6dd
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Sub 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7f07ae0a4d514c19b14ec9caba31a088
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Mul 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 2421249057b6467c89624892f046532a
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Mul 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 902d0820dd454e94af3d29692ef7ae52
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Mul 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 963f1d81a2324d26af6a9c7060c6838b
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Mul 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] c55f835c9fb14bd18e77027d3cd8537a
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Div 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] c79283e3be894694a6ccff86a03ae01b
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Div 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 449bc2aaee554714aeb5af414aef3eb6
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Div 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 69ab21bc7b304c589aafbce3e5d24709
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Div 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 397641c548414daeb6eb634671defd4f
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_FloorDiv 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 832eeb8e27094a598c0cdb794350e497
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_FloorDiv 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 515e6b93a9524f8aa1b704b9985c5cc2
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_FloorDiv 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f8f1469230e34f02bdfc2427c1510a52
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_FloorDiv 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 01436bc7928c473eb3b1b75caa817d75
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Mod 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] c8c5bd937edf4900a0fa0bd7a1bc76f7
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Mod 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] a20e3422df4d4d47ac03def38bf816ba
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Mod 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] c528c6c1d213411f97d2dbfd77471561
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Mod 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7ecbe5c59b694966b6bb717eb7914d79
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Pow 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7a354f61c6854abea8fa5dfba9237934
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Pow 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] dc8b027324f345f0a549457d45f67171
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Pow 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 32cf98c5854348ec911431af9244d0c6
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_Pow 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f604b5fe36e54215bdbeac1d2aa1532b
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_RShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 6978f35bacff4db4b6ddcd170156df30
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_RShift 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 6289aea2be0c4d23a91b6b70a757bf7b
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_RShift 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 584a894cb6a34c06b889e9c014b3aa62
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_RShift 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 0ba2190572f64b61b092facfc085fed1
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_LShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 33e9e21aff4443478f6ad71e3e7d6f61
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_LShift 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7fcbd0d049e9462e96a1ba11288aec50
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_LShift 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 5bdf40cc4a4845c19bbd58968fc6d6f6
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_LShift 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 0c7e7ef190364720a862614dc6fd8d15
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_BitAnd 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8990f0656e0847278cd34d9d25b50174
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_BitAnd 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 5d246ac2464c4e95b264dad9177260b6
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_BitAnd 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e5c0197957b845268d06ad1b4564dc97
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_BitAnd 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 51ef39c51b944ff7a7f1eeb370dce8f0
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_BitXor 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 168124ce6bd04b3ba30add9928b750f4
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_BitXor 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 75e7cd285cd146849d027f7feb7e297a
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_BitXor 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 2d7fe89a35614de9ad62aa88daf03b7c
+src\kiln\scheduler\domain\policies.py core/ReplaceBinaryOperator_BitOr_BitXor 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] c54e23a3d2334f488b4b8def42d557fc
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_Lt_Eq 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 4c76e6722a7e42aa9cdfc875b350ced8
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_Lt_Eq 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] eff682a2bfbd4a259e61d1f49478167b
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_Lt_NotEq 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f2fb39dcf4f34cd099a167e368261e6a
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_Lt_NotEq 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] baa89ae327c7459a8d783562a9f49056
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_Lt_LtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 4e19b6b417c44cb7be9a043a8d0b1852
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_Lt_LtE 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] b05c777a8cec4ed5bb158693c3223a0c
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_Lt_Gt 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f49698385f014e58855ad84d43957d00
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_Lt_Gt 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] ece5aa0e590d4c548463c42e60f4099f
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_Lt_GtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e089860db5cc4a93a0dc55a63b25b28f
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_Lt_GtE 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] e5bac144acaa4ea9a2d939276937d019
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_Lt_Is 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 86b1cb8e18c648b2a23ad1fb49e5b46c
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_Lt_Is 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f48e10e24e15422cae8ab28f5d8b641c
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_Lt_IsNot 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 100f6bdd6ffa4dfb95d09d84a10f3c2c
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_Lt_IsNot 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 66e1ac846daa4538b650cdf49aeb1a2d
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_LtE_Eq 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 5b2250e8296c435486253b0e3961a29d
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_LtE_NotEq 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 19ea1ee386c3433daa79ebaeb204fa64
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_LtE_Lt 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 4ddee9780cd84e78ae039f76241964f4
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_LtE_Gt 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 2225685cbf4c41a7bc9059685e3659b9
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_LtE_GtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 912e13be37fd4b5e93d1922bc0a1d147
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_LtE_Is 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 344953e145124d739636cf861a8b7e22
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_LtE_IsNot 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] b939537fdb4543c4a5c87e6960f7674d
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_GtE_Eq 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 9ec52caf990e4d46ad812e96b9a0951c
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_GtE_NotEq 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 62b8b95196c440ca8d043b1c5c983c05
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_GtE_Lt 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] ad5cf7850ae64c2aa0f9a67f56b4d786
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_GtE_LtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 5389a0e0a9fb4d39ae008c3d81a3a1ef
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_GtE_Gt 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 582faa6f93654352acb8cc89cda45267
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_GtE_Is 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 95abed4e00784cce89ef8919a0adff0e
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_GtE_IsNot 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f7bd8b19af4c41718f26d12a16af1ead
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_Is_IsNot 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 03fe1dbe90734ab4973fe5810acd1e04
+src\kiln\scheduler\domain\policies.py core/ReplaceComparisonOperator_Is_IsNot 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 6eaa7b26cd3b4601a5e8aaaf0aae008a
+src\kiln\scheduler\domain\policies.py core/ReplaceUnaryOperator_USub_UAdd 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e95043dc1d27468484ae8618e7bbbd32
+src\kiln\scheduler\domain\policies.py core/ReplaceUnaryOperator_USub_Invert 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 24d15ef1d0b04942813b617c5db01efe
+src\kiln\scheduler\domain\policies.py core/ReplaceUnaryOperator_USub_Not 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f156fee2abae4a339875cceebc77f8ec
+src\kiln\scheduler\domain\policies.py core/ReplaceUnaryOperator_Delete_USub 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b00905943c6341deb878615ca945a090
+src\kiln\scheduler\domain\policies.py core/ReplaceUnaryOperator_Delete_Not 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] a9afd7d8aa464b6cb13aecb7e8874e04
+src\kiln\scheduler\domain\policies.py core/ReplaceUnaryOperator_Delete_Not 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 10e5e49830a5455684782a1bc5e4af31
+src\kiln\scheduler\domain\policies.py core/AddNot 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 4119910e98e845c8a2e74e29927b2bda
+src\kiln\scheduler\domain\policies.py core/AddNot 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] af302b24703543eb94627253c6acc099
+src\kiln\scheduler\domain\policies.py core/ReplaceAndWithOr 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e6ca50da77124a0e8febe65b4ecd54e7
+src\kiln\scheduler\domain\policies.py core/ReplaceAndWithOr 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 06be7c68a33644aa8f7daf503122ae16
+src\kiln\scheduler\domain\policies.py core/ReplaceOrWithAnd 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] c38fda51a5a84ac5b3f559b84a8a71c7
+src\kiln\scheduler\domain\policies.py core/ReplaceOrWithAnd 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 0562bead268a4871bb1d1c8946e7dced
+src\kiln\scheduler\domain\policies.py core/ReplaceOrWithAnd 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] d7fbcb58d9f14f6695543d8b396a355d
+src\kiln\scheduler\domain\policies.py core/ReplaceOrWithAnd 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] be01ee470cd14c2cac933d2e91cb46dc
+src\kiln\scheduler\domain\policies.py core/NumberReplacer 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] da671c1cafb6415a8c1f5f3865caf25f
+src\kiln\scheduler\domain\policies.py core/NumberReplacer 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 893a15a36e53463eb0d2d75085de68d5
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_Add_Sub 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 8a0dad6cf28b418d9dd634388ad14c76
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_Add_Sub 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f925848bf24e4d2882178bbdf29feeca
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_Add_Mul 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 0752e2f7643340be8ffb4f4a9cb45ad4
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_Add_Mul 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 6e95b26f5a1a41dbb71f6621c00976c2
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_Add_Div 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 120395861aa24202af84f37c83257eb6
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_Add_Div 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 889fa9aa2a5b48838c285bdb2aa91193
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_Add_FloorDiv 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 26a048d591cf4724b8e6047a1f62aeaa
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_Add_FloorDiv 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 5592b03309854c2d9b9452bd109ae3ee
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_Add_Mod 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] de2a505ea6b54e48a346cef5bcaae9a8
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_Add_Mod 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] c93e1ebb223f480f99a406abc991fb9a
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_Add_Pow 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9eca0ab8149c4e9dbb406d3602351c34
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_Add_Pow 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] fb90a771310f465bb2a83a534e0c7620
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_Add_RShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 1932506445d04be0aa319236965b608a
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_Add_RShift 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] ab01cf395ec84d0887f20c306dc826c9
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_Add_LShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] c6bb765cd1114169953f77bca2f4a133
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_Add_LShift 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] c21c781ac5094eedb705d4429c80f889
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_Add_BitOr 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] c92af95d5abd4878b9cbc108ba99d955
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_Add_BitOr 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f57ec971085c40209cbe1d69ea14b7e2
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_Add_BitAnd 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 775e2483d4834c8fb5f2572534893c7a
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_Add_BitAnd 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 7203094523b748269c61e740c684425f
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_Add_BitXor 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 5013efa51e774b61a2c4e7abda8e3d43
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_Add_BitXor 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 88c76df150ba43128288a899d9b8ba97
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Add 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] bcf0bb3fa7cb42d6bd85bf2fd50fe86e
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Add 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 553f7390a9fa404daf917f5463dd0f29
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Add 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e3a5c1e677224d7d8b7777dadd4be30b
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Add 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 45bed505823b476ea00f1632344c3923
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Add 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 5586b9c183284362bf73ec215b536a8e
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Sub 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1bf4544ffa14499c92138d2c5b231d92
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Sub 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 73071c2e0152443181510f101b4dcd02
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Sub 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] bd3c172ec35640aab68f9998f55ad3c3
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Sub 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 3380b8909dd74122849a87003985588e
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Sub 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1466ef0ff9744af996c8b6490fa15c70
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Mul 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 390d400505614d5786eaa27ae279da15
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Mul 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] bf261188fa814b629d8c842fbc963c7d
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Mul 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] fcee7e8df4be420fb2d2ba4bc1d9f378
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Mul 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 4faa7f07a34a4449b21e0e2f27575b32
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Mul 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 0ab83ea6f6df4a9f991abaa1d5f49e98
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Div 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7f3e6cc80b1d47d5a11604718c5be75f
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Div 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] c98604d946d540eb84b9233054eaaf8d
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Div 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 492d3e7b41f443b6950fc509179e8c11
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Div 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 397ca3554c1f4c04812823cf733e7833
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Div 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 14caea8750044e849a9d8841e2f46f8d
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_FloorDiv 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] ccd7cc670dff4e6bbd6cb2807b086000
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_FloorDiv 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 76882a9b9dcb43609d5b2a9f4f667065
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_FloorDiv 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 467228b10db44dc494fa5dec2dc5abcb
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_FloorDiv 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8f91ce367707479d9c58f605b9430f24
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_FloorDiv 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 90673bafd5b7429e8de944e99a1fa804
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Mod 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 95054eb47d164cabbfa6e7558303c5e7
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Mod 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] fcf1391f6f1048d6be7e6373a1333e25
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Mod 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] cd5e113bd97b45f39612f796b069ae4d
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Mod 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 3b16a2355f8642e996327a3f5e866025
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Mod 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7cfaa8ec3a23483c80ef6171c49cfa08
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Pow 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] ce0873b6945b42a69c721a787f7b442f
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Pow 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] cfd39ab99b064c0fb85c33eb3cbc471c
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Pow 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] cccdb6571a5246c48912fc0f3a6367cb
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Pow 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8521c9b303fb4a50b4ea2ab0e6e4e213
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_Pow 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9526d9d53aa24f038fb0b50294d49cd1
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_RShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 91cfb1bdea134616bdc9f4824d414bd0
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_RShift 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8d2a03ded1f44b8a9a22a8981f025dbb
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_RShift 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] c577e7d8493844ea8af20c5aeed92c2f
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_RShift 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] bbb4fc925fd54986b25c4fa7ae27fb05
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_RShift 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e1e0f252723042be830cf043e7d0788b
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_LShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 0239d46c685b43898e8a99df1514fbbf
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_LShift 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 74c842aac5664e9db14c4516b9d1222d
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_LShift 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 209420bf6ad84da49b20c5e5a34cc96a
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_LShift 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] a2b2edee9f5f454484ccf306a8cdcdd8
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_LShift 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e612035030fd470b879e7a30088b787a
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_BitAnd 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7084f8e2f0554e47849b79117f69b31c
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_BitAnd 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 4c709c1fd7074920bf4aa598a8e9d2b8
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_BitAnd 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 31224bd09a884448bfe9be952c4f7302
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_BitAnd 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] acfe94864f644b47b45e62e76f1eb7cc
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_BitAnd 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] a00b6e53a0554e79a8afb2302f472b57
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_BitXor 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] ecd2713520de4ee7868b276ab0f7e05b
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_BitXor 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] a4e506ddb451432c83d9a97f42278b75
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_BitXor 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e44b581d12ef4c9aa0428700d0e5b6c6
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_BitXor 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8ae461a3f28e48fd8f2c226761ab4e62
+src\kiln\scheduler\domain\routing.py core/ReplaceBinaryOperator_BitOr_BitXor 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8e297a02af494c5cba2d4df11111f5ae
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_NotEq 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] aa6109e07ce44d82b11fab1a2aa9b510
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_NotEq 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 2c26916b94444379a984b684abab0af3
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_NotEq 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] c2c2b05ac38146cf955f54f07dec2890
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_NotEq 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 9378bf0e9fb444659f9e7648eb9f0d5b
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_Lt 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] fdad5a7033b945b3b110b801ff62a056
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_Lt 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] cda7995fac3a44e588c04e37a669a73f
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_Lt 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 748cf7a355ab460985206b30a8013bc8
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_Lt 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] b8e6625305a5409dab62c9e5bf1d6f02
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_LtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] b01d827a930b4756bab0bf53184c864a
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_LtE 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 3bc9576f5d3340899d0c11971b870af4
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_LtE 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 6e006529f423445f91d53052e2d6d1b2
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_LtE 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] c981ceda2f7d41c2b4f202d0b98e6d7f
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_Gt 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 76990716aff94d2a87561dd37a65dbe6
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_Gt 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 5a29a0f82bac42c1b9b72e68c2aac85a
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_Gt 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 19ccd36ca08f49559071d4e56c3649e8
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_Gt 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 9bd3893658a44e3b9bef6953e6f27aaf
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_GtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 7cac3d92a8034f8693f0d3aba8d8fba1
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_GtE 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] a6cb4af6490144e792003d9bfd75f2de
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_GtE 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 56d3286b5c744e938012dc6d2514bb9d
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_GtE 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] ed4d12b272f54616b0a0642cce6eba90
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_Is 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 82e116bd02a4495d9bea523c954ef561
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_Is 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 1585c0b69fa64007abc560847a3874b7
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_Is 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 4e3506816a294258a13ab52714d26f63
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_Is 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] aee4aee9c1bc4cb58c1843ea8507f26d
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_IsNot 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 24ebbcb2c3604badbab997347d41120a
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_IsNot 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] e69b4e2f9dce4c5bbbea4d9fd3c4e78d
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_IsNot 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f266fefaf65745d4a8f72b5d2c5325e4
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Eq_IsNot 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] cfb6749468534287bedb6fb953df6ab6
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_NotEq_Eq 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 3561634a83fe4158b08c29408baa1780
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_NotEq_Lt 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 5ce5e8ccdcb0411993692bcd6304227d
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_NotEq_LtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 1760151a17e44356a8edf0b7a55b816e
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_NotEq_Gt 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 0e73a52ae5464c409d05345bc7c3aa99
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_NotEq_GtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 1748757420954241a7f25529579a17ab
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_NotEq_Is 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f6f7ba0abd794db9a7c00d1207d0ff1f
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_NotEq_IsNot 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] b6f7358a3a0e4262b55736d8280e03df
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Lt_Eq 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 3cbfd81cd30a45be94d29027ec074f04
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Lt_NotEq 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 49b0d6ed575b47848f53bd07c8e5d3b4
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Lt_LtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 3f2fc59d13074e76a4a497794892c410
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Lt_Gt 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 358539ace7db40e0a1408828a6cc22c5
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Lt_GtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 49d9f9122b9a484daa344f5a2aa1fe68
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_LtE_Eq 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9018717e87bb4474a6c54d5dd6a1fffe
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_LtE_NotEq 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 4fddb7efb9704b629841e3ca59d77db8
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_LtE_Lt 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 276f9f9899624b38b30bbb8b2506f495
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_LtE_Gt 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 6fff58af2ed0417da84c6d7b9426f5aa
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_LtE_GtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] a43d176a44084d799bdc6b355bb93719
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_LtE_Is 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e9538a14d50f4d8fb1fd83fe52c80ca8
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_LtE_IsNot 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 22cb76784476488f91b75e063b884b37
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Gt_Eq 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 51f543f2106644a59a60e769a2e1a5d4
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Gt_NotEq 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f2c7e279735f4e7faf688857d7213db9
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Gt_Lt 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] c4bad87cf1e24a9abf686642cc85b7da
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Gt_LtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] ccba980ab2d343a38d7568ff02a2e471
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Gt_GtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 3d620495b66f4fe093ad2634fc1ae2de
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Is_IsNot 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 2bece3fb00f54414bee8243395db05de
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Is_IsNot 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] ea6e760c763c49acb601fe50d8affbb9
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Is_IsNot 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] cda6aa83a21e46a990566c64c8aae4d3
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Is_IsNot 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 4adbdacdabc04c0d820cf1cf72519a83
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Is_IsNot 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] d27393f101614a688b73f8e0cc5e3b1d
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_Is_IsNot 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] b3e555af431c4180b32bcdaae4965ed8
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_IsNot_Is 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 9977944c8af84e0fb166b3cf13d5f6cd
+src\kiln\scheduler\domain\routing.py core/ReplaceComparisonOperator_IsNot_Is 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 8ee44bcf79704f01ae0b592260161ee7
+src\kiln\scheduler\domain\routing.py core/ReplaceUnaryOperator_Delete_Not 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 48385acc140d420596f8f51d1feccde6
+src\kiln\scheduler\domain\routing.py core/ReplaceUnaryOperator_Delete_Not 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 00daea0e589b4bffa8bb9b3742ab8ff2
+src\kiln\scheduler\domain\routing.py core/ReplaceUnaryOperator_Delete_Not 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 3e8bfa450e4d4e12ab636c85cc17c179
+src\kiln\scheduler\domain\routing.py core/ReplaceUnaryOperator_Delete_Not 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 318d15d148f646658a89aab38ec217da
+src\kiln\scheduler\domain\routing.py core/ReplaceUnaryOperator_Delete_Not 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] ff21e6ae2b7c4d8496957110efde2903
+src\kiln\scheduler\domain\routing.py core/ReplaceUnaryOperator_Delete_Not 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 1ecf302d0a0a4df78d3828d9673b9dc0
+src\kiln\scheduler\domain\routing.py core/ReplaceUnaryOperator_Delete_Not 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] bd9cb84324874798872a753940908586
+src\kiln\scheduler\domain\routing.py core/ReplaceUnaryOperator_Delete_Not 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 7d017c8456494f8db94b7240be5bbe8e
+src\kiln\scheduler\domain\routing.py core/ReplaceUnaryOperator_Delete_Not 8
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 930c5c37def642ab9f8c1b2fb4c214d1
+src\kiln\scheduler\domain\routing.py core/ReplaceUnaryOperator_Delete_Not 9
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] fb8bd2ca85f4483d941f68fc7e589dc5
+src\kiln\scheduler\domain\routing.py core/ReplaceUnaryOperator_Delete_Not 10
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] a5688441d4784fe285b58b812a50901f
+src\kiln\scheduler\domain\routing.py core/ReplaceUnaryOperator_Delete_Not 11
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 2a3b45efaf2c4421a50d0ddb2f58eaca
+src\kiln\scheduler\domain\routing.py core/ReplaceUnaryOperator_Delete_Not 12
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 0d77049f9f0244b2bdb1ff665cb80a06
+src\kiln\scheduler\domain\routing.py core/ReplaceUnaryOperator_Delete_Not 13
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] e08af2ec818941b9a5f35933d97d8b7c
+src\kiln\scheduler\domain\routing.py core/AddNot 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 06f9279167d14cbfba6c5e0fcbb03ba7
+src\kiln\scheduler\domain\routing.py core/AddNot 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 356db1ed9bd6451f97abaac48ad038d1
+src\kiln\scheduler\domain\routing.py core/AddNot 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 803a512d28214a2dbebce8b519e0ea1d
+src\kiln\scheduler\domain\routing.py core/AddNot 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 872965df2aa14ce28ce4599cd2534b79
+src\kiln\scheduler\domain\routing.py core/AddNot 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 92f6eb2a022448cc9ce151355afca3fe
+src\kiln\scheduler\domain\routing.py core/AddNot 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] fb5e0a58d2f74c5896f2ec42c253cd7c
+src\kiln\scheduler\domain\routing.py core/AddNot 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] dbc855d28c62484e9e0b4d8311614bb3
+src\kiln\scheduler\domain\routing.py core/AddNot 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 16b073932af74c439269f3a32b0b0671
+src\kiln\scheduler\domain\routing.py core/AddNot 8
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 22c37c82825243c49f0fdb0a1fbb8b73
+src\kiln\scheduler\domain\routing.py core/AddNot 9
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 2beb8a012be9463e80d15dce252e4b43
+src\kiln\scheduler\domain\routing.py core/AddNot 10
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] cfb0aa4a84854866b935243b30bf0a2b
+src\kiln\scheduler\domain\routing.py core/AddNot 11
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] d21f68dae1dc4054b9dd9fae8c972791
+src\kiln\scheduler\domain\routing.py core/AddNot 12
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] fec82e73e918458d839129f263f1e3e9
+src\kiln\scheduler\domain\routing.py core/AddNot 13
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 1e233d51f644424a8ee3f4623f043ab3
+src\kiln\scheduler\domain\routing.py core/AddNot 14
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] cf92acae9ab54cd0a9d8d2ab954bce80
+src\kiln\scheduler\domain\routing.py core/AddNot 15
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 0af346b671d2454a9633656687ea88d9
+src\kiln\scheduler\domain\routing.py core/AddNot 16
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] a0f392c245e84508b91e0f191d34c52c
+src\kiln\scheduler\domain\routing.py core/AddNot 17
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] bb5e8dbded7246dbae2be88b3b368842
+src\kiln\scheduler\domain\routing.py core/AddNot 18
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] eb3fb7a6db8948d2abc9bbf066135aa0
+src\kiln\scheduler\domain\routing.py core/AddNot 19
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 77fdcc6eea5e4ec8bc09cda7f4084b80
+src\kiln\scheduler\domain\routing.py core/AddNot 20
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 6aa24e63b415441584527f73ca06196e
+src\kiln\scheduler\domain\routing.py core/AddNot 21
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] d81e3b5094954c4881c531c77588973d
+src\kiln\scheduler\domain\routing.py core/AddNot 22
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 176a9f6aec17470b873887ee4eee97cc
+src\kiln\scheduler\domain\routing.py core/AddNot 23
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] c8e0eb84d36d4564b18f079a00d18580
+src\kiln\scheduler\domain\routing.py core/AddNot 24
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 2b9db9e6d8de480388b2492ae365411d
+src\kiln\scheduler\domain\routing.py core/AddNot 25
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] eaa006ef8d5d420d809ff97a683d7f9a
+src\kiln\scheduler\domain\routing.py core/ReplaceTrueWithFalse 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] eccd606f2c5d41c19cbf6b665ab4eb0d
+src\kiln\scheduler\domain\routing.py core/ReplaceTrueWithFalse 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] bd4dc6d37b214b18892fb65266111b5e
+src\kiln\scheduler\domain\routing.py core/ReplaceAndWithOr 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] da2e351e82674c09a7764e95b6784019
+src\kiln\scheduler\domain\routing.py core/ReplaceAndWithOr 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 04037a32e76944b4a5a63068188f29f9
+src\kiln\scheduler\domain\routing.py core/ReplaceAndWithOr 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 22ff9e8e85f84da191e988e911691657
+src\kiln\scheduler\domain\routing.py core/ReplaceOrWithAnd 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 9ffda52de1bc482e897a4724f28775f6
+src\kiln\scheduler\domain\routing.py core/ReplaceOrWithAnd 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 671b278bf6d740329e79c104be3be14d
+src\kiln\scheduler\domain\routing.py core/ReplaceOrWithAnd 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] a7e5d19f72074e48bcb84e02194e6317
+src\kiln\scheduler\domain\routing.py core/ReplaceOrWithAnd 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 324ad7310eeb4baaa66a425d7dc206f0
+src\kiln\scheduler\domain\routing.py core/ReplaceOrWithAnd 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 0879650c0add49fe8cd2dc4bf5019411
+src\kiln\scheduler\domain\routing.py core/ReplaceOrWithAnd 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 373b584ff4214e378c3ec16298fc00f4
+src\kiln\scheduler\domain\routing.py core/ReplaceOrWithAnd 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] d40d16875f89499e935537dd1bd20237
+src\kiln\scheduler\domain\routing.py core/ReplaceContinueWithBreak 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 3d5d7e68853e4850a6bb16e929fb4d71
+src\kiln\scheduler\domain\routing.py core/ReplaceContinueWithBreak 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 40b4c9a693b44f7d9f2e4be2f0b38065
+src\kiln\scheduler\domain\routing.py core/ReplaceContinueWithBreak 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] bc88b41c24674808ab9bedcbeb111fbf
+src\kiln\scheduler\domain\routing.py core/ReplaceContinueWithBreak 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] bf405d1e4a5d4dad8a6ac5cb2ab1f18c
+src\kiln\scheduler\domain\routing.py core/NumberReplacer 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b1888099907b47fcb8555defce159fde
+src\kiln\scheduler\domain\routing.py core/NumberReplacer 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] a222115842894c55bb531ff0ba1468c7
+src\kiln\scheduler\domain\routing.py core/NumberReplacer 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 7ac49496533b46d9a3c4cce7ec707f30
+src\kiln\scheduler\domain\routing.py core/NumberReplacer 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] c407d760fb4a4446b22f71dfbef6938f
+src\kiln\scheduler\domain\routing.py core/NumberReplacer 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 71a7f2abcac3445b8ee2b3efbc9fa91b
+src\kiln\scheduler\domain\routing.py core/NumberReplacer 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 08669969eef24e0ebbb663371d159359
+src\kiln\scheduler\domain\routing.py core/NumberReplacer 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 050d2460125848a8811a46eaa2e4d02a
+src\kiln\scheduler\domain\routing.py core/NumberReplacer 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] bfd2e0c848084120b22ec9a99fd2bd50
+src\kiln\scheduler\domain\routing.py core/NumberReplacer 8
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] c788233ae71348eeab13841316de0d3e
+src\kiln\scheduler\domain\routing.py core/NumberReplacer 9
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 5487a0da87604543a85fa70f13bf2208
+src\kiln\scheduler\domain\routing.py core/NumberReplacer 10
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f3504be29092440f8f98609ec6251b0a
+src\kiln\scheduler\domain\routing.py core/NumberReplacer 11
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 5b043d151be74798aa1eb17a83fc6dc9
+src\kiln\scheduler\domain\routing.py core/NumberReplacer 12
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 6305763b1e024bacb280ae482da4f297
+src\kiln\scheduler\domain\routing.py core/NumberReplacer 13
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] a544a6e6b9224fdaa3f6b92f06490a15
+src\kiln\scheduler\domain\routing.py core/NumberReplacer 14
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 370c92b8fc8e4291bdd4cdbb7fc63bd1
+src\kiln\scheduler\domain\routing.py core/NumberReplacer 15
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] b30856493c2c4b919ab7d5d9d318021c
+src\kiln\scheduler\domain\routing.py core/NumberReplacer 16
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 186ce6dcca9144f384c9cd9f9d161330
+src\kiln\scheduler\domain\routing.py core/NumberReplacer 17
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 08462dd5ff41470482a682ff5739b356
+src\kiln\scheduler\domain\routing.py core/NumberReplacer 18
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 35e6861df63749078d5adc27df21e963
+src\kiln\scheduler\domain\routing.py core/NumberReplacer 19
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 78d5e8739227479683e3ef2b48c418bc
+src\kiln\scheduler\domain\routing.py core/RemoveDecorator 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 425cf2d14e744d3e99c6dcb30e54484d
+src\kiln\scheduler\domain\routing.py core/RemoveDecorator 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] a6632e408f73412994a794ecab0e571f
+src\kiln\scheduler\domain\routing.py core/RemoveDecorator 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 233ddff660d04648a84d60cbe25c7dc2
+src\kiln\scheduler\domain\routing.py core/ZeroIterationForLoop 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 602d48db96784a5ebbd3cff52efe9627
+src\kiln\scheduler\domain\routing.py core/ZeroIterationForLoop 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] a67ea89532644468be515edc444323bf
+src\kiln\scheduler\domain\routing.py core/ZeroIterationForLoop 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 02a38a90846c40bda5eeae04f8abe8dd
+src\kiln\scheduler\domain\routing.py core/ZeroIterationForLoop 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] fbf1fe0bc1a745e385e8ed70c28e625f
+src\kiln\scheduler\domain\routing.py core/ZeroIterationForLoop 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 44ddf956289e443aa75beb45cfa2db88
+src\kiln\scheduler\domain\routing.py core/ZeroIterationForLoop 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 36809f93079e4c1c865f05427c892773
+src\kiln\scheduler\domain\routing.py core/ZeroIterationForLoop 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 46e2d79f17fe4632b947390255bb5ce5
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Add_Sub 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] de17cd90dfaf481a900533c4f3750986
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Add_Sub 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.INCOMPETENT
+[job-id] 280ab87026dc436b943b1b2a33e3d8d8
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Add_Mul 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 393d212cb1d740798c607c21831cc793
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Add_Mul 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.INCOMPETENT
+[job-id] b7cb0823206746bf9e250408d3870dae
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Add_Div 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 84b4fe22596e467281cd8a1cb79cff4e
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Add_Div 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.INCOMPETENT
+[job-id] e398b2bf863e430c8dda777bfb77fc20
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Add_FloorDiv 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] dc688064d2af409d9e44d224cebad440
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Add_FloorDiv 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.INCOMPETENT
+[job-id] b32d2db6932143ebb58419b8f740fda2
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Add_Mod 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 8620f892238f4fca8ec880599d879641
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Add_Mod 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.INCOMPETENT
+[job-id] 3176a6fa14ab4de681eaac18556240e0
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Add_Pow 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 247157af8dcc4bb8bd38facaf3704db6
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Add_Pow 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.INCOMPETENT
+[job-id] 8d6cec027334406f957243725a0a75a2
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Add_RShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f183f57be7fb4ef49542db7bd1274f5e
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Add_RShift 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.INCOMPETENT
+[job-id] 9cc1cb84236a4b1ab8b4309c3fed6010
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Add_LShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 2c9e81ac6512450bb234ac32cc7d0c76
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Add_LShift 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.INCOMPETENT
+[job-id] 0af3b631d7a5420c9e221a60d883a779
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Add_BitOr 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 040ecdd172474cfcb75f34767077d5e6
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Add_BitOr 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.INCOMPETENT
+[job-id] fc52b3b1fb1a44b19b1da4c4c2c60c5c
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Add_BitAnd 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 84ac7cc7fcf14b1992009d449e82c709
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Add_BitAnd 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.INCOMPETENT
+[job-id] e1fac74ebdf9461d8e5c354627584f37
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Add_BitXor 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 788bbd3d36cf41f2aff277e7a4440128
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Add_BitXor 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.INCOMPETENT
+[job-id] 346ec78f140f4c38ab4f53cfa33997b5
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Mul_Add 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] ec063e371d5241d88c2970e972a9cf7b
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Mul_Sub 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 5618de42871640d6961d6d9a50abef61
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Mul_Div 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 3183e26fb0a442d790a5269ecc3f8d9b
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Mul_FloorDiv 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 08977922b8f84d19be4db510d20089c6
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Mul_Mod 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 88d86f184e8c4ad2b4851cce43a9ec9e
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Mul_Pow 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 5826ea60c0534d53bbb27efa10a47d84
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Mul_RShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f7f625c567d74e718001b0a516628b30
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Mul_LShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] c894ecb6591840b6ac40f082d7f7cc16
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Mul_BitOr 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 16a4cb6f35754939b61d853d9790280f
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Mul_BitAnd 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 13bf51dee30c4aebafba217a2030eb68
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_Mul_BitXor 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 4f1571ecc2744a47b1c727ca0ffafc95
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Add 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 983412239a5441e4ae6df68bd50d752d
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Add 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 5be5575f6f3d46b2971c152f2d42dbcc
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Add 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 17ca447ad45b4262a524e928fc395df8
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Add 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 58709485aa094d77a42820bf833811e6
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Sub 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1662a3730bc944c7ac93456333005b74
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Sub 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 3cedafcffbca4d538194dfc59b77f2a0
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Sub 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 0b18d25fb4f7426b89bb36b22529198f
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Sub 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 39cdc8be80be4c7faad3921d1986106a
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Mul 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 3b0881850c5b4b938bb1d3c1c20fe74b
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Mul 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 19682c0e9eca4b0a9278afd5120e01ac
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Mul 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 95834a07675c43049639ff32e9e9d199
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Mul 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 465ba250c16d45588411859a5776d53a
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Div 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 681e5dcfaeb440aea09faa5a997ee1e0
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Div 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 80d10a9a4c964a6d970119b20e37b7c6
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Div 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] ba20b86ea866485fa00cf70ab8402bb5
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Div 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] ef7e9590ebbb4c679a678c70ffe7e4c5
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_FloorDiv 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] c038e8bb1b91481fa1bb7f6391e68c4e
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_FloorDiv 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7f9f85cbe31b41e0b6c10915d351f471
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_FloorDiv 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] ce852400fe884319bfebb01c7020504a
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_FloorDiv 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] be5ed5690eab4ce3a9c2133f31603f86
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Mod 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7854c3080db0402c8f7cf4040dfa4e10
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Mod 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 346ef73b32124032b7e89ee221577455
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Mod 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] fae8a1bd2b01431998672cd13f2cfd6b
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Mod 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 55b0efa5e3434a35b74d3b70616c2bf7
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Pow 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 075593cabb8747a1b3db3cbeda56b68d
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Pow 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 97a635a915f74d90a863033a92006787
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Pow 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 44c14a458ae0472dbeb15a0873d7baca
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_Pow 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 2a047f4541b8418489c6b961b1319780
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_RShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9e4edb9593124d468a5d0e00fe8988a4
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_RShift 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 3d4dbd6202a54323800f01ebae8f4ea3
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_RShift 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8de597847d5a43948b92e935e185f3ef
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_RShift 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 4f6d5de5ec574a4aaab019a87ad83cd5
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_LShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f70c153960c64d45bcac52a2263eafca
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_LShift 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 104f462a32234dc2bf399e098ff78bd5
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_LShift 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 2fdcdf8f28904d0898f99a2a57e71f1f
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_LShift 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e439f0dc7b894edcaf83ebdb5fce8556
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_BitAnd 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e990c145128b4815b7bb059bcffcc563
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_BitAnd 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f8abaf96ff31461ab7f9535e7cb67edf
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_BitAnd 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 014e4f6e313d4cf4a3bceb51127f2ffd
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_BitAnd 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7e1aee69165d48a09d97d05c3c0d4b78
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_BitXor 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 834b3e9fa63b4f689b2576705edfc697
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_BitXor 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 216ade11a856480ca33dcbf5f8073710
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_BitXor 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 96ddc57f77a84aefbe82c3b94f7c2732
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBinaryOperator_BitOr_BitXor 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] be93ede711254591bd8d2783592bab88
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceComparisonOperator_Eq_NotEq 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f1db138353d34c0583eaf915d4ea9247
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceComparisonOperator_Eq_NotEq 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 41f1a1b12b6f4fd98fc671bafd9db7f2
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceComparisonOperator_Eq_Lt 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 57772130367a434b88365711032a9820
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceComparisonOperator_Eq_Lt 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 24c56614155744be8c1c7f38af11709b
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceComparisonOperator_Eq_LtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] ba6d385667fc4b02a61661cde5d164f1
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceComparisonOperator_Eq_LtE 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 984eec02f0604d80a193ec311e9066df
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceComparisonOperator_Eq_Gt 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] e67b75e7b9f14cb7a91a88cf1b85970f
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceComparisonOperator_Eq_Gt 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] b36bdf773c104ee4b8bc33cdbbfc82c5
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceComparisonOperator_Eq_GtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] aeeb9818637d46449e01908392332fc2
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceComparisonOperator_Eq_GtE 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 3449a1cc8dfc4331bac7f7e6f85f17b1
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceComparisonOperator_Eq_Is 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 2ad8c30758354def9c5e34558a02ef14
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceComparisonOperator_Eq_Is 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] abdcb1e3fdca4cb1b831c4f0b1fffbf8
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceComparisonOperator_Eq_IsNot 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] cb2470883f8849e58ef487acf890d194
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceComparisonOperator_Eq_IsNot 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 42195bed81aa48ec8764a746aabe357d
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceComparisonOperator_NotEq_Eq 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 34c4aadf81da437da0bddd82a3b1676d
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceComparisonOperator_NotEq_Lt 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 2146f4e08b3e4ebd85bc88bd83f3d572
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceComparisonOperator_NotEq_LtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 136fd7ddd1c44d7cae5d8b00336c54e7
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceComparisonOperator_NotEq_Gt 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 5f6a34620ecd4844b4800efbefd2d2fd
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceComparisonOperator_NotEq_GtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 8227fa7245e24a968dd7b31c27bf0b85
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceComparisonOperator_NotEq_Is 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] d3bdc1fa918f41868551a547ad925b72
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceComparisonOperator_NotEq_IsNot 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 84a00fdefc2d443bb2a2cb238bb0f649
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceComparisonOperator_Is_IsNot 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 9c895435b2d34eb2a860666a32f02ec5
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceUnaryOperator_Delete_Not 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 53c3345b0749467ba3f5d172b61c37ab
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceUnaryOperator_Delete_Not 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 5eaa84fd6d194d20a0ec00bbec2f6e66
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceUnaryOperator_Delete_Not 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f667ca0840004205b63dccb25f91dc74
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceUnaryOperator_Delete_Not 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 5a67c6ac4f984241a382e7c5950af7b2
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceUnaryOperator_Delete_Not 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 319451726196495faede2de61939a5dc
+src\kiln\scheduler\domain\worker_prompt.py core/AddNot 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 0f47b77d2b684912bc2d224f00540fa0
+src\kiln\scheduler\domain\worker_prompt.py core/AddNot 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] b122cb6d347b43faa08351839a9bfcb4
+src\kiln\scheduler\domain\worker_prompt.py core/AddNot 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 15526872e2ea4a7db26b25ea3149fa28
+src\kiln\scheduler\domain\worker_prompt.py core/AddNot 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 7025514ed9b94e9a82db04402b877c11
+src\kiln\scheduler\domain\worker_prompt.py core/AddNot 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 6a049cba3f1b45aa8941c4aa27891804
+src\kiln\scheduler\domain\worker_prompt.py core/AddNot 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 374f6c3d19a3484ebb954d2cdeb7e6ee
+src\kiln\scheduler\domain\worker_prompt.py core/AddNot 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 184302aa8f9349cdbfc82cc1692fb9e2
+src\kiln\scheduler\domain\worker_prompt.py core/AddNot 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] fa3460c60d054fac8cd3ce89492aefa2
+src\kiln\scheduler\domain\worker_prompt.py core/AddNot 8
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f61386f083874e768df7e2abc1a377f2
+src\kiln\scheduler\domain\worker_prompt.py core/AddNot 9
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 53a213bf5c9f46978062a3d4179820e8
+src\kiln\scheduler\domain\worker_prompt.py core/AddNot 10
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] b35092b7fc434ec29bd2fba8f8b6aaf6
+src\kiln\scheduler\domain\worker_prompt.py core/AddNot 11
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.INCOMPETENT
+[job-id] 253ba89f959c41e3b86a6408789ad8e2
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceTrueWithFalse 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 0181fa237f16450cb33fb29490539dd9
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceFalseWithTrue 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 8e296153fe8f4f8bb9aa28d9717f7504
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceOrWithAnd 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] fc835eab2f0d4edd852e10d8e8b95bee
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceOrWithAnd 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 43416b2a88f940d8b3d5429ed451df2d
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceOrWithAnd 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 732631ab31254d63b5aaaa4d1c3f80fe
+src\kiln\scheduler\domain\worker_prompt.py core/ReplaceBreakWithContinue 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 8237a1bc6ee34bec8514adca897c1814
+src\kiln\scheduler\domain\worker_prompt.py core/ExceptionReplacer 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 9390adeb0ecb4cab87cf140e2f7b9b84
+src\kiln\scheduler\domain\worker_prompt.py core/NumberReplacer 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 968b7eed0a7042379ac40673a7674f05
+src\kiln\scheduler\domain\worker_prompt.py core/NumberReplacer 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 9b4cda7a6eb04e5883c356aefc6cd5f0
+src\kiln\scheduler\domain\worker_prompt.py core/NumberReplacer 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] c1309a79213c4c4bbeecffc4c30fab22
+src\kiln\scheduler\domain\worker_prompt.py core/NumberReplacer 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f0698cf3624b4374ab5f92a1e181c0ce
+src\kiln\scheduler\domain\worker_prompt.py core/NumberReplacer 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 0f3836e5e13341998a9a3d3cfb074587
+src\kiln\scheduler\domain\worker_prompt.py core/NumberReplacer 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 53124373606c41b48c8e9fc985e28ddd
+src\kiln\scheduler\domain\worker_prompt.py core/NumberReplacer 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 31ffc84338834251a6e5a91ed228719c
+src\kiln\scheduler\domain\worker_prompt.py core/NumberReplacer 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] dbec6b9e38fb4d4b9763a005f27d8097
+src\kiln\scheduler\domain\worker_prompt.py core/RemoveDecorator 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 27b9f9e5e34c4fc9a7453069cb1ef054
+src\kiln\scheduler\domain\worker_prompt.py core/ZeroIterationForLoop 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 5e5c97c653dc4d95bfa815b92a605756
+src\kiln\scheduler\domain\status_contract.py core/ReplaceBinaryOperator_BitOr_Add 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 26a3512753614f5f9398bf90c33c0bb2
+src\kiln\scheduler\domain\status_contract.py core/ReplaceBinaryOperator_BitOr_Sub 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] c19c4dca775a487c983a76ff621760d5
+src\kiln\scheduler\domain\status_contract.py core/ReplaceBinaryOperator_BitOr_Mul 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8353b95efba6490ba5089315f04d0177
+src\kiln\scheduler\domain\status_contract.py core/ReplaceBinaryOperator_BitOr_Div 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 701f7558f0c347e7abbf23d99d6be5a4
+src\kiln\scheduler\domain\status_contract.py core/ReplaceBinaryOperator_BitOr_FloorDiv 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] a2508e320d9e4e3c8f19193c1e67c172
+src\kiln\scheduler\domain\status_contract.py core/ReplaceBinaryOperator_BitOr_Mod 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b8e78a83539f46bfa3183ac28cfe03f4
+src\kiln\scheduler\domain\status_contract.py core/ReplaceBinaryOperator_BitOr_Pow 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] d8692cdd0440442eaaeed0b3ad1433be
+src\kiln\scheduler\domain\status_contract.py core/ReplaceBinaryOperator_BitOr_RShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 961d213b720446d7bd6092cf89db6b46
+src\kiln\scheduler\domain\status_contract.py core/ReplaceBinaryOperator_BitOr_LShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 69b66d705f1e47088d7014c9fbca1593
+src\kiln\scheduler\domain\status_contract.py core/ReplaceBinaryOperator_BitOr_BitAnd 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7e0fcfdbb9c048f2a8bb7b52bacfd122
+src\kiln\scheduler\domain\status_contract.py core/ReplaceBinaryOperator_BitOr_BitXor 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] d577f5906b624f08a465ccc929e4dacd
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_NotEq 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 35e8bd3420674322bcd97298d0d98278
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_NotEq 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] e366f2720b4c460c8168fc52331fe31b
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_NotEq 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 644a66e7dbb14df68006095eb89f6547
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_NotEq 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 87aa27312d9445e79a9d39be95754dee
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_NotEq 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] fef31a64ee724ac9b017a9d74a58d856
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_Lt 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 1a8716a4eefa408d941cfc1555cc1ee8
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_Lt 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] c349254757e34c8b875f2c2d1a96d4fe
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_Lt 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 0963197c736743a1b60a1bab4131dea9
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_Lt 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 6b1348474da64c65a413888edee31d2e
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_Lt 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 5eb5c4c520be408fbb224e49f3d4e2c7
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_LtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] a3163d684f4447f3bc8e797130f9680e
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_LtE 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] bd4dc3421e2a49cbb0efa7271dec5c6d
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_LtE 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] c093618fb1f14d4fbc97fa4ab908cece
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_LtE 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 2339d0ecabc84582ba46c96d26c44404
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_LtE 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f365dba0015c4c30b3b98b10672a079d
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_Gt 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 3033ee543f0e438aaf7239b57a5ab22e
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_Gt 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] becb688424f9435280a2f04df83100d6
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_Gt 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 3d82faf4ccd240d0bb972bb7757b11cc
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_Gt 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] a71a0ae5a97e47cc849ecc5cbea86b07
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_Gt 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 6f849cc96cff457cb28ed75d620c876b
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_GtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9acf4ff3d1a34b7b8c568f49189ba389
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_GtE 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] d2769ebc5a8c4b92b5ace304cd29a157
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_GtE 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] daf19cac69584a7ba9b2614473c7143a
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_GtE 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 3635aabc09b1412b9f9822bccee2d329
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_GtE 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 3e0504942ab341e68706bbe90a2d1a11
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_Is 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 64788a42a094469ead89ecb0e583999b
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_Is 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] a1258b75714e4f46b5774269d0fa1223
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_Is 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] cf048609608147b6afe7a092ed86182d
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_Is 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 7ed3fe03d8424534a9fde89ae3174c03
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_Is 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 5b7c964c57954be6bda37d89aa957b13
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_IsNot 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 2d08cc44a38442f6928a07b92935421c
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_IsNot 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 1c4be9c016974cc48c96f7effb6c6d93
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_IsNot 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] b3a284e4c4f54451990c3d72a43173c9
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_IsNot 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] be9a88a3086244e58743b65445616c66
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_Eq_IsNot 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 1e2944b9a86549a589c97e4453f4a3be
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_NotEq_Eq 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 2575e9fe5f434449a8c056430ae4210d
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_NotEq_Eq 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f6437b1985bd4ec5a0295a6fa9a62f13
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_NotEq_Lt 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f87e94919c01419c94f6673c31baa372
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_NotEq_Lt 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 5b583ceb9c194ccbb4d6169c8f6f9a79
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_NotEq_LtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 0436a90ad50b49139d9e10cf04b24898
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_NotEq_LtE 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] a52afaefed4940bc86563a8a6a6ef936
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_NotEq_Gt 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 3464942260d54f37914a411903360357
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_NotEq_Gt 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 58a100cbfc314c8eaaa157e277dc8f4a
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_NotEq_GtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 2ce760f8980f43f882e94f021c51778d
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_NotEq_GtE 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f05d7e4f5f7f41c1ab18827f149dd89b
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_NotEq_Is 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 2be98f0ab12643f188ff998d800bd5ab
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_NotEq_Is 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] c80ddba836334ee3900735ac0289f577
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_NotEq_IsNot 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 36f3a7521c3c45f2b0dbf912e40df482
+src\kiln\scheduler\domain\status_contract.py core/ReplaceComparisonOperator_NotEq_IsNot 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 5388ba462c084b4591a6c4763fde3ecb
+src\kiln\scheduler\domain\status_contract.py core/ReplaceUnaryOperator_Delete_Not 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] ec2c25c321784c4a9851a527a4792343
+src\kiln\scheduler\domain\status_contract.py core/AddNot 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 13d90c571d5d43f39165246424c67aaa
+src\kiln\scheduler\domain\status_contract.py core/AddNot 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 8a4a44ea31e046a2aada677c8022cf32
+src\kiln\scheduler\domain\status_contract.py core/AddNot 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 1b14a72e1bcf480f8b317b25d85c9635
+src\kiln\scheduler\domain\status_contract.py core/AddNot 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 2fcb2e2d6aff447a9c25e2fcc153e52e
+src\kiln\scheduler\domain\status_contract.py core/AddNot 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 9a1056da4d6541b6a6dc114ed813a285
+src\kiln\scheduler\domain\status_contract.py core/AddNot 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] dec4ad9540b442dc94c5d74bd1f5ca2a
+src\kiln\scheduler\domain\status_contract.py core/AddNot 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] ce8d38d6546a486cac645e8af8cf6940
+src\kiln\scheduler\domain\status_contract.py core/AddNot 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 279fb0ba56af4aff874f37fc607592dc
+src\kiln\scheduler\domain\status_contract.py core/ReplaceTrueWithFalse 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 4c03f229742c4bb39d30c7508d2c792c
+src\kiln\scheduler\domain\status_contract.py core/ReplaceTrueWithFalse 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] c52ce44a242c4909a8b15d02d514732f
+src\kiln\scheduler\domain\status_contract.py core/ReplaceTrueWithFalse 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 1279c05e35f74479ab2aaff0a4814714
+src\kiln\scheduler\domain\status_contract.py core/ReplaceFalseWithTrue 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 1512de62db2d4422b9b9357dfe052292
+src\kiln\scheduler\domain\status_contract.py core/ReplaceOrWithAnd 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] a2d820db40b54dd4b5e9d4caaa441b3f
+src\kiln\scheduler\domain\status_contract.py core/ReplaceContinueWithBreak 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] cae5e9de667e40849b8632c115b312e7
+src\kiln\scheduler\domain\status_contract.py core/ReplaceContinueWithBreak 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 248099cae99c41cb84fe78ec54a93202
+src\kiln\scheduler\domain\status_contract.py core/NumberReplacer 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.INCOMPETENT
+[job-id] efe151e286c347ed9c1c536b2b7841ff
+src\kiln\scheduler\domain\status_contract.py core/NumberReplacer 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.INCOMPETENT
+[job-id] 6e1a8eb8c8474455823794b8018f1728
+src\kiln\scheduler\domain\status_contract.py core/NumberReplacer 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 5032815e7daf4e9abd2accc5803cf333
+src\kiln\scheduler\domain\status_contract.py core/NumberReplacer 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 2177878719f94689ab59f2741a8e56d9
+src\kiln\scheduler\domain\status_contract.py core/RemoveDecorator 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 0abc6e990692466595f4aee604c006e4
+src\kiln\scheduler\domain\status_contract.py core/RemoveDecorator 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f38c6a77da02423d9d76cfeed7f556df
+src\kiln\scheduler\domain\status_contract.py core/RemoveDecorator 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f130ee3c60f84c818dc5c7dadcc4bfc9
+src\kiln\scheduler\domain\status_contract.py core/ZeroIterationForLoop 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 964207c4f1364e89ba5d4262fd2b295f
+src\kiln\scheduler\domain\status_contract.py core/ZeroIterationForLoop 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 56403310f46c4fc583e9474b1acecb4c
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Sub 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f8bc22fe801a443cadf2f5e683c31d17
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Sub 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 6a90b0c25d4f4e3c80f7fa4495e88072
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Sub 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] d1b6db2eb4db416096374dd2c55dabf1
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Sub 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 43016d7e6e2f4b95b12fe8635da2bd46
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Sub 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 15a0dab05ca946f58b25d0fc5a6a78ad
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Sub 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] a6b77abaacbf4fcaa829efebbb2f17bd
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Sub 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f335c715fc8e4b799ff4fd6b46f2d2da
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Mul 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] a38488cb36494ea9ab257a51a16ff0b8
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Mul 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 3954072398bd4c5f9c03d7c43ac46f8a
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Mul 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 150de61ffb9f48bfb5ce01ffbcb3c355
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Mul 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 75435b6fba7940cb805289fac22ffd3a
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Mul 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 3eb5ce9de16f43f5b2a8c4267cf717cd
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Mul 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] bdb6603755c848e0ae53a4142e4b275e
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Mul 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] cf352ed8679d4890a2b4649ee8276bb3
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Div 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] cf96381c055241ddaf86f8e2ef59c559
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Div 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 052ad4cf469d40dea998a54d75b00621
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Div 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 036007c6d5e74b1c84ed9dcbac1f873a
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Div 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f3e9253e66444d479ef6e917cd70559a
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Div 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 8627dcb1cd084e18951cd12f15e2e91c
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Div 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] b0653678f6574904b7057afbae3e263e
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Div 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] eea3306a2bfe4cfd8ef0af785f66819f
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_FloorDiv 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 65dcbc655d064ea396bf1721fd9b46bf
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_FloorDiv 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 58a305b04f844b558516e13050fa80be
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_FloorDiv 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] eb7d04bf97414616a1bcf4154b50b501
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_FloorDiv 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 89d741919f6d4cb4816c907761a84799
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_FloorDiv 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] e26c980736a24f85b11e77086438d9de
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_FloorDiv 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] c766b231018846f1a479993868695626
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_FloorDiv 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 23c07705588246d8a5bc129d8293d072
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Mod 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 0aad15a58afa4ac6ac390e925594db4a
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Mod 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 6e506e20d09b428e8d042ba3d1285122
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Mod 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f9598f14469247bbb613c540f37a5b13
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Mod 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 8fd108cb9f6f4c69bbbcce75643e45ce
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Mod 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f38447e2a1eb4978a041ae9d18465847
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Mod 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] db1ed90bb9f848f9aabd05f8ea769384
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Mod 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] bd18b8f579664105b009a91df594d342
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Pow 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] beeaea353c934e3daea6457292f4936f
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Pow 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] fcf1c96658c7433494e0f0a928a8dfb3
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Pow 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] d5f55155917442e5a148b996b2e3e610
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Pow 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 3e2a22d3991b4b959d64c3d2be838842
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Pow 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 266bac384e434fe3b43b658840beea19
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Pow 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 0ad3a9b50b8b4379a18e553959eec604
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_Pow 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 99d115505e4b4c018f7f8d58c2f7a15e
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_RShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] fcda6fed32f14ee4930e89af32cf1688
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_RShift 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 63dc0d20efd74291a0c3fce87eb5bfc9
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_RShift 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 074cf234141b4b8db401c1b58f6efe26
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_RShift 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 429a13f8877c4f5681b756901574a7be
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_RShift 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] cb6ddbead9454440ab16fb4b07550276
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_RShift 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] ff75e0e13c3548fd967025a890a6bd25
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_RShift 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 541a7bb74ab946d9a2aef933224123b4
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_LShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] ab528c56c45c49739d3bfea124041a69
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_LShift 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 98c6170e14f54ba5964fe3c81dc7c1de
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_LShift 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 604ff953bb74430c866b628c6d70b3d6
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_LShift 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 436f2654bba04673841b4bec7f5e2add
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_LShift 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 065ab2bee43e488ba67c168fe3c0f4a9
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_LShift 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 81d59f39f50b4597aa1a0c60a47f1624
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_LShift 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 18aba0a6c078457c9aedeeff168c36a6
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_BitOr 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 2e21df09d2294ca8887b2e79db7fd69d
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_BitOr 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 20563f2e411541febe7e7ead685c51a7
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_BitOr 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 0c6e3281129d49ec9759df7c31aa0d7f
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_BitOr 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] c160f9607d71430180e5233e87d566a4
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_BitOr 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1679eb0faf9745dc8a224c6e5a9da784
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_BitOr 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7063ddc012a742c28c0db329e0a96b1e
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_BitOr 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9cfc21faa3da462c976db3264c374d0b
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_BitAnd 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 95b579d8fb894f1a8acd3a645cb62417
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_BitAnd 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] cb6eea4c15a34166b9e96f4f30d3641a
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_BitAnd 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 569f5bf087b040db8b8c71d646c6e4bd
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_BitAnd 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 554cf7e4b60c44a0978a69b8b07c923b
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_BitAnd 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 74930efc6a3246fdaa760f0696d2eabc
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_BitAnd 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 2326fc8ff4704afdb35b46fbe1542f06
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_BitAnd 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 89e656ae715a4a48b5928106fa3f6e26
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_BitXor 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 5aa5ae025eb64a69a7ff9e745954813c
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_BitXor 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] ac6dd400467b46f48372aa60d38a3ba1
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_BitXor 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 6b8d9177a27d4a01bb648122d9443a62
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_BitXor 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f683c52f81c5490d99515357a51cdff6
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_BitXor 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 11044982fc6944a08d9503b072ea932b
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_BitXor 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 78f4731861a3420ba76bb125351702ca
+src\kiln\scheduler\domain\models.py core/ReplaceBinaryOperator_Add_BitXor 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 06af76b85aeb4ced88bf09f297abd9fe
+src\kiln\scheduler\domain\models.py core/ReplaceTrueWithFalse 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] beda6841558f4a36b2c59ae8efb4f5cc
+src\kiln\scheduler\domain\models.py core/ReplaceTrueWithFalse 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9d97c57326754c8f837a6ee90b4e0c87
+src\kiln\scheduler\domain\models.py core/ReplaceTrueWithFalse 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b7a4a6a142764c33b31c345fa0b968b5
+src\kiln\scheduler\domain\models.py core/ReplaceFalseWithTrue 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] cac74eed578c4cbb81a66016c588d7a6
+src\kiln\scheduler\domain\models.py core/ReplaceFalseWithTrue 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 536ba038017241c98a1d268e6147f338
+src\kiln\scheduler\domain\models.py core/ReplaceFalseWithTrue 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] fd0a1b53e4154e0cb6314f6edc263331
+src\kiln\scheduler\domain\models.py core/NumberReplacer 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] ff46c3391c3541dc83e477f8e81b5de4
+src\kiln\scheduler\domain\models.py core/NumberReplacer 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8e99b603c2804ec5a46c4758f4159df9
+src\kiln\scheduler\domain\models.py core/NumberReplacer 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8870e537c95b401d8c1094b385fb4a07
+src\kiln\scheduler\domain\models.py core/NumberReplacer 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] cfbf5725131c4e579f54173f55308fbd
+src\kiln\scheduler\domain\models.py core/NumberReplacer 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 795abef09761417bb14688cd1727491a
+src\kiln\scheduler\domain\models.py core/NumberReplacer 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 73ceb23129764ce4b2d21419961264f3
+src\kiln\scheduler\domain\models.py core/NumberReplacer 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 7f2f9dd5e9b14d378f9201fb76c54f2c
+src\kiln\scheduler\domain\models.py core/NumberReplacer 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 4443d0ffde2045088680a32a609756e7
+src\kiln\scheduler\domain\models.py core/NumberReplacer 8
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 31469a7615c04e4b8730568f3e8774d7
+src\kiln\scheduler\domain\models.py core/NumberReplacer 9
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 566445998b8845eb8a2d7e8df314cc5d
+src\kiln\scheduler\domain\models.py core/NumberReplacer 10
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 0b1dc6e1d49f4dbb81023c5ae03e26f6
+src\kiln\scheduler\domain\models.py core/NumberReplacer 11
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 36a63bd393a74272a7fc6ea573056a50
+src\kiln\scheduler\domain\models.py core/NumberReplacer 12
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 73df71a7245c4e6aa9c682f41e957153
+src\kiln\scheduler\domain\models.py core/NumberReplacer 13
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7d1e287817624e26a704a679d3225add
+src\kiln\scheduler\domain\models.py core/RemoveDecorator 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 3b0a90435c144fcc899d834638c72032
+src\kiln\scheduler\domain\models.py core/RemoveDecorator 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 8cb990c050414c4487e7b7e0d583dc9e
+src\kiln\scheduler\domain\models.py core/RemoveDecorator 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 738055522ae846c89895924a602e07a1
+src\kiln\scheduler\domain\models.py core/RemoveDecorator 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 5b74de36059f47fc9c68f731158932f9
+src\kiln\scheduler\domain\models.py core/RemoveDecorator 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+total jobs: 704
+complete: 704 (100.00%)
+surviving mutants: 239 (33.95%)

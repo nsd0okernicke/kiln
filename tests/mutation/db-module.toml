@@ -1,16 +1,21 @@
-# Mutation testing for db.py — the >=70% baseline tier.
+# Mutation testing for the SQLite queue implementation — the >=70% baseline tier.
 #
-# Separate from pure-modules.toml because db.py's tests hit real SQLite and are therefore
-# slower, and because its bar is the standard baseline rather than the raised one.
+# Separate from pure-modules.toml because these tests hit real SQLite and are therefore slower,
+# and because this tier uses the standard baseline rather than the raised pure-policy bar.
+# `db.py` and `__init__.py` are compatibility/export surfaces; the behavior they expose lives in
+# queue_commands.py, queue_queries.py, queue_storage.py, and sqlite_message_queue.py.
 #
 #   .venv/Scripts/cosmic-ray.exe init tests/mutation/db-module.toml .kiln-mutation/db.sqlite
 #   .venv/Scripts/cosmic-ray.exe exec tests/mutation/db-module.toml .kiln-mutation/db.sqlite
 #   .venv/Scripts/cr-report.exe .kiln-mutation/db.sqlite
 
 [cosmic-ray]
-module-path = "src/kiln/scheduler/infrastructure/persistence/db.py"
+module-path = "src/kiln/scheduler/infrastructure/persistence"
 timeout = 60.0
-excluded-modules = []
+excluded-modules = [
+    "**/__init__.py",
+    "**/db.py",
+]
 test-command = "python -m pytest -x -q tests/integration/kiln/scheduler/infrastructure/persistence/test_db.py tests/integration/kiln/mcp_server/test_channel_server.py"
 
 [cosmic-ray.distributor]

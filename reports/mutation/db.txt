@@ -1,0 +1,1332 @@
+[job-id] 70d206f2f6754af78a5444447d197209
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Add 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 4ebbd006ab7c49d3a35d4adeacab20fc
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Add 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] a160931daca84db59fbb9e6440fa6599
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Add 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 6ca7ceed217d4249b10eb7b59bad035d
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Add 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] ee659712cbd14b50828a61f30233dce1
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Add 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 30818c37e5734ba2bc1638ab18860503
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Add 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1bd63f3eaf804f0f932b168020a7d383
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Add 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 4a39ec1d568d4c5dbc1949169045e209
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Add 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] bb94727bb6654262b1311f0497afebe2
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Sub 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 29cfcb44dba444a0be93fbb2fd913ec0
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Sub 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 85920a4054a74512b3fc9ac0ac2c3cd4
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Sub 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 0e9894e6696d4f59b3d88b4fa98cfb2f
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Sub 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 786bcc5e8456439d97a04916df8f2537
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Sub 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] bda0ec0338a94ffb8fc893088a29154d
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Sub 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 123ea158fe0f437484999b45c84915d3
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Sub 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9038b02cc2d340399b4b0e325963575e
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Sub 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f2f77f16eb9a4fcc945b03d48681fa50
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Mul 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 43ee3859ab3748e4879453b10d424c18
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Mul 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 97b19f933479471e9c7c88ac541054a0
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Mul 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1f6e86e6da49488180abd88312b2d73e
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Mul 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7b5ecafb08054c4e911adba4c4907347
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Mul 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8310973466bc41ffb2e19d0edca3d6f6
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Mul 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7b8c735c5bea44a7abc2f1bb7dd5a080
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Mul 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1a125b810c514dc7a45f76b24279fc37
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Mul 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 225b09d0ccf8427485dcdb21302a01cf
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Div 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 16d889ea848f43e29a9e4bfb65d3afcd
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Div 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] ad6f270fa140439385aa4489db3fb60f
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Div 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 69bcf2d396bb4d89b9c40a34a50e014d
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Div 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 556a184f48214942947f61da077b92f2
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Div 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 3a3599c526064bee9ce8e02a5cd20c46
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Div 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 44d0383dfc00459b91b3c5100693b0d8
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Div 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 6691157db44349cab1ff515818a467f7
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Div 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 94628463455241de9ddfe3e32fc163e7
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_FloorDiv 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 0ae6423a5fb44b489f03b0dbc5cc8745
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_FloorDiv 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 73a735ef626844588787e59c40f54f9b
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_FloorDiv 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 883d1bc05aed457b8676419d463c4cc7
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_FloorDiv 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e4f256574db04f0eb2782cf80a68c569
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_FloorDiv 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b8364de8aacc45b7877fc1a57e199cd6
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_FloorDiv 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 69ab7fc52a4949ae83f0750976087e4b
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_FloorDiv 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 2f36ca55c6874a098bf7b755d89df956
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_FloorDiv 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 36c9cc0023eb4657bc6025b421c163f4
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Mod 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] ff76c8970caa4711b745f3a60098475d
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Mod 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 02b14bc2eac047cbb670c9ed052295c5
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Mod 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 0dc8403c26ee4330828d100a57907502
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Mod 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 65dc60ce6db44d51bd4c8881da2719e0
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Mod 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] d49d9379667643aeb1042c48f1db32df
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Mod 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 6a93bec415d746bd81f7201299360b8d
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Mod 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b1f9c99f724a4481aba8dbf914b3660e
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Mod 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 267eee7e7bb74fb38e2d265238e635c7
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Pow 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 26357237689a4f1385cc9c6cb0894c66
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Pow 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 6acaa8c2ea194104be4777de07164183
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Pow 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 86910db4fcd544b098167acfa648b4a6
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Pow 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 4a70706081824758ad91f0afb2bf3ce8
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Pow 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] cb60e530fe7f4978a8235ae6c36592b0
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Pow 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 80ea2e3b38464f519faca2b09bdbee88
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Pow 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1bb4a9d363bb46ab8bcd811169a2f478
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_Pow 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 5206d7012cf744009b7b8b7ff5cf2067
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_RShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] eefeec904f5044acb7347ca3df586fb1
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_RShift 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 27048dbe9dd843b5af20523169ef867e
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_RShift 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 24fa67985f8a4c52abc5da40b9647532
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_RShift 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7ca28cc3984142778fb8d9ffa86b7098
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_RShift 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] fdcf24e687d44370b8c9f66e03449b77
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_RShift 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 960d54c81f0d48e8984575f2c408d66a
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_RShift 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 35aad7b193b54d92bd388d0d817aaafa
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_RShift 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 6d1d7e90c8354d94b7d082c585508678
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_LShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 57e903aa715e40b6a4a030e1d4929561
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_LShift 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 992c177edefd47d58f4f8764c65560b2
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_LShift 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] edfbca9a6e4642f88176bf6b7634d2e6
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_LShift 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 29dc2be7e99544518a1a4f5e94f10d53
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_LShift 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 01dc1f6b5e9842618974fd052ce7fee7
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_LShift 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 30f4fb26008e4538bc514cbb5a02ad36
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_LShift 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] df468c35e11d46a8b590964cdbff267e
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_LShift 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 37bdd96ab1e848c7a4dc5b3bfbb17fe1
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_BitAnd 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 04404de64b374e9c9f580a0e1217f6ab
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_BitAnd 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9bad9fbf4e6f46f2b88ff47a74dadb41
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_BitAnd 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 99ceed3aa96942ee954ad9089b133920
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_BitAnd 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1fa7489a3b464fb1be676096ada478f5
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_BitAnd 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 08ff35886b5a483d916565b0e5433f6f
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_BitAnd 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 5f3b186342a74672ab0025be023cf4b7
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_BitAnd 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 46c341ba7f9744b49f69bf51ffd21667
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_BitAnd 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 504b8b4e4e3142f08368d7d54c282135
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_BitXor 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f86b9a94345244ab9553b7f4dc0e6b84
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_BitXor 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 2b335155cda845d8a05ae837001d7f90
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_BitXor 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b80bc7475e3d47c493c3f5ded863383e
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_BitXor 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] ea8c7243629544158603e54948ce3d76
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_BitXor 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 0905c7fd91d149cfbd8236bb5a15c7b1
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_BitXor 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e20570a3aa21496da483f0504ce4ddfd
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_BitXor 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] d33a03026b1245b6a472a1fe0dbf4e9d
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/ReplaceBinaryOperator_BitOr_BitXor 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e37aa6556548459e8fb43dde2b291f0b
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/NumberReplacer 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 7aa21fe8917b4e778dfc94fe5c891ce4
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/NumberReplacer 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 88387c286a784e5199736e8dbc3f78f8
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/NumberReplacer 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] fe9ad6b7e2ba4c7aa29578554f18c961
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/NumberReplacer 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 84d0336345884b40911c93f71338108b
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/NumberReplacer 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] a36bbe64ca1e459f8e27c8dc2b679c15
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/NumberReplacer 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 5a6a3615e62545f6b0d9fbf5ad602238
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/NumberReplacer 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 4a3356b8cdab4e599abfbb00f46a9c09
+src\kiln\scheduler\infrastructure\persistence\queue_queries.py core/NumberReplacer 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 66a491b52796432295231eabb3aa6590
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Add 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b0d2fcc912514f44af7b182e55dc1bec
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Add 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 3650876c181a4001b328c7416db51eb7
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Add 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7844753f45474ae0b4f49de0738e16d8
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Add 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f0f7574f99e248efbbf9dedc602b7495
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Sub 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] daf379cfd3c144fbaeebd8820cec09a5
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Sub 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] c03165a3c4b9452893ef3f30ac65eb21
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Sub 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] eaea7957e8374af68c8d99d60d2382f8
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Sub 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] eb1d3fd2141144729a1ad3afde583b4b
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Mul 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 17646613252149b3b5cf6b85d2036c52
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Mul 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 2315be3a2154449cada99ce7d2aeb5e6
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Mul 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] a13d07dfbaef4b03b5d1466a08a6827e
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Mul 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 547b41a6d0f340c3af37a9fd94319527
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Div 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 52098842c1ab454b90709fd1b670a52b
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Div 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] c4b79e8f4a4846d3a0f976624c21692e
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Div 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] a9e8d0cbd3034c5aa9b7ab92772f25ef
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Div 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8a18ef73957244a08542e442953409b9
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_FloorDiv 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8d2df631f8f346dca3f71489e50912f5
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_FloorDiv 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 43bdea59b20247a5bf92d75879dddde2
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_FloorDiv 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] d68417222ac14da1a324aa5706effe12
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_FloorDiv 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1cdde0f1c5104ae8ae74eb69d81abf23
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Mod 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] d4c543ab7f704dd1b705de69acf55c18
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Mod 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 33fb39d9d43842c487b34344228845d9
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Mod 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 6127cc6c093449748bf1aa5bc33c04f6
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Mod 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 26b91a847a704344bae16aaca7b5f8c2
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Pow 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 30d0bd1c552844f885e7e743a402b0d7
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Pow 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 53c77aee09e948a9bdbdffdfe4dfd594
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Pow 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e96d5a8e3e7149f098df3e8cfa515fcd
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_Pow 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 2da97a117c784eb983c08c8b67f42819
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_RShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 6d066b9841a147c895af7566821a0acd
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_RShift 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 75c1fe1ff2da45c7a22a0e5cb1ad8e51
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_RShift 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 925f09e421db41adb1d31afe30e96148
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_RShift 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 440bb44c95e44719a241d0ecf7a40f23
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_LShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 521c8299c6f74b798e63348175472ad2
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_LShift 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] ec13e228e97f4ca3a65c1f8954f2ba5d
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_LShift 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] a62553fcd3d74983a609ed91db8803ac
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_LShift 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9d020e750a8146e19a01d5c07dc502d2
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_BitAnd 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 933023c37ae94bce8e4dc1999e541667
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_BitAnd 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 3874859819544b86813addded94656a0
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_BitAnd 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 35201aaf75da4d488ebc38d1ee028b1a
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_BitAnd 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b5f2b44109ea4f4ba45560bacdde9fc2
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_BitXor 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] ec45d6c647434aed9a4c2e490f90495b
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_BitXor 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] a2b2593b660b4ff990dccdd8d33db9e2
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_BitXor 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f6d2d8b8112d4c1e9261217a1853cb49
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ReplaceBinaryOperator_BitOr_BitXor 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] eabb04bceef64b5aa751a7f6b42d2cd8
+src\kiln\scheduler\infrastructure\persistence\sqlite_message_queue.py core/ExceptionReplacer 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 10b811a9c01d4e5b951db79186314f1f
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Add 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b30a276156bc465c85ea8a5dcc679736
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Add 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 547d49df96094df28be6ab389b50e6eb
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Add 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 108d9acdd90048fcb5bd16039d3a87cf
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Add 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] c2cac2e8b4a24124a9fc1f567aee77bc
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Add 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b52e9e8f068d4aada1ba60b43a3628c5
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Add 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f90175a987d44b5db09ff667250c162d
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Add 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 0d0921b593434796806ebfe192a8312b
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Add 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 0dfce21e9cd240ad8998f8c1fb6e256f
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Add 8
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9952fc760c1a4e32a30a0e5bcdfedf8a
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Add 9
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f529f0c0c84840ac8efe308668972303
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Add 10
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 5f8dc8f04fd2432f9318d86ef850d951
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Add 11
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9892eb54bfe04761a475280b9e98b026
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Add 12
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 3665702a5ae942d0b433783dcdf6319e
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Add 13
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 2666b288ca58454890c237037c361ea4
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Add 14
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 2dc57d830f484fcaa53f60a56d589699
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Add 15
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9787584803f641ca9867a648124da09b
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Add 16
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e0e6dd916d2d4caeaf81d2d2edb00f31
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Add 17
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] de673ee5bbdc4acdbe05c30fe31e33ea
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Add 18
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 18c3af4beffc423fb521c44eb6f3b731
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Add 19
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8513bb547209429d8b8b840323a1b8d0
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Add 20
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b6256f16963e401b9f0d92e367f57ef8
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Add 21
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 25315d4b18a143fd88f51601456ca8f3
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Sub 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] a9e6ff302ee049668d80de4a2291c08c
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Sub 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 117f501ceb8648bbb40ea513cae33695
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Sub 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8ef1b7938b404be58672df7929a32d34
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Sub 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] dfacb210792342dcb84cbe182e111efa
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Sub 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b784ea19aa3548188db8d61817d46aaa
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Sub 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b3ed5df2544047308c0e68165c8d4f2a
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Sub 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7d7d0e6719d74f49b96062f66490dc49
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Sub 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] d45dac5d139847a2a6a98ca74d01fd14
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Sub 8
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 71a1f360ac794f9d8ef58f1f764b96fc
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Sub 9
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 69de7f05bec84f83a2bd3f7ca59cfab7
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Sub 10
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 04783931075d4a4ba7b4dea5aa2a87c6
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Sub 11
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 279bd46aa678436fb284bc9b80223755
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Sub 12
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8926c07a8ce64fe39df15c37720aa3a8
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Sub 13
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 80ef02d963264e20900993037dda8ab6
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Sub 14
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f0e059f4d01f408c89fa32a9fb000e4d
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Sub 15
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] c67e385476b94618bca38c1457621218
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Sub 16
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 23fafb63ba5047c39884a991f6b1640c
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Sub 17
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 037a3d25f47547ac8d2da7d5114e94a3
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Sub 18
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] d7d7db762d4a4c3b86ad38bc91d5a7d7
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Sub 19
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 255f154e8a3f4ef78211c9a1965eaeb7
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Sub 20
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 0807a14ac23b4542a84c98ea7abb711d
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Sub 21
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 2d3263aeced64530a87b08b8a0da0a2c
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mul 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b81a2427da3a444a94c369af4a29a500
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mul 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 14a2032ab5c54312866b6134d6ecb107
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mul 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1350aa79dbdc4a05b07d07674e316548
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mul 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] cea0bfca52a3427b8f910f40bcf6d69a
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mul 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 85c22a5802604854b9ade1d64d58850c
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mul 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 07cb960b1c8b435694d1d42a84ed8dcb
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mul 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 2c1ec3c472184330b4b634bece7b4a80
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mul 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9067941882614177ab88cdcf365d3db7
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mul 8
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9429ba898e0f4c38868ce573d5a4f44d
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mul 9
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1af69b6d0b0b48df8fbfed7fd6ffba03
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mul 10
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 845eeb06d6684bbc8f22d954526ef850
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mul 11
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e7afabad07c246aa987e38c39a496d84
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mul 12
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 4fb6666785b84f6fb9bcc8dd380e3dcf
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mul 13
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] d7e2779d7342488caf0b8ddf74ef07c3
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mul 14
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 73ea0254a1884433b41a18ebd2fe3af7
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mul 15
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 263ef68b4c88455ab3b80c196651816c
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mul 16
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] ef75d587a61b46089d30390997424330
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mul 17
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 2a58e338081e497fb9524ff8a39d3078
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mul 18
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] c735fbcf11184f72b96e3ec31cfc6bc1
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mul 19
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 6fe15c0a3e7d40a7ad5fb771408543dc
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mul 20
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 911cdbad2c6d4a47a29d3cbfe8660283
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mul 21
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b7785e032aef41a3ab2e5cfaa13923f0
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Div 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8e163c060e38402fac8ccb376dddc9fd
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Div 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1bf22049896b4a99bea3059f6b516d2d
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Div 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 294f2b52b28c4f3a84eda74080a0f7b3
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Div 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 6ba45783a29b44d6819857c49e3b1bd2
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Div 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f38f65767fa9448f9ff0313f6f3a2c53
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Div 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7333ef0155614613a1cfdc52b81b044e
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Div 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 08185016d556429b981fc827745ad135
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Div 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 64dc1b3d43224b53a5058f3a3b78c14d
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Div 8
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] a25a136f250940d883cd65f006fa7f32
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Div 9
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] fc56396a63e64f20bf6c8f1ee4c7f354
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Div 10
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 02b0ee20d7d74725a0b8440285400de1
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Div 11
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b7808aa8d3114743976b750a6686b773
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Div 12
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 5d948fdca3974daca802a08cb4599846
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Div 13
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 99ee030cb30c437e90f8ceece6e41ca0
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Div 14
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f44a095d1654439686f8cfcdfb10e845
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Div 15
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 4ceece3c650a477490760d0bf63a7251
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Div 16
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8bc2823390d044dc813be4ed0264d4f1
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Div 17
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 3a547f3f21df488ba4a404c781b4cdda
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Div 18
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9718a98674ea4cd09d96fe48a8d58f5a
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Div 19
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 4ab6166dd48e42b18f2651f64b023073
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Div 20
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 16be2eeaf3b549f98e2a0f0149524917
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Div 21
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] df9578d62d694082b54f61d5a6ece9bd
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_FloorDiv 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 5c4fadebe4f2430b92977f6314df986f
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_FloorDiv 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7e0eef11947f44d18a4ab003d193f31d
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_FloorDiv 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] add35a5f2d1847ce8a0da803f067cd48
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_FloorDiv 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 745cfaca122c45baa37a4552419bdef1
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_FloorDiv 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 6696ee91836c4e6d97b866c6da5f3c70
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_FloorDiv 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7b0b6387d9bc482890c0ca4b9aba5c18
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_FloorDiv 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8ff0ae5d16ba4243a1aa478183061b69
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_FloorDiv 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 865ff61c18b94450ba173e569f7a74b2
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_FloorDiv 8
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 95bd9a035a4346749043a54f43ddb7d6
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_FloorDiv 9
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1a4fa0a499534edeb4e4eb5b5f47de8b
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_FloorDiv 10
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 3a7169971fe24dcca3850f852c26d183
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_FloorDiv 11
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 59957034028d4ddb8ea30508c4f6baa2
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_FloorDiv 12
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 75e38e4f6e7b461090ff1da2caae5552
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_FloorDiv 13
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 46a9065973e04f7398d056c113171765
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_FloorDiv 14
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e3a400b0b5f7469a9c9fb3499a20583a
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_FloorDiv 15
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1a5ad21bb5bb411593f3a1d84e43d5c6
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_FloorDiv 16
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] ec1f75e781cd4f3b88b738815fe4227b
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_FloorDiv 17
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] ebb59a0389124829b5ee02caaff3715f
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_FloorDiv 18
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 6a59451c0120474b8a4f8b897eb9e7c8
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_FloorDiv 19
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 20522e959b9544c293934d6641ad4634
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_FloorDiv 20
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 46cf88040e80491bbfe63d00d1811942
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_FloorDiv 21
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7d1e6a0a82084baa9879c02e5dca97e3
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mod 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 856083f0a890417c8e55fe79972f12c0
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mod 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] d2939f74febf4010907b90c0726e4c2f
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mod 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 730c7c9c0dcf4298b2d2099411a3d15e
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mod 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b72148ba64b94d9796eefab18686f0c4
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mod 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 66753d7843824b1ea0a5ba9190321274
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mod 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 2d84c8096c594c51bd127f1b054b0be7
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mod 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 2b20b40e3a8c471e9e3697e298f45795
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mod 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1b8c5b6109e1409f965629032fd711a5
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mod 8
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] bd7d7bf00003481dbb7799dd0e11906f
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mod 9
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 6b5e9ad52a0c4f18933f7babdd639ef2
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mod 10
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 956d15928a2c438888572850407d2b86
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mod 11
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b121efc79d24401cae4b94054444079c
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mod 12
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] dec012cbdbed49fe9fa6eb2a8178eab5
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mod 13
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9fc62a35cfc7499dbd71080052cbd624
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mod 14
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] a5e7655c263740248c854dcc96373189
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mod 15
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7b630fb2c48047299026ff587cea55c8
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mod 16
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f3f95034fdfc47cba5f9c1b5b6f54881
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mod 17
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 29aef99cca8c4bb8a01bb5c8c0c34004
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mod 18
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 63c2be5f0fd7401c84fd385067afb7fe
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mod 19
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 89db611cf31f4d308003157be830b99a
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mod 20
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 19da822bbf6d431e8c15b24dbe204c65
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Mod 21
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9b03998ff7d5418082a6e75a69849edb
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Pow 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1cb0d30e8b7343109780cd979f966317
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Pow 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1f2556abbfdd428dbe0b7bc23a2952f1
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Pow 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f7c75fb8361642569a90aa5ed87a7d3e
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Pow 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] fb5e7c3118fd46cb951a7baa58461302
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Pow 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] dcda29cebd684d7bb2b76ebe4887f592
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Pow 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1e65323488cd4ed0821442da906fd49e
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Pow 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 95f37949094448d2a2f08838c98123e0
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Pow 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9b1cd93dbc014282a11547b10baf2cea
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Pow 8
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 889c49aa01594b47a09187b1903616f4
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Pow 9
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] da356269a441483882f0219dd07696a4
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Pow 10
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 82f9178d84e54f049b808b1ab7c9e0b9
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Pow 11
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 68376fe7ea76463cbe1291fa3a82f8c9
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Pow 12
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] bce2f1fc1bd742f1adf131982a7bc09d
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Pow 13
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e279960b80544a34a8e6d946abaeba5c
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Pow 14
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 67634e3c29d34694a292a1dbcbaca0d7
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Pow 15
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 31e1ac57df0f4089a2d00adab11dd903
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Pow 16
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1b66daadd5064f3f90e699d17ccbdd1f
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Pow 17
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b4a1629e7e444841959d8c70f184f07e
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Pow 18
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] adf305950a9c4969ba2dc3f564f5f5e8
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Pow 19
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 4e2828de0287424f8f2911bd180b750c
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Pow 20
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 66dec5b696694f7e9bd98bf8e0960882
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_Pow 21
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 2ecba812b3b64c009cb59f2642d2e7fa
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_RShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 797ced4629c5418786d0391954c1171b
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_RShift 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] ecf3d218b515457a81882d803582d12e
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_RShift 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 941b499d01644e54b4395a346ba435d0
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_RShift 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] db3ad625bbbe447a9112760b6df620a2
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_RShift 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 34488f31534d4b6bafc84dd388c6a947
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_RShift 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7888caa2d42941598efdf69977f0fbb6
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_RShift 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] a44386edb8b949eea18736aad43e0fc3
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_RShift 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8c7d366768874810916f5ae7db475c14
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_RShift 8
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] fe21263e00e7488d8afc0bb9ec5323ea
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_RShift 9
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9346f383c5b947479ff3c0df6874f79b
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_RShift 10
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] dc953e40c6a9408a9b76d7035d235b71
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_RShift 11
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 27938830ebbe4938a436402073bd6aa1
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_RShift 12
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 6dad1955846248d8b997fc63d2c3d67d
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_RShift 13
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 965457692dde4e92a972b04d8c0c0d9f
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_RShift 14
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 09d03ea75d3140fcb81e42bb357ed0fc
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_RShift 15
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 950192f70ba34f8c968ebb9e49fafc08
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_RShift 16
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 2c748ddac1e6473bb469172e25b1dd41
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_RShift 17
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 27a444bcb8c740a390b7a6182644d240
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_RShift 18
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 23db7a27c6834822874e957daddd7414
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_RShift 19
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 18b4aaffeb864cd1a94611e8a88cce05
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_RShift 20
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 17c32a8d28104108adafb105f3097cd0
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_RShift 21
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] af173a2a66a54ee79101de74814e298a
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_LShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b5b690d05bdf44479d6eadfc994eda5f
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_LShift 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b2df08cca69142d19a1d0d4bbc00de75
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_LShift 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 559612e7416a479397e1700babce97a0
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_LShift 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 68096142a6e9415288101745beaa5b98
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_LShift 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] bd13a0335c30434fa11cc0e3f43b93f4
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_LShift 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 4592de9d63c04594bf37eeb82d405f2a
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_LShift 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 873a782237204be1895dc233077dabe1
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_LShift 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e5ed9f26388f4a7086d5142ad255d525
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_LShift 8
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] bc79ea31059746448919b183e1d4258b
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_LShift 9
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9f36f6d942ed406fa239657926ebc4a0
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_LShift 10
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9698b513c2b5456a8eb5603376b5cc61
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_LShift 11
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 5d59d925a1274aa2a07419eb3d88a0eb
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_LShift 12
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 851745659a0443389466cd9107240af0
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_LShift 13
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 04b308f67a89489e95fa6dd686786bf9
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_LShift 14
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e792822d28274bad9ea8ba4be01fd263
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_LShift 15
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 608b3bf909164973aba9a3d9c6c43d90
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_LShift 16
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 53e588fc6c414c4499d8da5f1a7b3ca1
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_LShift 17
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9b6315d302f94f279419498ce65d6b7e
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_LShift 18
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1409eb01d88a40f09a0dce8937bdf5a1
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_LShift 19
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 0c87da7dc7b049fa87f7398ddbd55722
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_LShift 20
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 2eceb302073e4495a1e5146e23db75cd
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_LShift 21
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b328ea23e26e4a5f8e039829ed6e7a56
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitAnd 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 95e4891b4cba4741af01c3cb278722b3
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitAnd 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 68aef58ee2d1460d92180818440fb1b8
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitAnd 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] ae4323d778d14dd29d6d76027b214164
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitAnd 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] f076e07e7b824a88a77c4390c2068606
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitAnd 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] d4cb289a268e4239b27ba3a3e07ee509
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitAnd 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 87d63af86b394161892e03496e107f38
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitAnd 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9dad81d426194ce799af9894db5d7e67
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitAnd 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] ca239e43f618496e82e8aac0fc701370
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitAnd 8
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8f015df1abca4dcb8249c532fcdab182
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitAnd 9
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7017e75cb6bc48f9a36c94ebefefa25f
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitAnd 10
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 72fb8243292d4289893dccc0bb423e36
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitAnd 11
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e5f188191cd04c2394d5a71b71a2b9ca
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitAnd 12
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 70a7bccdac1a4946af202b549f2ef92d
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitAnd 13
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e3c3d95062e34c5bafda77c18194b9ae
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitAnd 14
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7a4bad64335a43cf983602fe915ca32a
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitAnd 15
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] a8b2895bff1840c4b9303e511c0bcc18
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitAnd 16
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] cbc53b3fbe254ddc8d7eb0cad9af90f9
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitAnd 17
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 54d478a6c5bc4c79a570202db76364b3
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitAnd 18
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 4cd71f90364c42f6b774578e48652d58
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitAnd 19
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8d98a6fbd14845a5a1addd7d1096fce5
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitAnd 20
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 5d1e460809184f37af28e063c762908d
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitAnd 21
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b7d0c07b15644009afcfda1647929523
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitXor 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e7e0f5d6dfd14e7eb8e25075986b6e48
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitXor 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 43fe5e94ee08430f9b9ececaa9c02894
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitXor 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] cbb3af0d62da406e91f112c794e9c239
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitXor 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 58b46e23102949ec850b5b932fb41e26
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitXor 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 261c1e199e0d4323a5dbc5a46a63fe6e
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitXor 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] dfac4e4454884d9fb44bf44ed9c13caf
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitXor 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 70cde9bcc4ac4a1d894de505f175219b
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitXor 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 60b93f4531b3407892863e55664bca12
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitXor 8
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] a32ea140af3e414f896c65f648fae653
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitXor 9
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 19b4876ff0d440b7be33f251e7ac6cd1
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitXor 10
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 2fdfb1fd553c4a579a8cbf1693b7af39
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitXor 11
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 4d714bb929264953bd90e1eb440e01b6
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitXor 12
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b6d2710a42634cd6ba253e2882457fdf
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitXor 13
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 200eb5a876814f19941f3fd3125896c1
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitXor 14
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 6584d279fbe24e39b4abab4102d4397a
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitXor 15
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 40fb8176187649fb9d64f2cab7c0d368
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitXor 16
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] fc949cb2528b4f5791248b14d2c86bb2
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitXor 17
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] a1ee96bec5984727b6c8b6c5618ceecc
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitXor 18
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] c0dd0e01cfea45daa6f58c06012c9d5e
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitXor 19
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] fa3d9231081c468c803edf8eafa35f1d
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitXor 20
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 96f76bdd3510414492fc954e4031a65d
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceBinaryOperator_BitOr_BitXor 21
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8a912a0e1e3947bba0b5c8beb922cc10
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceComparisonOperator_Gt_Eq 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 78afaf9f3aaf45b494504fa4dac8aac7
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceComparisonOperator_Gt_Eq 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 5a70deacc2ed4a4ca4ab1766157b68c7
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceComparisonOperator_Gt_NotEq 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 59ad9f59ec824c2fa8aff54eb9e70b66
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceComparisonOperator_Gt_NotEq 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e6bcf49a73674c7cb12b2016f683e694
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceComparisonOperator_Gt_Lt 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 5c7b917868db4ff38626f656c3b5cf2c
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceComparisonOperator_Gt_Lt 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 00cd3e10c3564e348d76e69738574be5
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceComparisonOperator_Gt_LtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 09407134042a476ebf92caee3bc2b632
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceComparisonOperator_Gt_LtE 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 3454ddcb975f4a8b800845b690788292
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceComparisonOperator_Gt_GtE 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 617f0fe98c264799aa4f7ed1152d3954
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceComparisonOperator_Gt_GtE 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 2d3d6982b9b546429cca2078b09fe332
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceComparisonOperator_Is_IsNot 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 7bd9baa8182e48bc97edd7c5637a61da
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceComparisonOperator_Is_IsNot 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 3731cd1d0dfb41b09856166ca0855bd4
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceComparisonOperator_Is_IsNot 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 90ebf6a7a02a44758df4ced2f4f18120
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceComparisonOperator_IsNot_Is 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 61159824d06742bcbbe40513742e15c7
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceUnaryOperator_Delete_Not 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 71b63e6faed7456a936468bbcf25c16e
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceUnaryOperator_Delete_Not 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] b79a794392a04d3b90f48a9a9407f6b9
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceUnaryOperator_Delete_Not 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 11f44bba03c74e779f8981cd4f0051cf
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/AddNot 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8e605479567c4676bccfc990fbecea65
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/AddNot 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] b3515736b11e4975bb66303f22517281
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/AddNot 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 01b4cf61556746c5a508a50a50a74647
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/AddNot 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] fb20b84d3527454ebb5b3785d96250ca
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/AddNot 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] dddaea2e974949a5b1e97a8892949739
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/AddNot 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 697a3b88ca4c4b328d9d4d87bdc30ee1
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/AddNot 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 4db411b25d7c48f7a693035d9f584912
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/AddNot 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 0f05c3b1307a4d2fb1316beb7373edec
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/AddNot 8
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] deb30ad3fd204a2e8550607fbeabe94e
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/AddNot 9
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 72178455a5564aa29b74b771085d6a70
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/AddNot 10
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] a0cb8a9d177f4e139721d1b7d524fd49
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/AddNot 11
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 2fd69dcfcf024ad49df932678785038b
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/AddNot 12
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b38b303f9a974f92b897b7695be9692c
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceTrueWithFalse 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 76143f7208ea46c89f85b1e539865cd3
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceFalseWithTrue 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] f371837acf514ac4900418df7f875e6c
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceFalseWithTrue 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b9de3a24358f40578961a36983182746
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceFalseWithTrue 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] d4f1f80c52f14b848f0704427857dbb0
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceFalseWithTrue 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 97c01372c24e4396a1ac87d862a4fcfd
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceFalseWithTrue 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] ff81666dc5a94dd3bf9f5fb09989c677
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceFalseWithTrue 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1c917f6deb544491a997a030d21fc860
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceFalseWithTrue 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 0acda0fa1efa460d91016101c58b3272
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ReplaceOrWithAnd 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 379541533e9a4365873f8da5e1efece6
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ExceptionReplacer 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 8da5286a401d4c7aa1152b6f6080ed00
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/ExceptionReplacer 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 1a62b2b908b54ac8bb380186065739ee
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/NumberReplacer 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 7c53866ef039424b9fe7192a74cea340
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/NumberReplacer 1
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 4534fce0cbb94dabb97eb8944e07583b
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/NumberReplacer 2
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 2129d20f58514e0a8ec4dcef836ee4f6
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/NumberReplacer 3
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 52df9877e6c748a5b08ad38643fb438c
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/NumberReplacer 4
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.KILLED
+[job-id] 761ed23a4a6840adbf62c9be1859011c
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/NumberReplacer 5
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 3fbd0bdf30ff444fab30ff9b9b8e5cc4
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/NumberReplacer 6
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.INCOMPETENT
+[job-id] 5e05c9e4a56c4b0da05c9e4ec4939c5a
+src\kiln\scheduler\infrastructure\persistence\queue_commands.py core/NumberReplacer 7
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 9015535a1bb74cf8b5c5efd1dc2fb783
+src\kiln\scheduler\infrastructure\persistence\queue_storage.py core/ReplaceBinaryOperator_BitOr_Add 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] ae035308c69940929e0308849708be5c
+src\kiln\scheduler\infrastructure\persistence\queue_storage.py core/ReplaceBinaryOperator_BitOr_Sub 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b4dc5e218f9b4ca3965769cdeb5dc573
+src\kiln\scheduler\infrastructure\persistence\queue_storage.py core/ReplaceBinaryOperator_BitOr_Mul 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] b7cf5eb49469461ba38ab0af70a66369
+src\kiln\scheduler\infrastructure\persistence\queue_storage.py core/ReplaceBinaryOperator_BitOr_Div 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 394de64bdc1b436dbca12cd85cbd4686
+src\kiln\scheduler\infrastructure\persistence\queue_storage.py core/ReplaceBinaryOperator_BitOr_FloorDiv 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] d3822108730c4c7ebad9578d90d3cb51
+src\kiln\scheduler\infrastructure\persistence\queue_storage.py core/ReplaceBinaryOperator_BitOr_Mod 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e14d5c74932a41c69ee2acd3714b0291
+src\kiln\scheduler\infrastructure\persistence\queue_storage.py core/ReplaceBinaryOperator_BitOr_Pow 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 948aebe33fe846b49ce6004ae8fd7091
+src\kiln\scheduler\infrastructure\persistence\queue_storage.py core/ReplaceBinaryOperator_BitOr_RShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 19a7d15138144f409bc0bac5f1e5b339
+src\kiln\scheduler\infrastructure\persistence\queue_storage.py core/ReplaceBinaryOperator_BitOr_LShift 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] 348eccee9a7f44cea59528031ef95d4c
+src\kiln\scheduler\infrastructure\persistence\queue_storage.py core/ReplaceBinaryOperator_BitOr_BitAnd 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+[job-id] e37b865a8a07452383ff27994660c912
+src\kiln\scheduler\infrastructure\persistence\queue_storage.py core/ReplaceBinaryOperator_BitOr_BitXor 0
+worker outcome: WorkerOutcome.NORMAL, test outcome: TestOutcome.SURVIVED
+total jobs: 443
+complete: 443 (100.00%)
+surviving mutants: 413 (93.23%)
