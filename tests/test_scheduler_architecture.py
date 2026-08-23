@@ -1,6 +1,6 @@
 """Characterization tests for the scheduler's domain and port boundaries."""
 
-from scheduler import db, policies
+from scheduler import db, policies, queue_queries
 from scheduler.adapters import WorkerInvocation as LegacyWorkerInvocation
 from scheduler.infrastructure import (
     CallableWorkerRunner,
@@ -84,3 +84,8 @@ def test_file_debug_sink_owns_diagnostic_persistence(tmp_path):
 
 def test_adapter_package_keeps_worker_invocation_compatibility_export():
     assert LegacyWorkerInvocation is WorkerInvocation
+
+
+def test_db_keeps_read_projection_compatibility_exports():
+    assert db.recent_messages is queue_queries.recent_messages
+    assert db.count_work_item_arrivals is queue_queries.count_work_item_arrivals

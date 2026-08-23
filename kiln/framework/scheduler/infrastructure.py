@@ -14,6 +14,7 @@ from .models import (
     WorkerInvocation,
     WorkerRequest,
 )
+from .queue_queries import count_work_item_arrivals
 
 log = logging.getLogger(__name__)
 
@@ -70,7 +71,7 @@ class SQLiteMessageQueue:
         return db.mark_failed(self.path, message_id, error)
 
     def count_arrivals(self, work_item: str, branch: str, target: str) -> int:
-        return db.count_work_item_arrivals(self.path, work_item, branch, target)
+        return count_work_item_arrivals(self.path, work_item, branch, target)
 
     def insert(
         self,

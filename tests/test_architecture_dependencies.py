@@ -75,6 +75,12 @@ def test_scheduler_models_do_not_import_adapters_or_infrastructure():
     }
 
 
+def test_queue_projections_do_not_depend_on_commands_or_application():
+    path = ROOT / "scheduler" / "queue_queries.py"
+    assert not imports(path) & {"application", "db", "infrastructure"}
+    assert "commit" not in called_attributes(path)
+
+
 def test_cockpit_state_projection_does_not_depend_on_http_server():
     assert "server" not in imports(ROOT / "cockpit" / "state.py")
 
