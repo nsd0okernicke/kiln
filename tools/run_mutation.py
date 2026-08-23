@@ -32,6 +32,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("tier", choices=TIERS)
     parser.add_argument("--init-only", action="store_true")
+    parser.add_argument(
+        "--reuse",
+        action="store_true",
+        help="reuse an existing session to resume it; fresh enumeration is the default",
+    )
     args = parser.parse_args(argv)
     sessions = ROOT / ".kiln-mutation"
     reports = ROOT / "reports" / "mutation"
@@ -39,6 +44,8 @@ def main(argv: list[str] | None = None) -> int:
     reports.mkdir(parents=True, exist_ok=True)
     session = sessions / f"{args.tier}.sqlite"
     config = TIERS[args.tier]
+    if session.is_file() and not args.reuse:
+        session.unlink()
     if not session.is_file():
         code = subprocess.run(
             [executable("cosmic-ray"), "init", str(config), str(session)],

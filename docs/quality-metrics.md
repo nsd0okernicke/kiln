@@ -36,6 +36,17 @@ The deterministic run creates:
 - a lightweight identical-function duplication signal;
 - reproducibility metadata.
 
+Pytest discovers three complementary suites by default:
+
+- `tests/unit/` contains fixed examples and regression cases;
+- `tests/property/` contains Hypothesis-generated invariants and mirrors `src/kiln/`;
+- `tests/integration/` exercises deterministic local boundaries.
+
+Property modules use the `test_<subject>_properties.py` suffix so they can be collected in the
+same run as same-subject unit and integration modules. Property testing is a generation method,
+not a coverage target: use it for algebra, round-trips, normalization, bounds, monotonicity and
+other stable invariants rather than wrapping every orchestration path in arbitrary data.
+
 The cockpit, live agent CLIs, authenticated backends, and terminal emulators are not prerequisites.
 Tests marked `integration` still use only deterministic local SQLite, Git, filesystem, and HTTP.
 
@@ -50,9 +61,15 @@ python -m tools.run_mutation pure
 python -m tools.run_mutation db
 ```
 
+Each command starts with a fresh enumeration so changed source or configuration cannot silently
+reuse stale mutants. Pass `--reuse` only to resume an interrupted session. Existing reports remain
+under `reports/mutation/` until a completed run replaces them.
+
 Mutation is slower and stays on-demand/nightly until its accepted baseline is known.
-Use `--init-only` to enumerate a tier without executing it; the initial pure tier contains 2,085
-mutants and is intentionally not part of the ordinary deterministic command.
+Use `--init-only` to enumerate a tier without executing it. Mutant counts are recorded in the
+accepted baseline after enumeration rather than hardcoded here, because they change whenever
+the domain or Cosmic Ray configuration changes. Mutation remains intentionally outside the
+ordinary deterministic command.
 
 ## Policy
 

@@ -118,7 +118,8 @@ my-project/
 │       ├── constitution/
 │       │   ├── workflow.md           # Handoff protocol
 │       │   ├── engineering.md        # Engineering practices & quality standards
-│       │   └── project.md            # Project-specific rules (language, architecture, constraints)
+│       │   ├── project.md            # Project-specific architecture and constraints
+│       │   └── skill-orchestration.md # Quality-gate ownership between roles
 │       ├── roles/                    # Role definitions for your agents
 │       │   ├── specifier.md
 │       │   ├── coder.md
@@ -138,7 +139,7 @@ my-project/
 │   ├── architect/
 │   └── ...
 ├── .claude/                      # Claude Code configuration
-│   ├── settings.json             # MCP and permission settings
+│   ├── settings.json             # Claude permissions and status hooks
 │   └── .gitignore
 ├── .mcp.json                     # MCP server configuration (kiln-db + kiln-channel, for Claude agents)
 ├── .gitignore                    # Git exclusions
@@ -214,57 +215,46 @@ kiln/
 │   └── kiln-db.ps1               # Inspect/manage messages.db (Windows only)
 │
 ├── src/kiln/                     # Installable Python package; never copied into projects
-│   ├── resources/project/        # Scaffold source copied to a new project's kiln/project/
-│   │   ├── constitution.md
-│   │   ├── constitution/         # Shared constitution rules
-│   │   ├── roles/                # Role prompts
-│   │   └── skills/               # Agent skills
-│   ├── launcher/                 # Process/worktree/profile orchestration
-│       │   ├── cli.py                    # Argument parsing and the launch sequence
-│       │   ├── config.py                 # Profile loading, inheritance, validation
-│       │   ├── paths.py                  # Every path Kiln touches, in one place
-│       │   ├── commands.py               # The command injected into each pane
-│       │   ├── generate.py               # CLAUDE.md / AGENTS.md / .mcp.json / worker files
-│       │   ├── templates.py              # Loads templates/constitution/roles, fills placeholders
-│       │   ├── workspace.py              # gitignore, hooks, worktrees, skills
-│       │   ├── scaffold.py               # `init` project scaffolding
-│       │   ├── stop.py                   # `--stop` process teardown
-│       │   └── terminals/                # One module per backend
-│       │       ├── wezterm.py                # Generates the Lua config; WezTerm builds the panes
-│       │       ├── windows_terminal.py       # Builds `wt.exe` argument lists
-│       │       └── tmux.py                   # new-session / send-keys
-│   ├── scheduler/                # Hexagonal scheduler
-│       │   ├── domain/                   # Models, policies, routing and handoff rules
-│       │   ├── application/
-│       │   │   ├── ports/                # Contracts required by application use cases
-│       │   │   └── use_cases/            # Scheduler orchestration
-│       │   ├── infrastructure/
-│       │   │   ├── persistence/          # SQLite queue implementation
-│       │   │   ├── vcs/                  # Git worktree implementation
-│       │   │   ├── agents/               # Claude, Codex, Copilot and Grok adapters
-│       │   │   ├── terminal/             # Pane status presentation
-│       │   │   └── diagnostics/          # Verification and worker debug output
-│       │       └── cli/                  # Scheduler, inbox, dashboard, send and retry CLIs
+│   ├── launcher/                 # Launching and workspace orchestration
+│   │   ├── domain/               # Profiles and the canonical path model
+│   │   ├── application/          # Command and generated-file use cases
+│   │   └── infrastructure/       # CLI, scaffolding, Git workspace and terminals
+│   ├── scheduler/                # Deterministic worker cycle
+│   │   ├── domain/               # Models, policies, routing, handoffs and reports
+│   │   ├── application/          # Use cases and their required ports
+│   │   └── infrastructure/       # Agents, CLI, SQLite, Git, diagnostics and terminal UI
 │   ├── cockpit/                  # Browser-based swarm operations
-│   ├── proxy/                    # Opt-in traffic capture (`--proxy`, see "Traffic Capture")
-│       │   ├── server.py                 # Forwarding proxy; streams through, never buffers
-│       │   └── capture.py                # Redaction, composition split, traffic.db schema
-│   ├── mcp_server/               # kiln-channel: blocking wait_for_message() receiver
-│   └── resources/
-│       ├── profiles.json             # Default configuration profiles
-│       ├── templates/                # Loop/runtime templates for wrapper-mode roles
-│       └── tools/                    # Re-seeded into .kiln/tools/ every launch
+│   │   ├── application/          # Actions and state projections
+│   │   └── infrastructure/       # Action gateway and HTTP/static UI
+│   ├── proxy/                    # Opt-in traffic capture (`--proxy`)
+│   │   ├── domain/               # Redaction, capture and usage rules
+│   │   └── infrastructure/       # Streaming HTTP proxy and traffic persistence
+│   ├── mcp_server/               # kiln-channel MCP transport boundary
+│   └── resources/                # Packaged, framework-owned runtime data
+│       ├── claude/               # Claude settings copied during generation
+│       ├── project/              # Scaffold copied to a project's kiln/project/
+│       │   ├── constitution/     # Shared project rules
+│       │   ├── roles/            # Role prompts
+│       │   └── skills/           # Agent skills
+│       ├── templates/            # Loop/runtime templates for wrapper-mode roles
+│       ├── tools/                # Re-seeded into .kiln/tools/ every launch
+│       └── profiles.json         # Default swarm profiles
 │
 ├── examples/                     # Example project briefs
 ├── tests/
-│   ├── unit/kiln/               # Fast tests mirroring src/kiln/
-│   ├── integration/kiln/        # Real SQLite, Git, subprocess and HTTP adapters
-│   ├── conftest.py              # Shared fixtures
-│   └── mutation/                # Cosmic Ray configurations
+│   ├── unit/kiln/                # Fast example-based tests mirroring src/kiln/
+│   ├── property/kiln/            # Hypothesis invariants mirroring src/kiln/
+│   ├── integration/kiln/         # SQLite, Git, subprocess and local HTTP boundaries
+│   └── mutation/                 # Cosmic Ray configurations
+├── tools/                        # Quality and mutation report runners
 └── docs/                         # Documentation & assets
 ```
 
-**`bin/`** holds entry points. The two `kiln` scripts are shims with no logic in them; the rest are standalone utilities that were never part of the kiln.launcher. **`src/kiln/launcher/` and `src/kiln/scheduler/`** are the actual implementation. **`src/kiln/resources/project/`** is the bundled scaffold copied to a generated project's editable **`kiln/project/`** directory. Runtime implementation is read directly from the install.
+**`bin/`** holds shell entry points. The two `kiln` scripts are shims with no business logic;
+the installable implementation is under **`src/kiln/`**. Each feature keeps its own domain,
+application and infrastructure layers where those distinctions are useful. Shared packaged data
+lives under **`src/kiln/resources/`**; its **`project/`** subtree is copied to a generated
+project's editable **`kiln/project/`** directory. Runtime implementation is read from the install.
 
 > The pre-port implementation lived in `lib/` as parallel PowerShell and shell trees
 > (`profile-loader.{ps1,sh}`, `terminal-adapter.sh`, `terminal-adapters/*`). Those are deleted;
@@ -1570,7 +1560,7 @@ addressable, which is what lets you send it back rather than starting over.
 
 ```bash
 kiln retry                                   # list what failed, and why
-kiln retry 4f3a91c2 --guidance "the fixtures live in tests/conftest.py"
+kiln retry 4f3a91c2 --guidance "the fixtures live beside the unit tests"
 ```
 
 The **same message** goes back to the **same role**, so the work item, its lap count and its
@@ -2425,7 +2415,7 @@ under **Kiln v0.3 — Phase 7** above.
   delegation are structurally identical on every platform, and what remains platform-specific
   is only the terminal backend. That was the theory; the Python port had never once been
   *executed* on Linux. The first real run (Ubuntu 24.04 on WSL2) found the theory broadly
-  sound — the full suite passes (932 passed, 3 Windows-console tests skipped) and worktrees,
+  sound — the then-current full suite passed, and worktrees,
   real symlinks, git hooks, the tmux backend and `--stop` all work — but it also found six
   defects that only a real run could surface:
   - `bin/*.sh` were not executable (mode `100644`), so the documented `./bin/kiln.sh .` died

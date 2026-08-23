@@ -127,6 +127,20 @@ Every worker is isolated — no `Agent` tool, no MCP messaging tools, only file 
 
 ---
 
+## Code Architecture & Quality
+
+- Feature packages live under `src/kiln/{launcher,scheduler,cockpit,proxy}`
+- Each feature uses **domain → application → infrastructure** boundaries where applicable;
+  dependencies point inward and empty ceremonial layers are avoided
+- Framework-owned profiles, templates, Claude settings, tools and the project scaffold are
+  packaged under `src/kiln/resources/`
+- Tests mirror the package in three suites: **unit**, **property** (Hypothesis invariants) and
+  deterministic **integration** tests
+- Coverage, branch coverage, complexity, CRAP, typing and duplication are reported together;
+  Cosmic Ray mutation tiers remain an explicit long-running/nightly gate
+
+---
+
 ## Status & Known Limits
 
 - **Windows**: live-validated — 8+ full cycles, zero stalls or message loss

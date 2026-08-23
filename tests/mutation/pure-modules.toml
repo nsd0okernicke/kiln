@@ -1,4 +1,4 @@
-# Mutation testing for the decision-heavy pure modules (routing + status contract).
+# Mutation testing for the scheduler's decision-heavy domain modules.
 #
 # Kept separate from db.py's config because these carry the higher bar: a wrong routing or
 # sentinel decision misroutes a whole swarm cycle, so they target >=80% killed rather than
@@ -13,19 +13,14 @@
 # mutmut refuses to run on native Windows (it requires WSL); cosmic-ray is Windows-native.
 
 [cosmic-ray]
-module-path = "src/kiln/scheduler"
+module-path = "src/kiln/scheduler/domain"
 timeout = 60.0
-# The I/O-bound modules are excluded here: their tests drive real git and SQLite, so a
-# whole-module mutation run costs hours rather than minutes. They are covered by
-# db-module.toml and (for the scheduler) tracked separately.
 excluded-modules = [
-    "**/db.py",
-    "**/git_ops.py",
-    "**/role_scheduler.py",
-    "**/adapters/*.py",
     "**/__init__.py",
 ]
-test-command = "python -m pytest -x -q tests/unit/kiln/scheduler/domain"
+# Fixed regressions and generated invariants both judge each mutation. Infrastructure is
+# outside this tier; SQLite persistence has its own db-module.toml run.
+test-command = "python -m pytest -x -q tests/unit/kiln/scheduler/domain tests/property/kiln/scheduler/domain"
 
 [cosmic-ray.distributor]
 name = "local"

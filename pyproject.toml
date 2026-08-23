@@ -15,7 +15,7 @@ build-backend = "setuptools.build_meta"
 name = "kiln-swarm"
 version = "0.1.0"
 description = "A local, role-based agent orchestration framework"
-readme = "kiln/README.md"
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = []
 
