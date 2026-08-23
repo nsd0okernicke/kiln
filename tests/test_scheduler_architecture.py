@@ -1,14 +1,14 @@
 """Characterization tests for the scheduler's domain and port boundaries."""
 
 from scheduler import db, policies
-from scheduler.adapters import WorkerInvocation
+from scheduler.adapters import WorkerInvocation as LegacyWorkerInvocation
 from scheduler.infrastructure import (
     CallableWorkerRunner,
     FileWorkerDebugSink,
     GitWorktree,
     SQLiteMessageQueue,
 )
-from scheduler.models import MessageStatus, WorkerRequest, can_transition
+from scheduler.models import MessageStatus, WorkerInvocation, WorkerRequest, can_transition
 from scheduler.ports import MessageQueue, WorkerRunner, Worktree
 from scheduler.status_contract import STATUS_DONE, WorkerResult
 
@@ -80,3 +80,7 @@ def test_file_debug_sink_owns_diagnostic_persistence(tmp_path):
     assert (tmp_path / "logs" / "worker-debug-coder-attempt2.log").read_text(
         encoding="utf-8"
     ) == "raw worker output"
+
+
+def test_adapter_package_keeps_worker_invocation_compatibility_export():
+    assert LegacyWorkerInvocation is WorkerInvocation

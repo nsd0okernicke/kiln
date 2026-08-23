@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from .adapters import WorkerInvocation
+from .models import WorkerInvocation
 
 
 def should_retry(invocations: Sequence[WorkerInvocation], max_attempts: int) -> bool:

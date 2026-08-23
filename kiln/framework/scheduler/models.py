@@ -1,10 +1,12 @@
-"""Typed queue contracts shared by the scheduler and its driving adapters."""
+"""Scheduler domain values shared by application and infrastructure adapters."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TypedDict
+
+from .status_contract import WorkerResult
 
 DEFAULT_PRIORITY = 50
 
@@ -47,6 +49,50 @@ class WorkerRequest:
     prompt: str
     attempt: int = 1
     max_budget_usd: float | None = None
+
+
+@dataclass(frozen=True)
+class TokenUsage:
+    """Token counts for one worker invocation, kept separate by billing category."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_creation_tokens: int = 0
+
+    @property
+    def total(self) -> int:
+        return (
+            self.input_tokens
+            + self.output_tokens
+            + self.cache_read_tokens
+            + self.cache_creation_tokens
+        )
+
+    def __add__(self, other: TokenUsage) -> TokenUsage:
+        return TokenUsage(
+            input_tokens=self.input_tokens + other.input_tokens,
+            output_tokens=self.output_tokens + other.output_tokens,
+            cache_read_tokens=self.cache_read_tokens + other.cache_read_tokens,
+            cache_creation_tokens=self.cache_creation_tokens + other.cache_creation_tokens,
+        )
+
+
+@dataclass(frozen=True)
+class WorkerInvocation:
+    """Outcome of one worker execution, independent of the backend that produced it."""
+
+    result: WorkerResult
+    raw_output: str
+    cost_usd: float = 0.0
+    is_error: bool = False
+    timed_out: bool = False
+    detail: str = ""
+    tokens: TokenUsage | None = None
+
+    @property
+    def is_done(self) -> bool:
+        return self.result.is_done
 
 
 ALLOWED_TRANSITIONS: dict[MessageStatus, frozenset[MessageStatus]] = {

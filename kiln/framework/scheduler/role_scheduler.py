@@ -24,10 +24,10 @@ from pathlib import Path
 
 from . import application as scheduler_application
 from . import pane_status, verify
-from .adapters import DEFAULT_IDLE_TIMEOUT_SEC, TokenUsage, WorkerInvocation
+from .adapters import DEFAULT_IDLE_TIMEOUT_SEC
 from .application import CycleResult, SchedulerContext, SchedulerState
 from .infrastructure import FileWorkerDebugSink, GitWorktree, SQLiteMessageQueue
-from .models import WorkerRequest
+from .models import TokenUsage, WorkerInvocation, WorkerRequest
 from .routing import load_routing_table, parse_routing_arguments
 from .worker_prompt import WorkerDefinition, load_worker_definition
 

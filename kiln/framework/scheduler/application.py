@@ -9,8 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import handoff, policies, status_contract
-from .adapters import TokenUsage, WorkerInvocation
-from .models import DEFAULT_PRIORITY, WorkerRequest
+from .models import DEFAULT_PRIORITY, TokenUsage, WorkerInvocation, WorkerRequest
 from .ports import MessageQueue, VerificationResult, WorkerDebugSink, WorkerRunner, Worktree
 from .routing import RoutingTable
 from .worker_prompt import WorkerDefinition, build_task_prompt

@@ -25,7 +25,7 @@ import sys
 from dataclasses import dataclass, field
 from typing import TextIO
 
-from .adapters import TokenUsage
+from .models import TokenUsage
 
 #: Reserved for the bar itself.
 BAR_ROWS = 1

@@ -7,8 +7,13 @@ from collections.abc import Callable
 from pathlib import Path
 
 from . import db, git_ops
-from .adapters import WorkerInvocation
-from .models import DEFAULT_PRIORITY, InboundMessage, QueueMessage, WorkerRequest
+from .models import (
+    DEFAULT_PRIORITY,
+    InboundMessage,
+    QueueMessage,
+    WorkerInvocation,
+    WorkerRequest,
+)
 
 log = logging.getLogger(__name__)
 

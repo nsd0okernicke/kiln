@@ -48,6 +48,7 @@ def test_scheduler_ports_do_not_import_concrete_adapters():
 
 def test_scheduler_application_does_not_import_cli_or_concrete_infrastructure():
     assert not imports(ROOT / "scheduler" / "application.py") & {
+        "adapters",
         "argparse",
         "db",
         "git_ops",
@@ -60,6 +61,17 @@ def test_scheduler_application_does_not_import_cli_or_concrete_infrastructure():
         "mkdir",
         "open",
         "write_text",
+    }
+
+
+def test_scheduler_models_do_not_import_adapters_or_infrastructure():
+    assert not imports(ROOT / "scheduler" / "models.py") & {
+        "adapters",
+        "db",
+        "git_ops",
+        "infrastructure",
+        "sqlite3",
+        "subprocess",
     }
 
 

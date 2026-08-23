@@ -5,8 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol
 
-from .adapters import WorkerInvocation
-from .models import DEFAULT_PRIORITY, InboundMessage, QueueMessage, WorkerRequest
+from .models import (
+    DEFAULT_PRIORITY,
+    InboundMessage,
+    QueueMessage,
+    WorkerInvocation,
+    WorkerRequest,
+)
 
 
 class CommandResult(Protocol):
