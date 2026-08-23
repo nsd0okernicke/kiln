@@ -138,7 +138,7 @@ def work_item_messages(
     """
     Recent messages on a branch, newest first — the cockpit board's input.
 
-    Grouping into cards is left to the caller (`kiln.cockpit.state.build_board`) rather than done
+    Grouping into cards is left to the cockpit application rather than done
     in SQL. "Latest row per group" in SQLite is either a bare-column-with-MAX trick, which
     picks arbitrarily among rows sharing a `created_at` second — two hops of one cycle can
     easily land in the same second — or a window function this module would then depend on.
@@ -153,7 +153,7 @@ def work_item_messages(
     specifier is what invents one -- so filtering NULLs here made every new request invisible
     on the board until the specifier's first cycle finished, which took eight minutes on the
     run that exposed it. Whether an unnamed row deserves a card is a display question, and it
-    is answered in `kiln.cockpit.state.build_board` where it can be tested without a database.
+    is answered by the cockpit board projection, where it can be tested without a database.
     """
     with closing(connect(db_path)) as conn:
         cur = conn.cursor()

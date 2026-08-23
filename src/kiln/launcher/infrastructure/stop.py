@@ -23,20 +23,12 @@ log = logging.getLogger(__name__)
 #: database after the swarm was supposedly down (issue #18) -- which also made the
 #: stuck-in-`processing` bug (#19) easy to hit, since stopping mid-cycle is routine.
 #:
-<<<<<<<< HEAD:src/kiln/launcher/infrastructure/stop.py
 #: The cockpit HTTP adapter holds a listening socket rather than just polling, which makes
 #: leaking
 #: it worse than leaking a pane: a surviving cockpit keeps a port bound and keeps offering
 #: New Task and Teardown buttons for a swarm that no longer exists.
 #:
 #: The proxy HTTP adapter is a detached background process rather than a pane, but is started by
-========
-#: `kiln.cockpit.server` holds a listening socket rather than just polling, which makes leaking
-#: it worse than leaking a pane: a surviving cockpit keeps a port bound and keeps offering
-#: New Task and Teardown buttons for a swarm that no longer exists.
-#:
-#: `kiln.proxy.server` is a detached background process rather than a pane, but it is started by
->>>>>>>> 164b1fed95030ce51978a18566b3ebd5b6fa30de:src/kiln/launcher/stop.py
 #: the same launch and must end with it: a capture proxy left listening would keep relaying
 #: traffic for whatever ran next.
 #:
@@ -52,13 +44,8 @@ KILN_PROCESS_MARKERS = (
     "kiln.scheduler.infrastructure.cli.role_scheduler",
     "kiln.scheduler.infrastructure.cli.inbox",
     "kiln.scheduler.infrastructure.cli.dashboard",
-<<<<<<<< HEAD:src/kiln/launcher/infrastructure/stop.py
     "kiln.cockpit.infrastructure.http.server",
     "kiln.proxy.infrastructure.http.server",
-========
-    "kiln.cockpit.server",
-    "kiln.proxy.server",
->>>>>>>> 164b1fed95030ce51978a18566b3ebd5b6fa30de:src/kiln/launcher/stop.py
 )
 
 
@@ -127,11 +114,7 @@ def find_project_proxies(traffic_db: Path) -> list[tuple[int, str]]:
     matches = []
     for pid, command in _windows_matches() if os.name == "nt" else _posix_matches():
         haystack = command.casefold() if os.name == "nt" else command
-<<<<<<<< HEAD:src/kiln/launcher/infrastructure/stop.py
         if "kiln.proxy.infrastructure.http.server" in command and wanted in haystack:
-========
-        if "kiln.proxy.server" in command and wanted in haystack:
->>>>>>>> 164b1fed95030ce51978a18566b3ebd5b6fa30de:src/kiln/launcher/stop.py
             matches.append((pid, command))
     return matches
 

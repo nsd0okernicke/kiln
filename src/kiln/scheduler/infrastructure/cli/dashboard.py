@@ -52,7 +52,7 @@ _SUMMARY_RE = re.compile(
 #: something worse: the tab-bar Lua defaults a `manual` role with no status file to
 #: `waiting`, so a perfectly healthy cockpit pane advertised itself as waiting for something.
 #:
-#: Restated here rather than imported: `kiln.launcher.config` owns these strings and writes them
+#: Restated here rather than imported: launcher profile models own and write these strings
 #: into the sessions file, but `scheduler` must not import `launcher` -- the dependency runs
 #: the other way. `test_dashboard` pins the two sets against each other, which a test can do
 #: because it may import both.
@@ -94,7 +94,7 @@ def read_sessions(path: Path) -> list[RoleSession]:
     Parse `.kiln/sessions` (`index\\trole\\tagent\\tdisplay_name\\tkind\\tmodel` per line).
 
     **Every row is returned, passive ones included.** Filtering belongs to the renderers:
-    `kiln.launcher.cli.run_stop` and `kiln.cockpit.actions._session_roles` both read this to close
+    launcher stop and cockpit session handling both read this to close
     tmux sessions, and a passive pane dropped here would be one nothing ever tore down.
 
     The kind column is optional so a sessions file from an earlier launch -- one written
@@ -123,7 +123,7 @@ def visible_roles(sessions: list[RoleSession]) -> list[RoleSession]:
     """
     The roles worth a row in a state table — everything except the stateless panes.
 
-    One rule with two callers (this module's grid and `kiln.cockpit.state.role_rows`), so the
+    One rule with two callers (this grid and the cockpit role projection), so the
     terminal and the browser cannot come to disagree about which roles exist.
     """
     return [session for session in sessions if not session.passive]
@@ -546,7 +546,7 @@ class SwarmSnapshot:
     Split out of `snapshot` so a second front end can read the same numbers the TTY
     dashboard shows without going through `render_dashboard`, which answers in rendered
     ASCII (`list[str]`) and therefore cannot be re-parsed into anything else. The web
-    cockpit (`kiln.cockpit.state`) builds its JSON from this; the ASCII render is unchanged and
+    the cockpit builds its JSON from this; the ASCII render is unchanged and
     still the only consumer inside this module.
 
     Both clocks travel with the data deliberately: `created_at` in the queue is naive

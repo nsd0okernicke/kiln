@@ -34,7 +34,7 @@ DEFAULT_TIMEOUT_SEC = 120
 #: Observed live: `.claude/settings.json` was committed by the specifier's squash and
 #: instantly wedged the coder. `tmp/` was the same bug found earlier.
 #:
-#: Mirrors kiln.launcher.workspace.REQUIRED_GITIGNORE_ENTRIES, duplicated on purpose so the
+#: Mirrors the launcher's required gitignore entries, duplicated on purpose so the
 #: scheduler stays runnable without the launcher package on the path.
 GENERATED_WORKTREE_PATHS = (
     "tmp/",

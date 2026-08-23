@@ -400,11 +400,7 @@ def _observed_lanes(cards: list[dict]) -> list[str]:
 
     A poor substitute for the profile's role list and knowingly so: a role that has not yet
     received anything has no lane, so the board grows one as work reaches it. Good enough to
-<<<<<<<< HEAD:src/kiln/cockpit/application/state.py
     keep the standalone HTTP server useful; the launcher always passes `--lanes`.
-========
-    keep `python -m kiln.cockpit.server` useful on its own; the launcher always passes `--lanes`.
->>>>>>>> 164b1fed95030ce51978a18566b3ebd5b6fa30de:src/kiln/cockpit/state.py
     """
     order: list[str] = []
     for card in cards:

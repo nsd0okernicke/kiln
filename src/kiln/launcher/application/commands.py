@@ -67,11 +67,7 @@ def proxy_env(role: RoleConfig, proxy_url: str | None) -> dict[str, str]:
 
     The URL carries the role name as a path prefix (`/kiln/<role>`) because a proxy sees
     HTTP requests, not roles — without it the capture is an undifferentiated blob that
-<<<<<<<< HEAD:src/kiln/launcher/application/commands.py
     cannot answer "what did the refactorer cost". The proxy HTTP adapter strips the
-========
-    cannot answer "what did the refactorer cost". `kiln.proxy.server.split_role` strips the
->>>>>>>> 164b1fed95030ce51978a18566b3ebd5b6fa30de:src/kiln/launcher/commands.py
     prefix again before forwarding.
 
     Returns `{}` for a backend with no verified override, so enabling the proxy on a mixed
@@ -395,7 +391,6 @@ def _cockpit_command(
     """
     human_role = _human_role(profile)
     argv = [
-<<<<<<<< HEAD:src/kiln/launcher/application/commands.py
         python_command(),
         "-m",
         "kiln.cockpit.infrastructure.http.server",
@@ -421,21 +416,6 @@ def _cockpit_command(
         str(paths.traffic_db),
         "--human-role",
         human_role,
-========
-        python_command(), "-m", "kiln.cockpit.server",
-        "--branch", branch,
-        "--db-path", str(paths.db_path),
-        "--status-dir", str(paths.status_dir),
-        "--sessions-file", str(paths.sessions_file),
-        "--project-name", paths.project_root.name,
-        "--url-file", str(paths.cockpit_url_file),
-        "--pid-file", str(paths.cockpit_pid_file),
-        "--log-file", str(paths.scheduler_log(role.role)),
-        # As with the dashboard: always passed, and hidden by the cockpit when the store is
-        # absent, so a swarm launched without the proxy is not a different kiln.cockpit.
-        "--traffic-db", str(paths.traffic_db),
-        "--human-role", human_role,
->>>>>>>> 164b1fed95030ce51978a18566b3ebd5b6fa30de:src/kiln/launcher/commands.py
     ]
     lanes = _cockpit_lanes(profile)
     if lanes:
