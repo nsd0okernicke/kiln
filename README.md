@@ -2252,8 +2252,12 @@ equivalent).
   `cycles`/`cost_usd` fields (threaded from the pane status bar through `set-status.py`), so
   spend and cycle count survive the process that tracked them and are readable by anything
   else polling status, not just the bar that produced them.
-- ✓ **Test suite** — pytest over `launcher/` and `scheduler/`, with mutation testing on the
-  pure modules. `pip install pytest ruff` then `pytest` — there is no install step, because
+- ✓ **Test and quality metrics** — pytest over the framework plus statement/branch coverage,
+  Radon complexity/maintainability, per-function CRAP, gradual Pyright, Ruff, duplication,
+  architecture checks, and focused Cosmic Ray tiers. See
+  [docs/quality-metrics.md](docs/quality-metrics.md) for the cross-platform fast and full
+  report commands. Install with `python -m pip install -r requirements-dev.txt` — there is
+  no package install step, because
   `pyproject.toml` is tooling configuration rather than a packaging manifest (`pip install -e .`
   cannot work: there is no `[project]` or `[build-system]` table). Imports resolve through
   `pythonpath = ["kiln/framework"]` in `[tool.pytest.ini_options]`.

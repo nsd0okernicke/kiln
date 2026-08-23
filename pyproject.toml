@@ -31,3 +31,29 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 [tool.mutmut]
 paths_to_mutate = "kiln/framework/scheduler/"
 tests_dir = "tests/"
+
+[tool.coverage.run]
+branch = true
+source = ["kiln/framework"]
+omit = ["*/__main__.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+precision = 2
+
+[tool.coverage.json]
+show_contexts = true
+
+[tool.pyright]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+include = [
+    "kiln/framework/scheduler/routing.py",
+    "kiln/framework/scheduler/handoff.py",
+    "kiln/framework/scheduler/status_contract.py",
+    "kiln/framework/scheduler/worker_prompt.py",
+    "kiln/framework/cockpit/state.py",
+]
+extraPaths = ["kiln/framework"]
+reportMissingTypeStubs = false

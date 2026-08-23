@@ -1,0 +1,67 @@
+{
+  "phase": "observe",
+  "baseline_commit": "4a71c492f9a11549b0949400c50dfc52bafa3639",
+  "worktree_dirty": true,
+  "generated_at": "2026-08-23",
+  "environment": {
+    "os": "Windows",
+    "python": "3.14"
+  },
+  "tests": {
+    "passed": 1832,
+    "skipped": 2,
+    "warnings": 29,
+    "duration_seconds": 242.29
+  },
+  "coverage": {
+    "statement_percent": 90.49,
+    "branch_percent": 85.31,
+    "covered_lines": 4796,
+    "missing_lines": 504,
+    "covered_branches": 1307,
+    "missing_branches": 225
+  },
+  "complexity": {
+    "functions_measured": 543,
+    "c_or_worse": 27,
+    "d_or_worse": 3,
+    "lowest_maintainability_modules": [
+      "kiln/framework/scheduler/role_scheduler.py",
+      "kiln/framework/scheduler/dashboard.py",
+      "kiln/framework/launcher/config.py",
+      "kiln/framework/launcher/workspace.py",
+      "kiln/framework/launcher/cli.py"
+    ]
+  },
+  "crap": {
+    "threshold": 6,
+    "above_threshold": 98,
+    "top_hotspots": [
+      "kiln/framework/launcher/cli.py:389 run_launch",
+      "kiln/framework/launcher/stop.py:178 stop_all",
+      "kiln/framework/cockpit/server.py:514 main",
+      "kiln/framework/launcher/cli.py:584 resolve_queue_context",
+      "kiln/framework/tools/set-status.py:209 main"
+    ]
+  },
+  "typing": {
+    "modules_enrolled": 5,
+    "errors": 0,
+    "warnings": 0
+  },
+  "duplication": {
+    "identical_function_groups": 1
+  },
+  "formatting": {
+    "status": "observe-only",
+    "files_would_reformat": 70
+  },
+  "mutation": {
+    "status": "existing Cosmic Ray tiers retained; execution remains on-demand",
+    "pure_mutants": 2085,
+    "db_mutants": 397,
+    "pure_target_percent": 80,
+    "db_target_percent": 70
+  },
+  "policy": "No new gates beyond pytest and Ruff until this baseline is reviewed."
+}

@@ -11,7 +11,7 @@
 module-path = "kiln/framework/scheduler/db.py"
 timeout = 60.0
 excluded-modules = []
-test-command = ".venv/Scripts/python.exe -m pytest -x -q tests/test_db.py tests/test_channel_server.py"
+test-command = "python -m pytest -x -q tests/test_db.py tests/test_channel_server.py"
 
 [cosmic-ray.distributor]
 name = "local"

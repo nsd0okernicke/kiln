@@ -25,7 +25,7 @@ excluded-modules = [
     "**/adapters/*.py",
     "**/__init__.py",
 ]
-test-command = ".venv/Scripts/python.exe -m pytest -x -q tests/test_routing.py tests/test_status_contract.py tests/test_handoff.py tests/test_worker_prompt.py"
+test-command = "python -m pytest -x -q tests/test_routing.py tests/test_status_contract.py tests/test_handoff.py tests/test_worker_prompt.py"
 
 [cosmic-ray.distributor]
 name = "local"
