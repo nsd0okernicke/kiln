@@ -81,6 +81,13 @@ def test_queue_projections_do_not_depend_on_commands_or_application():
     assert "commit" not in called_attributes(path)
 
 
+def test_queue_commands_do_not_depend_on_application_or_concrete_adapter():
+    assert not imports(ROOT / "scheduler" / "queue_commands.py") & {
+        "application",
+        "infrastructure",
+    }
+
+
 def test_cockpit_state_projection_does_not_depend_on_http_server():
     assert "server" not in imports(ROOT / "cockpit" / "state.py")
 

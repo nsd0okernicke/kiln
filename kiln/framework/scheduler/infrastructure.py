@@ -6,7 +6,7 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
-from . import db, git_ops
+from . import git_ops, queue_commands
 from .models import (
     DEFAULT_PRIORITY,
     InboundMessage,
@@ -56,19 +56,19 @@ class SQLiteMessageQueue:
         self.path = Path(path)
 
     def fetch(self, role: str, branch: str) -> InboundMessage | None:
-        return db.fetch_and_deliver(self.path, role, branch)
+        return queue_commands.fetch_and_deliver(self.path, role, branch)
 
     def fetch_resume(self, role: str, branch: str) -> InboundMessage | None:
-        return db.fetch_resume(self.path, role, branch)
+        return queue_commands.fetch_resume(self.path, role, branch)
 
     def mark_processing(self, message_id: str) -> bool:
-        return db.mark_processing(self.path, message_id)
+        return queue_commands.mark_processing(self.path, message_id)
 
     def mark_processed(self, message_id: str) -> bool:
-        return db.mark_processed(self.path, message_id)
+        return queue_commands.mark_processed(self.path, message_id)
 
     def mark_failed(self, message_id: str, error: str) -> bool:
-        return db.mark_failed(self.path, message_id, error)
+        return queue_commands.mark_failed(self.path, message_id, error)
 
     def count_arrivals(self, work_item: str, branch: str, target: str) -> int:
         return count_work_item_arrivals(self.path, work_item, branch, target)
@@ -82,13 +82,15 @@ class SQLiteMessageQueue:
         priority: int = DEFAULT_PRIORITY,
         work_item: str | None = None,
     ) -> str:
-        return db.insert_handoff(self.path, sender, target, content, branch, priority, work_item)
+        return queue_commands.insert_handoff(
+            self.path, sender, target, content, branch, priority, work_item
+        )
 
     def exists(self, message_id: str) -> bool:
-        return db.message_exists(self.path, message_id)
+        return queue_commands.message_exists(self.path, message_id)
 
     def recover_processing(self, role: str, branch: str) -> list[QueueMessage]:
-        return db.recover_stale_processing(self.path, role, branch)
+        return queue_commands.recover_stale_processing(self.path, role, branch)
 
 
 class GitWorktree:

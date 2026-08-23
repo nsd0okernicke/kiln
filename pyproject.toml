@@ -92,6 +92,7 @@ include = [
     "kiln/framework/scheduler/application.py",
     "kiln/framework/scheduler/queue_storage.py",
     "kiln/framework/scheduler/queue_queries.py",
+    "kiln/framework/scheduler/queue_commands.py",
     "kiln/framework/scheduler/db.py",
     "kiln/framework/scheduler/routing.py",
     "kiln/framework/scheduler/handoff.py",

@@ -53,7 +53,7 @@ class TestInsertVerification:
             calls["verify"] += 1
             return False if calls["verify"] == 1 else real_verify(*args, **kwargs)
 
-        monkeypatch.setattr(infrastructure.db, "message_exists", flaky_verify)
+        monkeypatch.setattr(infrastructure.queue_commands, "message_exists", flaky_verify)
 
         ctx = SchedulerContext(
             role="coder",
@@ -93,7 +93,7 @@ class TestInsertVerification:
             return message_id
 
         monkeypatch = pytest.MonkeyPatch()
-        monkeypatch.setattr(infrastructure.db, "insert_handoff", insert_then_consume)
+        monkeypatch.setattr(infrastructure.queue_commands, "insert_handoff", insert_then_consume)
         try:
             assert role_scheduler._insert_verified(ctx, "refactorer", "payload") is not None
         finally:
@@ -104,7 +104,9 @@ class TestInsertVerification:
         assert total == 1, "the handoff must be sent exactly once"
 
     def test_gives_up_after_two_attempts(self, db_path, git_repo, monkeypatch):
-        monkeypatch.setattr(infrastructure.db, "message_exists", lambda *a, **k: False)
+        monkeypatch.setattr(
+            infrastructure.queue_commands, "message_exists", lambda *a, **k: False
+        )
         ctx = SchedulerContext(
             role="coder",
             branch="main",
