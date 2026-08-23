@@ -150,10 +150,6 @@ class KilnPaths:
 
     # --- framework-owned ----------------------------------------------------------
     @property
-    def bundled_dir(self) -> Path:
-        return self.framework_root / "kiln"
-
-    @property
     def source_dir(self) -> Path:
         return self.framework_root / "src"
 
@@ -194,7 +190,7 @@ class KilnPaths:
 
     @property
     def claude_settings_template(self) -> Path:
-        return self.bundled_dir / ".claude" / "settings.json"
+        return self.resources_dir / "claude" / "settings.json"
 
     # --- per-role -----------------------------------------------------------------
     def worktree_path(self, worktree_name: str) -> Path:

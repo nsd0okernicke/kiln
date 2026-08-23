@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "kiln-db": {
-      "command": "npx",
-      "args": ["mcp-sqlite", "__KILN_DB_PATH__"]
-    }
-  }
-}
-

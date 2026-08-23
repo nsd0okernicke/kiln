@@ -26,7 +26,6 @@ pytestmark = pytest.mark.integration
 def framework(tmp_path):
     """A minimal but structurally real framework checkout."""
     root = tmp_path / "framework"
-    bundled = root / "kiln"
     scaffold_resources = root / "src" / "kiln" / "resources" / "project"
 
     constitution = scaffold_resources / "constitution"
@@ -44,8 +43,9 @@ def framework(tmp_path):
     skill.mkdir(parents=True)
     (skill / "SKILL.md").write_text("---\nname: kiln-handoff\n---\n", encoding="utf-8")
 
-    (bundled / ".claude").mkdir(parents=True)
-    (bundled / ".claude" / "settings.json").write_text('{"x": 1}', encoding="utf-8")
+    claude_resources = root / "src" / "kiln" / "resources" / "claude"
+    claude_resources.mkdir(parents=True)
+    (claude_resources / "settings.json").write_text('{"x": 1}', encoding="utf-8")
 
     example = root / "examples" / "demo"
     (example / "kiln" / "project" / "constitution").mkdir(parents=True)

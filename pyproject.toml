@@ -50,6 +50,7 @@ kiln = [
     "resources/*.json",
     "resources/templates/*.md",
     "resources/tools/*.py",
+    "resources/claude/*.json",
     "resources/project/*.md",
     "resources/project/constitution/*.md",
     "resources/project/roles/*.md",

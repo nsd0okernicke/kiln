@@ -40,8 +40,9 @@ def paths(tmp_path):
     project = tmp_path / "proj"
     project.mkdir()
     framework = tmp_path / "fw"
-    (framework / "kiln" / ".claude").mkdir(parents=True)
-    (framework / "kiln" / ".claude" / "settings.json").write_text("{}", encoding="utf-8")
+    claude_resources = framework / "src" / "kiln" / "resources" / "claude"
+    claude_resources.mkdir(parents=True, exist_ok=True)
+    (claude_resources / "settings.json").write_text("{}", encoding="utf-8")
     (framework / "src" / "kiln" / "resources" / "tools").mkdir(parents=True)
     (framework / "src" / "kiln" / "resources" / "tools" / "set-status.py").write_text(
         "print('status')\n", encoding="utf-8"
