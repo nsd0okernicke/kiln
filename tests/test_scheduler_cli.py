@@ -15,6 +15,8 @@ from contextlib import closing
 from datetime import datetime
 
 import pytest
+from test_role_scheduler import DEFINITION, ROUTING, FakeWorker, queued_for, worker
+
 from kiln.scheduler.domain import handoff
 from kiln.scheduler.domain.models import TokenUsage, WorkerRequest
 from kiln.scheduler.domain.routing import parse_routing_table
@@ -28,7 +30,6 @@ from kiln.scheduler.infrastructure.persistence import SQLiteMessageQueue, db, qu
 from kiln.scheduler.infrastructure.terminal import pane_status
 from kiln.scheduler.infrastructure.vcs import GitWorktree
 from kiln.scheduler.infrastructure.vcs import git as git_ops
-from test_role_scheduler import DEFINITION, ROUTING, FakeWorker, queued_for, worker
 
 pytestmark = pytest.mark.integration
 

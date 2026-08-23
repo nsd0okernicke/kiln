@@ -23,6 +23,7 @@ import threading
 import time
 
 import pytest
+
 from kiln.scheduler.infrastructure.agents import REAP_TIMEOUT_SEC, Watchdog, terminate_tree
 
 #: Long enough that nothing finishes on its own during a test, so a passing assertion can

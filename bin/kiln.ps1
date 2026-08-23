@@ -38,5 +38,5 @@ if ($python -eq "python" -and -not (Get-Command python -ErrorAction SilentlyCont
 
 $env:PYTHONPATH = if ($env:PYTHONPATH) { "$packageRoot;$env:PYTHONPATH" } else { $packageRoot }
 
-& $python -m kiln.launcher.cli @args
+& $python -m kiln.launcher.infrastructure.cli @args
 exit $LASTEXITCODE

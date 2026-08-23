@@ -3,7 +3,7 @@ Kiln launcher — the Python core that replaces bin/kiln.ps1 and bin/kiln.sh.
 
 Import with `src` on sys.path:
 
-    from kiln.launcher import config, paths
+    from kiln.launcher.domain import paths, profile
 
 Structure mirrors what the shell scripts did, minus the duplication between them:
 

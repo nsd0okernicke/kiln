@@ -8,7 +8,8 @@ by both callers because the alternative — holding the socket and handing it ov
 nothing here: the processes that would race for it are Kiln's own, launched seconds apart,
 and a genuine collision surfaces immediately as a failed bind in a pane rather than silently.
 
-The error is deliberately *not* raised here. `cli` and `kiln.cockpit.server` fail differently and
+The error is deliberately *not* raised here. The CLI and cockpit HTTP adapter fail differently
+and
 say different things to the operator ("launch with --no-proxy" versus "`kiln --stop` clears a
 leftover cockpit"), and a shared exception type would make one of those messages wrong.
 """

@@ -380,7 +380,7 @@ def read_request_stats(
     if not traffic_db:
         return {}
     try:
-        from kiln.proxy.capture import TrafficStore
+        from kiln.proxy.infrastructure.persistence import TrafficStore
 
         return TrafficStore(traffic_db).request_stats_by_role(since=since)
     except Exception:  # pragma: no cover - optional panel, never fatal

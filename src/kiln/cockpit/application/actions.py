@@ -2,7 +2,8 @@
 The cockpit's write half — everything a button does.
 
 Not one line of queue, retry or teardown logic lives here. `scheduler.send.send`,
-`scheduler.retry.resume` and `kiln.launcher.stop.stop_all` already own those decisions and are
+`scheduler.retry.resume` and `kiln.launcher.infrastructure.stop.stop_all` already own those
+decisions and are
 already the paths `kiln send` / `kiln retry` / `kiln --stop` take, so the cockpit calls them
 and does nothing else. A second implementation of "queue a handoff" is how the browser and
 the CLI would come to disagree about what a handoff is.
@@ -28,7 +29,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from kiln.launcher import stop
+from kiln.launcher.infrastructure import stop
 from kiln.scheduler.domain.status_contract import PENDING_HANDOFF, is_valid_work_item_name
 from kiln.scheduler.infrastructure.cli import dashboard, retry, send
 from kiln.scheduler.infrastructure.persistence import db
@@ -199,9 +200,7 @@ def check_confirmation(confirm: str) -> None:
     stopped (see `teardown`).
     """
     if confirm != TEARDOWN_CONFIRMATION:
-        raise ActionError(
-            f"teardown needs confirm={TEARDOWN_CONFIRMATION!r}; nothing was stopped"
-        )
+        raise ActionError(f"teardown needs confirm={TEARDOWN_CONFIRMATION!r}; nothing was stopped")
 
 
 def teardown(ctx: ActionContext, *, confirm: str) -> dict:
@@ -212,7 +211,7 @@ def teardown(ctx: ActionContext, *, confirm: str) -> dict:
     projects. The confirmation string is the guard, and the roles list comes from this
     project's sessions file only so tmux sessions get closed too.
 
-    **This kills its own caller.** `kiln.cockpit.server` is in `stop.KILN_PROCESS_MARKERS`, as it
+    **This kills its own caller.** The HTTP server is in `stop.KILN_PROCESS_MARKERS`, as it
     must be — a cockpit surviving `kiln --stop` would keep a port bound and keep offering
     buttons for a swarm that no longer exists. So there is no return value any HTTP client
     will see, and the server calls this only after its reply has gone out.
@@ -238,7 +237,8 @@ def _resolve_message_id(ctx: ActionContext, prefix: str) -> str:
         return prefix
 
     matches = [
-        str(row["id"]) for row in db.failed_messages(ctx.db_path, ctx.branch)
+        str(row["id"])
+        for row in db.failed_messages(ctx.db_path, ctx.branch)
         if str(row["id"]).startswith(prefix)
     ]
     if len(matches) == 1:

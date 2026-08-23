@@ -40,7 +40,7 @@ fi
 # A bare first argument that is not a known subcommand is treated as the project directory,
 # preserving the old `kiln.sh /path/to/project` calling convention.
 #
-# Every subcommand kiln.launcher.cli recognises has to be listed here, or it gets swallowed as a
+# Every subcommand kiln.launcher.infrastructure.cli recognises has to be listed here, or it gets swallowed as a
 # directory: `send` and `inbox` were missing, so `kiln.sh send --to specifier ...` was
 # rewritten to `--working-dir send --to specifier ...` and died on "unrecognized arguments:
 # --to". Both are documented in the README and both were unusable on Unix; kiln.ps1 never had
@@ -56,4 +56,4 @@ if [ "${#args[@]}" -gt 0 ]; then
 fi
 
 export PYTHONPATH="$package_root${PYTHONPATH:+:$PYTHONPATH}"
-exec "$python_bin" -m kiln.launcher.cli "${args[@]}"
+exec "$python_bin" -m kiln.launcher.infrastructure.cli "${args[@]}"

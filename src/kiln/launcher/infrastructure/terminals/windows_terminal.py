@@ -28,10 +28,16 @@ def _pane_by_role(panes: list[PaneSpec], role: str) -> PaneSpec | None:
 
 def _new_tab_args(pane: PaneSpec, index: int, title: str | None = None) -> list[str]:
     return [
-        "--title", title or f"{TAB_MARKERS[index % len(TAB_MARKERS)]} {pane.name}",
-        "-d", pane.path,
-        "--colorScheme", COLOR_SCHEMES[index % len(COLOR_SCHEMES)],
-        "pwsh", "-NoExit", "-Command", pane.cmd,
+        "--title",
+        title or f"{TAB_MARKERS[index % len(TAB_MARKERS)]} {pane.name}",
+        "-d",
+        pane.path,
+        "--colorScheme",
+        COLOR_SCHEMES[index % len(COLOR_SCHEMES)],
+        "pwsh",
+        "-NoExit",
+        "-Command",
+        pane.cmd,
     ]
 
 

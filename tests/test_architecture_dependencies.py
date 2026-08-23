@@ -87,7 +87,22 @@ def test_queue_commands_do_not_depend_on_application_or_concrete_adapter():
 
 
 def test_cockpit_state_projection_does_not_depend_on_http_server():
-    assert "server" not in imports(ROOT / "cockpit" / "state.py")
+    assert "server" not in imports(ROOT / "cockpit" / "application" / "state.py")
+
+
+def test_cockpit_application_does_not_import_http_transport():
+    for path in (ROOT / "cockpit" / "application").glob("*.py"):
+        assert not imports(path) & {"http", "server"}, path.name
+
+
+def test_proxy_domain_does_not_import_transport_or_persistence():
+    for path in (ROOT / "proxy" / "domain").glob("*.py"):
+        assert not imports(path) & {"http", "socket", "sqlite3"}, path.name
+
+
+def test_launcher_domain_does_not_import_process_or_transport_adapters():
+    for path in (ROOT / "launcher" / "domain").glob("*.py"):
+        assert not imports(path) & {"http", "socket", "sqlite3", "subprocess"}, path.name
 
 
 def test_agent_adapters_do_not_depend_on_launcher_ui():

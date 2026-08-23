@@ -39,14 +39,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from kiln.launcher import ports
+from kiln.launcher.infrastructure import ports
 from kiln.scheduler.infrastructure.cli import dashboard
 from kiln.scheduler.infrastructure.cli.dashboard import DashboardContext
 from kiln.scheduler.infrastructure.persistence import db
 from kiln.scheduler.infrastructure.runtime import configure_logging
 
-from . import state as state_builder
-from .actions import (
+from ...application import state as state_builder
+from ...application.actions import (
     ActionContext,
     ActionError,
     chat,
@@ -142,9 +142,7 @@ def gather_state(config: CockpitConfig) -> dict:
         work_items=work_items,
         cycles=db.cycles_by_work_item(config.dashboard.db_path, ctx.branch),
         failed=db.failed_messages(config.dashboard.db_path, ctx.branch),
-        awaiting_human=db.pending_for_role(
-            config.dashboard.db_path, ctx.branch, ctx.human_role
-        ),
+        awaiting_human=db.pending_for_role(config.dashboard.db_path, ctx.branch, ctx.human_role),
         activity_limit=config.activity_limit,
     )
 
@@ -173,9 +171,7 @@ class CockpitHandler(BaseHTTPRequestHandler):
             return self._guarded(lambda: self._send_status(unquote(path.rsplit("/", 1)[-1])))
         if path.startswith("/api/logs/"):
             return self._guarded(
-                lambda: self._send_log(
-                    unquote(path.rsplit("/", 1)[-1]), parse_qs(parsed.query)
-                )
+                lambda: self._send_log(unquote(path.rsplit("/", 1)[-1]), parse_qs(parsed.query))
             )
         self._send_json(404, {"error": f"no route for {path}"})
 
@@ -248,8 +244,10 @@ class CockpitHandler(BaseHTTPRequestHandler):
 
     def _ack(self, message_id: str) -> dict:
         row = db.acknowledge_message(
-            self.config.dashboard.db_path, message_id,
-            self.config.cockpit.human_role, self.config.cockpit.branch,
+            self.config.dashboard.db_path,
+            message_id,
+            self.config.cockpit.human_role,
+            self.config.cockpit.branch,
         )
         if row is None:
             raise ActionError("that message is not awaiting acknowledgement")
@@ -259,7 +257,7 @@ class CockpitHandler(BaseHTTPRequestHandler):
         """
         Answer first, then stop everything — including this process.
 
-        `teardown` matches `kiln.cockpit.server` in `stop.KILN_PROCESS_MARKERS`, so calling it
+        `teardown` matches this server in `stop.KILN_PROCESS_MARKERS`, so calling it
         inline would kill the server mid-reply and the browser would see a dropped
         connection: indistinguishable from a crash, at the exact moment the operator most
         needs to know what happened.
@@ -267,7 +265,9 @@ class CockpitHandler(BaseHTTPRequestHandler):
         confirm = str(body.get("confirm") or "")
         check_confirmation(confirm)
         timer = threading.Timer(
-            TEARDOWN_DELAY_SEC, teardown, args=(self.config.actions,),
+            TEARDOWN_DELAY_SEC,
+            teardown,
+            args=(self.config.actions,),
             kwargs={"confirm": confirm},
         )
         timer.daemon = True
@@ -296,9 +296,9 @@ class CockpitHandler(BaseHTTPRequestHandler):
         name straight from the URL would make `../` a file-read primitive on a server with
         no authentication.
         """
-        known = {session.role for session in dashboard.read_sessions(
-            self.config.dashboard.sessions_file
-        )}
+        known = {
+            session.role for session in dashboard.read_sessions(self.config.dashboard.sessions_file)
+        }
         if role not in known:
             return self._send_json(404, {"error": f"{role!r} is not a role in this swarm"})
         status = dashboard.read_status(self.config.status_dir, role)
@@ -308,9 +308,9 @@ class CockpitHandler(BaseHTTPRequestHandler):
 
     def _send_log(self, role: str, query: dict[str, list[str]]) -> None:
         """Return the newly appended bytes of one role log, bounded on first read."""
-        known = {session.role for session in dashboard.read_sessions(
-            self.config.dashboard.sessions_file
-        )}
+        known = {
+            session.role for session in dashboard.read_sessions(self.config.dashboard.sessions_file)
+        }
         if role not in known:
             return self._send_json(404, {"error": f"{role!r} is not a role in this swarm"})
 
@@ -324,10 +324,16 @@ class CockpitHandler(BaseHTTPRequestHandler):
 
         path = self.config.dashboard.db_path.parent / "logs" / f"{stream}-{role}.log"
         if not path.is_file():
-            return self._send_json(200, {
-                "role": role, "stream": stream, "offset": 0, "lines": [],
-                "truncated": False,
-            })
+            return self._send_json(
+                200,
+                {
+                    "role": role,
+                    "stream": stream,
+                    "offset": 0,
+                    "lines": [],
+                    "truncated": False,
+                },
+            )
         size = path.stat().st_size
         truncated = size < after
         start = 0 if truncated else after
@@ -337,11 +343,16 @@ class CockpitHandler(BaseHTTPRequestHandler):
         with path.open("rb") as handle:
             handle.seek(start)
             raw = handle.read()
-        return self._send_json(200, {
-            "role": role, "stream": stream, "offset": start + len(raw),
-            "lines": raw.decode("utf-8", errors="replace").splitlines(),
-            "truncated": truncated,
-        })
+        return self._send_json(
+            200,
+            {
+                "role": role,
+                "stream": stream,
+                "offset": start + len(raw),
+                "lines": raw.decode("utf-8", errors="replace").splitlines(),
+                "truncated": truncated,
+            },
+        )
 
     # --- plumbing ------------------------------------------------------------------
 
@@ -369,7 +380,8 @@ class CockpitHandler(BaseHTTPRequestHandler):
 
     def _send_json(self, code: int, payload: dict) -> None:
         self._send_bytes(
-            code, "application/json; charset=utf-8",
+            code,
+            "application/json; charset=utf-8",
             json.dumps(payload, default=str).encode("utf-8"),
         )
 
@@ -390,7 +402,8 @@ def find_free_port(preferred: int = DEFAULT_PORT, attempts: int = PORT_ATTEMPTS)
 
     Raises rather than falling back to an ephemeral port: the URL is written to a file and
     printed in a pane, and a cockpit that landed somewhere unpredictable is harder to find
-    than one that refused to start. The probe is `kiln.launcher.ports`' -- the capture proxy needs
+    than one that refused to start. The probe is shared with the capture proxy through
+    `kiln.launcher.infrastructure.ports`, while
     the identical one -- while the message stays here, since it is about cockpits.
     """
     port = ports.first_free_port(preferred, attempts)
@@ -457,7 +470,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--project-name", default="")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument(
-        "--lanes", default="",
+        "--lanes",
+        default="",
         help=(
             "comma-separated roles that get a swimlane, in board order. Omitted lanes are "
             "inferred from traffic, which cannot show a role nothing has reached yet."
@@ -465,7 +479,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--human-role", default="human-in-the-loop")
     parser.add_argument(
-        "--intake-role", default="",
+        "--intake-role",
+        default="",
         help="where New Task sends; the routing target of --human-role",
     )
     parser.add_argument("--activity-limit", type=int, default=DEFAULT_ACTIVITY_LIMIT)
@@ -474,7 +489,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--traffic-db", default=None)
     parser.add_argument("--log-file", default=None)
     parser.add_argument(
-        "--no-browser", action="store_true",
+        "--no-browser",
+        action="store_true",
         help=f"do not open a browser tab (or set {NO_BROWSER_ENV})",
     )
     return parser

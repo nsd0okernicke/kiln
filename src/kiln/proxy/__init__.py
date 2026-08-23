@@ -22,13 +22,13 @@ when a CLI pins certificates.
 
 from __future__ import annotations
 
-from .capture import (
+from .domain.capture import (
     SENSITIVE_HEADERS,
     CaptureMode,
     TrafficRecord,
-    TrafficStore,
     redact_headers,
 )
+from .infrastructure.persistence import TrafficStore
 
 __all__ = [
     "SENSITIVE_HEADERS",

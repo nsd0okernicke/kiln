@@ -6,6 +6,7 @@ prose, so the rendered output has to stay byte-compatible with workflow.md's tem
 from __future__ import annotations
 
 import pytest
+
 from kiln.scheduler.domain import handoff
 
 REAL_MESSAGE = """\

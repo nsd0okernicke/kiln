@@ -23,11 +23,12 @@ log = logging.getLogger(__name__)
 #: database after the swarm was supposedly down (issue #18) -- which also made the
 #: stuck-in-`processing` bug (#19) easy to hit, since stopping mid-cycle is routine.
 #:
-#: `kiln.cockpit.server` holds a listening socket rather than just polling, which makes leaking
+#: The cockpit HTTP adapter holds a listening socket rather than just polling, which makes
+#: leaking
 #: it worse than leaking a pane: a surviving cockpit keeps a port bound and keeps offering
 #: New Task and Teardown buttons for a swarm that no longer exists.
 #:
-#: `kiln.proxy.server` is a detached background process rather than a pane, but it is started by
+#: The proxy HTTP adapter is a detached background process rather than a pane, but is started by
 #: the same launch and must end with it: a capture proxy left listening would keep relaying
 #: traffic for whatever ran next.
 #:
@@ -43,8 +44,8 @@ KILN_PROCESS_MARKERS = (
     "kiln.scheduler.infrastructure.cli.role_scheduler",
     "kiln.scheduler.infrastructure.cli.inbox",
     "kiln.scheduler.infrastructure.cli.dashboard",
-    "kiln.cockpit.server",
-    "kiln.proxy.server",
+    "kiln.cockpit.infrastructure.http.server",
+    "kiln.proxy.infrastructure.http.server",
 )
 
 
@@ -52,7 +53,7 @@ def _windows_matches() -> list[tuple[int, str]]:
     """(pid, command line) for python processes, via CIM."""
     script = (
         "Get-CimInstance Win32_Process -Filter \"Name like 'python%'\" | "
-        "ForEach-Object { \"$($_.ProcessId)`t$($_.CommandLine)\" }"
+        'ForEach-Object { "$($_.ProcessId)`t$($_.CommandLine)" }'
     )
     result = subprocess.run(
         ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
@@ -113,7 +114,7 @@ def find_project_proxies(traffic_db: Path) -> list[tuple[int, str]]:
     matches = []
     for pid, command in _windows_matches() if os.name == "nt" else _posix_matches():
         haystack = command.casefold() if os.name == "nt" else command
-        if "kiln.proxy.server" in command and wanted in haystack:
+        if "kiln.proxy.infrastructure.http.server" in command and wanted in haystack:
             matches.append((pid, command))
     return matches
 

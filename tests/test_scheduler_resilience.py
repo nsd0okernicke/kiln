@@ -13,9 +13,9 @@ import logging
 
 import pytest
 
-from kiln.launcher import workspace
-from kiln.launcher.config import parse_profile
-from kiln.launcher.paths import KilnPaths
+from kiln.launcher.domain.paths import KilnPaths
+from kiln.launcher.domain.profile import parse_profile
+from kiln.launcher.infrastructure import workspace
 from kiln.scheduler.infrastructure.agents.worker_runner import CallableWorkerRunner
 from kiln.scheduler.infrastructure.cli import role_scheduler
 from kiln.scheduler.infrastructure.cli.role_scheduler import CycleResult
@@ -324,8 +324,8 @@ class TestLogFile:
         role_scheduler.configure_logging(None)  # must not raise
 
     def test_launcher_passes_a_log_file(self, tmp_path):
-        from kiln.launcher.commands import build_agent_command
-        from kiln.launcher.config import RoleConfig
+        from kiln.launcher.application.commands import build_agent_command
+        from kiln.launcher.domain.profile import RoleConfig
 
         paths = KilnPaths.create(tmp_path / "p", tmp_path / "f")
         argv = build_agent_command(

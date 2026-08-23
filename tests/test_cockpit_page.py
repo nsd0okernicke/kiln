@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from kiln.cockpit.server import STATIC_DIR
+from kiln.cockpit.infrastructure.http.server import STATIC_DIR
 
 pytestmark = pytest.mark.integration
 
@@ -153,11 +153,11 @@ class TestAgentColours:
     a not-quite-right vendor mark is worse than an accurate word.
     """
 
-    #: Every backend `kiln.launcher.config.VALID_AGENTS` accepts.
+    #: Every backend `kiln.launcher.domain.profile.VALID_AGENTS` accepts.
     AGENTS = ("claude", "codex", "copilot", "grok")
 
     def test_every_accepted_backend_has_its_own_colour(self, page):
-        from kiln.launcher.config import VALID_AGENTS
+        from kiln.launcher.domain.profile import VALID_AGENTS
 
         declared = _declared_in(page, ":root")
 

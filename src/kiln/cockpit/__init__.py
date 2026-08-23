@@ -10,7 +10,7 @@ Three modules, split by what they are allowed to touch:
 
 * `state`   — pure builders. Given one gathered snapshot, produce the JSON the page renders.
 * `actions` — the write half, delegating to `scheduler.send`, `scheduler.retry` and
-              `kiln.launcher.stop` rather than reimplementing any of them.
+              `kiln.launcher.infrastructure.stop` rather than reimplementing any of them.
 * `server`  — the only module that owns a socket. Binds 127.0.0.1 and nothing else.
 
 There is no second board filesystem and no parallel task store: every number on the page

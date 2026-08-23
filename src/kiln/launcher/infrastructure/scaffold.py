@@ -19,8 +19,8 @@ from pathlib import Path
 
 from kiln.scheduler.infrastructure.vcs import git as git_ops
 
+from ..domain.paths import KilnPaths
 from . import workspace
-from .paths import KilnPaths
 
 log = logging.getLogger(__name__)
 
@@ -124,9 +124,7 @@ def write_initial_mcp_json(paths: KilnPaths, result: ScaffoldResult) -> None:
     this with the full config once roles are known.
     """
     config = {
-        "mcpServers": {
-            "kiln-db": {"command": "npx", "args": ["mcp-sqlite", str(paths.db_path)]}
-        }
+        "mcpServers": {"kiln-db": {"command": "npx", "args": ["mcp-sqlite", str(paths.db_path)]}}
     }
     (paths.project_root / ".mcp.json").write_text(
         json.dumps(config, indent=2) + "\n", encoding="utf-8"

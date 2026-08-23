@@ -33,19 +33,19 @@ from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from .capture import (
+from ...domain.capture import (
     DEFAULT_BODY_LIMIT_BYTES,
     SENSITIVE_HEADERS,
     CaptureMode,
     StreamingUsageTracker,
     TrafficRecord,
-    TrafficStore,
     capture_body,
     extract_composition,
     extract_model,
     extract_usage,
     redact_headers,
 )
+from ..persistence import TrafficStore
 
 log = logging.getLogger(__name__)
 
@@ -80,6 +80,7 @@ def parse_upstream(value: str) -> Upstream:
     host, separator, rest = value.strip().strip("/").partition("/")
     return Upstream(host=host, base_path=(separator + rest) if separator else "")
 
+
 #: Prefix that carries the role name, e.g. `/kiln/coder/v1/messages`.
 ROLE_PREFIX = "/kiln/"
 
@@ -91,8 +92,14 @@ CHUNK_BYTES = 8192
 #: message, and passing them on corrupts the next one. Per RFC 9110 §7.6.1.
 HOP_BY_HOP_HEADERS = frozenset(
     {
-        "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
-        "te", "trailers", "transfer-encoding", "upgrade",
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailers",
+        "transfer-encoding",
+        "upgrade",
     }
 )
 
@@ -120,19 +127,25 @@ STUB_EVENTS = (
     {
         "type": "message_start",
         "message": {
-            "id": "msg_kiln_stub", "type": "message", "role": "assistant",
-            "model": "kiln-proxy-stub", "content": [],
+            "id": "msg_kiln_stub",
+            "type": "message",
+            "role": "assistant",
+            "model": "kiln-proxy-stub",
+            "content": [],
             "usage": {"input_tokens": 0, "output_tokens": 0},
         },
     },
-    {"type": "content_block_start", "index": 0,
-     "content_block": {"type": "text", "text": ""}},
-    {"type": "content_block_delta", "index": 0,
-     "delta": {"type": "text_delta",
-               "text": "kiln proxy stub: request captured, nothing forwarded"}},
+    {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
+    {
+        "type": "content_block_delta",
+        "index": 0,
+        "delta": {
+            "type": "text_delta",
+            "text": "kiln proxy stub: request captured, nothing forwarded",
+        },
+    },
     {"type": "content_block_stop", "index": 0},
-    {"type": "message_delta", "delta": {"stop_reason": "end_turn"},
-     "usage": {"output_tokens": 0}},
+    {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 0}},
     {"type": "message_stop"},
 )
 
@@ -147,7 +160,7 @@ def split_role(path: str) -> tuple[str | None, str]:
     """
     if not path.startswith(ROLE_PREFIX):
         return None, path
-    remainder = path[len(ROLE_PREFIX):]
+    remainder = path[len(ROLE_PREFIX) :]
     role, separator, rest = remainder.partition("/")
     if not role:
         return None, path
@@ -224,8 +237,15 @@ class ProxyHandler(BaseHTTPRequestHandler):
             log.error("upstream request failed: %s", exc)
             self.send_error(502, "upstream request failed")
             self._record(
-                role, method, upstream_path, request_bytes, b"", None,
-                started, status=502, usage=None,
+                role,
+                method,
+                upstream_path,
+                request_bytes,
+                b"",
+                None,
+                started,
+                status=502,
+                usage=None,
             )
             return
 
@@ -265,18 +285,26 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
         log.info(
             "stub: %s %s from role=%s, auth headers seen: %s",
-            method, path, role or "-",
+            method,
+            path,
+            role or "-",
             ", ".join(sorted(self._auth_header_names())) or "NONE",
         )
         self._record(
-            role, method, path, request_bytes, b"", 0, started, status=200, usage=None,
+            role,
+            method,
+            path,
+            request_bytes,
+            b"",
+            0,
+            started,
+            status=200,
+            usage=None,
         )
 
     def _auth_header_names(self) -> set[str]:
         """Which credential headers the client attached — names only, never values."""
-        return {
-            name.lower() for name in self.headers if name.lower() in SENSITIVE_HEADERS
-        }
+        return {name.lower() for name in self.headers if name.lower() in SENSITIVE_HEADERS}
 
     def _forward(
         self, method: str, path: str, body: bytes, role: str | None = None
@@ -371,8 +399,15 @@ class ProxyHandler(BaseHTTPRequestHandler):
             pass
 
         self._record(
-            role, method, path, request_bytes, bytes(captured), total,
-            started, status=response.status, usage=tracker.usage,
+            role,
+            method,
+            path,
+            request_bytes,
+            bytes(captured),
+            total,
+            started,
+            status=response.status,
+            usage=tracker.usage,
         )
 
     def _record(
@@ -409,9 +444,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 # fallback for a non-streamed JSON reply, which has no SSE events at all.
                 tokens=usage or extract_usage(response_text),
                 request_body=capture_body(request_text, self.config.mode, self.config.body_limit),
-                response_body=capture_body(
-                    response_text, self.config.mode, self.config.body_limit
-                ),
+                response_body=capture_body(response_text, self.config.mode, self.config.body_limit),
                 request_headers=redact_headers(dict(self.headers.items())),
             )
             self.config.store.record(entry)
@@ -453,7 +486,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--upstream", default=DEFAULT_UPSTREAM)
     parser.add_argument(
-        "--route", action="append", default=[], metavar="ROLE=HOST[/BASE-PATH]",
+        "--route",
+        action="append",
+        default=[],
+        metavar="ROLE=HOST[/BASE-PATH]",
         help=(
             "send one role's traffic to a different upstream, e.g. "
             "--route architect=chatgpt.com/backend-api/codex. Repeatable. Roles not named "
@@ -468,7 +504,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="metadata (default) records sizes/model/usage only; full also stores bodies",
     )
     parser.add_argument(
-        "--stub", action="store_true",
+        "--stub",
+        action="store_true",
         help=(
             "answer locally and never contact the upstream: records what a client sent "
             "and which credential it attached, at zero cost. Use to verify wiring."
@@ -496,7 +533,8 @@ def parse_routes(values: list[str]) -> dict[str, Upstream]:
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI entry point
     args = build_parser().parse_args(argv)
     logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s [kiln-proxy/%(levelname)s] %(message)s",
+        level=logging.INFO,
+        format="%(asctime)s [kiln-proxy/%(levelname)s] %(message)s",
         datefmt="%H:%M:%S",
     )
     try:
@@ -517,7 +555,8 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI entry 
         log.info("  route: %s -> %s%s", role, upstream.host, upstream.base_path)
     log.info(
         "proxy listening on http://%s:%s -> %s (capture: %s)",
-        args.host, args.port,
+        args.host,
+        args.port,
         "STUB (nothing is forwarded)" if args.stub else args.upstream,
         args.mode,
     )

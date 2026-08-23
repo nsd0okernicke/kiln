@@ -74,7 +74,5 @@ def launch(panes: list[PaneSpec], layout: dict | None, dry_run: bool = False) ->
                     break
 
     if not dry_run and panes:
-        log.info(
-            "attach with: tmux attach -t %s", session_name(panes[0].role)
-        )
+        log.info("attach with: tmux attach -t %s", session_name(panes[0].role))
     return planned

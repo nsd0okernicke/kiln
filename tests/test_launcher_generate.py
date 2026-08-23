@@ -12,9 +12,9 @@ import json
 
 import pytest
 
-from kiln.launcher import generate
-from kiln.launcher.config import RoleConfig, parse_profile
-from kiln.launcher.paths import KilnPaths
+from kiln.launcher.application import generate
+from kiln.launcher.domain.paths import KilnPaths
+from kiln.launcher.domain.profile import RoleConfig, parse_profile
 from kiln.scheduler.domain.status_contract import SENTINEL_PREFIX
 
 CONSTITUTION = {
@@ -458,7 +458,7 @@ class TestRoutingTableInjection:
     """
 
     def _profile(self, routing):
-        from kiln.launcher.config import Profile, RoleConfig
+        from kiln.launcher.domain.profile import Profile, RoleConfig
         from kiln.scheduler.domain.routing import parse_profile_routing
 
         return Profile(
@@ -479,7 +479,7 @@ class TestRoutingTableInjection:
         )
 
     def test_the_placeholder_is_replaced(self, paths):
-        from kiln.launcher.config import RoleConfig
+        from kiln.launcher.domain.profile import RoleConfig
 
         self._workflow_with_placeholder(paths)
         content = generate.render_instructions(
@@ -489,7 +489,7 @@ class TestRoutingTableInjection:
         assert "{{ROUTING_TABLE}}" not in content
 
     def test_the_agent_sees_its_own_profile_s_routing(self, paths):
-        from kiln.launcher.config import RoleConfig
+        from kiln.launcher.domain.profile import RoleConfig
 
         self._workflow_with_placeholder(paths)
         content = generate.render_instructions(
@@ -502,7 +502,7 @@ class TestRoutingTableInjection:
     def test_it_never_shows_a_route_the_profile_does_not_have(self, paths):
         # The trap this closes: instructions telling a wrapper role to hand off to a role
         # its own swarm never launches.
-        from kiln.launcher.config import RoleConfig
+        from kiln.launcher.domain.profile import RoleConfig
 
         self._workflow_with_placeholder(paths)
         content = generate.render_instructions(
@@ -512,7 +512,7 @@ class TestRoutingTableInjection:
         assert "refactorer" not in content
 
     def test_a_conditional_row_survives_into_the_instructions(self, paths):
-        from kiln.launcher.config import RoleConfig
+        from kiln.launcher.domain.profile import RoleConfig
 
         self._workflow_with_placeholder(paths)
         content = generate.render_instructions(

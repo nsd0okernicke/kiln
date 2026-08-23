@@ -20,14 +20,14 @@ from pathlib import Path
 
 from kiln.scheduler.infrastructure.vcs import git as git_ops
 
-from .config import Profile, RoleConfig
-from .generate import (
+from ..application.generate import (
     build_codex_config_toml,
     build_copilot_mcp_config,
     channel_is_available,
     write_mcp_config,
 )
-from .paths import KilnPaths
+from ..domain.paths import KilnPaths
+from ..domain.profile import Profile, RoleConfig
 
 log = logging.getLogger(__name__)
 
@@ -125,9 +125,7 @@ GITATTRIBUTES = (
 def ensure_gitattributes(paths: KilnPaths) -> Path:
     """Create or top up the project `.gitattributes` with the entries Kiln requires."""
     path = paths.project_root / ".gitattributes"
-    required = [
-        line for line in GITATTRIBUTES.splitlines() if line and not line.startswith("#")
-    ]
+    required = [line for line in GITATTRIBUTES.splitlines() if line and not line.startswith("#")]
     if not path.exists():
         path.write_text(GITATTRIBUTES, encoding="utf-8")
         return path
@@ -197,7 +195,8 @@ def make_executable(path: Path) -> None:
         if not os.access(path, os.X_OK):
             log.warning(
                 "could not make %s executable (%s); git will silently skip this hook",
-                path, exc,
+                path,
+                exc,
             )
 
 
@@ -383,7 +382,8 @@ def warn_if_worktree_conflicts(paths: KilnPaths, role_branch: str, branch: str) 
         "worktree branch %r would conflict with the current %r branch tip -- this looks like "
         "a worktree left over from an earlier, unrelated run rather than one that's just behind "
         "on this run's handoffs:",
-        role_branch, branch,
+        role_branch,
+        branch,
     )
     for conflict in conflicts:
         log.warning("   %s", conflict)
@@ -434,7 +434,10 @@ def prepare_worktrees(profile: Profile, paths: KilnPaths, branch: str) -> list[P
         _copy_worker_definitions(paths, worktree)
         # See generate.channel_is_available for why a role may not get the blocking channel.
         write_mcp_config(
-            worktree, paths, role.role, branch,
+            worktree,
+            paths,
+            role.role,
+            branch,
             include_channel=channel_is_available(role),
         )
         (worktree / "tmp").mkdir(parents=True, exist_ok=True)
@@ -663,7 +666,8 @@ def seed_codex_auth(home: Path) -> bool:
     if not source.is_file():
         log.warning(
             "no Codex credentials at %s; codex roles will fail to authenticate. "
-            "Run `codex login` first.", source,
+            "Run `codex login` first.",
+            source,
         )
         return False
     try:

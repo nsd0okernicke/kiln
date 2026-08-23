@@ -7,6 +7,7 @@ import uuid
 from contextlib import closing
 
 import pytest
+
 from kiln.scheduler.infrastructure.persistence import db
 
 

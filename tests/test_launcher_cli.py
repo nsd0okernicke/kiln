@@ -16,8 +16,8 @@ from typing import ClassVar
 
 import pytest
 
-from kiln.launcher import cli, scaffold
-from kiln.launcher.paths import KilnPaths
+from kiln.launcher.domain.paths import KilnPaths
+from kiln.launcher.infrastructure import cli, scaffold
 
 pytestmark = pytest.mark.integration
 
@@ -129,7 +129,7 @@ class TestScaffold:
         target = tmp_path / "proj"
         scaffold.scaffold(target, framework)
         assert (target / ".git").exists()
-        from kiln.launcher import workspace
+        from kiln.launcher.infrastructure import workspace
 
         assert workspace.run_git(["rev-parse", "HEAD"], target).returncode != 0
 
@@ -174,7 +174,7 @@ class TestChannelPreflight:
     """
 
     def _profile(self, *scheduled):
-        from kiln.launcher.config import Profile, RoleConfig
+        from kiln.launcher.domain.profile import Profile, RoleConfig
 
         roles = [
             RoleConfig(role=name, scheduler="python" if name in scheduled else None)
@@ -305,9 +305,9 @@ class TestStopMarkers:
 
     @pytest.mark.parametrize("role_kwargs", PANE_ROLES)
     def test_each_python_backed_pane_has_a_stop_marker(self, tmp_path, role_kwargs):
-        from kiln.launcher.commands import build_agent_command
-        from kiln.launcher.config import RoleConfig
-        from kiln.launcher.stop import KILN_PROCESS_MARKERS
+        from kiln.launcher.application.commands import build_agent_command
+        from kiln.launcher.domain.profile import RoleConfig
+        from kiln.launcher.infrastructure.stop import KILN_PROCESS_MARKERS
 
         paths = KilnPaths.create(tmp_path / "proj", tmp_path / "fw")
         command = build_agent_command(RoleConfig(**role_kwargs), paths, branch="main")
@@ -319,13 +319,13 @@ class TestStopMarkers:
     def test_the_capture_proxy_is_stoppable(self):
         # Not a pane -- a detached background process -- but started by the same launch and
         # it must end with it. A proxy left listening would relay whatever ran next.
-        from kiln.launcher.stop import KILN_PROCESS_MARKERS
+        from kiln.launcher.infrastructure.stop import KILN_PROCESS_MARKERS
 
-        assert "kiln.proxy.server" in KILN_PROCESS_MARKERS
+        assert "kiln.proxy.infrastructure.http.server" in KILN_PROCESS_MARKERS
 
     def test_the_mcp_channel_server_marker_survives(self):
         # Not produced by any pane command, so an enumeration test would happily delete it.
-        from kiln.launcher.stop import KILN_PROCESS_MARKERS
+        from kiln.launcher.infrastructure.stop import KILN_PROCESS_MARKERS
 
         assert "channel.py" in KILN_PROCESS_MARKERS
 
@@ -339,7 +339,7 @@ class TestPanesCarryPassivity:
     """
 
     def _profile(self):
-        from kiln.launcher.config import parse_profile
+        from kiln.launcher.domain.profile import parse_profile
 
         return parse_profile(
             {
@@ -392,34 +392,36 @@ class TestReclaimingLeftoverProxies:
     """
 
     def _processes(self, monkeypatch, rows):
-        from kiln.launcher import stop
+        from kiln.launcher.infrastructure import stop
 
         monkeypatch.setattr(stop, "_windows_matches", lambda: rows)
         monkeypatch.setattr(stop, "_posix_matches", lambda: rows)
 
     def test_a_proxy_for_this_project_is_found(self, monkeypatch, tmp_path):
-        from kiln.launcher import stop
+        from kiln.launcher.infrastructure import stop
 
         db = tmp_path / ".kiln" / "traffic.db"
         self._processes(monkeypatch, [
-            (11, f"python -m kiln.proxy.server --db-path {db} --port 8787 --mode metadata"),
+            (11, "python -m kiln.proxy.infrastructure.http.server "
+             f"--db-path {db} --port 8787 --mode metadata"),
         ])
         assert [pid for pid, _ in stop.find_project_proxies(db)] == [11]
 
     def test_another_project_s_proxy_is_left_alone(self, monkeypatch, tmp_path):
         # Starting a swarm has no business killing another project's capture. `--stop` is
         # machine-wide by design; this is not.
-        from kiln.launcher import stop
+        from kiln.launcher.infrastructure import stop
 
         mine = tmp_path / "mine" / "traffic.db"
         theirs = tmp_path / "theirs" / "traffic.db"
         self._processes(monkeypatch, [
-            (22, f"python -m kiln.proxy.server --db-path {theirs} --port 8787 --mode metadata"),
+            (22, "python -m kiln.proxy.infrastructure.http.server "
+             f"--db-path {theirs} --port 8787 --mode metadata"),
         ])
         assert stop.find_project_proxies(mine) == []
 
     def test_other_kiln_processes_are_not_mistaken_for_proxies(self, monkeypatch, tmp_path):
-        from kiln.launcher import stop
+        from kiln.launcher.infrastructure import stop
 
         db = tmp_path / ".kiln" / "traffic.db"
         self._processes(monkeypatch, [
@@ -428,11 +430,12 @@ class TestReclaimingLeftoverProxies:
         assert stop.find_project_proxies(db) == []
 
     def test_the_leftover_is_killed(self, monkeypatch, tmp_path):
-        from kiln.launcher import stop
+        from kiln.launcher.infrastructure import stop
 
         db = tmp_path / ".kiln" / "traffic.db"
         self._processes(monkeypatch, [
-            (44, f"python -m kiln.proxy.server --db-path {db} --port 8787 --mode metadata"),
+            (44, "python -m kiln.proxy.infrastructure.http.server "
+             f"--db-path {db} --port 8787 --mode metadata"),
         ])
         killed = []
         monkeypatch.setattr(stop, "kill_process", lambda pid: killed.append(pid) or True)
@@ -440,7 +443,7 @@ class TestReclaimingLeftoverProxies:
         assert killed == [44]
 
     def test_nothing_running_is_not_an_error(self, monkeypatch, tmp_path):
-        from kiln.launcher import stop
+        from kiln.launcher.infrastructure import stop
 
         self._processes(monkeypatch, [])
         assert stop.stop_project_proxies(tmp_path / "traffic.db") == []
@@ -534,7 +537,7 @@ class TestProxyRoutes:
     """
 
     def _profile(self, *agents):
-        from kiln.launcher.config import Profile, RoleConfig
+        from kiln.launcher.domain.profile import Profile, RoleConfig
 
         roles = [RoleConfig(role=f"r{index}", agent=agent)
                  for index, agent in enumerate(agents)]
@@ -695,21 +698,21 @@ class TestUnscaffoldedProject:
     """
 
     def test_missing_scaffolding_is_reported_with_a_remedy(self, tmp_path):
-        from kiln.launcher.templates import TemplateError, check_project_scaffolding
+        from kiln.launcher.application.templates import TemplateError, check_project_scaffolding
 
         paths = KilnPaths.create(tmp_path, tmp_path)
         with pytest.raises(TemplateError, match="not a scaffolded Kiln project"):
             check_project_scaffolding(paths)
 
     def test_error_names_the_init_command(self, tmp_path):
-        from kiln.launcher.templates import TemplateError, check_project_scaffolding
+        from kiln.launcher.application.templates import TemplateError, check_project_scaffolding
 
         paths = KilnPaths.create(tmp_path, tmp_path)
         with pytest.raises(TemplateError, match="kiln init"):
             check_project_scaffolding(paths)
 
     def test_missing_workflow_is_fatal(self, tmp_path):
-        from kiln.launcher.templates import TemplateError, check_project_scaffolding
+        from kiln.launcher.application.templates import TemplateError, check_project_scaffolding
 
         paths = KilnPaths.create(tmp_path, tmp_path)
         paths.constitution_dir.mkdir(parents=True)
@@ -717,7 +720,7 @@ class TestUnscaffoldedProject:
             check_project_scaffolding(paths)
 
     def test_workflow_alone_is_enough_to_proceed(self, tmp_path):
-        from kiln.launcher.templates import check_project_scaffolding
+        from kiln.launcher.application.templates import check_project_scaffolding
 
         paths = KilnPaths.create(tmp_path, tmp_path)
         paths.constitution_dir.mkdir(parents=True)
@@ -725,7 +728,7 @@ class TestUnscaffoldedProject:
         check_project_scaffolding(paths)  # must not raise
 
     def test_optional_sections_degrade_instead_of_aborting(self, tmp_path):
-        from kiln.launcher.templates import read_constitution
+        from kiln.launcher.application.templates import read_constitution
 
         paths = KilnPaths.create(tmp_path, tmp_path)
         paths.constitution_dir.mkdir(parents=True)

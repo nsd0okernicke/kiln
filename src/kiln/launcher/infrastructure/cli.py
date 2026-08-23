@@ -1,9 +1,9 @@
 """
 `kiln` entry point — the launch sequence that bin/kiln.ps1 and bin/kiln.sh used to own.
 
-    python -m kiln.launcher.cli --working-dir C:\\path\\to\\project
-    python -m kiln.launcher.cli --stop
-    python -m kiln.launcher.cli --list-profiles
+    python -m kiln.launcher.infrastructure.cli --working-dir C:\\path\\to\\project
+    python -m kiln.launcher.infrastructure.cli --stop
+    python -m kiln.launcher.infrastructure.cli --list-profiles
 
 Flag names keep their PowerShell spellings as aliases (`-WorkingDir`, `-Profile`, …) so the
 shim scripts can forward arguments through unchanged.
@@ -21,8 +21,8 @@ import sys
 import time
 from pathlib import Path
 
-from . import generate, ports, scaffold, stop, workspace
-from .commands import (
+from ..application import generate
+from ..application.commands import (
     PROXY_CAPABLE_AGENTS,
     PROXY_UPSTREAMS,
     build_agent_command,
@@ -30,7 +30,10 @@ from .commands import (
     render_posix,
     render_powershell,
 )
-from .config import (
+from ..application.generate import CHANNEL_IMPORT_PROBE, MCP_PYTHON
+from ..application.templates import TemplateError, check_project_scaffolding, resolve_framework_root
+from ..domain.paths import KilnPaths, python_command
+from ..domain.profile import (
     Profile,
     ProfileError,
     apply_agent_override,
@@ -38,9 +41,7 @@ from .config import (
     list_profiles,
     load_profile,
 )
-from .generate import CHANNEL_IMPORT_PROBE, MCP_PYTHON
-from .paths import KilnPaths, python_command
-from .templates import TemplateError, check_project_scaffolding, resolve_framework_root
+from . import ports, scaffold, stop, workspace
 from .terminals import TMUX, WEZTERM, WINDOWS_TERMINAL, PaneSpec, TerminalError, detect_backend
 from .terminals import launch as launch_terminal
 
@@ -84,14 +85,20 @@ def warn_if_channel_unavailable(profile: Profile) -> bool:
         log.warning(
             "%r is not on PATH, so the kiln-channel server cannot start. "
             "Roles %s will be unable to receive handoffs.",
-            MCP_PYTHON, ", ".join(wrapper_roles),
+            MCP_PYTHON,
+            ", ".join(wrapper_roles),
         )
         return True
 
     probe = subprocess.run(
         [MCP_PYTHON, "-c", CHANNEL_IMPORT_PROBE],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
-        stdin=subprocess.DEVNULL, check=False, timeout=30,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        stdin=subprocess.DEVNULL,
+        check=False,
+        timeout=30,
     )
     if probe.returncode == 0:
         return False
@@ -101,8 +108,10 @@ def warn_if_channel_unavailable(profile: Profile) -> bool:
         "the kiln-channel MCP server will not start: %r cannot import the MCP SDK (%s). "
         "Roles %s receive handoffs through it and will silently fall back to asking you "
         "for instructions. Fix with:  %s",
-        MCP_PYTHON, detail[-1] if detail else "unknown import error",
-        ", ".join(wrapper_roles), mcp_install_hint(),
+        MCP_PYTHON,
+        detail[-1] if detail else "unknown import error",
+        ", ".join(wrapper_roles),
+        mcp_install_hint(),
     )
     return True
 
@@ -167,9 +176,7 @@ def build_panes(
     panes: list[PaneSpec] = []
     for role in profile.roles:
         worktree = workspace.worktree_for(role, paths)
-        command = build_agent_command(
-            role, paths, branch, proxy_url=proxy_url, profile=profile
-        )
+        command = build_agent_command(role, paths, branch, proxy_url=proxy_url, profile=profile)
         panes.append(
             PaneSpec(
                 role=role.role,
@@ -346,10 +353,15 @@ def start_proxy(
     port = port if port_is_explicit else find_free_port(port)
 
     command = [
-        python_command(), "-m", "kiln.proxy.server",
-        "--db-path", str(paths.traffic_db),
-        "--port", str(port),
-        "--mode", capture_mode,
+        python_command(),
+        "-m",
+        "kiln.proxy.infrastructure.http.server",
+        "--db-path",
+        str(paths.traffic_db),
+        "--port",
+        str(port),
+        "--mode",
+        capture_mode,
         *proxy_routes(profile),
     ]
     environment = {
@@ -399,7 +411,8 @@ def run_launch(args: argparse.Namespace) -> int:
         profile = apply_agent_override(profile, args.agent_override, args.model_override)
         log.info(
             "agent override: every agent-bearing role runs on %s (model: %s)",
-            args.agent_override, args.model_override or "the backend's own default",
+            args.agent_override,
+            args.model_override or "the backend's own default",
         )
     check_launchable(profile)
     log.info("profile: %s (%d roles)", profile.name, len(profile.roles))
@@ -414,7 +427,10 @@ def run_launch(args: argparse.Namespace) -> int:
     proxy_url = None
     if args.proxy and not args.dry_run:
         proxy_url = start_proxy(
-            paths, args.proxy_port, args.capture, profile,
+            paths,
+            args.proxy_port,
+            args.capture,
+            profile,
             port_is_explicit=args.proxy_port != DEFAULT_PROXY_PORT,
         )
         log.info("capture proxy: %s (%s) -> %s", proxy_url, args.capture, paths.traffic_db)
@@ -427,9 +443,7 @@ def run_launch(args: argparse.Namespace) -> int:
         ]
         if unrouted:
             # Silence here would look like a capture bug later.
-            log.warning(
-                "  not routed (no verified base-URL override): %s", ", ".join(unrouted)
-            )
+            log.warning("  not routed (no verified base-URL override): %s", ", ".join(unrouted))
     elif args.proxy and args.dry_run:
         proxy_url = f"http://127.0.0.1:{args.proxy_port}"
         log.info("capture proxy: would start on %s", proxy_url)
@@ -505,27 +519,39 @@ def run_list_profiles(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="kiln", description="Launch a Kiln multi-agent swarm."
-    )
+    parser = argparse.ArgumentParser(prog="kiln", description="Launch a Kiln multi-agent swarm.")
     parser.add_argument(
-        "--working-dir", "--target", "-WorkingDir", "-Target",
-        dest="working_dir", default=".",
+        "--working-dir",
+        "--target",
+        "-WorkingDir",
+        "-Target",
+        dest="working_dir",
+        default=".",
         help="project directory (default: current directory)",
     )
     parser.add_argument(
         # `-ProfileName` was the PowerShell original's *primary* spelling (`-Profile` was its
         # alias), and it is what the README documented. Dropping it silently broke every
         # existing invocation, so both are accepted.
-        "--profile", "-Profile", "-ProfileName", dest="profile", default=None,
+        "--profile",
+        "-Profile",
+        "-ProfileName",
+        dest="profile",
+        default=None,
         help="profile name (default: the profile named by 'default')",
     )
     parser.add_argument(
-        "--terminal", "-Terminal", dest="terminal", default=None,
+        "--terminal",
+        "-Terminal",
+        dest="terminal",
+        default=None,
         help=f"terminal backend: {WEZTERM}, wt, {TMUX} or none",
     )
     parser.add_argument(
-        "--agent-override", "-AgentOverride", dest="agent_override", default=None,
+        "--agent-override",
+        "-AgentOverride",
+        dest="agent_override",
+        default=None,
         help=(
             "run every agent-bearing role of the chosen profile on this backend instead. "
             "Drops each role's model, since model names are backend-specific -- pass "
@@ -533,46 +559,97 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--model-override", "-ModelOverride", dest="model_override", default="",
+        "--model-override",
+        "-ModelOverride",
+        dest="model_override",
+        default="",
         help="model to use with --agent-override (default: let the backend's CLI choose)",
     )
     parser.add_argument(
-        "--all-profiles", "-AllProfiles", dest="all_profiles", action="store_true",
+        "--all-profiles",
+        "-AllProfiles",
+        dest="all_profiles",
+        action="store_true",
         help="with --list-profiles, include profiles marked as test fixtures",
     )
-    parser.add_argument("command", nargs="?", default="",
-                        help="'init' to scaffold a new project; 'send', 'inbox' or "
-                             "'retry' for the human entry points; omit to launch")
+    parser.add_argument(
+        "command",
+        nargs="?",
+        default="",
+        help="'init' to scaffold a new project; 'send', 'inbox' or "
+        "'retry' for the human entry points; omit to launch",
+    )
     # `kiln init <dir>` is the form both the README and kiln.sh's own usage block document,
     # but only `command` existed, so argparse rejected the directory as an unrecognised
     # argument and the documented Unix scaffolding invocation could not run at all.
-    parser.add_argument("init_target", nargs="?", default="",
-                        help="with 'init', the project directory to scaffold "
-                             "(equivalent to --working-dir)")
-    parser.add_argument("--init", "-Init", dest="init", action="store_true",
-                        help="scaffold a new project instead of launching")
-    parser.add_argument("--example", "-Example", dest="example", default="",
-                        help="seed the scaffold from examples/<name>")
-    parser.add_argument("--no-git", "-NoGit", dest="no_git", action="store_true",
-                        help="skip git initialisation when scaffolding")
-    parser.add_argument("--stop", "-Stop", dest="stop", action="store_true",
-                        help="stop a running swarm")
-    parser.add_argument("--list-profiles", "-ListProfiles", dest="list_profiles",
-                        action="store_true", help="list available profiles and exit")
-    parser.add_argument("--dry-run", dest="dry_run", action="store_true",
-                        help="show what would be launched without starting anything")
-    parser.add_argument("--proxy", "-Proxy", dest="proxy",
-                        action=argparse.BooleanOptionalAction, default=False,
-                        help="route agent API traffic through the local capture proxy "
-                             "(claude and codex roles). Off by default. Only metadata is "
-                             "recorded unless --capture full is also given")
-    parser.add_argument("--proxy-port", dest="proxy_port", type=int,
-                        default=DEFAULT_PROXY_PORT,
-                        help=f"port for the capture proxy (default: {DEFAULT_PROXY_PORT})")
-    parser.add_argument("--capture", dest="capture", choices=["metadata", "full"],
-                        default="metadata",
-                        help="proxy capture depth: 'metadata' records sizes/model/usage, "
-                             "'full' also stores request and response bodies")
+    parser.add_argument(
+        "init_target",
+        nargs="?",
+        default="",
+        help="with 'init', the project directory to scaffold (equivalent to --working-dir)",
+    )
+    parser.add_argument(
+        "--init",
+        "-Init",
+        dest="init",
+        action="store_true",
+        help="scaffold a new project instead of launching",
+    )
+    parser.add_argument(
+        "--example",
+        "-Example",
+        dest="example",
+        default="",
+        help="seed the scaffold from examples/<name>",
+    )
+    parser.add_argument(
+        "--no-git",
+        "-NoGit",
+        dest="no_git",
+        action="store_true",
+        help="skip git initialisation when scaffolding",
+    )
+    parser.add_argument(
+        "--stop", "-Stop", dest="stop", action="store_true", help="stop a running swarm"
+    )
+    parser.add_argument(
+        "--list-profiles",
+        "-ListProfiles",
+        dest="list_profiles",
+        action="store_true",
+        help="list available profiles and exit",
+    )
+    parser.add_argument(
+        "--dry-run",
+        dest="dry_run",
+        action="store_true",
+        help="show what would be launched without starting anything",
+    )
+    parser.add_argument(
+        "--proxy",
+        "-Proxy",
+        dest="proxy",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="route agent API traffic through the local capture proxy "
+        "(claude and codex roles). Off by default. Only metadata is "
+        "recorded unless --capture full is also given",
+    )
+    parser.add_argument(
+        "--proxy-port",
+        dest="proxy_port",
+        type=int,
+        default=DEFAULT_PROXY_PORT,
+        help=f"port for the capture proxy (default: {DEFAULT_PROXY_PORT})",
+    )
+    parser.add_argument(
+        "--capture",
+        dest="capture",
+        choices=["metadata", "full"],
+        default="metadata",
+        help="proxy capture depth: 'metadata' records sizes/model/usage, "
+        "'full' also stores request and response bodies",
+    )
     parser.add_argument("--verbose", "-Debug", dest="verbose", action="store_true")
     return parser
 
@@ -600,9 +677,7 @@ def resolve_queue_context(argv: list[str]) -> list[str]:
             del remaining[index : index + 2]
             break
 
-    paths = KilnPaths.create(
-        Path(working_dir).expanduser().resolve(), resolve_framework_root()
-    )
+    paths = KilnPaths.create(Path(working_dir).expanduser().resolve(), resolve_framework_root())
     if not paths.db_path.is_file():
         raise LaunchError(
             f"no message queue at {paths.db_path}. Launch the swarm in this project first."
@@ -649,7 +724,8 @@ def main(argv: list[str] | None = None) -> int:
         log.error(
             "Unknown argument %r. Expected 'init', 'send', 'inbox' or 'retry', or "
             "named flags "
-            "like -WorkingDir.", args.command,
+            "like -WorkingDir.",
+            args.command,
         )
         return 1
 

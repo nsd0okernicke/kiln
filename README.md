@@ -8,7 +8,7 @@
 
 Kiln launches a config-driven multi-agent swarm, each agent working in its own git worktree with role-specific instructions and cross-agent communication. It is Git-aware: sub-branches are created per worktree, all state lives in `.kiln/`, and handoffs are tracked in `logbook.md`.
 
-**Kiln is a Python application.** `bin/kiln.ps1` and `bin/kiln.sh` are thin shims that put `src/` on `PYTHONPATH` and hand off to `python -m kiln.launcher.cli`; every platform runs the same code. Terminals are backend-specific (WezTerm, Windows Terminal, tmux), but nothing else is.
+**Kiln is a Python application.** `bin/kiln.ps1` and `bin/kiln.sh` are thin shims that put `src/` on `PYTHONPATH` and hand off to `python -m kiln.launcher.infrastructure.cli`; every platform runs the same code. Terminals are backend-specific (WezTerm, Windows Terminal, tmux), but nothing else is.
 
 ---
 
@@ -155,7 +155,7 @@ my-project/
 ## Platform Support
 
 One Python implementation runs on every platform. The shell scripts are shims — they locate
-the framework, set `PYTHONPATH`, and forward their arguments to `python -m kiln.launcher.cli`
+the framework, set `PYTHONPATH`, and forward their arguments to `python -m kiln.launcher.infrastructure.cli`
 unchanged. There is no second implementation to fall behind.
 
 **Shared requirements (all platforms):**
@@ -207,8 +207,8 @@ The Kiln repository is organized for clarity and maintainability:
 ```text
 kiln/
 ├── bin/                          # Entry points
-│   ├── kiln.ps1                  # Windows shim -> python -m kiln.launcher.cli
-│   ├── kiln.sh                   # Unix shim -> python -m kiln.launcher.cli
+│   ├── kiln.ps1                  # Windows shim -> python -m kiln.launcher.infrastructure.cli
+│   ├── kiln.sh                   # Unix shim -> python -m kiln.launcher.infrastructure.cli
 │   ├── kiln-cleanup.ps1          # Full project reset (Windows only — see Cleanup)
 │   ├── clear-messages.ps1 / .sh  # Empty the message queue (testing utility)
 │   └── kiln-db.ps1               # Inspect/manage messages.db (Windows only)
@@ -540,7 +540,7 @@ evidence after its pane is gone.
 
 ### Cockpit mode (`"scheduler": "cockpit"`)
 
-A fifth kind of pane, and the only one you read in a browser. It runs `kiln.cockpit.server`: a
+A fifth kind of pane, and the only one you read in a browser. It runs `kiln.cockpit.infrastructure.http.server`: a
 stdlib HTTP server bound to `127.0.0.1` that serves one page over the *same*
 `.kiln/messages.db`, `.kiln/status/<role>.json` and `.kiln/sessions` the dashboard reads.
 No agent, no worktree, no generated instructions, no MCP — the same passive shape as `inbox`
@@ -650,7 +650,7 @@ every Kiln process on the machine. Mutating requests additionally require an `X-
 header, which a hostile page in your browser cannot set against `127.0.0.1` without a
 preflight the server never approves. Do not put it behind a tunnel or a reverse kiln.proxy.
 
-Run it standalone against any project with `python -m kiln.cockpit.server --db-path ... --status-dir
+Run it standalone against any project with `python -m kiln.cockpit.infrastructure.http.server --db-path ... --status-dir
 ... --sessions-file ...` (see `--help`), or just launch a profile that includes it.
 
 ---
@@ -705,7 +705,7 @@ serving *another* project would record its traffic into that project's store whi
 appeared to work. `--proxy-port` pins an exact port instead, and fails rather than drifting if
 it is busy.
 
-`python -m kiln.proxy.server --stub` answers requests locally instead of forwarding, which makes
+`python -m kiln.proxy.infrastructure.http.server --stub` answers requests locally instead of forwarding, which makes
 the whole wiring dry-runnable without spending a token.
 
 ### What it stores
@@ -1104,7 +1104,7 @@ Written out in full, the way you would actually type them:
 
 ## Configuration Profiles
 
-Kiln uses JSON profiles to define swarm topology. The profile used when you pass no `--profile` is `full`, named by the top-level `"default"` key in `src/kiln/resources/profiles.json` (`load_profile()` in `src/kiln/launcher/config.py` resolves it at launch). All projects inherit the framework's profiles from `src/kiln/resources/profiles.json` automatically.
+Kiln uses JSON profiles to define swarm topology. The profile used when you pass no `--profile` is `full`, named by the top-level `"default"` key in `src/kiln/resources/profiles.json` (`load_profile()` in `src/kiln/launcher/domain/profile.py` resolves it at launch). All projects inherit the framework's profiles from `src/kiln/resources/profiles.json` automatically.
 
 **To customize profiles for a specific project**, create `kiln.profiles.json` at your project root. Kiln will use your custom profiles instead of the framework defaults.
 
@@ -1598,7 +1598,7 @@ breaker starts fresh rather than tripping again on the next single failure.
 }
 ```
 
-This is wired via Claude Code's subagent `model:` frontmatter field: `write_worker_file()` in `src/kiln/launcher/generate.py` writes `model: <workerModel>` into the generated `.claude/agents/<role>-worker.md` file when `workerModel` is set. In scheduler mode the same field is read back by `worker_prompt.py` to pick the one-shot worker's model. Claude Code resolves a dispatched subagent's model from its own frontmatter, independent of the parent session's model — so a Haiku-pinned wrapper genuinely dispatches a Sonnet worker, not Haiku. The framework's `full` profile (`src/kiln/resources/profiles.json`) currently runs both wrapper and worker on Sonnet for every role (`workerModel` omitted, so the worker just inherits the wrapper's model) — set `workerModel` explicitly per role if you want this cheaper/faster split instead.
+This is wired via Claude Code's subagent `model:` frontmatter field: `write_worker_file()` in `src/kiln/launcher/application/generate.py` writes `model: <workerModel>` into the generated `.claude/agents/<role>-worker.md` file when `workerModel` is set. In scheduler mode the same field is read back by `worker_prompt.py` to pick the one-shot worker's model. Claude Code resolves a dispatched subagent's model from its own frontmatter, independent of the parent session's model — so a Haiku-pinned wrapper genuinely dispatches a Sonnet worker, not Haiku. The framework's `full` profile (`src/kiln/resources/profiles.json`) currently runs both wrapper and worker on Sonnet for every role (`workerModel` omitted, so the worker just inherits the wrapper's model) — set `workerModel` explicitly per role if you want this cheaper/faster split instead.
 
 ### Layout Configurations
 
@@ -1929,12 +1929,12 @@ this one.
 
 ### Adding A Terminal Backend
 
-Backends live in `src/kiln/launcher/terminals/`, one module per backend. A backend
+Backends live in `src/kiln/launcher/infrastructure/terminals/`, one module per backend. A backend
 receives a resolved list of panes and is responsible only for getting each command running in
 its own surface:
 
 ```python
-# src/kiln/launcher/terminals/mybackend.py
+# src/kiln/launcher/infrastructure/terminals/mybackend.py
 from . import PaneSpec
 
 def launch(panes: list[PaneSpec], layout: dict | None, dry_run: bool = False) -> list[str]:

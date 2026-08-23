@@ -2,7 +2,7 @@
 The cockpit's write half — every button, against a real queue.
 
 Real SQLite, never a mock: these actions exist precisely to delegate to `scheduler.send`,
-`scheduler.retry` and `kiln.launcher.stop`, so a test that mocked the delegate would assert the
+`scheduler.retry` and launcher stop, so a test that mocked the delegate would assert the
 one thing the module does not do.
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from kiln.cockpit import actions
+from kiln.cockpit.application import actions
 from kiln.scheduler.infrastructure.persistence import db
 
 pytestmark = pytest.mark.integration

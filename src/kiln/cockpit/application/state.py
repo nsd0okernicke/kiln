@@ -101,32 +101,34 @@ def role_rows(snapshot: SwarmSnapshot, work_items: list[dict]) -> list[dict]:
     for session in visible_roles(snapshot.sessions):
         status = snapshot.statuses.get(session.role)
         queue = snapshot.queue_depth.get(session.role, 0)
-        rows.append({
-            "role": session.role,
-            "agent": session.agent,
-            "display_name": session.display_name,
-            # The status file first: that is the model the scheduler actually resolved,
-            # including the worker definition's frontmatter, which no other source knows.
-            # The sessions file is the fallback, and the only answer a *wrapper* role has --
-            # nothing writes a status model for a role with no scheduler behind it.
-            "model": (status or {}).get("model") or session.model or None,
-            "worktree": session.worktree or None,
-            "state": status["state"] if status else None,
-            "since": (status or {}).get("since"),
-            "since_ago": _since_ago(status, snapshot.now_utc),
-            "stalled": is_stalled(status, snapshot.now_utc),
-            "attempt": attempt_suffix(status).strip(),
-            "queue": queue,
-            "wait": _queue_wait(snapshot, session.role),
-            "cycles": (status or {}).get("cycles"),
-            "cost_usd": (status or {}).get("cost_usd"),
-            "tokens": (status or {}).get("tokens"),
-            "token_usage": (status or {}).get("token_usage") or {},
-            "cache_share": cache_share((status or {}).get("token_usage")),
-            "worker_timeout_sec": (status or {}).get("worker_timeout_sec"),
-            "heat": activity_heat(status, queue),
-            "work_item": holding.get(session.role),
-        })
+        rows.append(
+            {
+                "role": session.role,
+                "agent": session.agent,
+                "display_name": session.display_name,
+                # The status file first: that is the model the scheduler actually resolved,
+                # including the worker definition's frontmatter, which no other source knows.
+                # The sessions file is the fallback, and the only answer a *wrapper* role has --
+                # nothing writes a status model for a role with no scheduler behind it.
+                "model": (status or {}).get("model") or session.model or None,
+                "worktree": session.worktree or None,
+                "state": status["state"] if status else None,
+                "since": (status or {}).get("since"),
+                "since_ago": _since_ago(status, snapshot.now_utc),
+                "stalled": is_stalled(status, snapshot.now_utc),
+                "attempt": attempt_suffix(status).strip(),
+                "queue": queue,
+                "wait": _queue_wait(snapshot, session.role),
+                "cycles": (status or {}).get("cycles"),
+                "cost_usd": (status or {}).get("cost_usd"),
+                "tokens": (status or {}).get("tokens"),
+                "token_usage": (status or {}).get("token_usage") or {},
+                "cache_share": cache_share((status or {}).get("token_usage")),
+                "worker_timeout_sec": (status or {}).get("worker_timeout_sec"),
+                "heat": activity_heat(status, queue),
+                "work_item": holding.get(session.role),
+            }
+        )
     return rows
 
 
@@ -336,6 +338,7 @@ def build_state(
 
 # --- internals ---------------------------------------------------------------------
 
+
 def _card(row: dict, cycles: dict[str, int], now_local: datetime) -> dict:
     work_item = named_work_item(row)
     summary = extract_summary(row["content"], CARD_SUMMARY_CHARS)
@@ -397,7 +400,7 @@ def _observed_lanes(cards: list[dict]) -> list[str]:
 
     A poor substitute for the profile's role list and knowingly so: a role that has not yet
     received anything has no lane, so the board grows one as work reaches it. Good enough to
-    keep `python -m kiln.cockpit.server` useful on its own; the launcher always passes `--lanes`.
+    keep the standalone HTTP server useful; the launcher always passes `--lanes`.
     """
     order: list[str] = []
     for card in cards:

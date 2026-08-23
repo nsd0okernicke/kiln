@@ -14,7 +14,7 @@ import logging
 import re
 from pathlib import Path
 
-from .paths import KilnPaths
+from ..domain.paths import KilnPaths
 
 log = logging.getLogger(__name__)
 
@@ -23,9 +23,7 @@ BLOCK_SEPARATOR = "\n\n---\n\n"
 
 #: A role file's own loop sections are stripped before the role text is reused: the loop is
 #: the wrapper's concern (or the scheduler's), never the worker's.
-_LOOP_SECTION_RE = re.compile(
-    r"(?ms)^## (?:Message Loop|Interaction Loop).*?(?=^## |\Z)"
-)
+_LOOP_SECTION_RE = re.compile(r"(?ms)^## (?:Message Loop|Interaction Loop).*?(?=^## |\Z)")
 
 
 class TemplateError(Exception):
@@ -129,9 +127,9 @@ def resolve_framework_root(start: Path | None = None) -> Path:
     """
     Locate the Kiln checkout containing this package.
 
-    `launcher/` lives at `<framework_root>/src/kiln/launcher`, so the root is four parent
-    directories up. Computed from `__file__` rather than the cwd so the launcher works when
+    This module lives at `<framework_root>/src/kiln/launcher/application`, so the root is
+    five parent directories up. Computing it from `__file__` lets the launcher work when
     invoked by absolute path from anywhere.
     """
     here = (start or Path(__file__)).resolve()
-    return here.parent.parent.parent.parent
+    return here.parent.parent.parent.parent.parent

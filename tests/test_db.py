@@ -8,6 +8,7 @@ from __future__ import annotations
 from contextlib import closing
 
 import pytest
+
 from kiln.scheduler.infrastructure.persistence import db
 
 

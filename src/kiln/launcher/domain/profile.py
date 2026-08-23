@@ -22,7 +22,8 @@ from kiln.scheduler.domain.routing import RoutingTable, parse_profile_routing
 #: PowerShell one looked in ProgramData, the shell one in /etc — and the first Python port
 #: kept only the Windows path, silently dropping the documented Unix location.
 SYSTEM_PROFILES_PATH = (
-    Path("C:/ProgramData/kiln/profiles.json") if os.name == "nt"
+    Path("C:/ProgramData/kiln/profiles.json")
+    if os.name == "nt"
     else Path("/etc/kiln/profiles.json")
 )
 
@@ -66,15 +67,13 @@ SCHEDULER_INBOX = "inbox"
 SCHEDULER_DASHBOARD = "dashboard"
 
 #: Turns a role entry into the local web cockpit (issue #22) rather than an agent. It runs
-#: `kiln.cockpit.server`, which serves one page on 127.0.0.1 over the same `messages.db` and
+#: The HTTP adapter serves one page on 127.0.0.1 over the same `messages.db` and
 #: status files the dashboard reads. Same passive shape as `inbox` and `dashboard`, and
 #: deliberately alongside them rather than instead: the TTY dashboard is the only view that
 #: works over SSH or without a browser.
 SCHEDULER_COCKPIT = "cockpit"
 
-VALID_SCHEDULERS = (
-    SCHEDULER_PYTHON, SCHEDULER_INBOX, SCHEDULER_DASHBOARD, SCHEDULER_COCKPIT
-)
+VALID_SCHEDULERS = (SCHEDULER_PYTHON, SCHEDULER_INBOX, SCHEDULER_DASHBOARD, SCHEDULER_COCKPIT)
 
 
 class ProfileError(Exception):
@@ -134,7 +133,7 @@ class RoleConfig:
     #: Inbox panes only: ring the terminal bell on arrival. True is the shipped behaviour.
     bell: bool = True
     #: Cockpit panes only: the port to prefer. The cockpit probes upward when it is taken,
-    #: so this is a preference rather than a reservation. None keeps `kiln.cockpit.server`'s own
+    #: so this is a preference rather than a reservation. None keeps the HTTP adapter's own
     #: default -- one number, in one place, rather than a copy of it here.
     port: int | None = None
     #: Cockpit panes only: open a browser tab at launch. True is the shipped behaviour;
@@ -287,9 +286,7 @@ def find_profiles_config(
     project_root: str | Path, framework_root: str | Path | None = None
 ) -> Path:
     """Locate profiles.json, preferring a project-local override."""
-    candidates = _search_paths(
-        Path(project_root), Path(framework_root) if framework_root else None
-    )
+    candidates = _search_paths(Path(project_root), Path(framework_root) if framework_root else None)
     for path in candidates:
         if path.is_file():
             return path
@@ -320,13 +317,33 @@ def default_profile_name(
 #: Every key a terminal entry may carry. Anything else is a typo or a key from a version of
 #: Kiln this one is not -- either way the profile does not mean what its author thinks, and
 #: silently dropping it is how `"maxAttempts": 5` came to be *accepted and ignored*.
-TERMINAL_KEYS = frozenset({
-    "role", "agent", "worktree", "title", "mode", "model", "workerModel", "scheduler",
-    "watches", "workerDebug", "maxCycles", "maxBudgetUsd", "verify", "verifyTimeout",
-    "pollInterval", "workerTimeout", "workerIdleTimeout", "maxAttempts",
-    "escalationLimit", "activityLimit",
-    "bell", "port", "openBrowser",
-})
+TERMINAL_KEYS = frozenset(
+    {
+        "role",
+        "agent",
+        "worktree",
+        "title",
+        "mode",
+        "model",
+        "workerModel",
+        "scheduler",
+        "watches",
+        "workerDebug",
+        "maxCycles",
+        "maxBudgetUsd",
+        "verify",
+        "verifyTimeout",
+        "pollInterval",
+        "workerTimeout",
+        "workerIdleTimeout",
+        "maxAttempts",
+        "escalationLimit",
+        "activityLimit",
+        "bell",
+        "port",
+        "openBrowser",
+    }
+)
 
 #: Same, one level up.
 PROFILE_KEYS = frozenset({"description", "terminals", "layout", "routing", "defaults", "fixture"})
@@ -417,13 +434,9 @@ def _parse_role(entry: dict) -> RoleConfig:
         max_cycles=_positive_int_or_none(entry.get("maxCycles"), "maxCycles", role),
         max_budget_usd=budget,
         verify=str(entry.get("verify") or "").strip(),
-        verify_timeout=_positive_int_or_none(
-            entry.get("verifyTimeout"), "verifyTimeout", role
-        ),
+        verify_timeout=_positive_int_or_none(entry.get("verifyTimeout"), "verifyTimeout", role),
         poll_interval=_positive_or_none(entry.get("pollInterval"), "pollInterval", role),
-        worker_timeout=_positive_int_or_none(
-            entry.get("workerTimeout"), "workerTimeout", role
-        ),
+        worker_timeout=_positive_int_or_none(entry.get("workerTimeout"), "workerTimeout", role),
         worker_idle_timeout=_positive_or_none(
             entry.get("workerIdleTimeout"), "workerIdleTimeout", role
         ),
@@ -431,9 +444,7 @@ def _parse_role(entry: dict) -> RoleConfig:
         escalation_limit=_positive_int_or_none(
             entry.get("escalationLimit"), "escalationLimit", role
         ),
-        activity_limit=_positive_int_or_none(
-            entry.get("activityLimit"), "activityLimit", role
-        ),
+        activity_limit=_positive_int_or_none(entry.get("activityLimit"), "activityLimit", role),
         bell=bool(entry.get("bell", True)),
         port=_positive_int_or_none(entry.get("port"), "port", role),
         open_browser=bool(entry.get("openBrowser", True)),
@@ -578,9 +589,7 @@ def apply_agent_override(profile: Profile, agent: str, model: str = "") -> Profi
         )
 
     rewritten = tuple(
-        role if role.is_passive else replace(
-            role, agent=agent, model=model, worker_model=model
-        )
+        role if role.is_passive else replace(role, agent=agent, model=model, worker_model=model)
         for role in profile.roles
     )
     for role in rewritten:

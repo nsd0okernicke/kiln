@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 
 import pytest
+
 from kiln.scheduler.domain import worker_prompt
 from kiln.scheduler.domain.status_contract import SENTINEL_PREFIX, parse_worker_report
 

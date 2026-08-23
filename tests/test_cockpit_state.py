@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from kiln.cockpit import state as cockpit_state
+from kiln.cockpit.application import state as cockpit_state
 from kiln.scheduler.domain import handoff
 from kiln.scheduler.infrastructure.cli.dashboard import RoleSession, SwarmSnapshot
 from kiln.scheduler.infrastructure.persistence import db

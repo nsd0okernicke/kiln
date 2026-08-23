@@ -3,7 +3,7 @@
 Never copied into a project. Read directly from this install at generation/launch time. Editing these files changes behavior for every project using this framework install, immediately.
 
 `src/kiln/launcher/` and `src/kiln/scheduler/` are the implementation — `bin/kiln.ps1`
-and `bin/kiln.sh` put `src/` on `PYTHONPATH` and call `python -m kiln.launcher.cli`.
+and `bin/kiln.sh` put `src/` on `PYTHONPATH` and call `python -m kiln.launcher.infrastructure.cli`.
 Both are covered by the pytest suite in `tests/`.
 
 `src/kiln/resources/tools/` is a special case: it is not a per-project customization

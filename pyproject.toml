@@ -31,10 +31,10 @@ dev = [
 ]
 
 [project.scripts]
-kiln = "kiln.launcher.cli:main"
+kiln = "kiln.launcher.infrastructure.cli:main"
 kiln-scheduler = "kiln.scheduler.infrastructure.cli.role_scheduler:main"
 kiln-dashboard = "kiln.scheduler.infrastructure.cli.dashboard:main"
-kiln-cockpit = "kiln.cockpit.server:main"
+kiln-cockpit = "kiln.cockpit.infrastructure.http.server:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -45,7 +45,7 @@ include = ["kiln*"]
 
 [tool.setuptools.package-data]
 kiln = [
-    "cockpit/static/*.html",
+    "cockpit/infrastructure/http/static/*.html",
     "mcp_server/*.txt",
     "resources/*.json",
     "resources/templates/*.md",
@@ -96,7 +96,7 @@ include = [
     "src/kiln/scheduler/infrastructure/persistence",
     "src/kiln/scheduler/infrastructure/vcs",
     "src/kiln/scheduler/infrastructure/diagnostics",
-    "src/kiln/cockpit/state.py",
+    "src/kiln/cockpit/application/state.py",
 ]
 extraPaths = ["src"]
 reportMissingTypeStubs = false

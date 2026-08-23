@@ -11,6 +11,7 @@ never times out) and being available to its human.
 from __future__ import annotations
 
 import pytest
+
 from kiln.scheduler.domain import handoff
 from kiln.scheduler.infrastructure.cli import inbox, send
 from kiln.scheduler.infrastructure.persistence import db

@@ -13,7 +13,7 @@ import shutil
 
 import pytest
 
-from kiln.launcher.commands import (
+from kiln.launcher.application.commands import (
     START_PROMPT,
     AgentCommand,
     build_agent_command,
@@ -21,8 +21,8 @@ from kiln.launcher.commands import (
     render_posix,
     render_powershell,
 )
-from kiln.launcher.config import Profile, RoleConfig
-from kiln.launcher.paths import KilnPaths, python_command
+from kiln.launcher.domain.paths import KilnPaths, python_command
+from kiln.launcher.domain.profile import Profile, RoleConfig
 from kiln.scheduler.domain.routing import parse_profile_routing
 
 
@@ -152,7 +152,7 @@ class TestCockpitPane:
     def test_it_runs_the_cockpit_server_and_not_an_agent(self, paths):
         argv = self._cockpit(paths).argv
 
-        assert argv[1:3] == ["-m", "kiln.cockpit.server"]
+        assert argv[1:3] == ["-m", "kiln.cockpit.infrastructure.http.server"]
 
     def test_it_reads_the_same_state_the_dashboard_does(self, paths):
         # A second front end over one set of numbers, not a second source of them.
@@ -450,8 +450,8 @@ class TestInboxPane:
     """
 
     def _command(self, paths, **overrides):
-        from kiln.launcher.commands import build_agent_command
-        from kiln.launcher.config import RoleConfig
+        from kiln.launcher.application.commands import build_agent_command
+        from kiln.launcher.domain.profile import RoleConfig
 
         role = RoleConfig(
             role="inbox", worktree="@current", mode="manual",
@@ -469,8 +469,8 @@ class TestInboxPane:
         assert argv[argv.index("--role") + 1] == "human-in-the-loop"
 
     def test_falls_back_to_its_own_name_without_watches(self, paths):
-        from kiln.launcher.commands import build_agent_command
-        from kiln.launcher.config import RoleConfig
+        from kiln.launcher.application.commands import build_agent_command
+        from kiln.launcher.domain.profile import RoleConfig
 
         role = RoleConfig(role="human-in-the-loop", scheduler="inbox", mode="manual")
         argv = build_agent_command(role, paths, "main").argv
@@ -507,8 +507,8 @@ class TestDashboardPane:
     """A cross-role aggregate view, not an agent -- see scheduler/dashboard.py."""
 
     def _command(self, paths, **overrides):
-        from kiln.launcher.commands import build_agent_command
-        from kiln.launcher.config import RoleConfig
+        from kiln.launcher.application.commands import build_agent_command
+        from kiln.launcher.domain.profile import RoleConfig
 
         role = RoleConfig(
             role="dashboard", worktree="@current", mode="manual", scheduler="dashboard",
@@ -557,7 +557,7 @@ class TestInboxIsNotAnAgent:
     """Every per-role generation step must skip it, or it gets an agent's paperwork."""
 
     def _role(self):
-        from kiln.launcher.config import RoleConfig
+        from kiln.launcher.domain.profile import RoleConfig
 
         return RoleConfig(
             role="inbox", worktree="@current", mode="manual",
@@ -565,12 +565,12 @@ class TestInboxIsNotAnAgent:
         )
 
     def test_no_worker_definition_is_written(self, paths):
-        from kiln.launcher.generate import write_worker_file
+        from kiln.launcher.application.generate import write_worker_file
 
         assert write_worker_file(self._role(), paths) is None
 
     def test_no_instruction_file_is_written(self, tmp_path, paths):
-        from kiln.launcher.generate import write_instructions
+        from kiln.launcher.application.generate import write_instructions
 
         assert write_instructions(self._role(), paths, "main", tmp_path) is None
 
@@ -585,7 +585,7 @@ class TestInboxIsNotAnAgent:
         # just-written CLAUDE.md -- see TestInstructionFiles.
         # test_an_inbox_pane_does_not_delete_the_role_it_watches_claude_md in
         # test_launcher_generate.py for the end-to-end version of this.
-        from kiln.launcher.generate import instruction_file_for, write_instructions
+        from kiln.launcher.application.generate import instruction_file_for, write_instructions
 
         role = self._role()
         existing = instruction_file_for(role, tmp_path)
@@ -605,19 +605,19 @@ class TestDashboardIsNotAnAgent:
     """Same class of role as inbox -- see TestInboxIsNotAnAgent and RoleConfig.is_passive."""
 
     def _role(self):
-        from kiln.launcher.config import RoleConfig
+        from kiln.launcher.domain.profile import RoleConfig
 
         return RoleConfig(
             role="dashboard", worktree="@current", mode="manual", scheduler="dashboard"
         )
 
     def test_no_worker_definition_is_written(self, paths):
-        from kiln.launcher.generate import write_worker_file
+        from kiln.launcher.application.generate import write_worker_file
 
         assert write_worker_file(self._role(), paths) is None
 
     def test_no_instruction_file_is_written(self, tmp_path, paths):
-        from kiln.launcher.generate import write_instructions
+        from kiln.launcher.application.generate import write_instructions
 
         assert write_instructions(self._role(), paths, "main", tmp_path) is None
 
@@ -625,7 +625,7 @@ class TestDashboardIsNotAnAgent:
         # Same collision class as the inbox regression: a dashboard also always uses
         # "@current", so instruction_file_for() for its config resolves to whatever real
         # role shares that worktree, not a file the dashboard ever owned.
-        from kiln.launcher.generate import instruction_file_for, write_instructions
+        from kiln.launcher.application.generate import instruction_file_for, write_instructions
 
         role = self._role()
         existing = instruction_file_for(role, tmp_path)
@@ -713,7 +713,7 @@ class TestProfileRoutingReachesTheScheduler:
     """
 
     def _profile(self, routing=None):
-        from kiln.launcher.config import Profile, RoleConfig
+        from kiln.launcher.domain.profile import Profile, RoleConfig
         from kiln.scheduler.domain.routing import parse_profile_routing
 
         roles = (

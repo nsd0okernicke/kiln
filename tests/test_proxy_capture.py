@@ -14,7 +14,7 @@ import sqlite3
 
 import pytest
 
-from kiln.proxy.capture import (
+from kiln.proxy.domain.capture import (
     BODY_BUDGET_CHECK_EVERY,
     DEFAULT_BODY_LIMIT_BYTES,
     REDACTED,
@@ -22,13 +22,13 @@ from kiln.proxy.capture import (
     CaptureMode,
     StreamingUsageTracker,
     TrafficRecord,
-    TrafficStore,
     capture_body,
     extract_composition,
     extract_model,
     extract_usage,
     redact_headers,
 )
+from kiln.proxy.infrastructure.persistence import TrafficStore
 from kiln.scheduler.domain.models import TokenUsage
 
 

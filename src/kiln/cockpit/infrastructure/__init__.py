@@ -1,0 +1,1 @@
+"""Cockpit transport adapters."""

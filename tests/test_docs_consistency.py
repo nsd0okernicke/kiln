@@ -40,7 +40,7 @@ class TestConstitutionLoadOrder:
         # Worse than unreachable: skill-orchestration.md was absent from CONSTITUTION_FILES,
         # so no scaffolded project ever received it. Listing it in the load order without
         # copying it would have pointed every project at a file that is not there.
-        from kiln.launcher.scaffold import CONSTITUTION_FILES
+        from kiln.launcher.infrastructure.scaffold import CONSTITUTION_FILES
 
         present = {p.name for p in (REPO / "kiln" / "project" / "constitution").glob("*.md")}
 
@@ -312,7 +312,7 @@ class TestWrapperTemplateSets:
 
     def _expected(self, agent: str) -> set[str]:
         """Every template `generate.render_instructions` can ask for, for one agent."""
-        from kiln.launcher.generate import DELEGATING_AGENTS
+        from kiln.launcher.application.generate import DELEGATING_AGENTS
 
         names = {
             f"loop-auto-{agent}.md",
@@ -325,7 +325,7 @@ class TestWrapperTemplateSets:
         return names
 
     def test_every_accepted_agent_has_a_complete_template_set(self):
-        from kiln.launcher.config import VALID_AGENTS
+        from kiln.launcher.domain.profile import VALID_AGENTS
 
         present = {p.name for p in (REPO / "src" / "kiln" / "resources" / "templates").glob("*.md")}
 
@@ -349,7 +349,7 @@ class TestDocumentedTerminalKeys:
     """
 
     def test_every_accepted_terminal_key_is_documented(self):
-        from kiln.launcher.config import TERMINAL_KEYS
+        from kiln.launcher.domain.profile import TERMINAL_KEYS
 
         readme = (REPO / "README.md").read_text(encoding="utf-8")
 

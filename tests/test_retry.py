@@ -8,6 +8,7 @@ work item (lap counts, spend, history) still refers to one piece of work.
 from __future__ import annotations
 
 import pytest
+
 from kiln.scheduler.domain import handoff
 from kiln.scheduler.infrastructure.cli import retry
 from kiln.scheduler.infrastructure.persistence import db

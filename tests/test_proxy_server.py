@@ -25,8 +25,15 @@ from typing import ClassVar
 
 import pytest
 
-from kiln.proxy.capture import CaptureMode, TrafficStore
-from kiln.proxy.server import Upstream, parse_routes, parse_upstream, serve, split_role
+from kiln.proxy.domain.capture import CaptureMode
+from kiln.proxy.infrastructure.http.server import (
+    Upstream,
+    parse_routes,
+    parse_upstream,
+    serve,
+    split_role,
+)
+from kiln.proxy.infrastructure.persistence import TrafficStore
 from kiln.scheduler.domain.models import TokenUsage
 
 pytestmark = pytest.mark.integration

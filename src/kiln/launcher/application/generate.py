@@ -21,8 +21,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from .config import Profile, RoleConfig
-from .paths import KilnPaths, python_command
+from ..domain.paths import KilnPaths, python_command
+from ..domain.profile import Profile, RoleConfig
 from .templates import (
     generated_header,
     join_blocks,
@@ -125,11 +125,7 @@ def channel_is_available(role: RoleConfig | None) -> bool:
     outside `BLOCKING_CHANNEL_AGENTS`: its loop is told to poll `kiln-db` and never to call
     `wait_for_message()`, so registering the tool contradicts its own instructions.
     """
-    return (
-        role is not None
-        and not role.uses_scheduler
-        and role.agent in BLOCKING_CHANNEL_AGENTS
-    )
+    return role is not None and not role.uses_scheduler and role.agent in BLOCKING_CHANNEL_AGENTS
 
 
 def build_substitutions(
@@ -253,13 +249,12 @@ def write_instructions(
 
     target = instruction_file_for(role, worktree)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(
-        render_instructions(role, paths, branch, worktree, profile), encoding="utf-8"
-    )
+    target.write_text(render_instructions(role, paths, branch, worktree, profile), encoding="utf-8")
     return target
 
 
 # --- worker agent definitions --------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class WorkerFile:
@@ -327,8 +322,7 @@ def render_worker_file(role: RoleConfig, paths: KilnPaths) -> WorkerFile:
             frontmatter.append(f"model: {model}")
     else:
         frontmatter.append(
-            "tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell, Skill, "
-            "NotebookEdit, TodoWrite"
+            "tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell, Skill, NotebookEdit, TodoWrite"
         )
         if model:
             frontmatter.append(f"model: {model}")
@@ -349,6 +343,7 @@ def write_worker_file(role: RoleConfig, paths: KilnPaths) -> Path | None:
 
 
 # --- MCP configuration ----------------------------------------------------------------
+
 
 def build_mcp_config(
     paths: KilnPaths, role: str | None, branch: str, include_channel: bool
@@ -394,9 +389,7 @@ def write_mcp_config(
 def build_copilot_mcp_config(paths: KilnPaths) -> dict:
     """Copilot reads one shared global config rather than a per-worktree file."""
     return {
-        "mcpServers": {
-            "kiln-db": {"command": "npx", "args": ["mcp-sqlite", str(paths.db_path)]}
-        }
+        "mcpServers": {"kiln-db": {"command": "npx", "args": ["mcp-sqlite", str(paths.db_path)]}}
     }
 
 

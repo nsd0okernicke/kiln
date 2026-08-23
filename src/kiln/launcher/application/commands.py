@@ -19,8 +19,8 @@ from pathlib import Path
 from kiln.scheduler.domain.routing import format_routing_rules
 from kiln.scheduler.infrastructure.agents import codex_adapter
 
-from .config import Profile, RoleConfig
-from .paths import KilnPaths, python_command
+from ..domain.paths import KilnPaths, python_command
+from ..domain.profile import Profile, RoleConfig
 
 #: Fallback for the cockpit's `--human-role` when a profile declares no manual role. The
 #: conventional name every shipped profile and the routing table already use.
@@ -67,7 +67,7 @@ def proxy_env(role: RoleConfig, proxy_url: str | None) -> dict[str, str]:
 
     The URL carries the role name as a path prefix (`/kiln/<role>`) because a proxy sees
     HTTP requests, not roles — without it the capture is an undifferentiated blob that
-    cannot answer "what did the refactorer cost". `kiln.proxy.server.split_role` strips the
+    cannot answer "what did the refactorer cost". The proxy HTTP adapter strips the
     prefix again before forwarding.
 
     Returns `{}` for a backend with no verified override, so enabling the proxy on a mixed
@@ -96,10 +96,14 @@ def _claude_command(role: RoleConfig, paths: KilnPaths) -> AgentCommand:
     permission_mode = "default" if role.mode == "manual" else "bypassPermissions"
     argv = [
         "claude",
-        "--model", role.model or DEFAULT_CLAUDE_MODEL,
-        "--permission-mode", permission_mode,
-        "--mcp-config", "./.mcp.json",
-        "--debug-file", str(paths.agent_debug_log(role.role)),
+        "--model",
+        role.model or DEFAULT_CLAUDE_MODEL,
+        "--permission-mode",
+        permission_mode,
+        "--mcp-config",
+        "./.mcp.json",
+        "--debug-file",
+        str(paths.agent_debug_log(role.role)),
     ]
     if role.display_name:
         argv += ["-n", role.display_name]
@@ -146,8 +150,10 @@ def _grok_command(role: RoleConfig, paths: KilnPaths) -> AgentCommand:
     permission_mode = "default" if role.mode == "manual" else "bypassPermissions"
     argv = [
         "grok",
-        "--permission-mode", permission_mode,
-        "--debug-file", str(paths.agent_debug_log(role.role, "grok")),
+        "--permission-mode",
+        permission_mode,
+        "--debug-file",
+        str(paths.agent_debug_log(role.role, "grok")),
     ]
     if role.model:
         argv += ["-m", role.model]
@@ -193,14 +199,23 @@ def _scheduler_command(
     `scheduler` and `launcher` resolve.
     """
     argv = [
-        python_command(), "-m", "kiln.scheduler.infrastructure.cli.role_scheduler",
-        "--role", role.role,
-        "--branch", branch,
-        "--db-path", str(paths.db_path),
-        "--worktree", str(_worktree_for(role, paths)),
-        "--workflow", str(paths.workflow_md),
-        "--worker-agent", str(paths.worker_agent_file(role.role, role.agent)),
-        "--agent", role.agent,
+        python_command(),
+        "-m",
+        "kiln.scheduler.infrastructure.cli.role_scheduler",
+        "--role",
+        role.role,
+        "--branch",
+        branch,
+        "--db-path",
+        str(paths.db_path),
+        "--worktree",
+        str(_worktree_for(role, paths)),
+        "--workflow",
+        str(paths.workflow_md),
+        "--worker-agent",
+        str(paths.worker_agent_file(role.role, role.agent)),
+        "--agent",
+        role.agent,
     ]
     # A profile that declares its own routing replaces workflow.md's table -- the scheduler
     # runs in its own process and cannot read the launcher's parsed profile, so the resolved
@@ -225,13 +240,16 @@ def _scheduler_command(
         argv += ["--verify", role.verify]
         if role.verify_timeout is not None:
             argv += ["--verify-timeout", str(role.verify_timeout)]
-    argv += _tuning_args(role, {
-        "--poll-interval": role.poll_interval,
-        "--worker-timeout": role.worker_timeout,
-        "--worker-idle-timeout": role.worker_idle_timeout,
-        "--max-attempts": role.max_attempts,
-        "--escalation-limit": role.escalation_limit,
-    })
+    argv += _tuning_args(
+        role,
+        {
+            "--poll-interval": role.poll_interval,
+            "--worker-timeout": role.worker_timeout,
+            "--worker-idle-timeout": role.worker_idle_timeout,
+            "--max-attempts": role.max_attempts,
+            "--escalation-limit": role.escalation_limit,
+        },
+    )
 
     status_script = paths.state_tools_dir / "set-status.py"
     argv += ["--status-script", str(status_script)]
@@ -277,15 +295,22 @@ def _inbox_command(role: RoleConfig, paths: KilnPaths, branch: str) -> AgentComm
     messages it shows are addressed to `human-in-the-loop`.
     """
     argv = [
-        python_command(), "-m", "kiln.scheduler.infrastructure.cli.inbox",
-        "--role", role.watched_role,
-        "--branch", branch,
-        "--db-path", str(paths.db_path),
+        python_command(),
+        "-m",
+        "kiln.scheduler.infrastructure.cli.inbox",
+        "--role",
+        role.watched_role,
+        "--branch",
+        branch,
+        "--db-path",
+        str(paths.db_path),
         # The human is a real role in the graph, not just a notification target: an inbound
         # handoff must be merged into their tree or the work they are asked to review is not
         # actually there. This is /kiln-receive steps 1 and 4, done deterministically.
-        "--worktree", str(_worktree_for(role, paths)),
-        "--log-file", str(paths.scheduler_log(role.role)),
+        "--worktree",
+        str(_worktree_for(role, paths)),
+        "--log-file",
+        str(paths.scheduler_log(role.role)),
     ]
     argv += _tuning_args(role, {"--poll-interval": role.poll_interval})
     if not role.bell:
@@ -308,22 +333,34 @@ def _dashboard_command(role: RoleConfig, paths: KilnPaths, branch: str) -> Agent
     directory, and the role inventory `workspace.write_sessions_file` already wrote.
     """
     argv = [
-        python_command(), "-m", "kiln.scheduler.infrastructure.cli.dashboard",
-        "--branch", branch,
-        "--db-path", str(paths.db_path),
-        "--status-dir", str(paths.status_dir),
-        "--sessions-file", str(paths.sessions_file),
-        "--project-name", paths.project_root.name,
-        "--log-file", str(paths.scheduler_log(role.role)),
+        python_command(),
+        "-m",
+        "kiln.scheduler.infrastructure.cli.dashboard",
+        "--branch",
+        branch,
+        "--db-path",
+        str(paths.db_path),
+        "--status-dir",
+        str(paths.status_dir),
+        "--sessions-file",
+        str(paths.sessions_file),
+        "--project-name",
+        paths.project_root.name,
+        "--log-file",
+        str(paths.scheduler_log(role.role)),
         # Always passed, never conditional on the proxy being enabled: the dashboard hides
         # the panel when the store is absent, so one code path covers both cases and a
         # swarm launched without the proxy is not a different dashboard.
-        "--traffic-db", str(paths.traffic_db),
+        "--traffic-db",
+        str(paths.traffic_db),
     ]
-    argv += _tuning_args(role, {
-        "--poll-interval": role.poll_interval,
-        "--activity-limit": role.activity_limit,
-    })
+    argv += _tuning_args(
+        role,
+        {
+            "--poll-interval": role.poll_interval,
+            "--activity-limit": role.activity_limit,
+        },
+    )
     return AgentCommand(
         argv=argv,
         env={
@@ -354,19 +391,31 @@ def _cockpit_command(
     """
     human_role = _human_role(profile)
     argv = [
-        python_command(), "-m", "kiln.cockpit.server",
-        "--branch", branch,
-        "--db-path", str(paths.db_path),
-        "--status-dir", str(paths.status_dir),
-        "--sessions-file", str(paths.sessions_file),
-        "--project-name", paths.project_root.name,
-        "--url-file", str(paths.cockpit_url_file),
-        "--pid-file", str(paths.cockpit_pid_file),
-        "--log-file", str(paths.scheduler_log(role.role)),
+        python_command(),
+        "-m",
+        "kiln.cockpit.infrastructure.http.server",
+        "--branch",
+        branch,
+        "--db-path",
+        str(paths.db_path),
+        "--status-dir",
+        str(paths.status_dir),
+        "--sessions-file",
+        str(paths.sessions_file),
+        "--project-name",
+        paths.project_root.name,
+        "--url-file",
+        str(paths.cockpit_url_file),
+        "--pid-file",
+        str(paths.cockpit_pid_file),
+        "--log-file",
+        str(paths.scheduler_log(role.role)),
         # As with the dashboard: always passed, and hidden by the cockpit when the store is
         # absent, so a swarm launched without the proxy is not a different kiln.cockpit.
-        "--traffic-db", str(paths.traffic_db),
-        "--human-role", human_role,
+        "--traffic-db",
+        str(paths.traffic_db),
+        "--human-role",
+        human_role,
     ]
     lanes = _cockpit_lanes(profile)
     if lanes:
@@ -374,10 +423,13 @@ def _cockpit_command(
     intake = profile.routing.resolve(human_role) if profile else None
     if intake:
         argv += ["--intake-role", intake]
-    argv += _tuning_args(role, {
-        "--port": role.port,
-        "--activity-limit": role.activity_limit,
-    })
+    argv += _tuning_args(
+        role,
+        {
+            "--port": role.port,
+            "--activity-limit": role.activity_limit,
+        },
+    )
     if not role.open_browser:
         argv.append("--no-browser")
     return AgentCommand(
@@ -419,8 +471,7 @@ def _cockpit_lanes(profile: Profile | None) -> list[str]:
     for rule in profile.routing.rules:
         participating.add(rule.target)
     return [
-        role.role for role in profile.roles
-        if not role.is_passive and role.role in participating
+        role.role for role in profile.roles if not role.is_passive and role.role in participating
     ]
 
 
@@ -475,6 +526,7 @@ def build_agent_command(
 
 
 # --- rendering ---------------------------------------------------------------------
+
 
 def _quote_powershell(value: str) -> str:
     """Single-quoted PowerShell literal; embedded quotes double."""

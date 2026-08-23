@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from kiln.launcher import workspace
-from kiln.launcher.config import parse_profile
-from kiln.launcher.paths import KilnPaths
+from kiln.launcher.domain.paths import KilnPaths
+from kiln.launcher.domain.profile import parse_profile
+from kiln.launcher.infrastructure import workspace
 from kiln.scheduler.infrastructure.vcs import git as git_ops
 
 pytestmark = pytest.mark.integration

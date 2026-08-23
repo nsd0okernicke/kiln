@@ -10,8 +10,8 @@ import os
 
 import pytest
 
-from kiln.launcher import config
-from kiln.launcher.config import (
+from kiln.launcher.domain import profile as config
+from kiln.launcher.domain.profile import (
     Profile,
     ProfileError,
     RoleConfig,
@@ -613,7 +613,7 @@ class TestSearchPaths:
     """
 
     def _paths(self, tmp_path):
-        from kiln.launcher.config import _search_paths
+        from kiln.launcher.domain.profile import _search_paths
 
         return [str(p).replace("\\", "/") for p in _search_paths(tmp_path, tmp_path / "fw")]
 
@@ -635,7 +635,7 @@ class TestSearchPaths:
         assert override < framework
 
     def test_the_system_path_matches_the_platform(self, tmp_path):
-        from kiln.launcher.config import SYSTEM_PROFILES_PATH
+        from kiln.launcher.domain.profile import SYSTEM_PROFILES_PATH
 
         expected = (
             "C:/ProgramData/kiln/profiles.json" if os.name == "nt"
@@ -710,13 +710,13 @@ class TestProfileRouting:
         assert parse_profile(CONFIG, "compact").routing.rules == ()
 
     def test_launching_a_profile_without_routing_is_refused(self):
-        from kiln.launcher.config import check_launchable
+        from kiln.launcher.domain.profile import check_launchable
 
         with pytest.raises(ProfileError, match="routing"):
             check_launchable(parse_profile(CONFIG, "compact"))
 
     def test_a_passive_only_profile_needs_no_routing(self):
-        from kiln.launcher.config import check_launchable
+        from kiln.launcher.domain.profile import check_launchable
 
         passive = {"profiles": {"p": {"terminals": [
             {"role": "dashboard", "scheduler": "dashboard", "worktree": "@current"},
@@ -726,7 +726,7 @@ class TestProfileRouting:
     def test_every_shipped_profile_is_launchable(self):
         from pathlib import Path
 
-        from kiln.launcher.config import check_launchable
+        from kiln.launcher.domain.profile import check_launchable
 
         repo_root = Path(__file__).resolve().parents[1]
         config = json.loads(
