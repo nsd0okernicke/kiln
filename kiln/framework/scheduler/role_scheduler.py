@@ -24,9 +24,11 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 
-from . import db, git_ops, handoff, pane_status, policies, status_contract, verify
+from . import handoff, pane_status, policies, status_contract, verify
 from .adapters import DEFAULT_IDLE_TIMEOUT_SEC, TokenUsage, WorkerInvocation
-from .ports import GitWorktree, MessageQueue, SQLiteMessageQueue, Worktree
+from .infrastructure import GitWorktree, SQLiteMessageQueue
+from .models import DEFAULT_PRIORITY
+from .ports import MessageQueue, Worktree
 from .routing import RoutingTable, load_routing_table, parse_routing_arguments
 from .worker_prompt import WorkerDefinition, build_task_prompt, load_worker_definition
 
@@ -123,8 +125,8 @@ class SchedulerContext:
     routing: RoutingTable
     definition: WorkerDefinition
     run_worker: Callable[..., WorkerInvocation]
-    queue: MessageQueue | None = None
-    worktree_port: Worktree | None = None
+    queue: MessageQueue
+    worktree_port: Worktree
     clock: Callable[[], datetime] = datetime.now
     set_status: Callable[..., None] = lambda _state, **_kwargs: None
     #: One retry, then escalate — matches loop-auto-*.md step 4.
@@ -228,13 +230,11 @@ def should_retry(invocations: Sequence[WorkerInvocation], max_attempts: int) -> 
 
 
 def _queue(ctx: SchedulerContext) -> MessageQueue:
-    """Resolve the queue port, retaining source compatibility for direct context users."""
-    return ctx.queue or SQLiteMessageQueue(ctx.db_path)
+    return ctx.queue
 
 
 def _worktree(ctx: SchedulerContext) -> Worktree:
-    """Resolve the Git port, retaining source compatibility for direct context users."""
-    return ctx.worktree_port or GitWorktree(ctx.worktree)
+    return ctx.worktree_port
 
 
 def run_once(ctx: SchedulerContext, state: SchedulerState) -> CycleResult:
@@ -335,20 +335,11 @@ def persist_inbound(worktree: str | Path, content: str) -> Path | None:
     session reads to see what arrived. Returns the path, or None when it could not be
     written — never raises, because no cycle should fail over a debug artefact.
     """
-    try:
-        git_ops.ensure_generated_ignored(worktree)
-        tmp_dir = Path(worktree) / "tmp"
-        tmp_dir.mkdir(parents=True, exist_ok=True)
-        target = tmp_dir / "handoff-in.md"
-        target.write_text(content, encoding="utf-8")
-        return target
-    except OSError as exc:
-        log.warning("could not write tmp/handoff-in.md: %s", exc)
-        return None
+    return GitWorktree(worktree).persist_inbound(content)
 
 
 def _persist_inbound(ctx: SchedulerContext, content: str) -> None:
-    persist_inbound(ctx.worktree, content)
+    _worktree(ctx).persist_inbound(content)
 
 
 def _persist_worker_debug(
@@ -808,7 +799,7 @@ def _insert_verified(
     target: str,
     content: str,
     work_item: str | None = None,
-    priority: int = db.DEFAULT_PRIORITY,
+    priority: int = DEFAULT_PRIORITY,
 ) -> str | None:
     """
     Insert a message and confirm it landed, retrying once.

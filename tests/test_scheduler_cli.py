@@ -15,8 +15,9 @@ from contextlib import closing
 from datetime import datetime
 
 import pytest
-from scheduler import db, git_ops, handoff, pane_status, role_scheduler
+from scheduler import db, git_ops, handoff, infrastructure, pane_status, role_scheduler
 from scheduler.adapters import TokenUsage
+from scheduler.infrastructure import GitWorktree, SQLiteMessageQueue
 from scheduler.role_scheduler import SchedulerContext, SchedulerState
 from scheduler.routing import parse_routing_table
 from scheduler.worker_prompt import WorkerDefinition
@@ -46,11 +47,12 @@ class TestInsertVerification:
             calls["verify"] += 1
             return False if calls["verify"] == 1 else real_verify(*args, **kwargs)
 
-        monkeypatch.setattr(role_scheduler.db, "message_exists", flaky_verify)
+        monkeypatch.setattr(infrastructure.db, "message_exists", flaky_verify)
 
         ctx = SchedulerContext(
             role="coder", branch="main", db_path=db_path, worktree=git_repo,
             routing=ROUTING, definition=DEFINITION, run_worker=FakeWorker(),
+            queue=SQLiteMessageQueue(db_path), worktree_port=GitWorktree(git_repo),
         )
         assert role_scheduler._insert_verified(ctx, "refactorer", "payload") is not None
         assert calls["verify"] == 2
@@ -65,6 +67,7 @@ class TestInsertVerification:
         ctx = SchedulerContext(
             role="coder", branch="main", db_path=db_path, worktree=git_repo,
             routing=ROUTING, definition=DEFINITION, run_worker=FakeWorker(),
+            queue=SQLiteMessageQueue(db_path), worktree_port=GitWorktree(git_repo),
         )
         original_insert = db.insert_handoff
 
@@ -74,7 +77,7 @@ class TestInsertVerification:
             return message_id
 
         monkeypatch = pytest.MonkeyPatch()
-        monkeypatch.setattr(role_scheduler.db, "insert_handoff", insert_then_consume)
+        monkeypatch.setattr(infrastructure.db, "insert_handoff", insert_then_consume)
         try:
             assert role_scheduler._insert_verified(ctx, "refactorer", "payload") is not None
         finally:
@@ -85,10 +88,11 @@ class TestInsertVerification:
         assert total == 1, "the handoff must be sent exactly once"
 
     def test_gives_up_after_two_attempts(self, db_path, git_repo, monkeypatch):
-        monkeypatch.setattr(role_scheduler.db, "message_exists", lambda *a, **k: False)
+        monkeypatch.setattr(infrastructure.db, "message_exists", lambda *a, **k: False)
         ctx = SchedulerContext(
             role="coder", branch="main", db_path=db_path, worktree=git_repo,
             routing=ROUTING, definition=DEFINITION, run_worker=FakeWorker(),
+            queue=SQLiteMessageQueue(db_path), worktree_port=GitWorktree(git_repo),
         )
         assert role_scheduler._insert_verified(ctx, "refactorer", "payload") is None
 
@@ -96,7 +100,7 @@ class TestInsertVerification:
 class TestSquashFailureEscalates:
     def test_failed_squash_does_not_forward_work(self, db_path, git_repo, monkeypatch):
         monkeypatch.setattr(
-            role_scheduler.git_ops,
+            infrastructure.git_ops,
             "squash_since",
             lambda *a, **k: git_ops.GitResult(False, "", "disk full", 1),
         )
@@ -113,6 +117,7 @@ class TestSquashFailureEscalates:
             # The worker must genuinely change something, or the cycle ends as a no-op
             # before it ever reaches the squash this test is about.
             run_worker=FakeWorker(worker(), edits_file=git_repo / "work.txt"),
+            queue=SQLiteMessageQueue(db_path), worktree_port=GitWorktree(git_repo),
             clock=lambda: datetime(2026, 8, 7, 14, 0, 0),
         )
         result = role_scheduler.run_once(ctx, SchedulerState())
@@ -125,11 +130,14 @@ class TestSquashFailureEscalates:
 class TestPersistInboundIsNeverFatal:
     def test_unwritable_debug_file_does_not_fail_the_cycle(self, db_path, git_repo, monkeypatch):
         monkeypatch.setattr(
-            role_scheduler.Path, "mkdir", lambda *a, **k: (_ for _ in ()).throw(OSError("nope"))
+            infrastructure.Path,
+            "mkdir",
+            lambda *a, **k: (_ for _ in ()).throw(OSError("nope")),
         )
         ctx = SchedulerContext(
             role="coder", branch="main", db_path=db_path, worktree=git_repo,
             routing=ROUTING, definition=DEFINITION, run_worker=FakeWorker(),
+            queue=SQLiteMessageQueue(db_path), worktree_port=GitWorktree(git_repo),
         )
         role_scheduler._persist_inbound(ctx, "content")  # must not raise
 
@@ -720,6 +728,8 @@ def _dummy_ctx(tmp_path):
         routing=parse_routing_table("| coder | refactorer |"),
         definition=WorkerDefinition(name="coder-worker", description="d", prompt="b"),
         run_worker=FakeWorker(),
+        queue=SQLiteMessageQueue(tmp_path / "messages.db"),
+        worktree_port=GitWorktree(tmp_path),
     )
 
 

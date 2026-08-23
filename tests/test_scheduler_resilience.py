@@ -16,6 +16,7 @@ from launcher import workspace
 from launcher.config import parse_profile
 from launcher.paths import KilnPaths
 from scheduler import role_scheduler
+from scheduler.infrastructure import GitWorktree, SQLiteMessageQueue
 from scheduler.role_scheduler import CycleResult
 
 pytestmark = pytest.mark.integration
@@ -54,6 +55,8 @@ def stub_context(monkeypatch, tmp_path):
             routing=parse_routing_table("| coder | refactorer |"),
             definition=WorkerDefinition(name="coder-worker", description="d", prompt="b"),
             run_worker=lambda **_kw: None,
+            queue=SQLiteMessageQueue(tmp_path / "messages.db"),
+            worktree_port=GitWorktree(tmp_path),
         )
 
     monkeypatch.setattr(role_scheduler, "build_context", _build)
@@ -289,6 +292,8 @@ def _context(tmp_path):
         routing=parse_routing_table("| coder | refactorer |"),
         definition=WorkerDefinition(name="coder-worker", description="d", prompt="b"),
         run_worker=lambda **_kw: None,
+        queue=SQLiteMessageQueue(tmp_path / "messages.db"),
+        worktree_port=GitWorktree(tmp_path),
     )
 
 

@@ -18,7 +18,7 @@ from contextlib import closing
 from pathlib import Path
 from typing import cast
 
-from .models import MessageStatus, QueueMessage, can_transition
+from .models import DEFAULT_PRIORITY, MessageStatus, QueueMessage, can_transition
 
 log = logging.getLogger(__name__)
 
@@ -39,8 +39,6 @@ STATUS_FAILED = MessageStatus.FAILED.value
 
 #: Normal handoff priority. 0-9 is high (architect handoffs, critical tasks), 100+ is
 #: informational — see constitution/workflow.md "Priority values".
-DEFAULT_PRIORITY = 50
-
 #: UTC stamp format used for delivered_at/processed_at, matching channel.py's original
 #: statements. created_at deliberately uses localtime instead, matching the schema
 #: default and kiln-handoff/SKILL.md, so handoff timestamps read naturally to a human

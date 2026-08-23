@@ -29,6 +29,15 @@ def test_pure_scheduler_policy_does_not_import_infrastructure():
         assert not imports(ROOT / "scheduler" / name) & forbidden, name
 
 
+def test_scheduler_ports_do_not_import_concrete_adapters():
+    assert not imports(ROOT / "scheduler" / "ports.py") & {
+        "db",
+        "git_ops",
+        "sqlite3",
+        "subprocess",
+    }
+
+
 def test_cockpit_state_projection_does_not_depend_on_http_server():
     assert "server" not in imports(ROOT / "cockpit" / "state.py")
 

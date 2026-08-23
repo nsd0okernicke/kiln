@@ -1,8 +1,9 @@
 """Characterization tests for the scheduler's domain and port boundaries."""
 
 from scheduler import db, policies
+from scheduler.infrastructure import GitWorktree, SQLiteMessageQueue
 from scheduler.models import MessageStatus, can_transition
-from scheduler.ports import GitWorktree, SQLiteMessageQueue
+from scheduler.ports import MessageQueue, Worktree
 
 
 def test_message_lifecycle_rejects_completed_message_reentry(db_path, add_message):
@@ -40,3 +41,11 @@ def test_concrete_ports_bind_infrastructure_to_one_context(db_path, git_repo):
 
     assert queue.fetch("coder", "main") is None
     assert tree.head_commit()
+
+
+def test_concrete_adapters_satisfy_the_application_ports(db_path, git_repo):
+    queue: MessageQueue = SQLiteMessageQueue(db_path)
+    tree: Worktree = GitWorktree(git_repo)
+
+    assert queue.fetch("coder", "main") is None
+    assert tree.persist_inbound("handoff") == git_repo / "tmp" / "handoff-in.md"

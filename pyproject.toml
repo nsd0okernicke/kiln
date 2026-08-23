@@ -88,6 +88,7 @@ include = [
     "kiln/framework/scheduler/models.py",
     "kiln/framework/scheduler/policies.py",
     "kiln/framework/scheduler/ports.py",
+    "kiln/framework/scheduler/infrastructure.py",
     "kiln/framework/scheduler/db.py",
     "kiln/framework/scheduler/routing.py",
     "kiln/framework/scheduler/handoff.py",
