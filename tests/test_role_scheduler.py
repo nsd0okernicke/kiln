@@ -17,7 +17,12 @@ import pytest
 from scheduler import db, git_ops, handoff, role_scheduler, verify
 from scheduler.adapters import TokenUsage
 from scheduler.adapters.claude_adapter import WorkerInvocation
-from scheduler.infrastructure import CallableWorkerRunner, GitWorktree, SQLiteMessageQueue
+from scheduler.infrastructure import (
+    CallableWorkerRunner,
+    FileWorkerDebugSink,
+    GitWorktree,
+    SQLiteMessageQueue,
+)
 from scheduler.role_scheduler import CycleResult, SchedulerContext, SchedulerState
 from scheduler.routing import parse_routing_table
 from scheduler.status_contract import STATUS_BLOCKED, STATUS_DONE, WorkerResult
@@ -105,13 +110,14 @@ def make_ctx(db_path, git_repo):
         args = {
             "role": role,
             "branch": "main",
-            "db_path": db_path,
             "worktree": git_repo,
             "routing": ROUTING,
             "definition": DEFINITION,
             "worker_runner": CallableWorkerRunner(run_worker),
             "queue": SQLiteMessageQueue(db_path),
             "worktree_port": GitWorktree(overrides.get("worktree", git_repo)),
+            "debug_sink": FileWorkerDebugSink(db_path.parent / "logs"),
+            "queue_label": str(db_path),
             "clock": lambda: FIXED_NOW,
         }
         args.update(overrides)

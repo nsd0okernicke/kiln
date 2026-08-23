@@ -16,6 +16,14 @@ def imports(path: Path) -> set[str]:
     return found
 
 
+def called_attributes(path: Path) -> set[str]:
+    return {
+        node.func.attr
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+    }
+
+
 def test_pure_scheduler_policy_does_not_import_infrastructure():
     forbidden = {"sqlite3", "subprocess", "http", "socket", "launcher"}
     for name in (
@@ -47,6 +55,11 @@ def test_scheduler_application_does_not_import_cli_or_concrete_infrastructure():
         "pane_status",
         "sqlite3",
         "subprocess",
+    }
+    assert not called_attributes(ROOT / "scheduler" / "application.py") & {
+        "mkdir",
+        "open",
+        "write_text",
     }
 
 

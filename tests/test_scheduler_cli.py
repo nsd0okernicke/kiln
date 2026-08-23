@@ -17,7 +17,12 @@ from datetime import datetime
 import pytest
 from scheduler import db, git_ops, handoff, infrastructure, pane_status, role_scheduler
 from scheduler.adapters import TokenUsage
-from scheduler.infrastructure import CallableWorkerRunner, GitWorktree, SQLiteMessageQueue
+from scheduler.infrastructure import (
+    CallableWorkerRunner,
+    FileWorkerDebugSink,
+    GitWorktree,
+    SQLiteMessageQueue,
+)
 from scheduler.models import WorkerRequest
 from scheduler.role_scheduler import SchedulerContext, SchedulerState
 from scheduler.routing import parse_routing_table
@@ -53,13 +58,13 @@ class TestInsertVerification:
         ctx = SchedulerContext(
             role="coder",
             branch="main",
-            db_path=db_path,
             worktree=git_repo,
             routing=ROUTING,
             definition=DEFINITION,
             worker_runner=CallableWorkerRunner(FakeWorker()),
             queue=SQLiteMessageQueue(db_path),
             worktree_port=GitWorktree(git_repo),
+            debug_sink=FileWorkerDebugSink(db_path.parent / "logs"),
         )
         assert role_scheduler._insert_verified(ctx, "refactorer", "payload") is not None
         assert calls["verify"] == 2
@@ -72,13 +77,13 @@ class TestInsertVerification:
         ctx = SchedulerContext(
             role="coder",
             branch="main",
-            db_path=db_path,
             worktree=git_repo,
             routing=ROUTING,
             definition=DEFINITION,
             worker_runner=CallableWorkerRunner(FakeWorker()),
             queue=SQLiteMessageQueue(db_path),
             worktree_port=GitWorktree(git_repo),
+            debug_sink=FileWorkerDebugSink(db_path.parent / "logs"),
         )
         original_insert = db.insert_handoff
 
@@ -103,13 +108,13 @@ class TestInsertVerification:
         ctx = SchedulerContext(
             role="coder",
             branch="main",
-            db_path=db_path,
             worktree=git_repo,
             routing=ROUTING,
             definition=DEFINITION,
             worker_runner=CallableWorkerRunner(FakeWorker()),
             queue=SQLiteMessageQueue(db_path),
             worktree_port=GitWorktree(git_repo),
+            debug_sink=FileWorkerDebugSink(db_path.parent / "logs"),
         )
         assert role_scheduler._insert_verified(ctx, "refactorer", "payload") is None
 
@@ -135,7 +140,6 @@ class TestSquashFailureEscalates:
         ctx = SchedulerContext(
             role="coder",
             branch="main",
-            db_path=db_path,
             worktree=git_repo,
             routing=ROUTING,
             definition=DEFINITION,
@@ -146,6 +150,7 @@ class TestSquashFailureEscalates:
             ),
             queue=SQLiteMessageQueue(db_path),
             worktree_port=GitWorktree(git_repo),
+            debug_sink=FileWorkerDebugSink(db_path.parent / "logs"),
             clock=lambda: datetime(2026, 8, 7, 14, 0, 0),
         )
         result = role_scheduler.run_once(ctx, SchedulerState())
@@ -165,13 +170,13 @@ class TestPersistInboundIsNeverFatal:
         ctx = SchedulerContext(
             role="coder",
             branch="main",
-            db_path=db_path,
             worktree=git_repo,
             routing=ROUTING,
             definition=DEFINITION,
             worker_runner=CallableWorkerRunner(FakeWorker()),
             queue=SQLiteMessageQueue(db_path),
             worktree_port=GitWorktree(git_repo),
+            debug_sink=FileWorkerDebugSink(db_path.parent / "logs"),
         )
         role_scheduler._persist_inbound(ctx, "content")  # must not raise
 
@@ -798,13 +803,13 @@ def _dummy_ctx(tmp_path):
     return SchedulerContext(
         role="coder",
         branch="main",
-        db_path=tmp_path / "messages.db",
         worktree=tmp_path,
         routing=parse_routing_table("| coder | refactorer |"),
         definition=WorkerDefinition(name="coder-worker", description="d", prompt="b"),
         worker_runner=CallableWorkerRunner(FakeWorker()),
         queue=SQLiteMessageQueue(tmp_path / "messages.db"),
         worktree_port=GitWorktree(tmp_path),
+        debug_sink=FileWorkerDebugSink(tmp_path / "logs"),
     )
 
 

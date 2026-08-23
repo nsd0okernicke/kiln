@@ -2,7 +2,12 @@
 
 from scheduler import db, policies
 from scheduler.adapters import WorkerInvocation
-from scheduler.infrastructure import CallableWorkerRunner, GitWorktree, SQLiteMessageQueue
+from scheduler.infrastructure import (
+    CallableWorkerRunner,
+    FileWorkerDebugSink,
+    GitWorktree,
+    SQLiteMessageQueue,
+)
 from scheduler.models import MessageStatus, WorkerRequest, can_transition
 from scheduler.ports import MessageQueue, WorkerRunner, Worktree
 from scheduler.status_contract import STATUS_DONE, WorkerResult
@@ -65,3 +70,13 @@ def test_worker_runner_translates_the_typed_request_at_the_adapter_edge():
 
     assert result.is_done
     assert received == {"prompt": "do it", "attempt": 2, "max_budget_usd": 3.5}
+
+
+def test_file_debug_sink_owns_diagnostic_persistence(tmp_path):
+    sink = FileWorkerDebugSink(tmp_path / "logs")
+
+    sink.save("coder", 2, "raw worker output")
+
+    assert (tmp_path / "logs" / "worker-debug-coder-attempt2.log").read_text(
+        encoding="utf-8"
+    ) == "raw worker output"

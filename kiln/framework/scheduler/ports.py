@@ -51,6 +51,10 @@ class WorkerRunner(Protocol):
     def __call__(self, request: WorkerRequest) -> WorkerInvocation: ...
 
 
+class WorkerDebugSink(Protocol):
+    def save(self, role: str, attempt: int, raw_output: str) -> None: ...
+
+
 class VerificationResult(Protocol):
     ok: bool
     summary: str

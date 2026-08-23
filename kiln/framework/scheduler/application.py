@@ -11,7 +11,7 @@ from pathlib import Path
 from . import handoff, policies, status_contract
 from .adapters import TokenUsage, WorkerInvocation
 from .models import DEFAULT_PRIORITY, WorkerRequest
-from .ports import MessageQueue, VerificationResult, WorkerRunner, Worktree
+from .ports import MessageQueue, VerificationResult, WorkerDebugSink, WorkerRunner, Worktree
 from .routing import RoutingTable
 from .worker_prompt import WorkerDefinition, build_task_prompt
 
@@ -51,13 +51,14 @@ class SchedulerContext:
 
     role: str
     branch: str
-    db_path: Path
     worktree: Path
     routing: RoutingTable
     definition: WorkerDefinition
     worker_runner: WorkerRunner
     queue: MessageQueue
     worktree_port: Worktree
+    debug_sink: WorkerDebugSink
+    queue_label: str = ""
     clock: Callable[[], datetime] = datetime.now
     set_status: Callable[..., None] = lambda _state, **_kwargs: None
     max_attempts: int = 2
@@ -276,14 +277,7 @@ def _persist_worker_debug(
     nothing was written. Never raises — a debug artefact must not fail the cycle it exists to
     explain.
     """
-    try:
-        logs_dir = ctx.db_path.parent / "logs"
-        logs_dir.mkdir(parents=True, exist_ok=True)
-        target = logs_dir / f"worker-debug-{ctx.role}-attempt{attempt}.log"
-        target.write_text(invocation.raw_output or "(no output captured)", encoding="utf-8")
-        log.info("worker output for attempt %d saved to %s", attempt, target)
-    except OSError as exc:
-        log.warning("could not save worker debug output: %s", exc)
+    ctx.debug_sink.save(ctx.role, attempt, invocation.raw_output)
 
 
 def _delegate(

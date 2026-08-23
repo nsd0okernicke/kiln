@@ -26,7 +26,7 @@ from . import application as scheduler_application
 from . import pane_status, verify
 from .adapters import DEFAULT_IDLE_TIMEOUT_SEC, TokenUsage, WorkerInvocation
 from .application import CycleResult, SchedulerContext, SchedulerState
-from .infrastructure import GitWorktree, SQLiteMessageQueue
+from .infrastructure import FileWorkerDebugSink, GitWorktree, SQLiteMessageQueue
 from .models import WorkerRequest
 from .routing import load_routing_table, parse_routing_arguments
 from .worker_prompt import WorkerDefinition, load_worker_definition
@@ -234,7 +234,7 @@ def format_banner(ctx: SchedulerContext, args: argparse.Namespace) -> list[str]:
         ("hands off to", ", ".join(routes) or "(no route - handoffs will escalate)"),
         ("worktree", str(ctx.worktree)),
         ("workflow", str(args.workflow)),
-        ("queue", str(ctx.db_path)),
+        ("queue", ctx.queue_label),
         ("poll / worker timeout", f"{args.poll_interval:g}s / {args.worker_timeout}s"),
         ("idle timeout", f"{args.worker_idle_timeout:g}s" if args.worker_idle_timeout else "off"),
     ]
@@ -336,7 +336,6 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
     return SchedulerContext(
         role=args.role,
         branch=args.branch,
-        db_path=Path(args.db_path),
         worktree=Path(args.worktree),
         # A profile with its own routing sends it as --route arguments and replaces
         # workflow.md's table outright; without them the file stays the source.
@@ -347,6 +346,8 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
         worker_runner=run_worker,
         queue=SQLiteMessageQueue(args.db_path),
         worktree_port=GitWorktree(args.worktree),
+        debug_sink=FileWorkerDebugSink(Path(args.db_path).parent / "logs"),
+        queue_label=str(args.db_path),
         set_status=make_status_writer(
             args.role,
             args.status_script,
