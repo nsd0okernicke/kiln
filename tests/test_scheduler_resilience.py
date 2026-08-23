@@ -16,7 +16,7 @@ from launcher import workspace
 from launcher.config import parse_profile
 from launcher.paths import KilnPaths
 from scheduler import role_scheduler
-from scheduler.infrastructure import GitWorktree, SQLiteMessageQueue
+from scheduler.infrastructure import CallableWorkerRunner, GitWorktree, SQLiteMessageQueue
 from scheduler.role_scheduler import CycleResult
 
 pytestmark = pytest.mark.integration
@@ -28,13 +28,20 @@ def _args(tmp_path, **overrides):
     workflow = tmp_path / "workflow.md"
     workflow.write_text("| coder | refactorer |\n", encoding="utf-8")
     argv = [
-        "--role", "coder",
-        "--branch", "main",
-        "--db-path", str(tmp_path / "messages.db"),
-        "--worktree", str(tmp_path),
-        "--workflow", str(workflow),
-        "--worker-agent", str(worker),
-        "--poll-interval", "0.01",
+        "--role",
+        "coder",
+        "--branch",
+        "main",
+        "--db-path",
+        str(tmp_path / "messages.db"),
+        "--worktree",
+        str(tmp_path),
+        "--workflow",
+        str(workflow),
+        "--worker-agent",
+        str(worker),
+        "--poll-interval",
+        "0.01",
     ]
     for key, value in overrides.items():
         argv += [f"--{key}", str(value)]
@@ -54,7 +61,7 @@ def stub_context(monkeypatch, tmp_path):
             worktree=tmp_path,
             routing=parse_routing_table("| coder | refactorer |"),
             definition=WorkerDefinition(name="coder-worker", description="d", prompt="b"),
-            run_worker=lambda **_kw: None,
+            worker_runner=CallableWorkerRunner(lambda **_kw: None),
             queue=SQLiteMessageQueue(tmp_path / "messages.db"),
             worktree_port=GitWorktree(tmp_path),
         )
@@ -117,9 +124,7 @@ class TestLoopSurvivesFailures:
 
         assert seen["n"] == 4, "two isolated failures must not trip the limit"
 
-    def test_the_failure_reason_survives_in_the_log_file(
-        self, tmp_path, stub_context, monkeypatch
-    ):
+    def test_the_failure_reason_survives_in_the_log_file(self, tmp_path, stub_context, monkeypatch):
         # The point of the log file: the reason must outlive the pane.
         def boom(ctx, state):
             raise RuntimeError("the actual reason")
@@ -161,9 +166,7 @@ class TestHaltedLoopParks:
         assert role_scheduler.main(_args(tmp_path)) == 130
         assert polls["n"] == 3, "the loop must have kept polling while halted"
 
-    def test_it_announces_the_halt_once_not_every_poll(
-        self, tmp_path, stub_context, monkeypatch
-    ):
+    def test_it_announces_the_halt_once_not_every_poll(self, tmp_path, stub_context, monkeypatch):
         # A parked scheduler polls forever; repeating the line would bury the pane.
         # Read from the log file, not caplog: configure_logging replaces the root handlers.
         polls = {"n": 0}
@@ -210,8 +213,11 @@ class TestStaleMessageRecovery:
 
         db.ensure_schema(tmp_path / "messages.db")
         return db.insert_handoff(
-            tmp_path / "messages.db", kwargs.get("sender", "specifier"),
-            kwargs.get("target", "coder"), "payload", "main",
+            tmp_path / "messages.db",
+            kwargs.get("sender", "specifier"),
+            kwargs.get("target", "coder"),
+            "payload",
+            "main",
             work_item=kwargs.get("work_item"),
         )
 
@@ -291,7 +297,7 @@ def _context(tmp_path):
         worktree=tmp_path,
         routing=parse_routing_table("| coder | refactorer |"),
         definition=WorkerDefinition(name="coder-worker", description="d", prompt="b"),
-        run_worker=lambda **_kw: None,
+        worker_runner=CallableWorkerRunner(lambda **_kw: None),
         queue=SQLiteMessageQueue(tmp_path / "messages.db"),
         worktree_port=GitWorktree(tmp_path),
     )
@@ -402,7 +408,12 @@ class TestShippedRoutingTable:
             pytest.fail(f"the cycle never returns to the human: {' -> '.join(visited)}")
 
         assert visited == [
-            "specifier", "coder", "refactorer", "architect", "specifier", "human-in-the-loop"
+            "specifier",
+            "coder",
+            "refactorer",
+            "architect",
+            "specifier",
+            "human-in-the-loop",
         ]
 
 

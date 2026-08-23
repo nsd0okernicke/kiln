@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import TypedDict
 
@@ -30,6 +31,15 @@ class QueueMessage(TypedDict, total=False):
     error: str | None
     branch: str
     work_item: str | None
+
+
+@dataclass(frozen=True)
+class WorkerRequest:
+    """One application-level request to execute a role worker."""
+
+    prompt: str
+    attempt: int = 1
+    max_budget_usd: float | None = None
 
 
 ALLOWED_TRANSITIONS: dict[MessageStatus, frozenset[MessageStatus]] = {

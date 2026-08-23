@@ -3,12 +3,30 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 
 from . import db, git_ops
-from .models import DEFAULT_PRIORITY, QueueMessage
+from .adapters import WorkerInvocation
+from .models import DEFAULT_PRIORITY, QueueMessage, WorkerRequest
 
 log = logging.getLogger(__name__)
+
+
+class CallableWorkerRunner:
+    """Adapt the legacy keyword-callable worker shape to the typed application port."""
+
+    def __init__(self, worker: Callable[..., WorkerInvocation]):
+        self.worker = worker
+
+    def __call__(self, request: WorkerRequest) -> WorkerInvocation:
+        kwargs: dict[str, object] = {
+            "prompt": request.prompt,
+            "attempt": request.attempt,
+        }
+        if request.max_budget_usd is not None:
+            kwargs["max_budget_usd"] = request.max_budget_usd
+        return self.worker(**kwargs)
 
 
 class SQLiteMessageQueue:

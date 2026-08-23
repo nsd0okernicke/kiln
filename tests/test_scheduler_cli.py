@@ -17,7 +17,8 @@ from datetime import datetime
 import pytest
 from scheduler import db, git_ops, handoff, infrastructure, pane_status, role_scheduler
 from scheduler.adapters import TokenUsage
-from scheduler.infrastructure import GitWorktree, SQLiteMessageQueue
+from scheduler.infrastructure import CallableWorkerRunner, GitWorktree, SQLiteMessageQueue
+from scheduler.models import WorkerRequest
 from scheduler.role_scheduler import SchedulerContext, SchedulerState
 from scheduler.routing import parse_routing_table
 from scheduler.worker_prompt import WorkerDefinition
@@ -50,24 +51,34 @@ class TestInsertVerification:
         monkeypatch.setattr(infrastructure.db, "message_exists", flaky_verify)
 
         ctx = SchedulerContext(
-            role="coder", branch="main", db_path=db_path, worktree=git_repo,
-            routing=ROUTING, definition=DEFINITION, run_worker=FakeWorker(),
-            queue=SQLiteMessageQueue(db_path), worktree_port=GitWorktree(git_repo),
+            role="coder",
+            branch="main",
+            db_path=db_path,
+            worktree=git_repo,
+            routing=ROUTING,
+            definition=DEFINITION,
+            worker_runner=CallableWorkerRunner(FakeWorker()),
+            queue=SQLiteMessageQueue(db_path),
+            worktree_port=GitWorktree(git_repo),
         )
         assert role_scheduler._insert_verified(ctx, "refactorer", "payload") is not None
         assert calls["verify"] == 2
 
-    def test_a_consumer_taking_the_message_does_not_cause_a_duplicate(
-        self, db_path, git_repo
-    ):
+    def test_a_consumer_taking_the_message_does_not_cause_a_duplicate(self, db_path, git_repo):
         # The live failure, reproduced: the receiving role polls every couple of seconds and
         # can take the handoff one second after it is written. A verification that asked "is
         # there a *queued* message from me?" then reported the insert had failed, and the
         # sender sent the whole handoff again -- one request, two full specifier cycles.
         ctx = SchedulerContext(
-            role="coder", branch="main", db_path=db_path, worktree=git_repo,
-            routing=ROUTING, definition=DEFINITION, run_worker=FakeWorker(),
-            queue=SQLiteMessageQueue(db_path), worktree_port=GitWorktree(git_repo),
+            role="coder",
+            branch="main",
+            db_path=db_path,
+            worktree=git_repo,
+            routing=ROUTING,
+            definition=DEFINITION,
+            worker_runner=CallableWorkerRunner(FakeWorker()),
+            queue=SQLiteMessageQueue(db_path),
+            worktree_port=GitWorktree(git_repo),
         )
         original_insert = db.insert_handoff
 
@@ -90,9 +101,15 @@ class TestInsertVerification:
     def test_gives_up_after_two_attempts(self, db_path, git_repo, monkeypatch):
         monkeypatch.setattr(infrastructure.db, "message_exists", lambda *a, **k: False)
         ctx = SchedulerContext(
-            role="coder", branch="main", db_path=db_path, worktree=git_repo,
-            routing=ROUTING, definition=DEFINITION, run_worker=FakeWorker(),
-            queue=SQLiteMessageQueue(db_path), worktree_port=GitWorktree(git_repo),
+            role="coder",
+            branch="main",
+            db_path=db_path,
+            worktree=git_repo,
+            routing=ROUTING,
+            definition=DEFINITION,
+            worker_runner=CallableWorkerRunner(FakeWorker()),
+            queue=SQLiteMessageQueue(db_path),
+            worktree_port=GitWorktree(git_repo),
         )
         assert role_scheduler._insert_verified(ctx, "refactorer", "payload") is None
 
@@ -105,19 +122,30 @@ class TestSquashFailureEscalates:
             lambda *a, **k: git_ops.GitResult(False, "", "disk full", 1),
         )
         content = handoff.format_handoff(
-            sender="specifier", handoff="h", branch="main",
-            commit=git_ops.head_commit(git_repo), summary="s",
-            next_role="coder", timestamp="2026-08-07 10:00:00",
+            sender="specifier",
+            handoff="h",
+            branch="main",
+            commit=git_ops.head_commit(git_repo),
+            summary="s",
+            next_role="coder",
+            timestamp="2026-08-07 10:00:00",
         )
         db.insert_handoff(db_path, "specifier", "coder", content, "main")
 
         ctx = SchedulerContext(
-            role="coder", branch="main", db_path=db_path, worktree=git_repo,
-            routing=ROUTING, definition=DEFINITION,
+            role="coder",
+            branch="main",
+            db_path=db_path,
+            worktree=git_repo,
+            routing=ROUTING,
+            definition=DEFINITION,
             # The worker must genuinely change something, or the cycle ends as a no-op
             # before it ever reaches the squash this test is about.
-            run_worker=FakeWorker(worker(), edits_file=git_repo / "work.txt"),
-            queue=SQLiteMessageQueue(db_path), worktree_port=GitWorktree(git_repo),
+            worker_runner=CallableWorkerRunner(
+                FakeWorker(worker(), edits_file=git_repo / "work.txt")
+            ),
+            queue=SQLiteMessageQueue(db_path),
+            worktree_port=GitWorktree(git_repo),
             clock=lambda: datetime(2026, 8, 7, 14, 0, 0),
         )
         result = role_scheduler.run_once(ctx, SchedulerState())
@@ -135,9 +163,15 @@ class TestPersistInboundIsNeverFatal:
             lambda *a, **k: (_ for _ in ()).throw(OSError("nope")),
         )
         ctx = SchedulerContext(
-            role="coder", branch="main", db_path=db_path, worktree=git_repo,
-            routing=ROUTING, definition=DEFINITION, run_worker=FakeWorker(),
-            queue=SQLiteMessageQueue(db_path), worktree_port=GitWorktree(git_repo),
+            role="coder",
+            branch="main",
+            db_path=db_path,
+            worktree=git_repo,
+            routing=ROUTING,
+            definition=DEFINITION,
+            worker_runner=CallableWorkerRunner(FakeWorker()),
+            queue=SQLiteMessageQueue(db_path),
+            worktree_port=GitWorktree(git_repo),
         )
         role_scheduler._persist_inbound(ctx, "content")  # must not raise
 
@@ -164,12 +198,18 @@ class TestCli:
         workflow = tmp_path / "workflow.md"
         workflow.write_text("| coder | refactorer |\n", encoding="utf-8")
         argv = [
-            "--role", "coder",
-            "--branch", "main",
-            "--db-path", str(tmp_path / "messages.db"),
-            "--worktree", str(tmp_path),
-            "--workflow", str(workflow),
-            "--worker-agent", str(worker_file),
+            "--role",
+            "coder",
+            "--branch",
+            "main",
+            "--db-path",
+            str(tmp_path / "messages.db"),
+            "--worktree",
+            str(tmp_path),
+            "--workflow",
+            str(workflow),
+            "--worker-agent",
+            str(worker_file),
         ]
         for key, value in overrides.items():
             argv += [f"--{key}", str(value)]
@@ -200,11 +240,9 @@ class TestCli:
             captured.update(kwargs)
             return worker()
 
-        monkeypatch.setattr(
-            "scheduler.adapters.claude_adapter.run_worker", fake_run_worker
-        )
+        monkeypatch.setattr("scheduler.adapters.claude_adapter.run_worker", fake_run_worker)
         ctx = role_scheduler.build_context(role_scheduler.parse_args(self._args(tmp_path)))
-        ctx.run_worker(prompt="p")
+        ctx.worker_runner(WorkerRequest(prompt="p"))
         assert captured["model"] == "claude-sonnet-5"
 
     def test_explicit_model_overrides_the_definition(self, tmp_path, monkeypatch):
@@ -214,7 +252,7 @@ class TestCli:
             lambda **kwargs: captured.update(kwargs) or worker(),
         )
         args = role_scheduler.parse_args(self._args(tmp_path, model="opus"))
-        role_scheduler.build_context(args).run_worker(prompt="p")
+        role_scheduler.build_context(args).worker_runner(WorkerRequest(prompt="p"))
         assert captured["model"] == "opus"
 
     def test_worker_output_is_wired_to_an_emitter(self, tmp_path, monkeypatch):
@@ -226,7 +264,7 @@ class TestCli:
             lambda **kwargs: captured.update(kwargs) or worker(),
         )
         args = role_scheduler.parse_args(self._args(tmp_path))
-        role_scheduler.build_context(args).run_worker(prompt="p")
+        role_scheduler.build_context(args).worker_runner(WorkerRequest(prompt="p"))
         assert callable(captured["on_output"])
 
 
@@ -237,13 +275,20 @@ class TestAgentDispatch:
         workflow = tmp_path / "workflow.md"
         workflow.write_text("| coder | refactorer |\n", encoding="utf-8")
         argv = [
-            "--role", "coder",
-            "--branch", "main",
-            "--db-path", str(tmp_path / "messages.db"),
-            "--worktree", str(tmp_path),
-            "--workflow", str(workflow),
-            "--worker-agent", str(worker_file),
-            "--agent", agent,
+            "--role",
+            "coder",
+            "--branch",
+            "main",
+            "--db-path",
+            str(tmp_path / "messages.db"),
+            "--worktree",
+            str(tmp_path),
+            "--workflow",
+            str(workflow),
+            "--worker-agent",
+            str(worker_file),
+            "--agent",
+            agent,
         ]
         for key, value in overrides.items():
             argv += [f"--{key}", str(value)]
@@ -258,7 +303,7 @@ class TestAgentDispatch:
             lambda **kwargs: captured.update(kwargs) or worker(),
         )
         args = role_scheduler.parse_args(self._args(tmp_path, worker_file, "copilot"))
-        role_scheduler.build_context(args).run_worker(prompt="p")
+        role_scheduler.build_context(args).worker_runner(WorkerRequest(prompt="p"))
         assert captured["definition"].name == "coder-worker"
 
     def test_codex_agent_dispatches_to_the_codex_adapter(self, tmp_path, monkeypatch):
@@ -276,7 +321,7 @@ class TestAgentDispatch:
             lambda **kwargs: captured.update(kwargs) or worker(),
         )
         args = role_scheduler.parse_args(self._args(tmp_path, worker_file, "codex"))
-        role_scheduler.build_context(args).run_worker(prompt="p")
+        role_scheduler.build_context(args).worker_runner(WorkerRequest(prompt="p"))
         assert captured["definition"].name == "coder-worker"
 
     def test_grok_agent_dispatches_to_the_grok_adapter(self, tmp_path, monkeypatch):
@@ -288,7 +333,7 @@ class TestAgentDispatch:
             lambda **kwargs: captured.update(kwargs) or worker(),
         )
         args = role_scheduler.parse_args(self._args(tmp_path, worker_file, "grok"))
-        role_scheduler.build_context(args).run_worker(prompt="p")
+        role_scheduler.build_context(args).worker_runner(WorkerRequest(prompt="p"))
         assert captured["definition"].name == "coder-worker"
 
 
@@ -303,9 +348,20 @@ class TestResolveModel:
         workflow = tmp_path / "workflow.md"
         workflow.write_text("| coder | refactorer |\n", encoding="utf-8")
         argv = [
-            "--role", "coder", "--branch", "main",
-            "--db-path", str(tmp_path / "messages.db"), "--worktree", str(tmp_path),
-            "--workflow", str(workflow), "--worker-agent", str(worker_file), "--agent", agent,
+            "--role",
+            "coder",
+            "--branch",
+            "main",
+            "--db-path",
+            str(tmp_path / "messages.db"),
+            "--worktree",
+            str(tmp_path),
+            "--workflow",
+            str(workflow),
+            "--worker-agent",
+            str(worker_file),
+            "--agent",
+            agent,
         ]
         if model:
             argv += ["--model", model]
@@ -375,12 +431,18 @@ class TestStartupBanner:
         workflow = tmp_path / "workflow.md"
         workflow.write_text(workflow_text, encoding="utf-8")
         argv = [
-            "--role", "coder",
-            "--branch", "feature-x",
-            "--db-path", str(tmp_path / "messages.db"),
-            "--worktree", str(tmp_path),
-            "--workflow", str(workflow),
-            "--worker-agent", str(worker_file),
+            "--role",
+            "coder",
+            "--branch",
+            "feature-x",
+            "--db-path",
+            str(tmp_path / "messages.db"),
+            "--worktree",
+            str(tmp_path),
+            "--workflow",
+            str(workflow),
+            "--worker-agent",
+            str(worker_file),
         ]
         for key, value in overrides.items():
             argv += [f"--{key}", str(value)]
@@ -411,9 +473,20 @@ class TestStartupBanner:
         workflow = tmp_path / "workflow.md"
         workflow.write_text("| coder | refactorer |\n", encoding="utf-8")
         argv = [
-            "--role", "coder", "--branch", "main",
-            "--db-path", str(tmp_path / "messages.db"), "--worktree", str(tmp_path),
-            "--workflow", str(workflow), "--worker-agent", str(worker_file), "--agent", "copilot",
+            "--role",
+            "coder",
+            "--branch",
+            "main",
+            "--db-path",
+            str(tmp_path / "messages.db"),
+            "--worktree",
+            str(tmp_path),
+            "--workflow",
+            str(workflow),
+            "--worker-agent",
+            str(worker_file),
+            "--agent",
+            "copilot",
         ]
         args = role_scheduler.parse_args(argv)
         banner = "\n".join(role_scheduler.format_banner(role_scheduler.build_context(args), args))
@@ -629,7 +702,8 @@ class TestStatusBarWiring:
         ctx.set_status = lambda state, **kwargs: written.append(kwargs)
 
         monkeypatch.setattr(
-            role_scheduler, "run_once",
+            role_scheduler,
+            "run_once",
             lambda c, s: role_scheduler.CycleResult(role_scheduler.IDLE),
         )
         monkeypatch.setattr(role_scheduler, "build_context", lambda args: ctx)
@@ -708,7 +782,8 @@ class TestStatusBarWiring:
         bar = pane_status.StatusBar(pane_status.PaneStatus(role="coder"), stream=stream)
 
         monkeypatch.setattr(
-            role_scheduler, "_run_loop",
+            role_scheduler,
+            "_run_loop",
             lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")),
         )
         monkeypatch.setattr(role_scheduler, "build_context", lambda args: _dummy_ctx(tmp_path))
@@ -727,7 +802,7 @@ def _dummy_ctx(tmp_path):
         worktree=tmp_path,
         routing=parse_routing_table("| coder | refactorer |"),
         definition=WorkerDefinition(name="coder-worker", description="d", prompt="b"),
-        run_worker=FakeWorker(),
+        worker_runner=CallableWorkerRunner(FakeWorker()),
         queue=SQLiteMessageQueue(tmp_path / "messages.db"),
         worktree_port=GitWorktree(tmp_path),
     )
@@ -858,12 +933,18 @@ class TestRouteOverride:
         workflow = tmp_path / "workflow.md"
         workflow.write_text("| coder | refactorer |\n", encoding="utf-8")
         argv = [
-            "--role", "coder",
-            "--branch", "main",
-            "--db-path", str(tmp_path / "messages.db"),
-            "--worktree", str(tmp_path),
-            "--workflow", str(workflow),
-            "--worker-agent", str(worker_file),
+            "--role",
+            "coder",
+            "--branch",
+            "main",
+            "--db-path",
+            str(tmp_path / "messages.db"),
+            "--worktree",
+            str(tmp_path),
+            "--workflow",
+            str(workflow),
+            "--worker-agent",
+            str(worker_file),
         ]
         for route in routes:
             argv += ["--route", route]

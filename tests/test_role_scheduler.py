@@ -17,7 +17,7 @@ import pytest
 from scheduler import db, git_ops, handoff, role_scheduler, verify
 from scheduler.adapters import TokenUsage
 from scheduler.adapters.claude_adapter import WorkerInvocation
-from scheduler.infrastructure import GitWorktree, SQLiteMessageQueue
+from scheduler.infrastructure import CallableWorkerRunner, GitWorktree, SQLiteMessageQueue
 from scheduler.role_scheduler import CycleResult, SchedulerContext, SchedulerState
 from scheduler.routing import parse_routing_table
 from scheduler.status_contract import STATUS_BLOCKED, STATUS_DONE, WorkerResult
@@ -109,7 +109,7 @@ def make_ctx(db_path, git_repo):
             "worktree": git_repo,
             "routing": ROUTING,
             "definition": DEFINITION,
-            "run_worker": run_worker,
+            "worker_runner": CallableWorkerRunner(run_worker),
             "queue": SQLiteMessageQueue(db_path),
             "worktree_port": GitWorktree(overrides.get("worktree", git_repo)),
             "clock": lambda: FIXED_NOW,
@@ -218,9 +218,7 @@ class TestHappyPath:
         role_scheduler.run_once(make_ctx(FakeWorker()), SchedulerState())
         assert queued_for(db_path, "refactorer")[0]["work_item"] == "order-intake"
 
-    def test_the_stored_work_item_matches_the_name_in_the_message(
-        self, make_ctx, inbound, db_path
-    ):
+    def test_the_stored_work_item_matches_the_name_in_the_message(self, make_ctx, inbound, db_path):
         # Two spellings of the same work item would split the group silently.
         inbound(name="CAT-3 search by author")
         role_scheduler.run_once(make_ctx(FakeWorker()), SchedulerState())
@@ -256,9 +254,7 @@ class TestHappyPath:
         inbound(sender="specifier")
         role_scheduler.run_once(make_ctx(FakeWorker(), role="coder"), SchedulerState())
         subjects = git_ops.run_git(["log", "--format=%s"], git_repo).stdout.splitlines()
-        assert any(
-            s.startswith("[Coder] Merge order-intake from specifier") for s in subjects
-        )
+        assert any(s.startswith("[Coder] Merge order-intake from specifier") for s in subjects)
         assert not any(s.startswith("Merge commit '") for s in subjects)
 
     def test_writes_the_inbound_message_for_debugging(self, make_ctx, inbound, git_repo):
@@ -278,17 +274,13 @@ class TestConditionalRouting:
     def test_specifier_forwards_architect_reports_to_the_human(self, make_ctx, inbound, db_path):
         # The override that was previously prose only an LLM could follow.
         inbound(target="specifier", sender="architect")
-        result = role_scheduler.run_once(
-            make_ctx(FakeWorker(), role="specifier"), SchedulerState()
-        )
+        result = role_scheduler.run_once(make_ctx(FakeWorker(), role="specifier"), SchedulerState())
         assert result.target == "human-in-the-loop"
         assert len(queued_for(db_path, "human-in-the-loop")) == 1
 
     def test_specifier_sends_normal_requests_to_the_coder(self, make_ctx, inbound):
         inbound(target="specifier", sender="human-in-the-loop")
-        result = role_scheduler.run_once(
-            make_ctx(FakeWorker(), role="specifier"), SchedulerState()
-        )
+        result = role_scheduler.run_once(make_ctx(FakeWorker(), role="specifier"), SchedulerState())
         assert result.target == "coder"
 
     def test_unroutable_role_escalates_instead_of_guessing(self, make_ctx, inbound, db_path):
@@ -520,9 +512,7 @@ class TestNoOpCycle:
         assert message["priority"] >= role_scheduler.INFORMATIONAL_PRIORITY
         assert handoff.is_escalation(message["content"]) is False
 
-    def test_the_inbound_message_is_still_marked_processed(
-        self, make_ctx, inbound, read_message
-    ):
+    def test_the_inbound_message_is_still_marked_processed(self, make_ctx, inbound, read_message):
         # Otherwise it sits in `processing` forever and startup recovery replays it.
         result = self._no_op_cycle(make_ctx, inbound)
         assert read_message(result.message_id)["status"] == db.STATUS_PROCESSED
@@ -583,18 +573,14 @@ class TestMaxCyclesPerWorkItem:
 
     def test_under_the_limit_the_cycle_runs_normally(self, make_ctx, inbound, db_path):
         inbound(name="loopy")
-        result = role_scheduler.run_once(
-            make_ctx(FakeWorker(), max_cycles=5), SchedulerState()
-        )
+        result = role_scheduler.run_once(make_ctx(FakeWorker(), max_cycles=5), SchedulerState())
         assert result.outcome == role_scheduler.HANDED_OFF
 
     def test_over_the_limit_it_escalates_instead(self, make_ctx, inbound, db_path):
         self._arrive(db_path, "loopy", 3)
         inbound(name="loopy")
 
-        result = role_scheduler.run_once(
-            make_ctx(FakeWorker(), max_cycles=2), SchedulerState()
-        )
+        result = role_scheduler.run_once(make_ctx(FakeWorker(), max_cycles=2), SchedulerState())
 
         assert result.outcome == role_scheduler.MAX_CYCLES
         assert result.target == "human-in-the-loop"
@@ -624,9 +610,7 @@ class TestMaxCyclesPerWorkItem:
         self._arrive(db_path, "loopy", 9)
         inbound(name="innocent")
 
-        result = role_scheduler.run_once(
-            make_ctx(FakeWorker(), max_cycles=2), SchedulerState()
-        )
+        result = role_scheduler.run_once(make_ctx(FakeWorker(), max_cycles=2), SchedulerState())
 
         assert result.outcome == role_scheduler.HANDED_OFF
 
@@ -636,9 +620,7 @@ class TestMaxCyclesPerWorkItem:
         self._arrive(db_path, "loopy", 9, target="refactorer")
         inbound(name="loopy")
 
-        result = role_scheduler.run_once(
-            make_ctx(FakeWorker(), max_cycles=2), SchedulerState()
-        )
+        result = role_scheduler.run_once(make_ctx(FakeWorker(), max_cycles=2), SchedulerState())
 
         assert result.outcome == role_scheduler.HANDED_OFF
 
@@ -704,9 +686,7 @@ class TestCostCap:
 
         assert state.spend_on("pricey") == pytest.approx(3.0)
 
-    def test_the_worker_is_given_the_remaining_budget_not_the_whole_cap(
-        self, make_ctx, inbound
-    ):
+    def test_the_worker_is_given_the_remaining_budget_not_the_whole_cap(self, make_ctx, inbound):
         # A retry after a $4 first attempt under a $5 cap must not be handed $5 again.
         inbound(name="pricey")
         fake = FakeWorker(
@@ -793,9 +773,7 @@ class TestNamingTheWorkItem:
 
     def test_the_specifier_can_name_a_pending_work_item(self, make_ctx, inbound, db_path):
         inbound(target="specifier", sender="human-in-the-loop", name="pending")
-        fake = FakeWorker(
-            worker(summary="wrote the spec", handoff_name="cat-3-search-by-author")
-        )
+        fake = FakeWorker(worker(summary="wrote the spec", handoff_name="cat-3-search-by-author"))
 
         role_scheduler.run_once(make_ctx(fake, role="specifier"), SchedulerState())
 
@@ -824,9 +802,7 @@ class TestNamingTheWorkItem:
 
         assert queued_for(db_path, "refactorer")[0]["work_item"] == "cat-3-search"
 
-    def test_an_unnamed_cycle_stores_null_not_the_placeholder(
-        self, make_ctx, inbound, db_path
-    ):
+    def test_an_unnamed_cycle_stores_null_not_the_placeholder(self, make_ctx, inbound, db_path):
         # `pending` is not a work item, it is the absence of one. Storing it is what put every
         # unrelated request in the live database into a single group.
         inbound(target="specifier", sender="human-in-the-loop", name="pending")
@@ -929,9 +905,7 @@ class TestVerificationGate:
         fake = FakeWorker()
         verifier = self._verifier(self._fail(), self._pass())
 
-        result = role_scheduler.run_once(
-            make_ctx(fake, run_verify=verifier), SchedulerState()
-        )
+        result = role_scheduler.run_once(make_ctx(fake, run_verify=verifier), SchedulerState())
 
         assert fake.calls == 2, "a failed gate must consume an attempt, like a blocked worker"
         assert result.outcome == role_scheduler.HANDED_OFF
@@ -989,9 +963,7 @@ class TestVerificationGate:
         )
         verifier = self._verifier(self._fail(), self._pass())
 
-        result = role_scheduler.run_once(
-            make_ctx(fake, run_verify=verifier), SchedulerState()
-        )
+        result = role_scheduler.run_once(make_ctx(fake, run_verify=verifier), SchedulerState())
 
         assert result.cost_usd == pytest.approx(2.0)
         assert result.tokens.input_tokens == 200
@@ -1034,9 +1006,7 @@ class TestEscalationResume:
         result = role_scheduler.run_once(make_ctx(fake), state or SchedulerState())
         return message_id, result
 
-    def test_an_escalated_message_is_failed_not_processed(
-        self, make_ctx, inbound, read_message
-    ):
+    def test_an_escalated_message_is_failed_not_processed(self, make_ctx, inbound, read_message):
         message_id, _ = self._escalated(make_ctx, inbound)
 
         stored = read_message(message_id)
@@ -1047,9 +1017,7 @@ class TestEscalationResume:
         self._escalated(make_ctx, inbound)
         assert db.fetch_and_deliver(db_path, "coder", "main") is None
 
-    def test_a_resumed_message_is_worked_with_the_humans_guidance(
-        self, make_ctx, inbound, db_path
-    ):
+    def test_a_resumed_message_is_worked_with_the_humans_guidance(self, make_ctx, inbound, db_path):
         from scheduler import retry
 
         message_id, _ = self._escalated(make_ctx, inbound)
@@ -1156,8 +1124,7 @@ class TestStatusReporting:
         monkeypatch.setattr(
             role_scheduler.subprocess,
             "run",
-            lambda cmd, **kw: calls.setdefault("cmd", cmd)
-            or subprocess.CompletedProcess(cmd, 0),
+            lambda cmd, **kw: calls.setdefault("cmd", cmd) or subprocess.CompletedProcess(cmd, 0),
         )
         role_scheduler.make_status_writer("coder", script)("working")
         assert calls["cmd"][-2:] == ["coder", "working"]
@@ -1172,8 +1139,7 @@ class TestStatusReporting:
         monkeypatch.setattr(
             role_scheduler.subprocess,
             "run",
-            lambda cmd, **kw: calls.setdefault("cmd", cmd)
-            or subprocess.CompletedProcess(cmd, 0),
+            lambda cmd, **kw: calls.setdefault("cmd", cmd) or subprocess.CompletedProcess(cmd, 0),
         )
 
         role_scheduler.make_status_writer("coder", script, model="claude-sonnet-5")("working")
@@ -1189,8 +1155,7 @@ class TestStatusReporting:
         monkeypatch.setattr(
             role_scheduler.subprocess,
             "run",
-            lambda cmd, **kw: calls.setdefault("cmd", cmd)
-            or subprocess.CompletedProcess(cmd, 0),
+            lambda cmd, **kw: calls.setdefault("cmd", cmd) or subprocess.CompletedProcess(cmd, 0),
         )
 
         role_scheduler.make_status_writer("coder", script)("working")
@@ -1216,8 +1181,13 @@ class TestCommitPrefix:
 class TestMergeCommitMessage:
     def _inbound(self, **overrides):
         fields = dict(
-            sender="specifier", handoff="order-intake", branch="main-specifier",
-            commit="a1b2c3d4", is_ping=False, trail=(), raw="",
+            sender="specifier",
+            handoff="order-intake",
+            branch="main-specifier",
+            commit="a1b2c3d4",
+            is_ping=False,
+            trail=(),
+            raw="",
         )
         fields.update(overrides)
         return handoff.InboundHandoff(**fields)

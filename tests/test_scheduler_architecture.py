@@ -1,9 +1,11 @@
 """Characterization tests for the scheduler's domain and port boundaries."""
 
 from scheduler import db, policies
-from scheduler.infrastructure import GitWorktree, SQLiteMessageQueue
-from scheduler.models import MessageStatus, can_transition
-from scheduler.ports import MessageQueue, Worktree
+from scheduler.adapters import WorkerInvocation
+from scheduler.infrastructure import CallableWorkerRunner, GitWorktree, SQLiteMessageQueue
+from scheduler.models import MessageStatus, WorkerRequest, can_transition
+from scheduler.ports import MessageQueue, WorkerRunner, Worktree
+from scheduler.status_contract import STATUS_DONE, WorkerResult
 
 
 def test_message_lifecycle_rejects_completed_message_reentry(db_path, add_message):
@@ -49,3 +51,17 @@ def test_concrete_adapters_satisfy_the_application_ports(db_path, git_repo):
 
     assert queue.fetch("coder", "main") is None
     assert tree.persist_inbound("handoff") == git_repo / "tmp" / "handoff-in.md"
+
+
+def test_worker_runner_translates_the_typed_request_at_the_adapter_edge():
+    received = {}
+
+    def legacy_worker(**kwargs):
+        received.update(kwargs)
+        return WorkerInvocation(WorkerResult(STATUS_DONE, "done", True), "")
+
+    runner: WorkerRunner = CallableWorkerRunner(legacy_worker)
+    result = runner(WorkerRequest(prompt="do it", attempt=2, max_budget_usd=3.5))
+
+    assert result.is_done
+    assert received == {"prompt": "do it", "attempt": 2, "max_budget_usd": 3.5}

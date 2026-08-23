@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Protocol
 
 from .adapters import WorkerInvocation
-from .models import DEFAULT_PRIORITY, QueueMessage
+from .models import DEFAULT_PRIORITY, QueueMessage, WorkerRequest
 
 
 class MessageQueue(Protocol):
@@ -42,4 +42,4 @@ class Worktree(Protocol):
 
 
 class WorkerRunner(Protocol):
-    def __call__(self, **kwargs: object) -> WorkerInvocation: ...
+    def __call__(self, request: WorkerRequest) -> WorkerInvocation: ...

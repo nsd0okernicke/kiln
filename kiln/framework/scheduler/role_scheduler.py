@@ -27,8 +27,8 @@ from pathlib import Path
 from . import handoff, pane_status, policies, status_contract, verify
 from .adapters import DEFAULT_IDLE_TIMEOUT_SEC, TokenUsage, WorkerInvocation
 from .infrastructure import GitWorktree, SQLiteMessageQueue
-from .models import DEFAULT_PRIORITY
-from .ports import MessageQueue, Worktree
+from .models import DEFAULT_PRIORITY, WorkerRequest
+from .ports import MessageQueue, WorkerRunner, Worktree
 from .routing import RoutingTable, load_routing_table, parse_routing_arguments
 from .worker_prompt import WorkerDefinition, build_task_prompt, load_worker_definition
 
@@ -124,7 +124,7 @@ class SchedulerContext:
     worktree: Path
     routing: RoutingTable
     definition: WorkerDefinition
-    run_worker: Callable[..., WorkerInvocation]
+    worker_runner: WorkerRunner
     queue: MessageQueue
     worktree_port: Worktree
     clock: Callable[[], datetime] = datetime.now
@@ -273,7 +273,9 @@ def run_once(ctx: SchedulerContext, state: SchedulerState) -> CycleResult:
     # visible as a running chat session.
     log.info(
         f"{ICON_RECEIVED} received handoff %s from %s (name=%s)",
-        message_id[:8], inbound.sender or "?", inbound.handoff or "?",
+        message_id[:8],
+        inbound.sender or "?",
+        inbound.handoff or "?",
     )
     target = ctx.routing.resolve(ctx.role, inbound.sender)
 
@@ -316,8 +318,15 @@ def run_once(ctx: SchedulerContext, state: SchedulerState) -> CycleResult:
             attempts.last.result.summary
         )
         return _escalate(
-            ctx, state, message_id, inbound, detail, ESCALATED,
-            cost=attempts.cost, attempts=len(attempts.invocations), tokens=attempts.tokens,
+            ctx,
+            state,
+            message_id,
+            inbound,
+            detail,
+            ESCALATED,
+            cost=attempts.cost,
+            attempts=len(attempts.invocations),
+            tokens=attempts.tokens,
         )
 
     return _hand_off(ctx, state, message_id, inbound, target, anchor, attempts)
@@ -400,9 +409,11 @@ def _delegate(
         )
         log.info(
             f"{ICON_DELEGATE} delegating to %s (attempt %d/%d)",
-            ctx.definition.name, len(attempts.invocations) + 1, ctx.max_attempts,
+            ctx.definition.name,
+            len(attempts.invocations) + 1,
+            ctx.max_attempts,
         )
-        kwargs: dict[str, object] = {}
+        max_budget_usd: float | None = None
         if ctx.max_budget_usd is not None:
             # The *remaining* budget, not the whole cap: a retry after a $4 first attempt
             # under a $5 cap must not be handed $5 again. Passed only when configured, so
@@ -411,10 +422,16 @@ def _delegate(
             # after every invocation below -- so subtracting attempts.cost as well would
             # charge the retry twice.
             remaining = ctx.max_budget_usd - state.spend_on(work_item_of(inbound.handoff))
-            kwargs["max_budget_usd"] = max(remaining, 0.0)
+            max_budget_usd = max(remaining, 0.0)
 
         attempts.invocations.append(
-            ctx.run_worker(prompt=prompt, attempt=len(attempts.invocations) + 1, **kwargs)
+            ctx.worker_runner(
+                WorkerRequest(
+                    prompt=prompt,
+                    attempt=len(attempts.invocations) + 1,
+                    max_budget_usd=max_budget_usd,
+                )
+            )
         )
         state.record_spend(work_item_of(inbound.handoff), attempts.last.cost_usd)
         _apply_verification(ctx, attempts)
@@ -454,8 +471,15 @@ def _hand_off(
         detail = f"squash failed: {squashed.output}"
         log.error(detail)
         return _escalate(
-            ctx, state, message_id, inbound, detail, ESCALATED,
-            cost=attempts.cost, attempts=len(attempts.invocations), tokens=attempts.tokens,
+            ctx,
+            state,
+            message_id,
+            inbound,
+            detail,
+            ESCALATED,
+            cost=attempts.cost,
+            attempts=len(attempts.invocations),
+            tokens=attempts.tokens,
         )
 
     outbound = handoff.format_handoff(
@@ -611,9 +635,7 @@ def _budget_breach(
 
     work_item = work_item_of(inbound.handoff)
     spent = state.spend_on(work_item)
-    reason = policies.budget_breach(
-        spent=spent, maximum=ctx.max_budget_usd, work_item=work_item
-    )
+    reason = policies.budget_breach(spent=spent, maximum=ctx.max_budget_usd, work_item=work_item)
     return reason.replace("at this role", f"at {ctx.role}")
 
 
@@ -747,9 +769,7 @@ def _escalate(
         timestamp=ctx.timestamp(),
         escalation=True,
     )
-    _insert_verified(
-        ctx, ESCALATION_TARGET, outbound, work_item=work_item_of(inbound.handoff)
-    )
+    _insert_verified(ctx, ESCALATION_TARGET, outbound, work_item=work_item_of(inbound.handoff))
     # `failed`, not `processed`: the escalated message stays addressable, with its reason in
     # the `error` column, so `kiln retry` can send this exact row back rather than the human
     # having to start a new work item carrying none of the failed cycle's context. It is
@@ -815,8 +835,12 @@ def _insert_verified(
     """
     for attempt in (1, 2):
         message_id = _queue(ctx).insert(
-            ctx.role, target, content, ctx.branch,
-            priority=priority, work_item=work_item,
+            ctx.role,
+            target,
+            content,
+            ctx.branch,
+            priority=priority,
+            work_item=work_item,
         )
         if _queue(ctx).exists(message_id):
             return message_id
@@ -946,8 +970,7 @@ def format_banner(ctx: SchedulerContext, args: argparse.Namespace) -> list[str]:
         ("workflow", str(args.workflow)),
         ("queue", str(ctx.db_path)),
         ("poll / worker timeout", f"{args.poll_interval:g}s / {args.worker_timeout}s"),
-        ("idle timeout", f"{args.worker_idle_timeout:g}s" if args.worker_idle_timeout
-         else "off"),
+        ("idle timeout", f"{args.worker_idle_timeout:g}s" if args.worker_idle_timeout else "off"),
     ]
     if args.log_file:
         fields.append(("log", str(args.log_file)))
@@ -1006,8 +1029,10 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
     from .adapters import claude_adapter, codex_adapter, copilot_adapter, grok_adapter
 
     adapters = {
-        "claude": claude_adapter, "copilot": copilot_adapter,
-        "codex": codex_adapter, "grok": grok_adapter,
+        "claude": claude_adapter,
+        "copilot": copilot_adapter,
+        "codex": codex_adapter,
+        "grok": grok_adapter,
     }
     adapter = adapters[args.agent]
 
@@ -1017,22 +1042,20 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
         Path(args.db_path).parent / "logs" / f"worker-{args.role}.log"
     )
 
-    def run_worker(
-        *, prompt: str, attempt: int = 1, max_budget_usd: float | None = None
-    ) -> WorkerInvocation:
+    def run_worker(request: WorkerRequest) -> WorkerInvocation:
         debug_base = None
         if args.worker_debug:
             logs_dir = Path(args.db_path).parent / "logs"
-            debug_base = logs_dir / f"agent-debug-{args.role}-attempt{attempt}"
+            debug_base = logs_dir / f"agent-debug-{args.role}-attempt{request.attempt}"
         # Only Claude's CLI takes a budget flag today; its adapter advertises that rather
         # than this function hardcoding a backend name. Grok reports cost but has no such
         # flag, so its cap is enforced by the scheduler's own tally alone.
         budget: dict[str, object] = {}
-        if max_budget_usd is not None and getattr(adapter, "SUPPORTS_BUDGET_FLAG", False):
-            budget["max_budget_usd"] = max_budget_usd
+        if request.max_budget_usd is not None and getattr(adapter, "SUPPORTS_BUDGET_FLAG", False):
+            budget["max_budget_usd"] = request.max_budget_usd
         return adapter.run_worker(
             definition=definition,
-            prompt=prompt,
+            prompt=request.prompt,
             cwd=args.worktree,
             model=model,
             timeout=args.worker_timeout,
@@ -1052,16 +1075,16 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
         # A profile with its own routing sends it as --route arguments and replaces
         # workflow.md's table outright; without them the file stays the source.
         routing=(
-            parse_routing_arguments(args.route)
-            if args.route
-            else load_routing_table(args.workflow)
+            parse_routing_arguments(args.route) if args.route else load_routing_table(args.workflow)
         ),
         definition=definition,
-        run_worker=run_worker,
+        worker_runner=run_worker,
         queue=SQLiteMessageQueue(args.db_path),
         worktree_port=GitWorktree(args.worktree),
         set_status=make_status_writer(
-            args.role, args.status_script, worker_timeout=args.worker_timeout,
+            args.role,
+            args.status_script,
+            worker_timeout=args.worker_timeout,
             # `resolve_model`, not `args.model`: the same value the worker is actually
             # invoked with, including the frontmatter and default fallbacks.
             model=model,
@@ -1086,11 +1109,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--worktree", required=True)
     parser.add_argument("--workflow", required=True, help="path to constitution/workflow.md")
     parser.add_argument("--worker-agent", required=True, help="generated worker agent file")
+    parser.add_argument("--agent", default="claude", choices=["claude", "copilot", "codex", "grok"])
     parser.add_argument(
-        "--agent", default="claude", choices=["claude", "copilot", "codex", "grok"]
-    )
-    parser.add_argument(
-        "--route", action="append", default=[], metavar="ROLE=TARGET[:WHEN_SENDER]",
+        "--route",
+        action="append",
+        default=[],
+        metavar="ROLE=TARGET[:WHEN_SENDER]",
         help=(
             "one handoff routing rule from the profile, repeatable. Given at all, "
             "these replace the --workflow table entirely rather than adding to it."
@@ -1099,13 +1123,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--model", default="")
     parser.add_argument("--status-script", default=None)
     parser.add_argument(
-        "--log-file", default=None,
+        "--log-file",
+        default=None,
         help="also write this role's scheduler log here, so a crash leaves evidence",
     )
     parser.add_argument("--poll-interval", type=float, default=DEFAULT_POLL_INTERVAL_SEC)
     parser.add_argument("--worker-timeout", type=int, default=900)
     parser.add_argument(
-        "--worker-idle-timeout", type=float, default=DEFAULT_IDLE_TIMEOUT_SEC,
+        "--worker-idle-timeout",
+        type=float,
+        default=DEFAULT_IDLE_TIMEOUT_SEC,
         help=(
             "kill a worker that has produced no output for this long, even if its total "
             "timeout has not expired. 0 disables it. Every hang seen live went silent and "
@@ -1115,47 +1142,60 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--once", action="store_true", help="run a single cycle and exit")
     parser.add_argument(
-        "--max-cycles", type=int, default=None,
+        "--max-cycles",
+        type=int,
+        default=None,
         help=(
             "escalate instead of working once one work item has reached this role more than "
             "N times; unbounded by default"
         ),
     )
     parser.add_argument(
-        "--max-attempts", type=int, default=SchedulerContext.max_attempts,
+        "--max-attempts",
+        type=int,
+        default=SchedulerContext.max_attempts,
         help="worker attempts per handoff before escalating",
     )
     parser.add_argument(
-        "--escalation-limit", type=int, default=SchedulerContext.escalation_limit,
+        "--escalation-limit",
+        type=int,
+        default=SchedulerContext.escalation_limit,
         help="consecutive escalations before this role stops taking new work",
     )
     parser.add_argument(
-        "--verify", default="",
+        "--verify",
+        default="",
         help=(
             "shell command run in this role's worktree after the worker reports done; a "
             "non-zero exit costs an attempt and its output goes into the retry"
         ),
     )
     parser.add_argument(
-        "--verify-timeout", type=int, default=verify.DEFAULT_VERIFY_TIMEOUT_SEC,
+        "--verify-timeout",
+        type=int,
+        default=verify.DEFAULT_VERIFY_TIMEOUT_SEC,
         help="seconds before the verify command is killed and treated as a failure",
     )
     parser.add_argument(
-        "--max-budget-usd", type=float, default=None,
+        "--max-budget-usd",
+        type=float,
+        default=None,
         help=(
             "escalate instead of working once this role has spent N dollars on one work "
             "item; only meaningful on a backend that reports cost (claude, grok)"
         ),
     )
     parser.add_argument(
-        "--worker-debug", action="store_true",
+        "--worker-debug",
+        action="store_true",
         help=(
             "write the backend CLI's own internal debug trace per attempt to "
             "<db-path-dir>/logs/agent-debug-<role>-attempt<N>[.log]"
         ),
     )
     parser.add_argument(
-        "--no-status-bar", action="store_true",
+        "--no-status-bar",
+        action="store_true",
         help="do not reserve the pane's bottom row for the live status bar",
     )
     return parser.parse_args(argv)
@@ -1282,8 +1322,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     bar.start(format_banner(ctx, args))
     log.info(
         "scheduler started role=%s branch=%s worker=%s model=%s worktree=%s",
-        ctx.role, ctx.branch, ctx.definition.name,
-        display_model(args, ctx.definition), ctx.worktree,
+        ctx.role,
+        ctx.branch,
+        ctx.definition.name,
+        display_model(args, ctx.definition),
+        ctx.worktree,
     )
 
     # The launcher normally covers this, but a scheduler started by hand — or in a project
@@ -1330,7 +1373,9 @@ def recover_stale_messages(ctx: SchedulerContext) -> int:
         log.warning(
             f"{ICON_RETRY} recovered message %s from %s (work item %s), left mid-cycle by a "
             "killed scheduler; re-serving it",
-            str(row["id"])[:8], row["sender"] or "?", row["work_item"] or "-",
+            str(row["id"])[:8],
+            row["sender"] or "?",
+            row["work_item"] or "-",
         )
     if recovered:
         log.warning(
@@ -1365,7 +1410,8 @@ def _run_loop(
             consecutive_errors += 1
             log.exception(
                 f"{ICON_BLOCKED} cycle failed (%d/%d consecutive)",
-                consecutive_errors, MAX_CONSECUTIVE_ERRORS,
+                consecutive_errors,
+                MAX_CONSECUTIVE_ERRORS,
             )
             # Through ctx.set_status, not bar.update directly -- that's what also writes
             # .kiln/status/<role>.json, which drives the WezTerm tab-bar badge. A direct
@@ -1392,9 +1438,7 @@ def _run_loop(
             # screen where the human is already looking, and it stays reachable.
             if not state.parked:
                 state.parked = True
-                log.error(
-                    f"{ICON_HALT} scheduler halted; waiting for `kiln retry <message-id>`"
-                )
+                log.error(f"{ICON_HALT} scheduler halted; waiting for `kiln retry <message-id>`")
             ctx.set_status("halted")
             if args.once:
                 # A scripted single cycle must not block forever waiting on a human.
@@ -1416,8 +1460,6 @@ def _run_loop(
                 # it is almost always where Ctrl+C lands.
                 log.info("interrupted; shutting down")
                 return 130
-
-
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
