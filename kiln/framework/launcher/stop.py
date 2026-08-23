@@ -41,6 +41,7 @@ log = logging.getLogger(__name__)
 KILN_PROCESS_MARKERS = (
     "channel.py",
     "scheduler.role_scheduler",
+    "kiln.scheduler.role_scheduler",
     "scheduler.inbox",
     "scheduler.dashboard",
     "cockpit.server",

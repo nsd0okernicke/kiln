@@ -186,13 +186,13 @@ def _scheduler_command(
     """
     Launch the deterministic scheduler instead of an LLM wrapper session.
 
-    Invoked as `python -m scheduler.role_scheduler`, NOT as a bare script path: the package
+    Invoked as `python -m kiln.scheduler.role_scheduler`, NOT as a bare script path: the package
     uses relative imports, so running the file directly fails with "attempted relative
     import with no known parent package". PYTHONPATH points at kiln/framework so both
     `scheduler` and `launcher` resolve.
     """
     argv = [
-        python_command(), "-m", "scheduler.role_scheduler",
+        python_command(), "-m", "kiln.scheduler.role_scheduler",
         "--role", role.role,
         "--branch", branch,
         "--db-path", str(paths.db_path),

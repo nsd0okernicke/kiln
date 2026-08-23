@@ -32,8 +32,8 @@ dev = [
 
 [project.scripts]
 kiln = "launcher.cli:main"
-kiln-scheduler = "scheduler.role_scheduler:main"
-kiln-dashboard = "scheduler.dashboard:main"
+kiln-scheduler = "kiln.scheduler.role_scheduler:main"
+kiln-dashboard = "kiln.scheduler.dashboard:main"
 kiln-cockpit = "cockpit.server:main"
 
 [tool.setuptools]
@@ -41,7 +41,7 @@ package-dir = {"" = "kiln/framework"}
 
 [tool.setuptools.packages.find]
 where = ["kiln/framework"]
-include = ["launcher*", "scheduler*", "cockpit*", "proxy*"]
+include = ["kiln*", "launcher*", "scheduler*", "cockpit*", "proxy*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

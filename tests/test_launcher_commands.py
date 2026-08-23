@@ -337,7 +337,7 @@ class TestScheduler:
     def test_launches_the_module_not_the_script_path(self, paths):
         # A bare script path fails: the package uses relative imports.
         argv = self._scheduler(paths).argv
-        assert argv[:3] == [python_command(), "-m", "scheduler.role_scheduler"]
+        assert argv[:3] == [python_command(), "-m", "kiln.scheduler.role_scheduler"]
 
     def test_names_an_interpreter_that_actually_exists(self, paths):
         # The literal "python" was hardcoded here, and stock Debian/Ubuntu ships only
@@ -698,7 +698,7 @@ class TestPosixRendering:
             build(paths, scheduler="python", mode="auto", worktree="coder")
         )
         assert "export PYTHONPATH=" in rendered
-        assert f"{python_command()} -m scheduler.role_scheduler" in rendered
+        assert f"{python_command()} -m kiln.scheduler.role_scheduler" in rendered
 
 
 class TestProfileRoutingReachesTheScheduler:
@@ -752,4 +752,4 @@ class TestProfileRoutingReachesTheScheduler:
         command = build_agent_command(
             self._profile().role("coder"), paths, "main"
         )
-        assert "scheduler.role_scheduler" in " ".join(command.argv)
+        assert "kiln.scheduler.role_scheduler" in " ".join(command.argv)
