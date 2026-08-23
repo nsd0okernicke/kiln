@@ -243,6 +243,33 @@ class TestGuardHeader:
         assert "no route" in payload["error"]
 
 
+class TestSend:
+    def test_it_queues_for_the_chosen_role(self, client, db_path):
+        status, payload = client.post(
+            "/api/send", {"target": "coder", "summary": "restart with CAT-3"}
+        )
+
+        assert status == 200
+        assert payload["target"] == "coder"
+        assert db.get_message(db_path, payload["message_id"])["target"] == "coder"
+
+    def test_a_named_work_item_survives_the_round_trip(self, client, db_path):
+        status, payload = client.post(
+            "/api/send",
+            {"target": "specifier", "summary": "restart", "work_item": "CAT-3"},
+        )
+
+        assert status == 200
+        assert db.get_message(db_path, payload["message_id"])["work_item"] == "CAT-3"
+
+    def test_an_unaddressable_target_is_a_400_naming_the_real_roles(self, client, db_path):
+        status, payload = client.post("/api/send", {"target": "nosuchrole", "summary": "hi"})
+
+        assert status == 400
+        assert "specifier" in payload["error"]
+        assert db.recent_messages(db_path, "main") == []
+
+
 class TestTasks:
     def test_a_new_task_is_queued_for_the_intake_role(self, client, db_path):
         status, payload = client.post("/api/tasks", {"summary": "add order intake"})

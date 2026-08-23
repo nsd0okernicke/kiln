@@ -74,6 +74,10 @@ class RoleSession:
     display_name: str
     #: `agent`, `python`, `inbox`, `dashboard` or `cockpit` — the profile's `scheduler` value.
     kind: str = DEFAULT_KIND
+    #: The profile's configured model. A fallback for wrapper roles only: a scheduler role
+    #: writes the model it actually resolved into its status file, and that always wins.
+    #: Empty means the backend's CLI chooses, which is a real answer, not a missing one.
+    model: str = ""
 
     @property
     def passive(self) -> bool:
@@ -83,7 +87,7 @@ class RoleSession:
 
 def read_sessions(path: Path) -> list[RoleSession]:
     """
-    Parse `.kiln/sessions` (`index\\trole\\tagent\\tdisplay_name\\tkind` per line).
+    Parse `.kiln/sessions` (`index\\trole\\tagent\\tdisplay_name\\tkind\\tmodel` per line).
 
     **Every row is returned, passive ones included.** Filtering belongs to the renderers:
     `launcher.cli.run_stop` and `cockpit.actions._session_roles` both read this to close
@@ -102,8 +106,11 @@ def read_sessions(path: Path) -> list[RoleSession]:
             continue
         _, role, agent, display_name = parts[:4]
         kind = parts[4].strip() if len(parts) > 4 and parts[4].strip() else DEFAULT_KIND
+        model = parts[5].strip() if len(parts) > 5 else ""
         sessions.append(
-            RoleSession(role=role, agent=agent, display_name=display_name, kind=kind)
+            RoleSession(
+                role=role, agent=agent, display_name=display_name, kind=kind, model=model
+            )
         )
     return sessions
 

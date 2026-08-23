@@ -228,6 +228,35 @@ class TestInstructionText:
             assert name in sc.WORKER_STATUS_INSTRUCTION
             assert sc.parse_handoff_name(f"{sc.HANDOFF_PREFIX} {name}") == name
 
+    def test_the_validator_and_the_sentinel_parser_agree(self):
+        # `is_valid_work_item_name` is public because the worker's sentinel is no longer the
+        # only untrusted source -- the cockpit lets a human type a name too. The two paths
+        # must accept the same set, or a name valid in the browser would be dropped by a
+        # worker echoing it back.
+        for name in ("cat-3-search-by-author", "CAT-3", "fix isbn/validation", "a"):
+            assert sc.is_valid_work_item_name(name), name
+            assert sc.parse_handoff_name(f"{sc.HANDOFF_PREFIX} {name}") == name
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "please restart this with the CAT-3 spec, thanks!",  # a sentence
+            "-leading-hyphen",                                   # must start alphanumeric
+            "",
+            "x" * 81,                                            # over the 80-char budget
+            'quote"inside',
+        ],
+    )
+    def test_a_name_that_would_poison_the_grouping_key_is_rejected(self, name):
+        assert not sc.is_valid_work_item_name(name)
+
+    def test_the_placeholder_is_left_for_the_caller_to_judge(self):
+        # A worker echoing `pending` failed to name anything; a human choosing it means
+        # "let the specifier name this". Same string, opposite verdicts, so the shared
+        # validator stays out of it.
+        assert sc.is_valid_work_item_name(sc.PENDING_HANDOFF)
+        assert sc.parse_handoff_name(f"{sc.HANDOFF_PREFIX} {sc.PENDING_HANDOFF}") == ""
+
     def test_cli_prints_instruction(self, capsys):
         assert sc._main(["--instruction"]) == 0
         assert capsys.readouterr().out == sc.WORKER_STATUS_INSTRUCTION

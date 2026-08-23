@@ -88,6 +88,25 @@ class TestReadSessions:
         assert [s.kind for s in sessions] == ["python", "cockpit"]
         assert [s.passive for s in sessions] == [False, True]
 
+    def test_the_model_column_is_read(self, tmp_path):
+        path = tmp_path / "sessions"
+        path.write_text(
+            "1\thuman-in-the-loop\tclaude\tHuman\tagent\tclaude-sonnet-5\n"
+            "2\tcoder\tcopilot\tCoder\tpython\t\n",
+            encoding="utf-8",
+        )
+
+        sessions = dashboard.read_sessions(path)
+
+        assert [s.model for s in sessions] == ["claude-sonnet-5", ""]
+
+    def test_a_file_without_the_model_column_still_parses(self, tmp_path):
+        # Five columns is what a swarm launched one version ago has on disk.
+        path = tmp_path / "sessions"
+        path.write_text("1\tcoder\tclaude\tCoder\tpython\n", encoding="utf-8")
+
+        assert dashboard.read_sessions(path)[0].model == ""
+
     def test_a_file_without_the_kind_column_still_parses(self, tmp_path):
         # A swarm launched before the column existed has exactly this file on disk, and the
         # dashboard polls it every two seconds -- an upgrade must not blank the grid.

@@ -181,10 +181,28 @@ def parse_handoff_name(stdout: str) -> str:
         if candidate[: len(HANDOFF_PREFIX)].upper() != HANDOFF_PREFIX:
             continue
         name = candidate[len(HANDOFF_PREFIX) :].strip().strip("\"'")
-        if name.lower() == PENDING_HANDOFF or not _NAME_RE.match(name):
+        if name.lower() == PENDING_HANDOFF or not is_valid_work_item_name(name):
             return ""
         return name
     return ""
+
+
+def is_valid_work_item_name(name: str) -> bool:
+    """
+    True when `name` is usable as a work-item grouping key.
+
+    Public because a worker's sentinel is no longer the only untrusted source: the cockpit
+    lets a human type a name too, and the two must agree on what a work item may be called.
+    A name reaching the `work_item` column decides how cost, laps and board cards are
+    grouped, so a sentence — or a near-miss of an existing name — silently forks one piece of
+    work into two buckets.
+
+    The placeholder is *not* rejected here. `parse_handoff_name` refuses it because a worker
+    echoing `pending` has failed to name anything, while a human choosing it means "let the
+    specifier name this", which is a legitimate answer. Callers that care check
+    `PENDING_HANDOFF` themselves.
+    """
+    return bool(_NAME_RE.match(name))
 
 
 def _main(argv: list[str] | None = None) -> int:

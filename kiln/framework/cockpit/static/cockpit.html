@@ -228,6 +228,19 @@
     border-radius: 6px; padding: 8px 10px; font: inherit; resize: vertical;
   }
   .row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+  .field { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .field label { font-size: 12px; color: var(--dim); width: 68px; flex: none; }
+  select {
+    flex: 1; background: var(--surface); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 8px; font: inherit;
+  }
+  /* Sending to a halted role is a silent no-op -- the circuit breaker makes it read only
+     what `kiln retry` re-queued -- so the one thing this must not do is stay quiet. */
+  .warn-note {
+    font-size: 12px; color: var(--warn); background: var(--chip);
+    border-left: 3px solid var(--warn); border-radius: 4px; padding: 6px 9px; margin-bottom: 8px;
+  }
+  .row-send { padding: 2px 8px; font-size: 12px; }
   dialog {
     background: var(--panel); color: var(--ink); border: 1px solid var(--line);
     border-radius: 10px; width: min(620px, 92vw); padding: 0;
@@ -342,10 +355,20 @@
     </section>
 
     <section>
-      <h2>Chat to the master agent</h2>
+      <h2>Send</h2>
       <div class="body">
-        <textarea id="chat-text" rows="3" placeholder="A note for the human-in-the-loop role's queue. Does not start a cycle."></textarea>
-        <div class="row"><button id="chat-send">Send</button><span class="branch" id="chat-target"></span></div>
+        <div class="field">
+          <label for="send-target">To</label>
+          <select id="send-target"></select>
+        </div>
+        <div class="field">
+          <label for="send-item">Work item</label>
+          <select id="send-item"></select>
+        </div>
+        <input type="text" id="send-item-other" placeholder="Work-item name" style="display:none">
+        <div id="send-warning" class="warn-note" style="display:none"></div>
+        <textarea id="send-text" rows="3" placeholder="e.g. restart with CAT-3 — the acceptance criteria changed."></textarea>
+        <div class="row"><button class="primary" id="send-go">Send</button><span class="branch" id="send-hint"></span></div>
       </div>
     </section>
   </div>
@@ -355,21 +378,6 @@
     <div class="body" style="padding:0"><table id="activity"></table></div>
   </section>
 </main>
-
-<dialog id="task-dialog">
-  <h2>New task</h2>
-  <div class="body">
-    <textarea id="task-summary" rows="5" placeholder="What do you want done? One or more sentences."></textarea>
-    <div class="row">
-      <input type="text" id="task-name" placeholder="Work-item name (optional — the specifier normally invents it)">
-    </div>
-    <div class="row">
-      <button class="primary" id="task-send">Queue it</button>
-      <button id="task-cancel">Cancel</button>
-      <span class="spacer"></span><span class="branch" id="task-target"></span>
-    </div>
-  </div>
-</dialog>
 
 <dialog id="doc-dialog">
   <h2 id="doc-title">Handoff</h2>
@@ -451,8 +459,69 @@ function renderHeader(state) {
     host.append(text("span", " " + label));
   });
 
-  $("chat-target").textContent = "→ " + state.human_role;
-  $("task-target").textContent = state.intake_role ? "→ " + state.intake_role : "no intake role configured";
+}
+
+// --- composer ----------------------------------------------------------------------
+// One composer for every outbound message. `New task` and the row buttons are presets over
+// it, so there is a single place a handoff can be typed and a single place it can go wrong.
+const ITEM_PENDING = "pending";
+const ITEM_OTHER = "__other__";  // cannot collide with a work-item name
+
+function option(value, label) {
+  const el = document.createElement("option");
+  el.value = value;
+  el.textContent = label;
+  return el;
+}
+
+// `<select>` is rebuilt every poll, so the operator's half-made choice has to survive it.
+function renderSend(state) {
+  const target = $("send-target");
+  const keptTarget = target.value;
+  target.replaceChildren(...state.roles.map((role) => option(role.role, role.role)));
+  target.value = keptTarget || state.intake_role || "";
+  if (!target.value && target.options.length) target.selectedIndex = 0;
+
+  const item = $("send-item");
+  const keptItem = item.value;
+  item.replaceChildren(
+    option(ITEM_PENDING, "new — the specifier names it"),
+    ...state.work_items.map((name) => option(name, name)),
+    option(ITEM_OTHER, "other… (type a name)"),
+  );
+  // A work item that has since scrolled out of the list must not silently become `pending`.
+  item.value = [...item.options].some((o) => o.value === keptItem) ? keptItem : ITEM_PENDING;
+  $("send-item-other").style.display = item.value === ITEM_OTHER ? "" : "none";
+
+  renderSendWarning();
+}
+
+function renderSendWarning() {
+  const note = $("send-warning");
+  const role = latest && latest.roles.find((r) => r.role === $("send-target").value);
+  // A halted role reads only what `kiln retry` re-queued (`run_once` polls `fetch_resume`,
+  // which needs `acked_at`), so an ordinary send sits unread. Warn rather than refuse:
+  // queueing work for after it recovers is legitimate.
+  if (role && role.state === "halted") {
+    note.textContent =
+      role.role + " is halted by the circuit breaker and reads only messages resumed from " +
+      "Attention. This will sit unread until you retry its failed message.";
+    note.style.display = "";
+  } else {
+    note.style.display = "none";
+  }
+  $("send-hint").textContent = latest && $("send-target").value === latest.human_role
+    ? "the inbox pane shows this; it does not start a cycle"
+    : "";
+}
+
+// Used by the header button and by each Work Queue row.
+function prefillSend(role, workItem) {
+  if (role) $("send-target").value = role;
+  const item = $("send-item");
+  item.value = [...item.options].some((o) => o.value === workItem) ? workItem : ITEM_PENDING;
+  $("send-item-other").style.display = "none";
+  renderSendWarning();
 }
 
 function renderAttention(state) {
@@ -520,7 +589,9 @@ function renderQueue(state) {
   const table = $("queue");
   table.replaceChildren();
   const head = table.insertRow();
-  for (const label of ["Role", "Agent", "State", "Since", "Work item", "Queue", "Wait", "Cycles", "Cost", "Tokens", "Cache", ""]) {
+  // Two trailing blanks: the heat bar and the row's Send button. A header short of the row
+  // leaves the last column unlabelled and the table one cell wider than its own head.
+  for (const label of ["Role", "Agent", "State", "Since", "Work item", "Queue", "Wait", "Cycles", "Cost", "Tokens", "Cache", "", ""]) {
     head.append(text("th", label));
   }
   for (const role of state.roles) {
@@ -556,6 +627,18 @@ function renderQueue(state) {
     const heat = text("td");
     heat.append(text("span", "", "heat " + (role.heat >= 1 ? "hot" : role.heat > 0 ? "warm" : "")));
     row.append(heat);
+
+    // The direct path for "restart the specifier with CAT-3": prefill the composer with
+    // this role and whatever it is currently holding.
+    const action = text("td");
+    const send = text("button", "Send", "row-send");
+    send.title = "Send a message to " + role.role;
+    send.onclick = () => {
+      prefillSend(role.role, role.work_item || ITEM_PENDING);
+      $("send-text").focus();
+    };
+    action.append(send);
+    row.append(action);
   }
 }
 
@@ -614,6 +697,7 @@ async function poll() {
     renderBoard(latest);
     renderQueue(latest);
     renderActivity(latest);
+    renderSend(latest);
   } catch (error) {
     // A failed poll marks the page stale rather than blanking it: the last known state is
     // more useful than an empty screen, and the swarm itself is unaffected either way.
@@ -645,25 +729,33 @@ async function retryMessage(messageId, guidance) {
   } catch (error) { toast(error.message, true); }
 }
 
-$("new-task").onclick = () => $("task-dialog").showModal();
-$("task-cancel").onclick = () => $("task-dialog").close();
-$("task-send").onclick = async () => {
-  try {
-    const result = await post("/api/tasks", {
-      summary: $("task-summary").value, name: $("task-name").value,
-    });
-    $("task-summary").value = ""; $("task-name").value = "";
-    $("task-dialog").close();
-    toast("queued for " + result.target);
-    poll();
-  } catch (error) { toast(error.message, true); }
+// The header button is a shortcut into the composer, not a second one: preset the target to
+// the intake role and let the operator type. Two composers for one INSERT is how they drift.
+$("new-task").onclick = () => {
+  prefillSend(latest && latest.intake_role, ITEM_PENDING);
+  $("send-text").focus();
 };
 
-$("chat-send").onclick = async () => {
+$("send-item").onchange = () => {
+  const other = $("send-item").value === ITEM_OTHER;
+  $("send-item-other").style.display = other ? "" : "none";
+  if (other) $("send-item-other").focus();
+};
+$("send-target").onchange = () => renderSendWarning();
+
+$("send-go").onclick = async () => {
+  const chosen = $("send-item").value;
   try {
-    const result = await post("/api/chat", { summary: $("chat-text").value });
-    $("chat-text").value = "";
-    toast("delivered to " + result.target);
+    const result = await post("/api/send", {
+      target: $("send-target").value,
+      summary: $("send-text").value,
+      // `pending` is a real answer meaning "let the specifier name it", so it is sent as
+      // itself rather than as an empty field.
+      work_item: chosen === ITEM_OTHER ? $("send-item-other").value : chosen,
+    });
+    $("send-text").value = "";
+    $("send-item-other").value = "";
+    toast("queued for " + result.target);
     poll();
   } catch (error) { toast(error.message, true); }
 };

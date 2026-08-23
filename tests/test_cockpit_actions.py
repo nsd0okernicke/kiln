@@ -18,8 +18,13 @@ pytestmark = pytest.mark.integration
 @pytest.fixture
 def ctx(tmp_path, db_path):
     sessions = tmp_path / "sessions"
+    # A launched swarm's inventory, including the passive panes: `send_to` checks its target
+    # against this, and teardown needs every row.
     sessions.write_text(
-        "1\thuman-in-the-loop\tclaude\tHuman In The Loop\n2\tcoder\tclaude\tCoder\n",
+        "1\thuman-in-the-loop\tclaude\tHuman In The Loop\tagent\n"
+        "2\tspecifier\tclaude\tSpecifier\tpython\n"
+        "3\tcoder\tclaude\tCoder\tpython\n"
+        "4\tcockpit\tclaude\tCockpit\tcockpit\n",
         encoding="utf-8",
     )
     return actions.ActionContext(
@@ -29,6 +34,82 @@ def ctx(tmp_path, db_path):
         intake_role="specifier",
         sessions_file=sessions,
     )
+
+
+class TestSendTo:
+    """
+    Addressing a role directly — "specifier, restart with CAT-3". The general form of
+    `new_task` and `chat`, and the same insert `kiln send --to <role>` has always made.
+    """
+
+    def test_it_queues_for_the_role_the_operator_chose(self, ctx, db_path):
+        result = actions.send_to(ctx, target="coder", summary="restart with CAT-3")
+
+        message = db.get_message(db_path, result["message_id"])
+        assert message["target"] == "coder"
+        assert "restart with CAT-3" in message["content"]
+
+    def test_an_existing_work_item_is_carried_through_unchanged(self, ctx, db_path):
+        # The whole point of naming it: `resolve_work_item` returns a non-`pending` inbound
+        # name untouched, so the card keeps one identity instead of starting a second.
+        result = actions.send_to(
+            ctx, target="specifier", summary="restart", work_item="CAT-3"
+        )
+
+        assert db.get_message(db_path, result["message_id"])["work_item"] == "CAT-3"
+
+    def test_the_human_is_the_sender_when_directing_a_worker(self, ctx):
+        assert actions.send_to(ctx, target="coder", summary="go")["sender"] == (
+            "human-in-the-loop"
+        )
+
+    def test_the_cockpit_is_the_sender_when_writing_to_the_humans_own_queue(self, ctx):
+        # A role must not appear to mail itself, and the inbox pane prints the sender.
+        result = actions.send_to(ctx, target="human-in-the-loop", summary="note to self")
+
+        assert result["sender"] == "cockpit"
+
+    def test_a_passive_pane_is_refused(self, ctx, db_path):
+        # It runs no agent, so nothing would ever read the message: the insert would succeed,
+        # report success, and the work would stop dead with no error anywhere.
+        with pytest.raises(actions.ActionError, match="runs no agent"):
+            actions.send_to(ctx, target="cockpit", summary="hello")
+
+        assert db.recent_messages(db_path, "main") == []
+
+    def test_an_unknown_role_is_refused_and_names_the_real_ones(self, ctx):
+        with pytest.raises(actions.ActionError, match="not a role in this swarm") as caught:
+            actions.send_to(ctx, target="speciifer", summary="typo")
+
+        assert "specifier" in str(caught.value)
+
+    def test_an_empty_target_is_refused(self, ctx):
+        with pytest.raises(actions.ActionError, match="no target role"):
+            actions.send_to(ctx, target="  ", summary="hello")
+
+    def test_an_empty_message_is_refused(self, ctx, db_path):
+        with pytest.raises(actions.ActionError):
+            actions.send_to(ctx, target="coder", summary="   ")
+
+        assert db.recent_messages(db_path, "main") == []
+
+    def test_a_work_item_name_that_would_poison_the_grouping_key_is_refused(self, ctx):
+        # A sentence in the `work_item` column becomes the key cost, laps and the board card
+        # are grouped by.
+        with pytest.raises(actions.ActionError, match="usable work-item name"):
+            actions.send_to(
+                ctx, target="coder", summary="go",
+                work_item="please restart this with the CAT-3 spec, thanks!",
+            )
+
+    def test_the_placeholder_is_accepted_and_stored_as_no_work_item(self, ctx, db_path):
+        # "let the specifier name it" is a legitimate answer from a human, unlike from a
+        # worker that was asked to invent one.
+        result = actions.send_to(
+            ctx, target="specifier", summary="something new", work_item="pending"
+        )
+
+        assert db.get_message(db_path, result["message_id"])["work_item"] is None
 
 
 class TestNewTask:
@@ -156,7 +237,9 @@ class TestTeardown:
 
         actions.teardown(ctx, confirm="TEARDOWN")
 
-        assert seen["roles"] == ["human-in-the-loop", "coder"]
+        # Every row, passive panes included: a cockpit or inbox tmux session left running is
+        # one nothing else will ever close.
+        assert seen["roles"] == ["human-in-the-loop", "specifier", "coder", "cockpit"]
 
     def test_check_confirmation_is_what_rejects_early(self):
         # The server calls this before replying and `teardown` only afterwards, because

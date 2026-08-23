@@ -104,10 +104,11 @@ def role_rows(snapshot: SwarmSnapshot, work_items: list[dict]) -> list[dict]:
             "role": session.role,
             "agent": session.agent,
             "display_name": session.display_name,
-            # The *resolved* model, written by the scheduler into its own status file --
-            # the profile's value can be empty for a role whose model comes from the worker
-            # definition's frontmatter. None until the role has reported once.
-            "model": (status or {}).get("model"),
+            # The status file first: that is the model the scheduler actually resolved,
+            # including the worker definition's frontmatter, which no other source knows.
+            # The sessions file is the fallback, and the only answer a *wrapper* role has --
+            # nothing writes a status model for a role with no scheduler behind it.
+            "model": (status or {}).get("model") or session.model or None,
             "state": status["state"] if status else None,
             "since": (status or {}).get("since"),
             "since_ago": _since_ago(status, snapshot.now_utc),
@@ -310,6 +311,11 @@ def build_state(
         "intake_role": ctx.intake_role,
         "generated_at": snapshot.now_local.isoformat(timespec="seconds"),
         "roles": role_rows(snapshot, work_items),
+        # Names the composer offers, newest-first by first appearance -- `cycles_by_work_item`
+        # already orders them that way. Picking from this list rather than retyping is what
+        # stops a near-miss ("cat3" for "CAT-3") silently forking one feature into two
+        # grouping buckets, which would break its cost total, its lap count and its card.
+        "work_items": list(cycles),
         "totals": build_totals(snapshot),
         "board": build_board(work_items, cycles, snapshot.now_local, ctx.lanes),
         "attention": build_attention(

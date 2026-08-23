@@ -176,6 +176,42 @@ class TestAgentColours:
         assert '"model"' in page or 'role.model' in page
 
 
+class TestComposer:
+    """
+    One composer for every outbound message. Two of them for one INSERT is how the browser
+    and the CLI would come to disagree about what a handoff is.
+    """
+
+    def test_it_offers_a_target_and_a_work_item(self, page):
+        assert 'id="send-target"' in page and 'id="send-item"' in page
+
+    def test_the_old_separate_composers_are_gone(self, page):
+        # The New task dialog and the Chat panel were both replaced; leftovers would be dead
+        # ids that `$()` resolves to null at the first click.
+        for stale in ('id="task-dialog"', 'id="chat-text"', 'id="task-send"'):
+            assert stale not in page, stale
+
+    def test_the_work_item_sentinel_cannot_collide_with_a_real_name(self, page):
+        # `_NAME_RE` requires an alphanumeric first character, so a leading underscore is
+        # unreachable for a real work item.
+        from scheduler.status_contract import is_valid_work_item_name
+
+        sentinel = re.search(r'const ITEM_OTHER = "([^"]*)"', page).group(1)
+
+        assert not is_valid_work_item_name(sentinel)
+
+    def test_the_halted_warning_is_keyed_off_the_roles_own_state(self, page):
+        # Sending to a halted role is a silent no-op, so the one thing the page must not do
+        # is stay quiet about it.
+        assert 'role.state === "halted"' in page
+
+    def test_a_halted_role_is_warned_about_rather_than_blocked(self, page):
+        # Queueing work for after the role recovers is legitimate; the composer must not
+        # disable itself.
+        assert "send-warning" in page
+        assert "disabled" not in page.partition("function renderSendWarning")[2][:800]
+
+
 class TestPageIsSelfContained:
     def test_it_loads_nothing_from_the_network(self, page):
         # The cockpit is served by a stdlib HTTP server on a machine that may well be

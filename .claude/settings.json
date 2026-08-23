@@ -160,7 +160,11 @@
       "Bash(pwsh -NoProfile -File \"./bin/kiln.ps1\" -Init -WorkingDir \"C:\\\\tmp\\\\kiln-example-test-battlezone\" -Example battlezone -NoGit)",
       "Bash(grep -n \"^## Examples\\\\|^### LibraryHub\\\\|^---$\" README.md)",
       "PowerShell($errors = $null; [System.Management.Automation.Language.Parser]::ParseFile\\(\"c:\\\\projekte\\\\agentic-coding\\\\kiln\\\\bin\\\\kiln.ps1\", [ref]$null, [ref]$errors\\) | Out-Null; if \\($errors.Count -gt 0\\) { $errors | ForEach-Object { $_.ToString\\(\\) } } else { \"No syntax errors\" })",
-      "Bash(npm view *)"
+      "Bash(npm view *)",
+      "Bash(PYTHONPATH=C:/projekte/kiln/kiln/framework python -c ' *)",
+      "Bash(python -m pytest tests/test_dashboard.py tests/test_launcher_workspace.py tests/test_cockpit_state.py tests/test_cockpit_page.py -q)",
+      "Bash(python -m pytest tests/test_dashboard.py tests/test_launcher_workspace.py tests/test_cockpit_state.py -q)",
+      "Bash(PYTHONPATH=\"kiln/framework\" python -)"
     ],
     "additionalDirectories": [
       "C:\\projekte\\agentic-coding\\library-hub-testrun3\\.worktrees\\architect",

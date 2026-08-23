@@ -750,7 +750,9 @@ class TestSessionsFile:
         content = workspace.write_sessions_file(PROFILE, paths).read_text(encoding="utf-8")
         lines = content.strip().splitlines()
         assert len(lines) == 2
-        assert lines[0].split("\t") == ["1", "specifier", "claude", "Specifier", "agent"]
+        # Trailing empty model: this fixture's roles configure none, which is a real state
+        # meaning "the backend's CLI chooses", not a missing value.
+        assert lines[0].split("\t") == ["1", "specifier", "claude", "Specifier", "agent", ""]
 
     def test_it_records_each_panes_kind(self, paths):
         # This file is the only thing the terminal dashboard and the web cockpit read; the
@@ -779,6 +781,35 @@ class TestSessionsFile:
 
         kinds = [line.split("\t")[4] for line in content.strip().splitlines()]
         assert kinds == ["agent", "python", "inbox", "cockpit"]
+
+    def test_it_records_the_profiles_model_for_wrapper_roles(self, paths):
+        # A wrapper role has no scheduler, so nothing ever writes it a status model. Without
+        # this column its model is permanently unknown, which is what the cockpit showed for
+        # `human-in-the-loop`.
+        profile = parse_profile(
+            {
+                "profiles": {
+                    "p": {
+                        "defaults": {"model": "claude-sonnet-5"},
+                        "terminals": [
+                            {"role": "human-in-the-loop", "worktree": "@current",
+                             "mode": "manual"},
+                            {"role": "coder", "worktree": "coder", "model": ""},
+                        ],
+                    }
+                }
+            },
+            "p",
+        )
+
+        content = workspace.write_sessions_file(profile, paths).read_text(encoding="utf-8")
+
+        # Split without stripping the whole file: the last line's model column is empty here,
+        # so a trailing `.strip()` would eat its tab and hide the column entirely.
+        # `read_sessions` tolerates that (a short row falls back to ""), but the test must
+        # assert on what was actually written.
+        rows = [line.split("\t") for line in content.splitlines() if line]
+        assert [row[5] for row in rows] == ["claude-sonnet-5", ""]
 
     def test_the_kind_column_round_trips_through_the_reader(self, paths):
         # The writer and the reader live in different packages, so the format is only

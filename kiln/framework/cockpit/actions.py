@@ -30,7 +30,7 @@ from pathlib import Path
 
 from launcher import stop
 from scheduler import dashboard, db, retry, send
-from scheduler.status_contract import PENDING_HANDOFF
+from scheduler.status_contract import PENDING_HANDOFF, is_valid_work_item_name
 
 log = logging.getLogger(__name__)
 
@@ -56,59 +56,116 @@ class ActionContext:
     sessions_file: Path
 
 
+def send_to(ctx: ActionContext, *, target: str, summary: str, work_item: str = "") -> dict:
+    """
+    Queue one handoff for a role the operator chose.
+
+    The general form of what `new_task` and `chat` do, and the only one that can express
+    "specifier, restart with CAT-3" — the move an operator wants when a spec turns out wrong
+    or a role finished on a stale brief. Identical to `kiln send --to <role>`, which has
+    always been able to do this from a shell.
+
+    Three things it decides, each of which would be a silent failure if left to the caller:
+
+    * **The target must be a role that actually reads its queue.** A message addressed to a
+      passive pane or a typo inserts cleanly, reports success, and stops dead — nothing polls
+      that queue and no error is raised anywhere. `config._validate_routing` refuses the same
+      class of mistake at launch; this is the runtime half.
+    * **The sender depends on the target.** `cockpit` when writing to the human's own queue,
+      because a role must not appear to mail itself and the inbox pane prints the sender;
+      the human role otherwise, because that is who is directing the work.
+    * **The work-item name is validated**, since it becomes a grouping key — see
+      `status_contract.is_valid_work_item_name`.
+    """
+    summary = summary.strip()
+    if not summary:
+        raise ActionError("a message needs something to say")
+
+    target = _resolve_target(ctx, target)
+    work_item = work_item.strip() or PENDING_HANDOFF
+    if work_item.lower() != PENDING_HANDOFF and not is_valid_work_item_name(work_item):
+        raise ActionError(
+            f"{work_item!r} is not a usable work-item name. Names group a piece of work "
+            "across roles, so they must start with a letter or digit and hold only letters, "
+            "digits, spaces and . _ - / (80 characters at most)."
+        )
+
+    # A role must not appear to send itself mail, and the inbox pane prints the sender, so
+    # the operator can tell a browser-typed note from a real inbound handoff.
+    sender = "cockpit" if target == ctx.human_role else ctx.human_role
+    message_id = send.send(
+        db_path=ctx.db_path,
+        sender=sender,
+        target=target,
+        summary=summary,
+        branch=ctx.branch,
+        handoff_name=work_item,
+    )
+    log.info("cockpit queued %s -> %s (id=%s)", sender, target, message_id[:8])
+    return {"message_id": message_id, "target": target, "sender": sender}
+
+
 def new_task(ctx: ActionContext, *, summary: str, name: str = "") -> dict:
     """
     Start a piece of work: one handoff from the human to the intake role.
 
-    `name` is optional and usually absent. Leaving it as `pending` is the correct default,
-    not a shortcut — the specifier is the role that invents the work-item name, and a human
-    naming it first creates a grouping key nothing downstream agreed to
-    (`status_contract.HANDOFF_PREFIX` documents that handshake).
+    A preset over `send_to`, kept as its own entry point because the *browser* should not
+    have to know which role is the intake role — that is resolved from the profile's routing
+    at launch and lives here.
+
+    `name` is optional. Leaving it as `pending` lets the specifier invent the identity, which
+    is right for a loosely described request; supplying one is right when the name already
+    exists (a story id from the README), because `resolve_work_item` then carries it through
+    unchanged instead of renaming it.
     """
-    summary = summary.strip()
-    if not summary:
-        raise ActionError("a task needs a description")
     if not ctx.intake_role:
         raise ActionError(
             "this cockpit was started without an intake role, so it does not know which "
             "role a new task goes to. Relaunch through `kiln`, or pass --intake-role."
         )
-
-    message_id = send.send(
-        db_path=ctx.db_path,
-        sender=ctx.human_role,
-        target=ctx.intake_role,
-        summary=summary,
-        branch=ctx.branch,
-        handoff_name=name.strip() or PENDING_HANDOFF,
-    )
-    log.info("cockpit queued a task %s -> %s (id=%s)", ctx.human_role, ctx.intake_role,
-             message_id[:8])
-    return {"message_id": message_id, "target": ctx.intake_role}
+    if not summary.strip():
+        raise ActionError("a task needs a description")
+    return send_to(ctx, target=ctx.intake_role, summary=summary, work_item=name)
 
 
 def chat(ctx: ActionContext, *, summary: str, work_item: str = "") -> dict:
     """
-    Say something to the master agent — a message into the human role's own queue.
+    Put a note in the human role's own queue.
 
-    `sender` is `cockpit` rather than the human role: a role must not appear to send itself
-    mail, and the inbox pane prints the sender, so the operator can tell a browser-typed note
-    from a real inbound handoff.
+    A preset over `send_to`. Worth knowing what it does *not* do in a profile that runs an
+    `inbox` pane: that pane polls the human's queue every couple of seconds unattended and
+    marks what it finds `processed`, while the human's LLM session only reads the queue while
+    it happens to be blocked in `wait_for_message`. The inbox wins essentially always, so
+    this reaches the operator's notification pane rather than the agent.
     """
-    summary = summary.strip()
-    if not summary:
+    if not summary.strip():
         raise ActionError("an empty message says nothing")
+    return send_to(ctx, target=ctx.human_role, summary=summary, work_item=work_item)
 
-    message_id = send.send(
-        db_path=ctx.db_path,
-        sender="cockpit",
-        target=ctx.human_role,
-        summary=summary,
-        branch=ctx.branch,
-        handoff_name=work_item.strip() or PENDING_HANDOFF,
-    )
-    log.info("cockpit queued a note for %s (id=%s)", ctx.human_role, message_id[:8])
-    return {"message_id": message_id, "target": ctx.human_role}
+
+def _resolve_target(ctx: ActionContext, target: str) -> str:
+    """
+    The role a message may be addressed to, or ActionError naming the ones that exist.
+
+    Checked against the launched swarm rather than a profile: the cockpit deliberately does
+    not parse profiles, and `.kiln/sessions` is what it already reads everywhere else.
+    """
+    target = target.strip()
+    if not target:
+        raise ActionError("no target role given")
+
+    sessions = dashboard.read_sessions(ctx.sessions_file)
+    addressable = [session.role for session in dashboard.visible_roles(sessions)]
+    if target in addressable:
+        return target
+
+    known = ", ".join(addressable) or "(none — no swarm is running here)"
+    if any(session.role == target for session in sessions):
+        raise ActionError(
+            f"{target!r} runs no agent, so nothing would ever read the message. "
+            f"Addressable roles: {known}"
+        )
+    raise ActionError(f"{target!r} is not a role in this swarm. Addressable roles: {known}")
 
 
 def retry_message(ctx: ActionContext, *, message_id: str, guidance: str = "") -> dict:

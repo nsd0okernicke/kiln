@@ -686,9 +686,16 @@ def write_sessions_file(profile: Profile, paths: KilnPaths) -> Path:
 
     The concrete kind rather than a bare `passive` flag: it costs the same byte count and
     answers "what is this pane" as well as "does it have state".
+
+    The sixth column is the profile's model, and it exists for **wrapper roles only**. A
+    scheduler role reports the model it actually resolved into its own status file, which is
+    always the better answer; a wrapper role has no scheduler, so nothing writes one and its
+    model would otherwise be permanently unknown. Empty is normal — it means the backend's
+    CLI picks its own.
     """
     lines = [
-        f"{index}\t{role.role}\t{role.agent}\t{role.display_name}\t{role.scheduler or 'agent'}"
+        f"{index}\t{role.role}\t{role.agent}\t{role.display_name}"
+        f"\t{role.scheduler or 'agent'}\t{role.model}"
         for index, role in enumerate(profile.roles, start=1)
     ]
     paths.state_dir.mkdir(parents=True, exist_ok=True)

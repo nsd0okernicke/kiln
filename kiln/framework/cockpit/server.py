@@ -51,6 +51,7 @@ from .actions import (
     check_confirmation,
     new_task,
     retry_message,
+    send_to,
     teardown,
 )
 
@@ -182,6 +183,7 @@ class CockpitHandler(BaseHTTPRequestHandler):
             return self._send_json(403, {"error": f"missing {GUARD_HEADER} header"})
 
         routes: dict[str, Callable[[dict], dict]] = {
+            "/api/send": self._send,
             "/api/tasks": self._task,
             "/api/chat": self._chat,
             "/api/teardown": self._teardown,
@@ -200,6 +202,15 @@ class CockpitHandler(BaseHTTPRequestHandler):
         self._guarded(lambda: self._send_json(200, handler(body)))
 
     # --- handlers ------------------------------------------------------------------
+
+    def _send(self, body: dict) -> dict:
+        """Queue a handoff for a role the operator chose. The general form of the two below."""
+        return send_to(
+            self.config.actions,
+            target=str(body.get("target") or ""),
+            summary=str(body.get("summary") or body.get("body") or ""),
+            work_item=str(body.get("work_item") or ""),
+        )
 
     def _task(self, body: dict) -> dict:
         return new_task(

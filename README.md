@@ -599,12 +599,37 @@ What the page gives you:
   same reason `worker_timeout_sec` does: a reader consulting the profile would show nothing
   for a role whose model comes from frontmatter. A role that has not reported a cycle yet
   shows `—`, because until then there genuinely is no answer.
-- **New task** — queues a handoff from the human role to whatever the profile's routing says
-  the human hands off to (`specifier` in `full`). This is the same insert `kiln send` does,
-  so it actually starts a cycle.
-- **Chat** — a note into the human role's own queue, surfaced by the inbox pane. It does not
-  start a cycle.
+- **Send** — one composer for every outbound message: pick a **target role**, optionally a
+  **work item**, and type. This is the same insert `kiln send --to <role>` makes, so it
+  really does start (or restart) a cycle. **New task** in the header is a shortcut that
+  presets the target to whatever the profile's routing says the human hands off to
+  (`specifier` in `full`); each Work Queue row has its own **Send** button that presets that
+  role and whatever it is currently holding — the direct path for "specifier, restart with
+  CAT-3".
 - **Stop swarm** — `kiln --stop`, behind a typed `TEARDOWN` confirmation.
+
+Three things about **Send** worth knowing:
+
+- **Pick the work item from the list rather than retyping it.** The name is the database
+  grouping key, so a near-miss (`cat3` for `CAT-3`) silently forks one feature into two
+  buckets and breaks its cost total, its lap count and its board card. The composer offers
+  the run's known items; `new (pending)` leaves the naming to the specifier, which is right
+  for a loosely described request. Names are validated against the same rule the worker's
+  `KILN-HANDOFF:` sentinel uses.
+- **Re-sending an existing work item costs a lap.** `count_work_item_arrivals` counts every
+  message for that item and target, so a `maxCycles` guard on the receiving role fires one
+  lap sooner. That is correct — it genuinely is another lap — but it is worth knowing before
+  you restart a role three times.
+- **A halted role will not read it.** After the circuit breaker trips (three consecutive
+  escalations) a role polls only for messages `kiln retry` re-queued, so an ordinary send
+  sits unread. The composer warns you when the chosen target is halted; use **Retry** on its
+  failed message in Attention to wake it. Sending anyway is allowed — queueing work for after
+  it recovers is legitimate.
+
+Sending to the human role puts a note in its queue, which in a profile with an `inbox` pane
+is shown there rather than reaching the LLM session: that pane polls the human's queue every
+couple of seconds unattended and marks what it finds processed, while the agent only reads
+the queue while blocked in `wait_for_message`.
 
 Clicking any card, activity row or Attention row opens the full handoff body.
 

@@ -287,6 +287,26 @@ class TestRoleRows:
         assert rows[1]["agent"] == "claude"
         assert rows[1]["model"] == "claude-sonnet-5"
 
+    def test_a_wrapper_role_falls_back_to_the_profiles_model(self):
+        # `human-in-the-loop` has no scheduler, so nothing ever writes it a status model.
+        # The sessions file is its only source — without it the column stayed empty forever.
+        sessions = [RoleSession("human-in-the-loop", "claude", "Human", "agent",
+                                "claude-sonnet-5")]
+
+        rows = cockpit_state.role_rows(_snapshot(sessions=sessions), [])
+
+        assert rows[0]["model"] == "claude-sonnet-5"
+
+    def test_the_resolved_model_beats_the_profiles(self):
+        # A scheduler role's status carries what it actually resolved, including a model that
+        # came from the worker definition's frontmatter and appears in no profile.
+        sessions = [RoleSession("coder", "claude", "Coder", "python", "claude-sonnet-5")]
+        statuses = {"coder": {"state": "idle", "model": "claude-opus-5"}}
+
+        rows = cockpit_state.role_rows(_snapshot(sessions=sessions, statuses=statuses), [])
+
+        assert rows[0]["model"] == "claude-opus-5"
+
     def test_a_role_that_has_not_reported_yet_has_no_model(self):
         # None, not a guess from the profile: until the scheduler writes a status there is
         # genuinely no answer, and a frontmatter model would make any guess wrong.
@@ -479,10 +499,32 @@ class TestBuildState:
 
         assert set(payload) == {
             "project", "branch", "human_role", "intake_role", "generated_at", "roles",
-            "totals", "board", "attention", "activity", "request_stats",
+            "totals", "board", "attention", "activity", "request_stats", "work_items",
         }
         assert payload["project"] == "demo"
         assert payload["intake_role"] == "specifier"
+
+    def test_it_offers_the_known_work_items_newest_first(self):
+        # What the composer's picker lists. Retyping a name is how "cat3" quietly becomes a
+        # second bucket for CAT-3.
+        ctx = cockpit_state.CockpitContext(project_name="demo", branch="main")
+
+        payload = cockpit_state.build_state(
+            ctx, _snapshot(), work_items=[], cycles={"CAT-3": 4, "cat-1-search-books": 6},
+            failed=[], awaiting_human=[], activity_limit=5,
+        )
+
+        assert payload["work_items"] == ["CAT-3", "cat-1-search-books"]
+
+    def test_a_fresh_project_offers_none(self):
+        ctx = cockpit_state.CockpitContext(project_name="demo", branch="main")
+
+        payload = cockpit_state.build_state(
+            ctx, _snapshot(), work_items=[], cycles={}, failed=[], awaiting_human=[],
+            activity_limit=5,
+        )
+
+        assert payload["work_items"] == []
 
     def test_the_activity_feed_honours_its_limit(self):
         messages = [_row(message_id=str(index) * 32) for index in range(5)]
