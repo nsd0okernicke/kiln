@@ -15,18 +15,19 @@ from contextlib import closing
 from datetime import datetime
 
 import pytest
-from scheduler import db, git_ops, handoff, infrastructure, pane_status, role_scheduler
-from scheduler.adapters import TokenUsage
-from scheduler.infrastructure import (
-    CallableWorkerRunner,
-    FileWorkerDebugSink,
-    GitWorktree,
-    SQLiteMessageQueue,
-)
-from scheduler.models import WorkerRequest
-from scheduler.role_scheduler import SchedulerContext, SchedulerState
-from scheduler.routing import parse_routing_table
-from scheduler.worker_prompt import WorkerDefinition
+from kiln.scheduler.domain import handoff
+from kiln.scheduler.domain.models import TokenUsage, WorkerRequest
+from kiln.scheduler.domain.routing import parse_routing_table
+from kiln.scheduler.domain.worker_prompt import WorkerDefinition
+from kiln.scheduler.entrypoints import role_scheduler
+from kiln.scheduler.entrypoints.role_scheduler import SchedulerContext, SchedulerState
+from kiln.scheduler.infrastructure.agents.worker_runner import CallableWorkerRunner
+from kiln.scheduler.infrastructure.diagnostics import FileWorkerDebugSink
+from kiln.scheduler.infrastructure.diagnostics import file_worker_debug_sink as debug_sink_module
+from kiln.scheduler.infrastructure.persistence import SQLiteMessageQueue, db, queue_commands
+from kiln.scheduler.infrastructure.terminal import pane_status
+from kiln.scheduler.infrastructure.vcs import GitWorktree
+from kiln.scheduler.infrastructure.vcs import git as git_ops
 from test_role_scheduler import DEFINITION, ROUTING, FakeWorker, queued_for, worker
 
 pytestmark = pytest.mark.integration
@@ -53,7 +54,7 @@ class TestInsertVerification:
             calls["verify"] += 1
             return False if calls["verify"] == 1 else real_verify(*args, **kwargs)
 
-        monkeypatch.setattr(infrastructure.queue_commands, "message_exists", flaky_verify)
+        monkeypatch.setattr(queue_commands, "message_exists", flaky_verify)
 
         ctx = SchedulerContext(
             role="coder",
@@ -93,7 +94,7 @@ class TestInsertVerification:
             return message_id
 
         monkeypatch = pytest.MonkeyPatch()
-        monkeypatch.setattr(infrastructure.queue_commands, "insert_handoff", insert_then_consume)
+        monkeypatch.setattr(queue_commands, "insert_handoff", insert_then_consume)
         try:
             assert role_scheduler._insert_verified(ctx, "refactorer", "payload") is not None
         finally:
@@ -105,7 +106,7 @@ class TestInsertVerification:
 
     def test_gives_up_after_two_attempts(self, db_path, git_repo, monkeypatch):
         monkeypatch.setattr(
-            infrastructure.queue_commands, "message_exists", lambda *a, **k: False
+            queue_commands, "message_exists", lambda *a, **k: False
         )
         ctx = SchedulerContext(
             role="coder",
@@ -124,7 +125,7 @@ class TestInsertVerification:
 class TestSquashFailureEscalates:
     def test_failed_squash_does_not_forward_work(self, db_path, git_repo, monkeypatch):
         monkeypatch.setattr(
-            infrastructure.git_ops,
+            git_ops,
             "squash_since",
             lambda *a, **k: git_ops.GitResult(False, "", "disk full", 1),
         )
@@ -165,7 +166,7 @@ class TestSquashFailureEscalates:
 class TestPersistInboundIsNeverFatal:
     def test_unwritable_debug_file_does_not_fail_the_cycle(self, db_path, git_repo, monkeypatch):
         monkeypatch.setattr(
-            infrastructure.Path,
+            debug_sink_module.Path,
             "mkdir",
             lambda *a, **k: (_ for _ in ()).throw(OSError("nope")),
         )
@@ -247,7 +248,9 @@ class TestCli:
             captured.update(kwargs)
             return worker()
 
-        monkeypatch.setattr("scheduler.adapters.claude_adapter.run_worker", fake_run_worker)
+        monkeypatch.setattr(
+            "kiln.scheduler.infrastructure.agents.claude_adapter.run_worker", fake_run_worker
+        )
         ctx = role_scheduler.build_context(role_scheduler.parse_args(self._args(tmp_path)))
         ctx.worker_runner(WorkerRequest(prompt="p"))
         assert captured["model"] == "claude-sonnet-5"
@@ -255,7 +258,7 @@ class TestCli:
     def test_explicit_model_overrides_the_definition(self, tmp_path, monkeypatch):
         captured = {}
         monkeypatch.setattr(
-            "scheduler.adapters.claude_adapter.run_worker",
+            "kiln.scheduler.infrastructure.agents.claude_adapter.run_worker",
             lambda **kwargs: captured.update(kwargs) or worker(),
         )
         args = role_scheduler.parse_args(self._args(tmp_path, model="opus"))
@@ -267,7 +270,7 @@ class TestCli:
         # lines -- see pane_status.tint_worker_output.
         captured = {}
         monkeypatch.setattr(
-            "scheduler.adapters.claude_adapter.run_worker",
+            "kiln.scheduler.infrastructure.agents.claude_adapter.run_worker",
             lambda **kwargs: captured.update(kwargs) or worker(),
         )
         args = role_scheduler.parse_args(self._args(tmp_path))
@@ -306,7 +309,7 @@ class TestAgentDispatch:
         worker_file.write_text(WORKER_FILE, encoding="utf-8")
         captured = {}
         monkeypatch.setattr(
-            "scheduler.adapters.copilot_adapter.run_worker",
+            "kiln.scheduler.infrastructure.agents.copilot_adapter.run_worker",
             lambda **kwargs: captured.update(kwargs) or worker(),
         )
         args = role_scheduler.parse_args(self._args(tmp_path, worker_file, "copilot"))
@@ -324,7 +327,7 @@ class TestAgentDispatch:
         )
         captured = {}
         monkeypatch.setattr(
-            "scheduler.adapters.codex_adapter.run_worker",
+            "kiln.scheduler.infrastructure.agents.codex_adapter.run_worker",
             lambda **kwargs: captured.update(kwargs) or worker(),
         )
         args = role_scheduler.parse_args(self._args(tmp_path, worker_file, "codex"))
@@ -336,7 +339,7 @@ class TestAgentDispatch:
         worker_file.write_text(WORKER_FILE, encoding="utf-8")
         captured = {}
         monkeypatch.setattr(
-            "scheduler.adapters.grok_adapter.run_worker",
+            "kiln.scheduler.infrastructure.agents.grok_adapter.run_worker",
             lambda **kwargs: captured.update(kwargs) or worker(),
         )
         args = role_scheduler.parse_args(self._args(tmp_path, worker_file, "grok"))
@@ -758,7 +761,7 @@ class TestStatusBarWiring:
 
     def test_the_scrolling_region_is_released_when_the_loop_ends(self, tmp_path, monkeypatch):
         # A region that outlives the process leaves the pane's shell behaving strangely.
-        from scheduler import pane_status
+        from kiln.scheduler.infrastructure.terminal import pane_status
 
         class FakeTty(io.StringIO):
             def isatty(self):
@@ -779,7 +782,7 @@ class TestStatusBarWiring:
         assert pane_status.RESET_REGION in stream.getvalue()
 
     def test_the_region_is_released_even_when_the_loop_raises(self, tmp_path, monkeypatch):
-        from scheduler import pane_status
+        from kiln.scheduler.infrastructure.terminal import pane_status
 
         class FakeTty(io.StringIO):
             def isatty(self):

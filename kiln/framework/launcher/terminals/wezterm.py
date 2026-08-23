@@ -360,7 +360,7 @@ def build_environment(panes: list[PaneSpec], layout: dict, project_dir: Path) ->
     """
     # Deferred: only importable once `prepare()` has put `kiln/framework` on sys.path (see
     # cli.py), and this module must stay importable before that has happened.
-    from scheduler.pane_status import STATE_COLORS_HEX
+    from kiln.scheduler.infrastructure.terminal.pane_status import STATE_COLORS_HEX
 
     env = {
         ENV_ROLES: build_roles_json(panes),

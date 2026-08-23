@@ -1,2 +1,1 @@
-"""Namespaced scheduler API; legacy ``scheduler`` imports remain supported."""
-
+"""Kiln's scheduler domain, application, infrastructure, and entry points."""

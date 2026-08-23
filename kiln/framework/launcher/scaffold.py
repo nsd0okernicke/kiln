@@ -17,7 +17,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from scheduler import git_ops
+from kiln.scheduler.infrastructure.vcs import git as git_ops
 
 from . import workspace
 from .paths import KilnPaths
@@ -179,7 +179,7 @@ def copy_example(paths: KilnPaths, example: str, result: ScaffoldResult) -> None
 def initialize_database(paths: KilnPaths, result: ScaffoldResult) -> None:
     """Create the message queue using the scheduler package's own schema."""
     sys.path.insert(0, str(paths.python_package_root))
-    from scheduler.db import ensure_schema
+    from kiln.scheduler.infrastructure.persistence.db import ensure_schema
 
     ensure_schema(paths.db_path)
     result.note("initialised message database")

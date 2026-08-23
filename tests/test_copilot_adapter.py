@@ -12,8 +12,8 @@ import subprocess
 import time
 
 import pytest
-from scheduler.adapters import copilot_adapter
-from scheduler.worker_prompt import WorkerDefinition
+from kiln.scheduler.domain.worker_prompt import WorkerDefinition
+from kiln.scheduler.infrastructure.agents import copilot_adapter
 
 DEFINITION = WorkerDefinition(
     name="coder-worker",

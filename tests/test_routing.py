@@ -6,7 +6,7 @@ misroutes an entire swarm, so malformed input must raise rather than guess.
 from __future__ import annotations
 
 import pytest
-from scheduler import routing
+from kiln.scheduler.domain import routing
 
 # The framework default, as shipped in kiln/project/constitution/workflow.md today.
 LEGACY_TABLE = """\

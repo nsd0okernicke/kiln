@@ -8,7 +8,7 @@ from __future__ import annotations
 from contextlib import closing
 
 import pytest
-from scheduler import db
+from kiln.scheduler.infrastructure.persistence import db
 
 
 class TestSchema:

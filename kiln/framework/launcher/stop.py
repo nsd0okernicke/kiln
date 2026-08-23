@@ -18,8 +18,8 @@ log = logging.getLogger(__name__)
 
 #: Command-line fragments identifying a process this swarm started.
 #:
-#: Every python-backed pane type must appear here. `scheduler.inbox` and
-#: `scheduler.dashboard` were missing, so both survived `kiln --stop` and kept polling the
+#: Every python-backed pane type must appear here. The inbox and dashboard were previously
+#: missing, so both survived `kiln --stop` and kept polling the
 #: database after the swarm was supposedly down (issue #18) -- which also made the
 #: stuck-in-`processing` bug (#19) easy to hit, since stopping mid-cycle is routine.
 #:
@@ -40,10 +40,9 @@ log = logging.getLogger(__name__)
 #: dies with its window.
 KILN_PROCESS_MARKERS = (
     "channel.py",
-    "scheduler.role_scheduler",
-    "kiln.scheduler.role_scheduler",
-    "scheduler.inbox",
-    "scheduler.dashboard",
+    "kiln.scheduler.entrypoints.role_scheduler",
+    "kiln.scheduler.entrypoints.inbox",
+    "kiln.scheduler.entrypoints.dashboard",
     "cockpit.server",
     "proxy.server",
 )

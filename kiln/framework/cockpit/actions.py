@@ -28,9 +28,10 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from kiln.scheduler.domain.status_contract import PENDING_HANDOFF, is_valid_work_item_name
+from kiln.scheduler.entrypoints import dashboard, retry, send
+from kiln.scheduler.infrastructure.persistence import db
 from launcher import stop
-from scheduler import dashboard, db, retry, send
-from scheduler.status_contract import PENDING_HANDOFF, is_valid_work_item_name
 
 log = logging.getLogger(__name__)
 

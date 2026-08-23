@@ -11,10 +11,10 @@ from __future__ import annotations
 import json
 
 import pytest
+from kiln.scheduler.domain.status_contract import SENTINEL_PREFIX
 from launcher import generate
 from launcher.config import RoleConfig, parse_profile
 from launcher.paths import KilnPaths
-from scheduler.status_contract import SENTINEL_PREFIX
 
 CONSTITUTION = {
     "workflow.md": "# Workflow Rules\n\n## Handoff Routing\n\n| Role | Sends to |\n"
@@ -347,7 +347,7 @@ class TestWorkerFiles:
         assert rendered.path.name == "coder-worker.md"
 
     def test_written_worker_parses_back(self, paths):
-        from scheduler.worker_prompt import load_worker_definition
+        from kiln.scheduler.domain.worker_prompt import load_worker_definition
 
         path = generate.write_worker_file(role(), paths)
         definition = load_worker_definition(path)
@@ -457,8 +457,8 @@ class TestRoutingTableInjection:
     """
 
     def _profile(self, routing):
+        from kiln.scheduler.domain.routing import parse_profile_routing
         from launcher.config import Profile, RoleConfig
-        from scheduler.routing import parse_profile_routing
 
         return Profile(
             name="p",

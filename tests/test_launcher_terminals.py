@@ -101,7 +101,7 @@ class TestWezTermEnvironment:
         # Not a hand-copied second palette -- scheduler.pane_status.STATE_COLORS_HEX is the
         # only place these values are written, so the pane's own status bar and this badge
         # cannot disagree on what a given state looks like.
-        from scheduler.pane_status import STATE_COLORS_HEX
+        from kiln.scheduler.infrastructure.terminal.pane_status import STATE_COLORS_HEX
 
         env = wezterm.build_environment(PANES, {}, Path("C:/proj"))
         assert json.loads(env[wezterm.ENV_STATE_COLORS]) == STATE_COLORS_HEX
@@ -148,7 +148,7 @@ class TestWezTermLua:
         # scheduler.pane_status.STATE_COLORS_HEX (see test_state_colours_come_from_the_
         # shared_scheduler_table), not as Lua literals -- this just confirms the Lua reads
         # them via the env var rather than falling back to STATE_COLOR_DEFAULT for every role.
-        from scheduler.pane_status import STATE_COLORS_HEX
+        from kiln.scheduler.infrastructure.terminal.pane_status import STATE_COLORS_HEX
 
         for state in ("retrying", "blocked", "idle"):
             assert state in STATE_COLORS_HEX

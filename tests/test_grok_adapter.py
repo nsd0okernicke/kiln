@@ -17,8 +17,8 @@ import subprocess
 import time
 
 import pytest
-from scheduler.adapters import grok_adapter
-from scheduler.worker_prompt import WorkerDefinition
+from kiln.scheduler.domain.worker_prompt import WorkerDefinition
+from kiln.scheduler.infrastructure.agents import grok_adapter
 
 DEFINITION = WorkerDefinition(
     name="coder-worker",

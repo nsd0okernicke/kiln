@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 
-from scheduler.adapters import (
+from kiln.scheduler.infrastructure.agents import (
     TokenUsage,
     claude_adapter,
     codex_adapter,

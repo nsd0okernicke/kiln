@@ -194,7 +194,7 @@ class TestComposer:
     def test_the_work_item_sentinel_cannot_collide_with_a_real_name(self, page):
         # `_NAME_RE` requires an alphanumeric first character, so a leading underscore is
         # unreachable for a real work item.
-        from scheduler.status_contract import is_valid_work_item_name
+        from kiln.scheduler.domain.status_contract import is_valid_work_item_name
 
         sentinel = re.search(r'const ITEM_OTHER = "([^"]*)"', page).group(1)
 

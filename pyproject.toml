@@ -32,8 +32,8 @@ dev = [
 
 [project.scripts]
 kiln = "launcher.cli:main"
-kiln-scheduler = "kiln.scheduler.role_scheduler:main"
-kiln-dashboard = "kiln.scheduler.dashboard:main"
+kiln-scheduler = "kiln.scheduler.entrypoints.role_scheduler:main"
+kiln-dashboard = "kiln.scheduler.entrypoints.dashboard:main"
 kiln-cockpit = "cockpit.server:main"
 
 [tool.setuptools]
@@ -41,7 +41,7 @@ package-dir = {"" = "kiln/framework"}
 
 [tool.setuptools.packages.find]
 where = ["kiln/framework"]
-include = ["kiln*", "launcher*", "scheduler*", "cockpit*", "proxy*"]
+include = ["kiln*", "launcher*", "cockpit*", "proxy*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -65,7 +65,7 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
 ignore = ["RUF001", "RUF002", "RUF003"]
 
 [tool.mutmut]
-paths_to_mutate = "kiln/framework/scheduler/"
+paths_to_mutate = "kiln/framework/kiln/scheduler/"
 tests_dir = "tests/"
 
 [tool.coverage.run]
@@ -85,19 +85,11 @@ show_contexts = true
 pythonVersion = "3.11"
 typeCheckingMode = "basic"
 include = [
-    "kiln/framework/scheduler/models.py",
-    "kiln/framework/scheduler/policies.py",
-    "kiln/framework/scheduler/ports.py",
-    "kiln/framework/scheduler/infrastructure.py",
-    "kiln/framework/scheduler/application.py",
-    "kiln/framework/scheduler/queue_storage.py",
-    "kiln/framework/scheduler/queue_queries.py",
-    "kiln/framework/scheduler/queue_commands.py",
-    "kiln/framework/scheduler/db.py",
-    "kiln/framework/scheduler/routing.py",
-    "kiln/framework/scheduler/handoff.py",
-    "kiln/framework/scheduler/status_contract.py",
-    "kiln/framework/scheduler/worker_prompt.py",
+    "kiln/framework/kiln/scheduler/domain",
+    "kiln/framework/kiln/scheduler/application",
+    "kiln/framework/kiln/scheduler/infrastructure/persistence",
+    "kiln/framework/kiln/scheduler/infrastructure/vcs",
+    "kiln/framework/kiln/scheduler/infrastructure/diagnostics",
     "kiln/framework/cockpit/state.py",
 ]
 extraPaths = ["kiln/framework"]

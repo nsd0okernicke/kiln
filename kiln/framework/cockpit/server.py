@@ -39,10 +39,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
+from kiln.scheduler.entrypoints import dashboard
+from kiln.scheduler.entrypoints.dashboard import DashboardContext
+from kiln.scheduler.entrypoints.role_scheduler import configure_logging
+from kiln.scheduler.infrastructure.persistence import db
 from launcher import ports
-from scheduler import dashboard, db
-from scheduler.dashboard import DashboardContext
-from scheduler.role_scheduler import configure_logging
 
 from . import state as state_builder
 from .actions import (

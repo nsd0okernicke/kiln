@@ -9,8 +9,8 @@ from __future__ import annotations
 import json
 
 import pytest
-from scheduler import worker_prompt
-from scheduler.status_contract import SENTINEL_PREFIX, parse_worker_report
+from kiln.scheduler.domain import worker_prompt
+from kiln.scheduler.domain.status_contract import SENTINEL_PREFIX, parse_worker_report
 
 # Shape produced by Write-GeneratedWorkerAgent (bin/kiln.ps1:955).
 GENERATED_AGENT = """\

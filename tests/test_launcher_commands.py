@@ -12,6 +12,7 @@ from __future__ import annotations
 import shutil
 
 import pytest
+from kiln.scheduler.domain.routing import parse_profile_routing
 from launcher.commands import (
     START_PROMPT,
     AgentCommand,
@@ -22,7 +23,6 @@ from launcher.commands import (
 )
 from launcher.config import Profile, RoleConfig
 from launcher.paths import KilnPaths, python_command
-from scheduler.routing import parse_profile_routing
 
 
 @pytest.fixture
@@ -337,7 +337,11 @@ class TestScheduler:
     def test_launches_the_module_not_the_script_path(self, paths):
         # A bare script path fails: the package uses relative imports.
         argv = self._scheduler(paths).argv
-        assert argv[:3] == [python_command(), "-m", "kiln.scheduler.role_scheduler"]
+        assert argv[:3] == [
+            python_command(),
+            "-m",
+            "kiln.scheduler.entrypoints.role_scheduler",
+        ]
 
     def test_names_an_interpreter_that_actually_exists(self, paths):
         # The literal "python" was hardcoded here, and stock Debian/Ubuntu ships only
@@ -456,7 +460,7 @@ class TestInboxPane:
 
     def test_runs_the_inbox_module(self, paths):
         argv = self._command(paths).argv
-        assert argv[:3] == [python_command(), "-m", "scheduler.inbox"]
+        assert argv[:3] == [python_command(), "-m", "kiln.scheduler.entrypoints.inbox"]
 
     def test_watches_the_role_it_was_told_to(self, paths):
         # Not its own name: the pane is 'inbox', the queue belongs to 'human-in-the-loop'.
@@ -513,7 +517,7 @@ class TestDashboardPane:
 
     def test_runs_the_dashboard_module(self, paths):
         argv = self._command(paths).argv
-        assert argv[:3] == [python_command(), "-m", "scheduler.dashboard"]
+        assert argv[:3] == [python_command(), "-m", "kiln.scheduler.entrypoints.dashboard"]
 
     def test_its_knobs_are_reachable_from_the_profile(self, paths):
         argv = self._command(paths, poll_interval=5, activity_limit=20).argv
@@ -698,7 +702,7 @@ class TestPosixRendering:
             build(paths, scheduler="python", mode="auto", worktree="coder")
         )
         assert "export PYTHONPATH=" in rendered
-        assert f"{python_command()} -m kiln.scheduler.role_scheduler" in rendered
+        assert f"{python_command()} -m kiln.scheduler.entrypoints.role_scheduler" in rendered
 
 
 class TestProfileRoutingReachesTheScheduler:
@@ -708,8 +712,8 @@ class TestProfileRoutingReachesTheScheduler:
     """
 
     def _profile(self, routing=None):
+        from kiln.scheduler.domain.routing import parse_profile_routing
         from launcher.config import Profile, RoleConfig
-        from scheduler.routing import parse_profile_routing
 
         roles = (
             RoleConfig(role="coder", scheduler="python", mode="auto"),
@@ -752,4 +756,4 @@ class TestProfileRoutingReachesTheScheduler:
         command = build_agent_command(
             self._profile().role("coder"), paths, "main"
         )
-        assert "kiln.scheduler.role_scheduler" in " ".join(command.argv)
+        assert "kiln.scheduler.entrypoints.role_scheduler" in " ".join(command.argv)

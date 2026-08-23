@@ -7,7 +7,7 @@ import uuid
 from contextlib import closing
 
 import pytest
-from scheduler import db
+from kiln.scheduler.infrastructure.persistence import db
 
 
 @pytest.fixture(autouse=True)

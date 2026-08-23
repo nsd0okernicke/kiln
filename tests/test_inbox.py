@@ -11,7 +11,9 @@ never times out) and being available to its human.
 from __future__ import annotations
 
 import pytest
-from scheduler import db, handoff, inbox, send
+from kiln.scheduler.domain import handoff
+from kiln.scheduler.entrypoints import inbox, send
+from kiln.scheduler.infrastructure.persistence import db
 
 pytestmark = pytest.mark.integration
 
@@ -133,7 +135,7 @@ class TestReceiveDoesTheWorkNotJustTheNotice:
         (git_repo / filename).write_text("built by the swarm\n", encoding="utf-8")
         git_cmd(git_repo, "add", "-A")
         git_cmd(git_repo, "commit", "-qm", "[Architect] cycle complete")
-        from scheduler import git_ops
+        from kiln.scheduler.infrastructure.vcs import git as git_ops
 
         commit = git_ops.head_commit(git_repo)
         git_cmd(git_repo, "checkout", "-q", "main")
@@ -168,7 +170,7 @@ class TestReceiveDoesTheWorkNotJustTheNotice:
     def test_the_merge_commit_names_the_role_handoff_and_sender(self, human, git_repo, git_cmd):
         # Otherwise it's git's generic "Merge commit '<hash>' into <branch>" -- identical for
         # every merge and useless in `git log` without cross-referencing messages.db by hand.
-        from scheduler import git_ops
+        from kiln.scheduler.infrastructure.vcs import git as git_ops
 
         commit = self._sender_commit(git_repo, git_cmd)
         _queue(human.db_path, handoff.format_handoff(

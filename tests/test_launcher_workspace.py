@@ -12,10 +12,10 @@ import logging
 from pathlib import Path
 
 import pytest
+from kiln.scheduler.infrastructure.vcs import git as git_ops
 from launcher import workspace
 from launcher.config import parse_profile
 from launcher.paths import KilnPaths
-from scheduler import git_ops
 
 pytestmark = pytest.mark.integration
 
@@ -816,7 +816,7 @@ class TestSessionsFile:
     def test_the_kind_column_round_trips_through_the_reader(self, paths):
         # The writer and the reader live in different packages, so the format is only
         # actually agreed if one is fed the other's output.
-        from scheduler import dashboard
+        from kiln.scheduler.entrypoints import dashboard
 
         path = workspace.write_sessions_file(PROFILE, paths)
 
@@ -827,7 +827,7 @@ class TestSessionsFile:
         assert [s.worktree for s in sessions] == ["@current", "coder"]
 
     def test_the_launcher_can_record_full_worktree_identities(self, paths):
-        from scheduler import dashboard
+        from kiln.scheduler.entrypoints import dashboard
 
         sessions = dashboard.read_sessions(
             workspace.write_sessions_file(PROFILE, paths, branch="run1")

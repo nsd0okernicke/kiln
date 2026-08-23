@@ -14,9 +14,9 @@ import json
 from pathlib import Path
 
 import pytest
-from scheduler import pane_status
-from scheduler.adapters import TokenUsage
-from scheduler.pane_status import (
+from kiln.scheduler.domain.models import TokenUsage
+from kiln.scheduler.infrastructure.terminal import pane_status
+from kiln.scheduler.infrastructure.terminal.pane_status import (
     PaneStatus,
     StatusBar,
     format_bar,

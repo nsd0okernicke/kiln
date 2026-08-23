@@ -12,17 +12,15 @@ from __future__ import annotations
 import logging
 
 import pytest
+from kiln.scheduler.entrypoints import role_scheduler
+from kiln.scheduler.entrypoints.role_scheduler import CycleResult
+from kiln.scheduler.infrastructure.agents.worker_runner import CallableWorkerRunner
+from kiln.scheduler.infrastructure.diagnostics import FileWorkerDebugSink
+from kiln.scheduler.infrastructure.persistence import SQLiteMessageQueue
+from kiln.scheduler.infrastructure.vcs import GitWorktree
 from launcher import workspace
 from launcher.config import parse_profile
 from launcher.paths import KilnPaths
-from scheduler import role_scheduler
-from scheduler.infrastructure import (
-    CallableWorkerRunner,
-    FileWorkerDebugSink,
-    GitWorktree,
-    SQLiteMessageQueue,
-)
-from scheduler.role_scheduler import CycleResult
 
 pytestmark = pytest.mark.integration
 
@@ -55,8 +53,8 @@ def _args(tmp_path, **overrides):
 
 @pytest.fixture
 def stub_context(monkeypatch, tmp_path):
-    from scheduler.routing import parse_routing_table
-    from scheduler.worker_prompt import WorkerDefinition
+    from kiln.scheduler.domain.routing import parse_routing_table
+    from kiln.scheduler.domain.worker_prompt import WorkerDefinition
 
     def _build(args):
         return role_scheduler.SchedulerContext(
@@ -214,7 +212,7 @@ class TestStaleMessageRecovery:
     """
 
     def _stranded(self, tmp_path, **kwargs):
-        from scheduler import db
+        from kiln.scheduler.infrastructure.persistence import db
 
         db.ensure_schema(tmp_path / "messages.db")
         return db.insert_handoff(
@@ -229,7 +227,7 @@ class TestStaleMessageRecovery:
     def test_startup_re_serves_a_message_left_mid_cycle(
         self, tmp_path, stub_context, monkeypatch, caplog
     ):
-        from scheduler import db
+        from kiln.scheduler.infrastructure.persistence import db
 
         message_id = self._stranded(tmp_path)
         db.mark_processing(tmp_path / "messages.db", message_id)
@@ -245,7 +243,7 @@ class TestStaleMessageRecovery:
         assert served is not None and served["id"] == message_id
 
     def test_each_recovered_message_is_logged(self, tmp_path, stub_context, caplog):
-        from scheduler import db
+        from kiln.scheduler.infrastructure.persistence import db
 
         message_id = self._stranded(tmp_path, work_item="add-login")
         db.mark_processing(tmp_path / "messages.db", message_id)
@@ -260,7 +258,7 @@ class TestStaleMessageRecovery:
     def test_the_replay_hazard_is_warned_about(self, tmp_path, stub_context, caplog):
         # The cycle is replayed against a worktree that may still hold partial work, so the
         # role can redo work it already did. An operator seeing that needs it explained.
-        from scheduler import db
+        from kiln.scheduler.infrastructure.persistence import db
 
         db.mark_processing(tmp_path / "messages.db", self._stranded(tmp_path))
 
@@ -292,8 +290,8 @@ class TestStaleMessageRecovery:
 
 
 def _context(tmp_path):
-    from scheduler.routing import parse_routing_table
-    from scheduler.worker_prompt import WorkerDefinition
+    from kiln.scheduler.domain.routing import parse_routing_table
+    from kiln.scheduler.domain.worker_prompt import WorkerDefinition
 
     return role_scheduler.SchedulerContext(
         role="coder",

@@ -1,43 +1,31 @@
-"""Contracts for the gradual migration to the ``kiln`` package namespace."""
+"""Contracts for Kiln's single namespaced scheduler package."""
 
 from __future__ import annotations
 
-import importlib
 import subprocess
 import sys
+from pathlib import Path
 
-import pytest
-
-BRIDGED_MODULES = (
-    "application",
-    "infrastructure",
-    "models",
-    "policies",
-    "ports",
-    "queue_commands",
-    "queue_queries",
-    "queue_storage",
-)
+ROOT = Path(__file__).parents[1] / "kiln" / "framework"
 
 
-@pytest.mark.parametrize("module_name", BRIDGED_MODULES)
-def test_namespaced_scheduler_modules_preserve_legacy_module_identity(module_name: str):
-    namespaced = importlib.import_module(f"kiln.scheduler.{module_name}")
-    legacy = importlib.import_module(f"scheduler.{module_name}")
-
-    assert namespaced is legacy
+def test_legacy_scheduler_package_has_no_source_modules():
+    assert not list((ROOT / "scheduler").glob("*.py"))
 
 
-def test_namespaced_domain_types_preserve_legacy_class_identity():
-    namespaced = importlib.import_module("kiln.scheduler.models")
-    legacy = importlib.import_module("scheduler.models")
+def test_namespaced_layers_are_importable():
+    from kiln.scheduler.application.ports import MessageQueue
+    from kiln.scheduler.application.use_cases.process_next_message import run_once
+    from kiln.scheduler.domain.models import MessageStatus
+    from kiln.scheduler.entrypoints.role_scheduler import main
+    from kiln.scheduler.infrastructure.persistence import SQLiteMessageQueue
 
-    assert namespaced.MessageStatus is legacy.MessageStatus
+    assert all((MessageQueue, run_once, MessageStatus, main, SQLiteMessageQueue))
 
 
-def test_namespaced_scheduler_module_is_executable():
+def test_namespaced_scheduler_entrypoint_is_executable():
     result = subprocess.run(
-        [sys.executable, "-m", "kiln.scheduler.role_scheduler", "--help"],
+        [sys.executable, "-m", "kiln.scheduler.entrypoints.role_scheduler", "--help"],
         capture_output=True,
         check=False,
         text=True,
@@ -47,9 +35,9 @@ def test_namespaced_scheduler_module_is_executable():
     assert "usage:" in result.stdout.lower()
 
 
-def test_namespaced_status_contract_module_is_executable():
+def test_namespaced_status_contract_is_executable():
     result = subprocess.run(
-        [sys.executable, "-m", "kiln.scheduler.status_contract", "--instruction"],
+        [sys.executable, "-m", "kiln.scheduler.domain.status_contract", "--instruction"],
         capture_output=True,
         check=False,
         text=True,

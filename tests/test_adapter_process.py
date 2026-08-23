@@ -23,7 +23,7 @@ import threading
 import time
 
 import pytest
-from scheduler.adapters import REAP_TIMEOUT_SEC, Watchdog, terminate_tree
+from kiln.scheduler.infrastructure.agents import REAP_TIMEOUT_SEC, Watchdog, terminate_tree
 
 #: Long enough that nothing finishes on its own during a test, so a passing assertion can
 #: only mean the kill worked.
@@ -268,7 +268,7 @@ class TestPosixBranch:
         `killpg` takes down the scheduler along with the worker — every role at once, with
         no log line explaining why.
         """
-        from scheduler import adapters
+        from kiln.scheduler.infrastructure import agents as adapters
 
         monkeypatch.setattr(os, "getpgid", lambda pid: os.getpgrp())
         killed: list[int] = []

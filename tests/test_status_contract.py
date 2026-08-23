@@ -6,7 +6,7 @@ edge cases are the difference between a swarm cycle advancing and stalling.
 from __future__ import annotations
 
 import pytest
-from scheduler import status_contract as sc
+from kiln.scheduler.domain import status_contract as sc
 
 
 class TestRecognisedSentinels:

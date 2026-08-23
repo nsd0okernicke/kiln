@@ -36,7 +36,7 @@ try:
 except ImportError:  # pragma: no cover - depends on the installed mcp release
     from mcp.server.mcpserver import MCPServer as FastMCP  # mcp 2.x
 
-from scheduler import db
+from kiln.scheduler.infrastructure.persistence import db
 
 MY_ROLE = os.getenv("KILN_ROLE", "")
 DB_PATH = os.getenv("KILN_DB_PATH", "")

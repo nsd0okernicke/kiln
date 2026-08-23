@@ -200,7 +200,7 @@ def prepare(profile: Profile, paths: KilnPaths) -> str:
     # The message queue's schema is owned by the scheduler package, so there is exactly one
     # definition of it rather than the launcher carrying a second copy.
     sys.path.insert(0, str(paths.python_package_root))
-    from scheduler.db import ensure_schema
+    from kiln.scheduler.infrastructure.persistence.db import ensure_schema
 
     ensure_schema(paths.db_path)
 
@@ -622,7 +622,7 @@ def run_subcommand(name: str, argv: list[str]) -> int:
     top-level parser exists to accept the PowerShell flag spellings the shims forward
     unchanged, and bolting subparsers onto it changes how those are matched.
     """
-    from scheduler import inbox, retry, send
+    from kiln.scheduler.entrypoints import inbox, retry, send
 
     handlers = {"send": send.main, "inbox": inbox.main, "retry": retry.main}
     return handlers[name](resolve_queue_context(argv))

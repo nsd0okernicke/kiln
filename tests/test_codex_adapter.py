@@ -13,8 +13,8 @@ import time
 from pathlib import Path
 
 import pytest
-from scheduler.adapters import codex_adapter
-from scheduler.worker_prompt import WorkerDefinition
+from kiln.scheduler.domain.worker_prompt import WorkerDefinition
+from kiln.scheduler.infrastructure.agents import codex_adapter
 
 DEFINITION = WorkerDefinition(
     name="refactorer-worker",

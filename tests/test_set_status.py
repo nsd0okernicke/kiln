@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from scheduler.pane_status import STATE_COLORS_HEX
+from kiln.scheduler.infrastructure.terminal.pane_status import STATE_COLORS_HEX
 
 SET_STATUS_PY = (
     Path(__file__).resolve().parents[1] / "kiln" / "framework" / "tools" / "set-status.py"

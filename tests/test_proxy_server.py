@@ -24,9 +24,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import ClassVar
 
 import pytest
+from kiln.scheduler.domain.models import TokenUsage
 from proxy.capture import CaptureMode, TrafficStore
 from proxy.server import Upstream, parse_routes, parse_upstream, serve, split_role
-from scheduler.adapters import TokenUsage
 
 pytestmark = pytest.mark.integration
 

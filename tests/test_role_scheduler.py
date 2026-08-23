@@ -14,19 +14,20 @@ import subprocess
 from datetime import datetime
 
 import pytest
-from scheduler import db, git_ops, handoff, role_scheduler, verify
-from scheduler.adapters import TokenUsage
-from scheduler.adapters.claude_adapter import WorkerInvocation
-from scheduler.infrastructure import (
-    CallableWorkerRunner,
-    FileWorkerDebugSink,
-    GitWorktree,
-    SQLiteMessageQueue,
-)
-from scheduler.role_scheduler import CycleResult, SchedulerContext, SchedulerState
-from scheduler.routing import parse_routing_table
-from scheduler.status_contract import STATUS_BLOCKED, STATUS_DONE, WorkerResult
-from scheduler.worker_prompt import WorkerDefinition
+from kiln.scheduler.domain import handoff
+from kiln.scheduler.domain.models import TokenUsage
+from kiln.scheduler.domain.routing import parse_routing_table
+from kiln.scheduler.domain.status_contract import STATUS_BLOCKED, STATUS_DONE, WorkerResult
+from kiln.scheduler.domain.worker_prompt import WorkerDefinition
+from kiln.scheduler.entrypoints import role_scheduler
+from kiln.scheduler.entrypoints.role_scheduler import CycleResult, SchedulerContext, SchedulerState
+from kiln.scheduler.infrastructure.agents.claude_adapter import WorkerInvocation
+from kiln.scheduler.infrastructure.agents.worker_runner import CallableWorkerRunner
+from kiln.scheduler.infrastructure.diagnostics import FileWorkerDebugSink
+from kiln.scheduler.infrastructure.diagnostics import verification as verify
+from kiln.scheduler.infrastructure.persistence import SQLiteMessageQueue, db
+from kiln.scheduler.infrastructure.vcs import GitWorktree
+from kiln.scheduler.infrastructure.vcs import git as git_ops
 
 pytestmark = pytest.mark.integration
 
@@ -1024,7 +1025,7 @@ class TestEscalationResume:
         assert db.fetch_and_deliver(db_path, "coder", "main") is None
 
     def test_a_resumed_message_is_worked_with_the_humans_guidance(self, make_ctx, inbound, db_path):
-        from scheduler import retry
+        from kiln.scheduler.entrypoints import retry
 
         message_id, _ = self._escalated(make_ctx, inbound)
         retry.resume(db_path=db_path, message_id=message_id, guidance="fixtures live in tests/")
@@ -1078,7 +1079,7 @@ class TestHaltedRoleParks:
         assert read_message(message_id)["status"] == db.STATUS_QUEUED
 
     def test_a_resume_wakes_it_up(self, make_ctx, inbound, db_path):
-        from scheduler import retry
+        from kiln.scheduler.entrypoints import retry
 
         state = self._halt(make_ctx, inbound)
         failed_id = db.failed_messages(db_path, "main")[0]["id"]
@@ -1091,7 +1092,7 @@ class TestHaltedRoleParks:
 
     def test_resuming_re_arms_the_circuit_breaker(self, make_ctx, inbound, db_path):
         # Otherwise the next single escalation would halt the role again immediately.
-        from scheduler import retry
+        from kiln.scheduler.entrypoints import retry
 
         state = self._halt(make_ctx, inbound)
         failed_id = db.failed_messages(db_path, "main")[0]["id"]

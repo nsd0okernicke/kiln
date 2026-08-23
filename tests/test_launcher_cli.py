@@ -289,7 +289,7 @@ class TestStopMarkers:
     """
     Every python-backed pane must be stoppable — issue #18.
 
-    `scheduler.inbox` and `scheduler.dashboard` were missing from the marker list, so both
+    The inbox and dashboard were missing from the marker list, so both
     survived `kiln --stop` and kept polling the database after the swarm was supposedly
     down. This enumerates the pane types rather than restating the strings, so a future
     pane type cannot quietly reintroduce the gap.
@@ -422,7 +422,7 @@ class TestReclaimingLeftoverProxies:
 
         db = tmp_path / ".kiln" / "traffic.db"
         self._processes(monkeypatch, [
-            (33, f"python -m scheduler.dashboard --traffic-db {db}"),
+            (33, f"python -m kiln.scheduler.entrypoints.dashboard --traffic-db {db}"),
         ])
         assert stop.find_project_proxies(db) == []
 

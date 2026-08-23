@@ -19,7 +19,7 @@ import types
 from pathlib import Path
 
 import pytest
-from scheduler import db
+from kiln.scheduler.infrastructure.persistence import db
 
 CHANNEL_PY = (
     Path(__file__).resolve().parents[1] / "kiln" / "framework" / "mcp-server" / "channel.py"

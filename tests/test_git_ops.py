@@ -7,7 +7,7 @@ nothing to squash) must now be handled by code.
 from __future__ import annotations
 
 import pytest
-from scheduler import git_ops
+from kiln.scheduler.infrastructure.vcs import git as git_ops
 
 pytestmark = pytest.mark.integration
 

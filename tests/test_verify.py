@@ -11,7 +11,7 @@ from __future__ import annotations
 import sys
 
 import pytest
-from scheduler import verify
+from kiln.scheduler.infrastructure.diagnostics import verification as verify
 
 pytestmark = pytest.mark.integration
 

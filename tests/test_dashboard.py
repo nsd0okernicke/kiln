@@ -11,7 +11,9 @@ import json
 from datetime import UTC, datetime
 
 import pytest
-from scheduler import dashboard, db, handoff
+from kiln.scheduler.domain import handoff
+from kiln.scheduler.entrypoints import dashboard
+from kiln.scheduler.infrastructure.persistence import db
 
 pytestmark = pytest.mark.integration
 

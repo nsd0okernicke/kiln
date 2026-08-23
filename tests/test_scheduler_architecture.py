@@ -1,16 +1,24 @@
 """Characterization tests for the scheduler's domain and port boundaries."""
 
-from scheduler import db, policies, queue_commands, queue_queries
-from scheduler.adapters import WorkerInvocation as LegacyWorkerInvocation
-from scheduler.infrastructure import (
-    CallableWorkerRunner,
-    FileWorkerDebugSink,
-    GitWorktree,
-    SQLiteMessageQueue,
+from kiln.scheduler.application.ports import MessageQueue, WorkerRunner, Worktree
+from kiln.scheduler.domain import policies
+from kiln.scheduler.domain.models import (
+    MessageStatus,
+    WorkerInvocation,
+    WorkerRequest,
+    can_transition,
 )
-from scheduler.models import MessageStatus, WorkerInvocation, WorkerRequest, can_transition
-from scheduler.ports import MessageQueue, WorkerRunner, Worktree
-from scheduler.status_contract import STATUS_DONE, WorkerResult
+from kiln.scheduler.domain.models import WorkerInvocation as LegacyWorkerInvocation
+from kiln.scheduler.domain.status_contract import STATUS_DONE, WorkerResult
+from kiln.scheduler.infrastructure.agents.worker_runner import CallableWorkerRunner
+from kiln.scheduler.infrastructure.diagnostics import FileWorkerDebugSink
+from kiln.scheduler.infrastructure.persistence import (
+    SQLiteMessageQueue,
+    db,
+    queue_commands,
+    queue_queries,
+)
+from kiln.scheduler.infrastructure.vcs import GitWorktree
 
 
 def test_message_lifecycle_rejects_completed_message_reentry(db_path, add_message):

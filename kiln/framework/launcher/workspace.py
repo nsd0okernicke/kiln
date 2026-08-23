@@ -18,7 +18,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from scheduler import git_ops
+from kiln.scheduler.infrastructure.vcs import git as git_ops
 
 from .config import Profile, RoleConfig
 from .generate import (

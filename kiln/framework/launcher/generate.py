@@ -34,8 +34,8 @@ from .templates import (
 
 # scheduler/ is a sibling package under kiln/framework.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from scheduler.routing import load_routing_table, render_routing_table
-from scheduler.status_contract import WORKER_STATUS_INSTRUCTION
+from kiln.scheduler.domain.routing import load_routing_table, render_routing_table
+from kiln.scheduler.domain.status_contract import WORKER_STATUS_INSTRUCTION
 
 #: The interpreter `.mcp.json` names for kiln-channel. Deliberately the bare command rather
 #: than sys.executable: the agent CLI resolves it from PATH at spawn time, which may not be

@@ -19,8 +19,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from scheduler import db, handoff
-from scheduler.dashboard import (
+from kiln.scheduler.domain import handoff
+from kiln.scheduler.entrypoints.dashboard import (
     WORKING_STATES,
     SwarmSnapshot,
     attempt_suffix,
@@ -35,7 +35,8 @@ from scheduler.dashboard import (
     total_token_usage,
     visible_roles,
 )
-from scheduler.role_scheduler import is_pending
+from kiln.scheduler.entrypoints.role_scheduler import is_pending
+from kiln.scheduler.infrastructure.persistence import db
 
 #: The lane a card reaches when nothing is holding it any more. Not a role, so it can never
 #: collide with one: `render_board` puts it last and the page paints it differently.

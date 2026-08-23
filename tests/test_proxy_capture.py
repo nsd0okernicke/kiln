@@ -13,6 +13,7 @@ import json
 import sqlite3
 
 import pytest
+from kiln.scheduler.domain.models import TokenUsage
 from proxy.capture import (
     BODY_BUDGET_CHECK_EVERY,
     DEFAULT_BODY_LIMIT_BYTES,
@@ -28,7 +29,6 @@ from proxy.capture import (
     extract_usage,
     redact_headers,
 )
-from scheduler.adapters import TokenUsage
 
 
 def _sse(*events):

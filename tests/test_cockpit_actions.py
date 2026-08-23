@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 from cockpit import actions
-from scheduler import db
+from kiln.scheduler.infrastructure.persistence import db
 
 pytestmark = pytest.mark.integration
 

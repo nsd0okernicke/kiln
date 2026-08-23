@@ -26,7 +26,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 
-from scheduler.adapters import TokenUsage
+from kiln.scheduler.domain.models import TokenUsage
 
 log = logging.getLogger(__name__)
 

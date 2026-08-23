@@ -16,7 +16,7 @@ import os
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from scheduler.routing import RoutingTable, parse_profile_routing
+from kiln.scheduler.domain.routing import RoutingTable, parse_profile_routing
 
 #: System-wide profile location, per platform. The two shell originals disagreed — the
 #: PowerShell one looked in ProgramData, the shell one in /etc — and the first Python port
@@ -53,12 +53,14 @@ CURRENT_DIR_ALIASES = ("@current", "none", "master")
 SCHEDULER_PYTHON = "python"
 
 #: Turns a role entry into a notification pane rather than an agent. It runs
-#: `scheduler.inbox` against the queue of the role named by `watches`, and has no worktree,
+#: the namespaced scheduler inbox against the queue of the role named by `watches`, and has no
+#: worktree,
 #: no generated instructions, no worker definition and no agent CLI.
 SCHEDULER_INBOX = "inbox"
 
 #: Turns a role entry into a live cross-role dashboard rather than an agent. It runs
-#: `scheduler.dashboard`, aggregating every role in the profile instead of watching one, and
+#: the namespaced scheduler dashboard, aggregating every role in the profile instead of
+#: watching one, and
 #: has no worktree, no generated instructions, no worker definition and no agent CLI --
 #: the same shape as an inbox pane (see `RoleConfig.is_passive`).
 SCHEDULER_DASHBOARD = "dashboard"

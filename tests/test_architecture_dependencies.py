@@ -4,6 +4,7 @@ import ast
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1] / "kiln" / "framework"
+SCHEDULER = ROOT / "kiln" / "scheduler"
 
 
 def imports(path: Path) -> set[str]:
@@ -34,20 +35,17 @@ def test_pure_scheduler_policy_does_not_import_infrastructure():
         "models.py",
         "policies.py",
     ):
-        assert not imports(ROOT / "scheduler" / name) & forbidden, name
+        assert not imports(SCHEDULER / "domain" / name) & forbidden, name
 
 
 def test_scheduler_ports_do_not_import_concrete_adapters():
-    assert not imports(ROOT / "scheduler" / "ports.py") & {
-        "db",
-        "git_ops",
-        "sqlite3",
-        "subprocess",
-    }
+    for path in (SCHEDULER / "application" / "ports").glob("*.py"):
+        assert not imports(path) & {"db", "git_ops", "sqlite3", "subprocess"}, path.name
 
 
 def test_scheduler_application_does_not_import_cli_or_concrete_infrastructure():
-    assert not imports(ROOT / "scheduler" / "application.py") & {
+    path = SCHEDULER / "application" / "use_cases" / "process_next_message.py"
+    assert not imports(path) & {
         "adapters",
         "argparse",
         "db",
@@ -57,7 +55,7 @@ def test_scheduler_application_does_not_import_cli_or_concrete_infrastructure():
         "sqlite3",
         "subprocess",
     }
-    assert not called_attributes(ROOT / "scheduler" / "application.py") & {
+    assert not called_attributes(path) & {
         "mkdir",
         "open",
         "write_text",
@@ -65,7 +63,7 @@ def test_scheduler_application_does_not_import_cli_or_concrete_infrastructure():
 
 
 def test_scheduler_models_do_not_import_adapters_or_infrastructure():
-    assert not imports(ROOT / "scheduler" / "models.py") & {
+    assert not imports(SCHEDULER / "domain" / "models.py") & {
         "adapters",
         "db",
         "git_ops",
@@ -76,13 +74,13 @@ def test_scheduler_models_do_not_import_adapters_or_infrastructure():
 
 
 def test_queue_projections_do_not_depend_on_commands_or_application():
-    path = ROOT / "scheduler" / "queue_queries.py"
+    path = SCHEDULER / "infrastructure" / "persistence" / "queue_queries.py"
     assert not imports(path) & {"application", "db", "infrastructure"}
     assert "commit" not in called_attributes(path)
 
 
 def test_queue_commands_do_not_depend_on_application_or_concrete_adapter():
-    assert not imports(ROOT / "scheduler" / "queue_commands.py") & {
+    assert not imports(SCHEDULER / "infrastructure" / "persistence" / "queue_commands.py") & {
         "application",
         "infrastructure",
     }
@@ -93,5 +91,5 @@ def test_cockpit_state_projection_does_not_depend_on_http_server():
 
 
 def test_agent_adapters_do_not_depend_on_launcher_ui():
-    for path in (ROOT / "scheduler" / "adapters").glob("*_adapter.py"):
+    for path in (SCHEDULER / "infrastructure" / "agents").glob("*_adapter.py"):
         assert "launcher" not in imports(path), path.name

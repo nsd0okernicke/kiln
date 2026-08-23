@@ -239,21 +239,18 @@ kiln/
 │       │       ├── windows_terminal.py       # Builds `wt.exe` argument lists
 │       │       └── tmux.py                   # new-session / send-keys
 │       │
-│       ├── scheduler/                # The deterministic role loop (see "Scheduler Mode")
-│       │   ├── role_scheduler.py         # One cycle = run_once(); main() is the only loop
-│       │   ├── db.py                     # Every message-queue SQL statement
-│       │   ├── routing.py                # Parses the Handoff Routing table
-│       │   ├── handoff.py                # Handoff message format
-│       │   ├── status_contract.py        # The KILN-STATUS: done|blocked contract
-│       │   ├── worker_prompt.py          # Builds the one-shot worker invocation
-│       │   ├── git_ops.py                # Merge, squash-to-anchor, local excludes
-│       │   ├── pane_status.py            # The pinned status bar in each pane
-│       │   ├── inbox.py                  # The human's notification pane (`kiln inbox`)
-│       │   ├── dashboard.py              # Swarm-wide live view (`"scheduler": "dashboard"`)
-│       │   ├── send.py                   # Queue a handoff from the CLI (`kiln send`)
-│       │   ├── retry.py                  # Resume an escalated role (`kiln retry`)
-│       │   ├── verify.py                 # Optional per-role quality gate before a handoff
-│       │   └── adapters/                 # One module per backend: claude, codex, copilot, grok
+│       ├── kiln/scheduler/           # Namespaced hexagonal scheduler
+│       │   ├── domain/                   # Models, policies, routing and handoff rules
+│       │   ├── application/
+│       │   │   ├── ports/                # Contracts required by application use cases
+│       │   │   └── use_cases/            # Scheduler orchestration
+│       │   ├── infrastructure/
+│       │   │   ├── persistence/          # SQLite queue implementation
+│       │   │   ├── vcs/                  # Git worktree implementation
+│       │   │   ├── agents/               # Claude, Codex, Copilot and Grok adapters
+│       │   │   ├── terminal/             # Pane status presentation
+│       │   │   └── diagnostics/          # Verification and worker debug output
+│       │   └── entrypoints/               # Scheduler, inbox, dashboard, send and retry CLIs
 │       │
 │       ├── proxy/                    # Opt-in traffic capture (`--proxy`, see "Traffic Capture")
 │       │   ├── server.py                 # Forwarding proxy; streams through, never buffers
@@ -269,7 +266,7 @@ kiln/
 └── docs/                         # Documentation & assets
 ```
 
-**`bin/`** holds entry points. The two `kiln` scripts are shims with no logic in them; the rest are standalone utilities that were never part of the launcher. **`kiln/framework/launcher/` and `kiln/framework/scheduler/`** are the actual implementation. **`kiln/project/`** is copied to new projects during scaffolding and is meant to be customized. **`kiln/framework/`** is never copied — it's read directly from this install at launch time, so edits there affect every project using this install.
+**`bin/`** holds entry points. The two `kiln` scripts are shims with no logic in them; the rest are standalone utilities that were never part of the launcher. **`kiln/framework/launcher/` and `kiln/framework/kiln/scheduler/`** are the actual implementation. **`kiln/project/`** is copied to new projects during scaffolding and is meant to be customized. **`kiln/framework/`** is never copied — it's read directly from this install at launch time, so edits there affect every project using this install.
 
 > The pre-port implementation lived in `lib/` as parallel PowerShell and shell trees
 > (`profile-loader.{ps1,sh}`, `terminal-adapter.sh`, `terminal-adapters/*`). Those are deleted;
@@ -351,7 +348,7 @@ What changes when a role is scheduled:
 
 | | Wrapper mode | Scheduler mode |
 | --- | --- | --- |
-| Pane runs | a persistent LLM session | `python -m scheduler.role_scheduler` |
+| Pane runs | a persistent LLM session | `python -m kiln.scheduler.entrypoints.role_scheduler` |
 | Loop control | prose in a loop template | `role_scheduler.run_once()` |
 | Queue access | `kiln-db` + `kiln-channel` MCP | direct SQLite |
 | Turn is done when | the model decides | the worker prints `KILN-STATUS: done` |
@@ -374,7 +371,7 @@ silently reporting success.
 whole cycle is unit-testable without an LLM. But each invocation is one-shot: the worker starts
 fresh every handoff with no memory of the last one, so anything it must remember has to be in
 the handoff, the repo, or the constitution. All four adapters
-(`kiln/framework/scheduler/adapters/{claude,copilot,codex,grok}_adapter.py`) are one-shot,
+(`kiln/framework/kiln/scheduler/infrastructure/agents/{claude,copilot,codex,grok}_adapter.py`) are one-shot,
 subprocess-based invocations, verified live against each CLI's actual non-interactive flags —
 `copilot`/`codex` report no dollar cost (only token/request counts), `claude`/`grok` do. Every
 adapter parses token usage out of the stream it is already reading, so a role that reports no
@@ -403,7 +400,7 @@ not a launch failure: `codex login` says it better than the launcher can.
 
 ### Inbox mode (`"scheduler": "inbox"`)
 
-A third kind of pane, and the human's half of the same idea. It runs `scheduler.inbox`: it
+A third kind of pane, and the human's half of the same idea. It runs `kiln.scheduler.entrypoints.inbox`: it
 watches another role's queue, prints each arriving message, marks it processed and rings the
 terminal bell. No agent, no worktree, no generated instructions, no MCP.
 
@@ -434,7 +431,7 @@ an empty one.
 ### Dashboard mode (`"scheduler": "dashboard"`)
 
 A fourth kind of pane, and the swarm-wide counterpart to the inbox's one-role view. It runs
-`scheduler.dashboard`: a `top`-style live view that aggregates every role at once instead of
+`kiln.scheduler.entrypoints.dashboard`: a `top`-style live view that aggregates every role at once instead of
 watching one — no agent, no worktree, no generated instructions, no MCP, same "no agent" shape
 as `inbox`.
 
@@ -526,7 +523,7 @@ The dashboard and the pane status bar now report the same cycle and cost numbers
 cycle. They used to differ by one: the status file is written during the cycle, and the totals
 were only folded in after it returned.
 
-Run it standalone against any project with `python -m scheduler.dashboard --once ...` (see
+Run it standalone against any project with `python -m kiln.scheduler.entrypoints.dashboard --once ...` (see
 `--help` for the required paths), or just launch a profile that includes it.
 
 **Try it:** the shipped `full` profile runs all four `auto` roles on the scheduler, keeps
@@ -1883,7 +1880,7 @@ the normal cycle (including `working`, deliberately calm rather than alarming �
 state an operator most wants to see), amber (`retrying`) flags a recoverable hiccup, and
 `blocked` → `escalated` → `halted` step from amber-red to pure red as trouble compounds. The
 full table — the single source of truth both this badge and the pane status bar below read
-from — is `STATE_COLORS_HEX` in `kiln/framework/scheduler/pane_status.py`.
+from — is `STATE_COLORS_HEX` in `kiln/framework/kiln/scheduler/infrastructure/terminal/pane_status.py`.
 
 ### Pane Status Bar (scheduler roles, every backend)
 
@@ -2235,11 +2232,11 @@ equivalent).
 - ✓ **Python launcher** (`kiln/framework/launcher/`) — ~3,200 lines of parallel PowerShell and
   shell collapsed into one implementation plus ~95 lines of shim. Profile loading, scaffolding,
   worktrees, generation, terminal backends and process teardown are all shared across platforms.
-- ✓ **Deterministic scheduler** (`kiln/framework/scheduler/`) — see **Execution Modes** above.
+- ✓ **Deterministic scheduler** (`kiln/framework/kiln/scheduler/`) — see **Execution Modes** above.
   `"scheduler": "python"` is the default for every `auto`-mode role in every shipped profile;
   wrapper mode remains for `manual`-mode roles and any backend without an adapter. All four
   accepted backends (`claude`, `copilot`, `codex`, `grok`) have one, each verified live against
-  the real CLI (`kiln/framework/scheduler/adapters/`).
+  the real CLI (`kiln/framework/kiln/scheduler/infrastructure/agents/`).
 - ✓ **Conditional handoff routing** — `workflow.md`'s routing table gained an optional
   `When Sender` column, so sender-dependent routing is data both the wrapper and the scheduler
   can follow rather than prose only an LLM could interpret.

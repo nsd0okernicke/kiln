@@ -12,8 +12,8 @@ import subprocess
 import time
 
 import pytest
-from scheduler.adapters import claude_adapter
-from scheduler.worker_prompt import WorkerDefinition
+from kiln.scheduler.domain.worker_prompt import WorkerDefinition
+from kiln.scheduler.infrastructure.agents import claude_adapter
 
 DEFINITION = WorkerDefinition(
     name="coder-worker",
@@ -476,7 +476,7 @@ class TestWorkerToolsAreHonoured:
     def test_grok_does_not_until_its_cli_is_spiked(self):
         # Same payload builder, unverified CLI: a wrong shape there would silently strip
         # the persona rather than error, which is not worth a size saving.
-        from scheduler.adapters import grok_adapter
+        from kiln.scheduler.infrastructure.agents import grok_adapter
 
         payload = json.loads(grok_adapter.build_agents_payload(self.RESTRICTED))
         assert "tools" not in payload["coder-worker"]
