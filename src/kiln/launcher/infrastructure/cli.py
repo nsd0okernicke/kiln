@@ -1,9 +1,15 @@
 """
 `kiln` entry point — the launch sequence that bin/kiln.ps1 and bin/kiln.sh used to own.
 
+<<<<<<<< HEAD:src/kiln/launcher/infrastructure/cli.py
     python -m kiln.launcher.infrastructure.cli --working-dir C:\\path\\to\\project
     python -m kiln.launcher.infrastructure.cli --stop
     python -m kiln.launcher.infrastructure.cli --list-profiles
+========
+    python -m kiln.launcher.cli --working-dir C:\\path\\to\\project
+    python -m kiln.launcher.cli --stop
+    python -m kiln.launcher.cli --list-profiles
+>>>>>>>> 164b1fed95030ce51978a18566b3ebd5b6fa30de:src/kiln/launcher/cli.py
 
 Flag names keep their PowerShell spellings as aliases (`-WorkingDir`, `-Profile`, …) so the
 shim scripts can forward arguments through unchanged.
@@ -353,6 +359,7 @@ def start_proxy(
     port = port if port_is_explicit else find_free_port(port)
 
     command = [
+<<<<<<<< HEAD:src/kiln/launcher/infrastructure/cli.py
         python_command(),
         "-m",
         "kiln.proxy.infrastructure.http.server",
@@ -362,6 +369,12 @@ def start_proxy(
         str(port),
         "--mode",
         capture_mode,
+========
+        python_command(), "-m", "kiln.proxy.server",
+        "--db-path", str(paths.traffic_db),
+        "--port", str(port),
+        "--mode", capture_mode,
+>>>>>>>> 164b1fed95030ce51978a18566b3ebd5b6fa30de:src/kiln/launcher/cli.py
         *proxy_routes(profile),
     ]
     environment = {

@@ -39,7 +39,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
+<<<<<<<< HEAD:src/kiln/cockpit/infrastructure/http/server.py
 from kiln.launcher.infrastructure import ports
+========
+from kiln.launcher import ports
+>>>>>>>> 164b1fed95030ce51978a18566b3ebd5b6fa30de:src/kiln/cockpit/server.py
 from kiln.scheduler.infrastructure.cli import dashboard
 from kiln.scheduler.infrastructure.cli.dashboard import DashboardContext
 from kiln.scheduler.infrastructure.persistence import db
@@ -257,7 +261,11 @@ class CockpitHandler(BaseHTTPRequestHandler):
         """
         Answer first, then stop everything — including this process.
 
+<<<<<<<< HEAD:src/kiln/cockpit/infrastructure/http/server.py
         `teardown` matches this server in `stop.KILN_PROCESS_MARKERS`, so calling it
+========
+        `teardown` matches `kiln.cockpit.server` in `stop.KILN_PROCESS_MARKERS`, so calling it
+>>>>>>>> 164b1fed95030ce51978a18566b3ebd5b6fa30de:src/kiln/cockpit/server.py
         inline would kill the server mid-reply and the browser would see a dropped
         connection: indistinguishable from a crash, at the exact moment the operator most
         needs to know what happened.
@@ -402,8 +410,12 @@ def find_free_port(preferred: int = DEFAULT_PORT, attempts: int = PORT_ATTEMPTS)
 
     Raises rather than falling back to an ephemeral port: the URL is written to a file and
     printed in a pane, and a cockpit that landed somewhere unpredictable is harder to find
+<<<<<<<< HEAD:src/kiln/cockpit/infrastructure/http/server.py
     than one that refused to start. The probe is shared with the capture proxy through
     `kiln.launcher.infrastructure.ports`, while
+========
+    than one that refused to start. The probe is `kiln.launcher.ports`' -- the capture proxy needs
+>>>>>>>> 164b1fed95030ce51978a18566b3ebd5b6fa30de:src/kiln/cockpit/server.py
     the identical one -- while the message stays here, since it is about cockpits.
     """
     port = ports.first_free_port(preferred, attempts)

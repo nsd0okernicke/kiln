@@ -67,7 +67,11 @@ SCHEDULER_INBOX = "inbox"
 SCHEDULER_DASHBOARD = "dashboard"
 
 #: Turns a role entry into the local web cockpit (issue #22) rather than an agent. It runs
+<<<<<<<< HEAD:src/kiln/launcher/domain/profile.py
 #: The HTTP adapter serves one page on 127.0.0.1 over the same `messages.db` and
+========
+#: `kiln.cockpit.server`, which serves one page on 127.0.0.1 over the same `messages.db` and
+>>>>>>>> 164b1fed95030ce51978a18566b3ebd5b6fa30de:src/kiln/launcher/config.py
 #: status files the dashboard reads. Same passive shape as `inbox` and `dashboard`, and
 #: deliberately alongside them rather than instead: the TTY dashboard is the only view that
 #: works over SSH or without a browser.
@@ -133,7 +137,11 @@ class RoleConfig:
     #: Inbox panes only: ring the terminal bell on arrival. True is the shipped behaviour.
     bell: bool = True
     #: Cockpit panes only: the port to prefer. The cockpit probes upward when it is taken,
+<<<<<<<< HEAD:src/kiln/launcher/domain/profile.py
     #: so this is a preference rather than a reservation. None keeps the HTTP adapter's own
+========
+    #: so this is a preference rather than a reservation. None keeps `kiln.cockpit.server`'s own
+>>>>>>>> 164b1fed95030ce51978a18566b3ebd5b6fa30de:src/kiln/launcher/config.py
     #: default -- one number, in one place, rather than a copy of it here.
     port: int | None = None
     #: Cockpit panes only: open a browser tab at launch. True is the shipped behaviour;

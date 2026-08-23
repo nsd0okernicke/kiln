@@ -2,8 +2,12 @@
 The cockpit's write half — everything a button does.
 
 Not one line of queue, retry or teardown logic lives here. `scheduler.send.send`,
+<<<<<<<< HEAD:src/kiln/cockpit/application/actions.py
 `scheduler.retry.resume` and `kiln.launcher.infrastructure.stop.stop_all` already own those
 decisions and are
+========
+`scheduler.retry.resume` and `kiln.launcher.stop.stop_all` already own those decisions and are
+>>>>>>>> 164b1fed95030ce51978a18566b3ebd5b6fa30de:src/kiln/cockpit/actions.py
 already the paths `kiln send` / `kiln retry` / `kiln --stop` take, so the cockpit calls them
 and does nothing else. A second implementation of "queue a handoff" is how the browser and
 the CLI would come to disagree about what a handoff is.
@@ -29,7 +33,11 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+<<<<<<<< HEAD:src/kiln/cockpit/application/actions.py
 from kiln.launcher.infrastructure import stop
+========
+from kiln.launcher import stop
+>>>>>>>> 164b1fed95030ce51978a18566b3ebd5b6fa30de:src/kiln/cockpit/actions.py
 from kiln.scheduler.domain.status_contract import PENDING_HANDOFF, is_valid_work_item_name
 from kiln.scheduler.infrastructure.cli import dashboard, retry, send
 from kiln.scheduler.infrastructure.persistence import db
@@ -211,7 +219,11 @@ def teardown(ctx: ActionContext, *, confirm: str) -> dict:
     projects. The confirmation string is the guard, and the roles list comes from this
     project's sessions file only so tmux sessions get closed too.
 
+<<<<<<<< HEAD:src/kiln/cockpit/application/actions.py
     **This kills its own caller.** The HTTP server is in `stop.KILN_PROCESS_MARKERS`, as it
+========
+    **This kills its own caller.** `kiln.cockpit.server` is in `stop.KILN_PROCESS_MARKERS`, as it
+>>>>>>>> 164b1fed95030ce51978a18566b3ebd5b6fa30de:src/kiln/cockpit/actions.py
     must be — a cockpit surviving `kiln --stop` would keep a port bound and keep offering
     buttons for a swarm that no longer exists. So there is no return value any HTTP client
     will see, and the server calls this only after its reply has gone out.
