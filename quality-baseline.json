@@ -26,22 +26,22 @@
     "c_or_worse": 27,
     "d_or_worse": 3,
     "lowest_maintainability_modules": [
-      "kiln/framework/scheduler/role_scheduler.py",
-      "kiln/framework/scheduler/dashboard.py",
-      "kiln/framework/launcher/config.py",
-      "kiln/framework/launcher/workspace.py",
-      "kiln/framework/launcher/cli.py"
+      "src/scheduler/role_scheduler.py",
+      "src/scheduler/dashboard.py",
+      "src/kiln/launcher/config.py",
+      "src/kiln/launcher/workspace.py",
+      "src/kiln/launcher/cli.py"
     ]
   },
   "crap": {
     "threshold": 6,
     "above_threshold": 98,
     "top_hotspots": [
-      "kiln/framework/launcher/cli.py:389 run_launch",
-      "kiln/framework/launcher/stop.py:178 stop_all",
-      "kiln/framework/cockpit/server.py:514 main",
-      "kiln/framework/launcher/cli.py:584 resolve_queue_context",
-      "kiln/framework/tools/set-status.py:209 main"
+      "src/kiln/launcher/cli.py:389 run_launch",
+      "src/kiln/launcher/stop.py:178 stop_all",
+      "src/kiln/cockpit/server.py:514 main",
+      "src/kiln/launcher/cli.py:584 resolve_queue_context",
+      "src/kiln/resources/tools/set-status.py:209 main"
     ]
   },
   "typing": {

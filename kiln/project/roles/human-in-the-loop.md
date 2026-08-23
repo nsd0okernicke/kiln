@@ -1,6 +1,6 @@
 <!-- Copied into <project>/kiln/project/roles/human-in-the-loop.md during project init (kiln.ps1 -Init / kiln.sh init). Customize this role's instructions per project. -->
 
-> **Part of every framework-shipped profile** (`kiln/framework/profiles.json`) — the single
+> **Part of every framework-shipped profile** (`src/kiln/resources/profiles.json`) — the single
 > human-facing entry point ahead of an otherwise fully autonomous specifier → coder →
 > refactorer → architect cycle. Every profile also runs a separate `inbox` pane beneath this
 > session — see "Receiving Messages" below for what that changes.

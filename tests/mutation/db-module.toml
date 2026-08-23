@@ -8,7 +8,7 @@
 #   .venv/Scripts/cr-report.exe .kiln-mutation/db.sqlite
 
 [cosmic-ray]
-module-path = "kiln/framework/kiln/scheduler/infrastructure/persistence/db.py"
+module-path = "src/kiln/scheduler/infrastructure/persistence/db.py"
 timeout = 60.0
 excluded-modules = []
 test-command = "python -m pytest -x -q tests/test_db.py tests/test_channel_server.py"

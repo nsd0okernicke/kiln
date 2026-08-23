@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 # Kiln entry point (Windows) — a shim.
 #
-# All logic lives in Python under kiln/framework/launcher/. This script only locates the
+# All logic lives in Python under src/kiln/launcher/. This script only locates the
 # framework, puts it on PYTHONPATH, and forwards its arguments through unchanged. The
 # launcher accepts both spellings, so existing invocations keep working:
 #
@@ -19,9 +19,9 @@ $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $frameworkRoot = Split-Path -Parent $scriptDir
-$packageRoot = Join-Path -Path $frameworkRoot -ChildPath (Join-Path -Path "kiln" -ChildPath "framework")
+$packageRoot = Join-Path -Path $frameworkRoot -ChildPath "src"
 
-if (-not (Test-Path (Join-Path $packageRoot "launcher"))) {
+if (-not (Test-Path (Join-Path $packageRoot "kiln\launcher"))) {
     Write-Host "Error: Kiln launcher package not found at $packageRoot" -ForegroundColor Red
     exit 1
 }
@@ -38,5 +38,5 @@ if ($python -eq "python" -and -not (Get-Command python -ErrorAction SilentlyCont
 
 $env:PYTHONPATH = if ($env:PYTHONPATH) { "$packageRoot;$env:PYTHONPATH" } else { $packageRoot }
 
-& $python -m launcher.cli @args
+& $python -m kiln.launcher.cli @args
 exit $LASTEXITCODE

@@ -12,7 +12,8 @@ import json
 from pathlib import Path
 
 import pytest
-from launcher.terminals import (
+
+from kiln.launcher.terminals import (
     NONE,
     TMUX,
     WEZTERM,
@@ -77,7 +78,7 @@ class TestWezTermEnvironment:
         # The Lua cannot work this out for itself -- it never sees a profile -- so the flag
         # has to ride along with the pane it describes.
         panes = [*PANES, PaneSpec(
-            role="cockpit", name="Cockpit", path="C:/proj", cmd="python -m cockpit.server",
+            role="cockpit", name="Cockpit", path="C:/proj", cmd="python -m kiln.cockpit.server",
             mode="manual", passive=True,
         )]
 

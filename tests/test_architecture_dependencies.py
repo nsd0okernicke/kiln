@@ -3,8 +3,8 @@
 import ast
 from pathlib import Path
 
-ROOT = Path(__file__).parents[1] / "kiln" / "framework"
-SCHEDULER = ROOT / "kiln" / "scheduler"
+ROOT = Path(__file__).parents[1] / "src" / "kiln"
+SCHEDULER = ROOT / "scheduler"
 
 
 def imports(path: Path) -> set[str]:

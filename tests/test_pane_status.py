@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 
 import pytest
+
 from kiln.scheduler.domain.models import TokenUsage
 from kiln.scheduler.infrastructure.terminal import pane_status
 from kiln.scheduler.infrastructure.terminal.pane_status import (
@@ -144,7 +145,7 @@ class TestColours:
     def test_matches_the_wezterm_tab_bar_palette(self):
         # The whole point of one shared table: read it back the way wezterm.py's Lua does
         # (JSON-exported via build_environment) and confirm nothing was lost in translation.
-        from launcher.terminals import wezterm
+        from kiln.launcher.terminals import wezterm
 
         environment = wezterm.build_environment([], {}, Path("/proj"))
         exported = json.loads(environment[wezterm.ENV_STATE_COLORS])

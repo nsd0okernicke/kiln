@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).parents[1] / "kiln" / "framework"
+ROOT = Path(__file__).parents[1] / "src"
 
 
 def test_legacy_scheduler_package_has_no_source_modules():

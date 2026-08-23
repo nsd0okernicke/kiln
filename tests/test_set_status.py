@@ -19,10 +19,11 @@ import sys
 from pathlib import Path
 
 import pytest
+
 from kiln.scheduler.infrastructure.terminal.pane_status import STATE_COLORS_HEX
 
 SET_STATUS_PY = (
-    Path(__file__).resolve().parents[1] / "kiln" / "framework" / "tools" / "set-status.py"
+    Path(__file__).resolve().parents[1] / "src" / "kiln" / "resources" / "tools" / "set-status.py"
 )
 
 pytestmark = pytest.mark.integration

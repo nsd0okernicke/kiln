@@ -16,9 +16,10 @@ import json
 import threading
 
 import pytest
-from cockpit import actions
-from cockpit import state as cockpit_state
-from cockpit.server import GUARD_HEADER, CockpitConfig, find_free_port, serve
+
+from kiln.cockpit import actions
+from kiln.cockpit import state as cockpit_state
+from kiln.cockpit.server import GUARD_HEADER, CockpitConfig, find_free_port, serve
 from kiln.scheduler.infrastructure.cli import dashboard
 from kiln.scheduler.infrastructure.cli.dashboard import DashboardContext
 from kiln.scheduler.infrastructure.persistence import db

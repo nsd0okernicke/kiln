@@ -8,7 +8,7 @@
 
 Kiln launches a config-driven multi-agent swarm, each agent working in its own git worktree with role-specific instructions and cross-agent communication. It is Git-aware: sub-branches are created per worktree, all state lives in `.kiln/`, and handoffs are tracked in `logbook.md`.
 
-**Kiln is a Python application.** `bin/kiln.ps1` and `bin/kiln.sh` are thin shims that put `kiln/framework/` on `PYTHONPATH` and hand off to `python -m launcher.cli`; every platform runs the same code. Terminals are backend-specific (WezTerm, Windows Terminal, tmux), but nothing else is.
+**Kiln is a Python application.** `bin/kiln.ps1` and `bin/kiln.sh` are thin shims that put `src/` on `PYTHONPATH` and hand off to `python -m kiln.launcher.cli`; every platform runs the same code. Terminals are backend-specific (WezTerm, Windows Terminal, tmux), but nothing else is.
 
 ---
 
@@ -85,7 +85,7 @@ See **"Running Kiln"** below for more options and customization.
 Kiln is a lightweight orchestration layer that:
 
 - Launches a **config-driven swarm** — specify each agent's role, AI tool/backend (claude/copilot/codex/grok, all four capable of both execution modes), and workspace (main directory or isolated worktree)
-  - Uses framework defaults from `kiln/framework/profiles.json`
+  - Uses framework defaults from `src/kiln/resources/profiles.json`
   - Projects can override by creating `kiln.profiles.json` at the root
   - Flexible terminal layouts: tabs, split panes, grids, or custom hierarchical arrangements
 - Creates one **terminal window/tab per role** — observe all agents in real time
@@ -155,7 +155,7 @@ my-project/
 ## Platform Support
 
 One Python implementation runs on every platform. The shell scripts are shims — they locate
-the framework, set `PYTHONPATH`, and forward their arguments to `python -m launcher.cli`
+the framework, set `PYTHONPATH`, and forward their arguments to `python -m kiln.launcher.cli`
 unchanged. There is no second implementation to fall behind.
 
 **Shared requirements (all platforms):**
@@ -163,7 +163,7 @@ unchanged. There is no second implementation to fall behind.
 - Python 3.11+ — the launcher, the scheduler and the MCP servers are all Python
 - Git
 - One or more agent CLIs (Claude Code, GitHub Copilot, Codex, Grok) depending on configured agents
-- `pip install -r kiln/framework/mcp-server/requirements.txt` if you use wrapper-mode roles
+- `pip install -r src/kiln/mcp_server/requirements.txt` if you use wrapper-mode roles
   (the `kiln-db` / `kiln-channel` MCP servers). Scheduler-mode roles need no MCP server.
   On Debian/Ubuntu that exact command fails with `error: externally-managed-environment`
   (PEP 668) — use `python3 -m pip install --user --break-system-packages -r ...` instead.
@@ -207,8 +207,8 @@ The Kiln repository is organized for clarity and maintainability:
 ```text
 kiln/
 ├── bin/                          # Entry points
-│   ├── kiln.ps1                  # Windows shim -> python -m launcher.cli
-│   ├── kiln.sh                   # Unix shim -> python -m launcher.cli
+│   ├── kiln.ps1                  # Windows shim -> python -m kiln.launcher.cli
+│   ├── kiln.sh                   # Unix shim -> python -m kiln.launcher.cli
 │   ├── kiln-cleanup.ps1          # Full project reset (Windows only — see Cleanup)
 │   ├── clear-messages.ps1 / .sh  # Empty the message queue (testing utility)
 │   └── kiln-db.ps1               # Inspect/manage messages.db (Windows only)
@@ -224,7 +224,7 @@ kiln/
 │   │   └── skills/                   # Agent skills (optional)
 │   │
 │   └── framework/                # Never copied — read directly from this install
-│       ├── launcher/                 # The launcher. Everything bin/ used to do.
+│       ├── launcher/                 # The kiln.launcher. Everything bin/ used to do.
 │       │   ├── cli.py                    # Argument parsing and the launch sequence
 │       │   ├── config.py                 # Profile loading, inheritance, validation
 │       │   ├── paths.py                  # Every path Kiln touches, in one place
@@ -266,7 +266,7 @@ kiln/
 └── docs/                         # Documentation & assets
 ```
 
-**`bin/`** holds entry points. The two `kiln` scripts are shims with no logic in them; the rest are standalone utilities that were never part of the launcher. **`kiln/framework/launcher/` and `kiln/framework/kiln/scheduler/`** are the actual implementation. **`kiln/project/`** is copied to new projects during scaffolding and is meant to be customized. **`kiln/framework/`** is never copied — it's read directly from this install at launch time, so edits there affect every project using this install.
+**`bin/`** holds entry points. The two `kiln` scripts are shims with no logic in them; the rest are standalone utilities that were never part of the kiln.launcher. **`src/kiln/launcher/` and `src/kiln/scheduler/`** are the actual implementation. **`kiln/project/`** is copied to new projects during scaffolding and is meant to be customized. **`src/`** is never copied — it's read directly from this install at launch time, so edits there affect every project using this install.
 
 > The pre-port implementation lived in `lib/` as parallel PowerShell and shell trees
 > (`profile-loader.{ps1,sh}`, `terminal-adapter.sh`, `terminal-adapters/*`). Those are deleted;
@@ -276,7 +276,7 @@ kiln/
 
 ## Core Features
 
-- **Config-Driven Topology** — The swarm shape comes from `kiln/framework/profiles.json`, not hardcoded variables.
+- **Config-Driven Topology** — The swarm shape comes from `src/kiln/resources/profiles.json`, not hardcoded variables.
 - **Flexible Terminal Layouts** — Define custom tab and pane arrangements in your profile: simple tabs, split panes, 2×2 grids, hierarchical trees, or focus layouts (e.g., 1 full tab + 3-way split below).
 - **Role Injection** — Constitution (`workflow.md`, `engineering.md`, `project.md`) and role instructions (`roles/<role>.md`) are merged into each agent's instruction file (`CLAUDE.md` or `.github/copilot-instructions.md`), giving full context immediately.
 - **Project-Local Constitution** — Customize architecture, tech stack, and quality gates via `kiln/project/constitution/project.md`.
@@ -330,7 +330,7 @@ path, poll and worker timeouts.*
 ### Wrapper mode (manual roles, and any backend without an adapter)
 
 A persistent LLM session sits in the pane and follows the loop written in
-`kiln/framework/templates/loop-auto-<agent>.md`. It reaches the message queue through two MCP
+`src/kiln/resources/templates/loop-auto-<agent>.md`. It reaches the message queue through two MCP
 servers (`kiln-db` for SQL, `kiln-channel` for a blocking `wait_for_message()`), decides when a
 turn is finished, and delegates the actual work to a disposable worker subagent. The mechanics
 are prose, so the model can misread them — a turn that ends early, a merge step that gets
@@ -371,7 +371,7 @@ silently reporting success.
 whole cycle is unit-testable without an LLM. But each invocation is one-shot: the worker starts
 fresh every handoff with no memory of the last one, so anything it must remember has to be in
 the handoff, the repo, or the constitution. All four adapters
-(`kiln/framework/kiln/scheduler/infrastructure/agents/{claude,copilot,codex,grok}_adapter.py`) are one-shot,
+(`src/kiln/scheduler/infrastructure/agents/{claude,copilot,codex,grok}_adapter.py`) are one-shot,
 subprocess-based invocations, verified live against each CLI's actual non-interactive flags —
 `copilot`/`codex` report no dollar cost (only token/request counts), `claude`/`grok` do. Every
 adapter parses token usage out of the stream it is already reading, so a role that reports no
@@ -541,7 +541,7 @@ evidence after its pane is gone.
 
 ### Cockpit mode (`"scheduler": "cockpit"`)
 
-A fifth kind of pane, and the only one you read in a browser. It runs `cockpit.server`: a
+A fifth kind of pane, and the only one you read in a browser. It runs `kiln.cockpit.server`: a
 stdlib HTTP server bound to `127.0.0.1` that serves one page over the *same*
 `.kiln/messages.db`, `.kiln/status/<role>.json` and `.kiln/sessions` the dashboard reads.
 No agent, no worktree, no generated instructions, no MCP — the same passive shape as `inbox`
@@ -649,9 +649,9 @@ other's swarm.
 flag — and has no authentication, because it can start work, retry failed cycles and kill
 every Kiln process on the machine. Mutating requests additionally require an `X-Kiln-Cockpit`
 header, which a hostile page in your browser cannot set against `127.0.0.1` without a
-preflight the server never approves. Do not put it behind a tunnel or a reverse proxy.
+preflight the server never approves. Do not put it behind a tunnel or a reverse kiln.proxy.
 
-Run it standalone against any project with `python -m cockpit.server --db-path ... --status-dir
+Run it standalone against any project with `python -m kiln.cockpit.server --db-path ... --status-dir
 ... --sessions-file ...` (see `--help`), or just launch a profile that includes it.
 
 ---
@@ -673,7 +673,7 @@ that needs a second, explicit opt-in.
 ```
 
 Note what you *don't* give up by leaving it off — `COST`, `TOKENS` and `CACHE` come from each
-adapter parsing its own CLI stream, not from the proxy. Only the prompt-weight panel below
+adapter parsing its own CLI stream, not from the kiln.proxy. Only the prompt-weight panel below
 needs it.
 
 And what turning it on costs, beyond the store: every routed request then passes through a
@@ -706,7 +706,7 @@ serving *another* project would record its traffic into that project's store whi
 appeared to work. `--proxy-port` pins an exact port instead, and fails rather than drifting if
 it is busy.
 
-`python -m proxy.server --stub` answers requests locally instead of forwarding, which makes
+`python -m kiln.proxy.server --stub` answers requests locally instead of forwarding, which makes
 the whole wiring dry-runnable without spending a token.
 
 ### What it stores
@@ -839,11 +839,11 @@ kiln/
       engineering.md           # Language, tools, dependencies, practices
       project.md               # Project-specific architecture, tech stack, quality gates
 
-# Optional: Override default profiles (framework uses kiln/framework/profiles.json)
+# Optional: Override default profiles (framework uses src/kiln/resources/profiles.json)
 kiln.profiles.json           # Project-specific profiles (optional, at root)
 ```
 
-**Note:** Configuration profiles are inherited from the framework default (`kiln/framework/profiles.json`). Projects can optionally override by creating `kiln.profiles.json` at the project root if they need custom profile definitions.
+**Note:** Configuration profiles are inherited from the framework default (`src/kiln/resources/profiles.json`). Projects can optionally override by creating `kiln.profiles.json` at the project root if they need custom profile definitions.
 
 ### Profile Loading
 
@@ -852,7 +852,7 @@ Configuration profiles define which agents run, which roles they take, and where
 1. **Project root** (`kiln.profiles.json`) — Project-level overrides
 2. **Project config** (`kiln/profiles.json`) — Searched, but scaffolding never creates it. Not to be confused with `kiln/project/`, the customizable constitution/roles/skills bucket
 3. **Project state** (`.kiln/profiles.json`) — Searched, but scaffolding never creates it
-4. **Framework** (`kiln/framework/profiles.json`) — Default profiles for all projects
+4. **Framework** (`src/kiln/resources/profiles.json`) — Default profiles for all projects
 5. **User home** (`~/.kiln/profiles.json`) — User-level defaults (optional)
 6. **System** — `/etc/kiln/profiles.json` on Unix, `C:\ProgramData\kiln\profiles.json` on Windows (optional)
 
@@ -860,14 +860,14 @@ The first file that exists wins outright; profiles are **not** merged across loc
 Locations 2 and 3 were previously documented as "Not used" — they are genuinely searched, so a
 file dropped there *will* override the framework defaults.
 
-By default, **all projects use the framework's `kiln/framework/profiles.json`**, which defines the standard 4-agent workflow (specifier, coder, refactorer, architect). This means new projects work immediately without configuration.
+By default, **all projects use the framework's `src/kiln/resources/profiles.json`**, which defines the standard 4-agent workflow (specifier, coder, refactorer, architect). This means new projects work immediately without configuration.
 
 **To customize profiles for a specific project**, create `kiln.profiles.json` at the project root.
 
 > ⚠️ That file **replaces** the framework's profile set rather than extending it. There is no
 > `extends` mechanism: once `kiln.profiles.json` exists, `full`, `fix`, `spike`, `harden`,
 > `dry-run` and the rest are no longer available unless you copy the ones you want into
-> it. Start by copying `kiln/framework/profiles.json` and editing, rather than writing a file
+> it. Start by copying `src/kiln/resources/profiles.json` and editing, rather than writing a file
 > with a single profile in it.
 
 ### Layered Constitution
@@ -928,7 +928,7 @@ The cycle flows: **specifier → coder → refactorer → architect → specifie
 
 > **Unsupported role:** `reviewer` sketches a batch-processing alternative to `refactorer`, but it does not run — no profile routes it, so the scheduler escalates `NO_ROUTE` on its first handoff, and it wants to notify two roles at once, which routing cannot express. See the warning at the top of `kiln/project/roles/reviewer.md`. Use `refactorer` + `architect`, which own these gates and are routed.
 >
-> **`human-in-the-loop`** is the human-facing intake and approval checkpoint ahead of the cycle, and every framework-shipped profile includes it — it is what lets `specifier` run `auto` with no user present. The **`full` profile** (`kiln/framework/profiles.json`) pairs it with an autonomous specifier: `human-in-the-loop` (manual, `@current`) gathers and confirms a request with the user, hands it to `specifier` (now `auto`, its own worktree), which runs its normal Gherkin workflow non-interactively and forwards the eventual architect completion report back to `human-in-the-loop` for the user to see. See `kiln/project/roles/human-in-the-loop.md` and `kiln/project/roles/specifier.md` → "Auto-Mode Worker Entry Point".
+> **`human-in-the-loop`** is the human-facing intake and approval checkpoint ahead of the cycle, and every framework-shipped profile includes it — it is what lets `specifier` run `auto` with no user present. The **`full` profile** (`src/kiln/resources/profiles.json`) pairs it with an autonomous specifier: `human-in-the-loop` (manual, `@current`) gathers and confirms a request with the user, hands it to `specifier` (now `auto`, its own worktree), which runs its normal Gherkin workflow non-interactively and forwards the eventual architect completion report back to `human-in-the-loop` for the user to see. See `kiln/project/roles/human-in-the-loop.md` and `kiln/project/roles/specifier.md` → "Auto-Mode Worker Entry Point".
 
 ---
 
@@ -1105,7 +1105,7 @@ Written out in full, the way you would actually type them:
 
 ## Configuration Profiles
 
-Kiln uses JSON profiles to define swarm topology. The profile used when you pass no `--profile` is `full`, named by the top-level `"default"` key in `kiln/framework/profiles.json` (`load_profile()` in `kiln/framework/launcher/config.py` resolves it at launch). All projects inherit the framework's profiles from `kiln/framework/profiles.json` automatically.
+Kiln uses JSON profiles to define swarm topology. The profile used when you pass no `--profile` is `full`, named by the top-level `"default"` key in `src/kiln/resources/profiles.json` (`load_profile()` in `src/kiln/launcher/config.py` resolves it at launch). All projects inherit the framework's profiles from `src/kiln/resources/profiles.json` automatically.
 
 **To customize profiles for a specific project**, create `kiln.profiles.json` at your project root. Kiln will use your custom profiles instead of the framework defaults.
 
@@ -1122,7 +1122,7 @@ The framework's `full` profile pairs a human-facing intake role with a fully aut
   "default": "full",
   "profiles": {
     "full": {
-      "description": "New feature, spec-first. Human-guided intake feeding the full autonomous cycle: specifier -> coder -> refactorer -> architect, on the deterministic scheduler, plus a dashboard tab and the local web cockpit.",
+      "description": "New feature, spec-first. Human-guided intake feeding the full autonomous cycle: specifier -> coder -> refactorer -> architect, on the deterministic scheduler, plus a dashboard tab and the local web kiln.cockpit.",
       "defaults": {
         "agent": "claude",
         "model": "claude-sonnet-5"
@@ -1243,7 +1243,7 @@ gets wrong:
   session, not for the toolchain each role actually runs — see **Terminal fields** below.
 
 This block is kept honest by `tests/test_docs_consistency.py`, which parses it out of this file
-and compares it to `kiln/framework/profiles.json`.
+and compares it to `src/kiln/resources/profiles.json`.
 
 ### Other Bundled Profiles
 
@@ -1387,7 +1387,7 @@ would not open.
 - **title** — the terminal tab/pane title. Defaults to a title derived from the role name.
 - **mode** — `auto` (runs unattended) or `manual` (a live session you talk to).
 - **scheduler** — `python` for a scheduled worker loop, `inbox` for the human's notification
-  pane, `dashboard` for the swarm-wide view, `cockpit` for the local browser cockpit. Omit it
+  pane, `dashboard` for the swarm-wide view, `cockpit` for the local browser kiln.cockpit. Omit it
   for a wrapper-mode role — see **Execution Modes** above.
 - **watches** — (inbox panes) which role's queue this pane reports on. Must name a role the
   same profile launches.
@@ -1400,7 +1400,7 @@ would not open.
 - **workerDebug** — (scheduler roles) additionally write the backend CLI's own internal debug trace to `.kiln/logs/agent-debug-<role>-attempt<N>.log`. `false` by default; the `mixed-backends` fixture turns it on for all four scheduled roles, which is what it is for — diagnosing an adapter against an unfamiliar backend. Independent of `.kiln/logs/worker-debug-<role>-attempt<N>.log`, which is written for *any* worker that fails to report done, debug flag or not.
 - **maxAttempts** — (scheduler roles) worker attempts per handoff before escalating. Defaults to 2.
 - **escalationLimit** — (scheduler roles) consecutive escalations before the role stops taking new work and parks for `kiln retry`. Defaults to 3.
-- **activityLimit** — (dashboard and cockpit panes) how many recent messages the activity list shows. Defaults to 8 on the dashboard, 12 in the cockpit.
+- **activityLimit** — (dashboard and cockpit panes) how many recent messages the activity list shows. Defaults to 8 on the dashboard, 12 in the kiln.cockpit.
 - **bell** — (inbox panes) ring the terminal bell on arrival. `true` by default.
 - **port** — (cockpit panes) the port the cockpit prefers. Defaults to 8765, and is a preference rather than a reservation: the cockpit probes upward when the port is taken, so two projects can be open at once.
 - **openBrowser** — (cockpit panes) open a browser tab at launch. `true` by default; set `KILN_COCKPIT_NO_BROWSER` to override it per machine without editing the profile.
@@ -1599,7 +1599,7 @@ breaker starts fresh rather than tripping again on the next single failure.
 }
 ```
 
-This is wired via Claude Code's subagent `model:` frontmatter field: `write_worker_file()` in `kiln/framework/launcher/generate.py` writes `model: <workerModel>` into the generated `.claude/agents/<role>-worker.md` file when `workerModel` is set. In scheduler mode the same field is read back by `worker_prompt.py` to pick the one-shot worker's model. Claude Code resolves a dispatched subagent's model from its own frontmatter, independent of the parent session's model — so a Haiku-pinned wrapper genuinely dispatches a Sonnet worker, not Haiku. The framework's `full` profile (`kiln/framework/profiles.json`) currently runs both wrapper and worker on Sonnet for every role (`workerModel` omitted, so the worker just inherits the wrapper's model) — set `workerModel` explicitly per role if you want this cheaper/faster split instead.
+This is wired via Claude Code's subagent `model:` frontmatter field: `write_worker_file()` in `src/kiln/launcher/generate.py` writes `model: <workerModel>` into the generated `.claude/agents/<role>-worker.md` file when `workerModel` is set. In scheduler mode the same field is read back by `worker_prompt.py` to pick the one-shot worker's model. Claude Code resolves a dispatched subagent's model from its own frontmatter, independent of the parent session's model — so a Haiku-pinned wrapper genuinely dispatches a Sonnet worker, not Haiku. The framework's `full` profile (`src/kiln/resources/profiles.json`) currently runs both wrapper and worker on Sonnet for every role (`workerModel` omitted, so the worker just inherits the wrapper's model) — set `workerModel` explicitly per role if you want this cheaper/faster split instead.
 
 ### Layout Configurations
 
@@ -1880,7 +1880,7 @@ the normal cycle (including `working`, deliberately calm rather than alarming �
 state an operator most wants to see), amber (`retrying`) flags a recoverable hiccup, and
 `blocked` → `escalated` → `halted` step from amber-red to pure red as trouble compounds. The
 full table — the single source of truth both this badge and the pane status bar below read
-from — is `STATE_COLORS_HEX` in `kiln/framework/kiln/scheduler/infrastructure/terminal/pane_status.py`.
+from — is `STATE_COLORS_HEX` in `src/kiln/scheduler/infrastructure/terminal/pane_status.py`.
 
 ### Pane Status Bar (scheduler roles, every backend)
 
@@ -1930,12 +1930,12 @@ this one.
 
 ### Adding A Terminal Backend
 
-Backends live in `kiln/framework/launcher/terminals/`, one module per backend. A backend
+Backends live in `src/kiln/launcher/terminals/`, one module per backend. A backend
 receives a resolved list of panes and is responsible only for getting each command running in
 its own surface:
 
 ```python
-# kiln/framework/launcher/terminals/mybackend.py
+# src/kiln/launcher/terminals/mybackend.py
 from . import PaneSpec
 
 def launch(panes: list[PaneSpec], layout: dict | None, dry_run: bool = False) -> list[str]:
@@ -2229,14 +2229,14 @@ wrapper architecture, which remains fully supported and is still what every `man
 role uses (it's structural, not a rollout stage: a live conversation has no scheduler
 equivalent).
 
-- ✓ **Python launcher** (`kiln/framework/launcher/`) — ~3,200 lines of parallel PowerShell and
+- ✓ **Python launcher** (`src/kiln/launcher/`) — ~3,200 lines of parallel PowerShell and
   shell collapsed into one implementation plus ~95 lines of shim. Profile loading, scaffolding,
   worktrees, generation, terminal backends and process teardown are all shared across platforms.
-- ✓ **Deterministic scheduler** (`kiln/framework/kiln/scheduler/`) — see **Execution Modes** above.
+- ✓ **Deterministic scheduler** (`src/kiln/scheduler/`) — see **Execution Modes** above.
   `"scheduler": "python"` is the default for every `auto`-mode role in every shipped profile;
   wrapper mode remains for `manual`-mode roles and any backend without an adapter. All four
   accepted backends (`claude`, `copilot`, `codex`, `grok`) have one, each verified live against
-  the real CLI (`kiln/framework/kiln/scheduler/infrastructure/agents/`).
+  the real CLI (`src/kiln/scheduler/infrastructure/agents/`).
 - ✓ **Conditional handoff routing** — `workflow.md`'s routing table gained an optional
   `When Sender` column, so sender-dependent routing is data both the wrapper and the scheduler
   can follow rather than prose only an LLM could interpret.
@@ -2257,7 +2257,7 @@ equivalent).
   no package install step, because
   `pyproject.toml` is tooling configuration rather than a packaging manifest (`pip install -e .`
   cannot work: there is no `[project]` or `[build-system]` table). Imports resolve through
-  `pythonpath = ["kiln/framework"]` in `[tool.pytest.ini_options]`.
+  `pythonpath = ["src"]` in `[tool.pytest.ini_options]`.
 
 **Live validation status: the complete loop has now been observed in one uninterrupted run** —
 and, for the record, the first platform it closed on was Linux, not Windows.
@@ -2292,7 +2292,7 @@ was run and seven defects fell out.
 - **Phase 2: Cross-Platform Infrastructure** — Windows (PowerShell/Windows Terminal/WezTerm), Unix/macOS (zsh/tmux)
 - **Phase 3: Auto-Agent Communication** — SQLite message queues with MCP server, automated role-based message forwarding, full agent chain test passing
 - **Phase 4: Channel-Based Messaging** — Replaced SQL inbox polling with a blocking `wait_for_message()` Channel
-  - ✓ `kiln-channel` Python MCP server (`kiln/framework/mcp-server/channel.py`) — polls SQLite and blocks until a message arrives, returns it already marked delivered
+  - ✓ `kiln-channel` Python MCP server (`src/kiln/mcp_server/channel.py`) — polls SQLite and blocks until a message arrives, returns it already marked delivered
   - ✓ Per-worktree `.mcp.json` generated with `kiln-db` + `kiln-channel`, correct `KILN_ROLE`/`KILN_BRANCH` env vars injected per agent
   - ✓ Channel debug logs at `.kiln/logs/channel-<role>.log`
   - ✓ `-Stop` flag on `kiln.ps1` to kill orphaned MCP server processes after terminal close

@@ -24,9 +24,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import ClassVar
 
 import pytest
+
+from kiln.proxy.capture import CaptureMode, TrafficStore
+from kiln.proxy.server import Upstream, parse_routes, parse_upstream, serve, split_role
 from kiln.scheduler.domain.models import TokenUsage
-from proxy.capture import CaptureMode, TrafficStore
-from proxy.server import Upstream, parse_routes, parse_upstream, serve, split_role
 
 pytestmark = pytest.mark.integration
 

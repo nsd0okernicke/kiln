@@ -1,4 +1,4 @@
-# Tooling configuration for Kiln's OWN framework code (kiln/framework/**).
+# Tooling configuration for Kiln's own Python code (`src/kiln/**`).
 #
 # This now also carries editable-install metadata while the existing scripts remain
 # compatibility entry points. Tool configuration stays project-local, per
@@ -31,24 +31,30 @@ dev = [
 ]
 
 [project.scripts]
-kiln = "launcher.cli:main"
+kiln = "kiln.launcher.cli:main"
 kiln-scheduler = "kiln.scheduler.infrastructure.cli.role_scheduler:main"
 kiln-dashboard = "kiln.scheduler.infrastructure.cli.dashboard:main"
-kiln-cockpit = "cockpit.server:main"
+kiln-cockpit = "kiln.cockpit.server:main"
 
 [tool.setuptools]
-package-dir = {"" = "kiln/framework"}
+package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
-where = ["kiln/framework"]
-include = ["kiln*", "launcher*", "cockpit*", "proxy*"]
+where = ["src"]
+include = ["kiln*"]
+
+[tool.setuptools.package-data]
+kiln = [
+    "cockpit/static/*.html",
+    "mcp_server/*.txt",
+    "resources/*.json",
+    "resources/templates/*.md",
+    "resources/tools/*.py",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# kiln/framework is not an importable package path from the repo root (its sibling
-# `mcp-server` has a hyphen), so put it on sys.path instead of adding __init__.py
-# files that would change how the scaffolder copies these trees.
-pythonpath = ["kiln/framework"]
+pythonpath = ["src"]
 addopts = "-q --strict-markers"
 markers = [
     "integration: exercises real SQLite + real git (slower; no live LLM)",
@@ -65,12 +71,12 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
 ignore = ["RUF001", "RUF002", "RUF003"]
 
 [tool.mutmut]
-paths_to_mutate = "kiln/framework/kiln/scheduler/"
+paths_to_mutate = "src/kiln/scheduler/"
 tests_dir = "tests/"
 
 [tool.coverage.run]
 branch = true
-source = ["kiln/framework"]
+source = ["src/kiln"]
 omit = ["*/__main__.py"]
 
 [tool.coverage.report]
@@ -85,12 +91,12 @@ show_contexts = true
 pythonVersion = "3.11"
 typeCheckingMode = "basic"
 include = [
-    "kiln/framework/kiln/scheduler/domain",
-    "kiln/framework/kiln/scheduler/application",
-    "kiln/framework/kiln/scheduler/infrastructure/persistence",
-    "kiln/framework/kiln/scheduler/infrastructure/vcs",
-    "kiln/framework/kiln/scheduler/infrastructure/diagnostics",
-    "kiln/framework/cockpit/state.py",
+    "src/kiln/scheduler/domain",
+    "src/kiln/scheduler/application",
+    "src/kiln/scheduler/infrastructure/persistence",
+    "src/kiln/scheduler/infrastructure/vcs",
+    "src/kiln/scheduler/infrastructure/diagnostics",
+    "src/kiln/cockpit/state.py",
 ]
-extraPaths = ["kiln/framework"]
+extraPaths = ["src"]
 reportMissingTypeStubs = false

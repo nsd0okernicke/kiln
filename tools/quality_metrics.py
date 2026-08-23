@@ -17,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORTS = ROOT / "reports"
-PRODUCTION = ROOT / "kiln" / "framework"
+PRODUCTION = ROOT / "src"
 TOOLS = ("pytest", "pytest-cov", "coverage", "ruff", "radon", "pyright", "cosmic-ray")
 
 
@@ -151,18 +151,18 @@ def main(argv: list[str] | None = None) -> int:
     commands: dict[str, list[str]] = {
         "tests": [py, "-m", "pytest", "-p", "no:cacheprovider",
                   "--junitxml=reports/tests/junit.xml", "--durations=25",
-                  "--cov=kiln/framework", "--cov-branch",
+                  "--cov=src", "--cov-branch",
                   "--cov-report=term-missing", "--cov-report=xml:reports/coverage/coverage.xml",
                   "--cov-report=json:reports/coverage/coverage.json",
                   "--cov-report=html:reports/coverage/html"],
-        "ruff": [py, "-m", "ruff", "check", "kiln/framework", "tests", "tools"],
+        "ruff": [py, "-m", "ruff", "check", "src", "tests", "tools"],
         "ruff_json": [py, "-m", "ruff", "check", "--output-format=json",
-                      "kiln/framework", "tests", "tools"],
-        "format": [py, "-m", "ruff", "format", "--check", "kiln/framework", "tests", "tools"],
-        "radon_cc_json": [py, "-m", "radon", "cc", "-j", "kiln/framework"],
-        "radon_cc_text": [py, "-m", "radon", "cc", "-s", "-a", "kiln/framework"],
-        "radon_mi": [py, "-m", "radon", "mi", "-j", "kiln/framework"],
-        "radon_raw": [py, "-m", "radon", "raw", "-j", "kiln/framework"],
+                      "src", "tests", "tools"],
+        "format": [py, "-m", "ruff", "format", "--check", "src", "tests", "tools"],
+        "radon_cc_json": [py, "-m", "radon", "cc", "-j", "src"],
+        "radon_cc_text": [py, "-m", "radon", "cc", "-s", "-a", "src"],
+        "radon_mi": [py, "-m", "radon", "mi", "-j", "src"],
+        "radon_raw": [py, "-m", "radon", "raw", "-j", "src"],
         "types": [py, "-m", "pyright", "--outputjson"],
     }
     outputs = {

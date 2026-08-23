@@ -119,7 +119,7 @@ Every worker is isolated — no `Agent` tool, no MCP messaging tools, only file 
 
 ## Configuration & Extensibility
 
-- Swarm shape lives in `kiln/framework/profiles.json` — role, backend, worktree, mode, model, routing, all data-driven; unknown keys fail the launch rather than being silently dropped
+- Swarm shape lives in `src/kiln/resources/profiles.json` — role, backend, worktree, mode, model, routing, all data-driven; unknown keys fail the launch rather than being silently dropped
 - Per-role **model selection**, including decoupling wrapper and worker models (e.g. Haiku wrapper, Sonnet worker)
 - **Flexible layouts** — tabs, grids, split panes, or focus arrangements, mixed per profile
 - `kiln.ps1 -Init` / `kiln.sh init` scaffolds a new project — constitution, roles, git, and MCP config in one step

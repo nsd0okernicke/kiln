@@ -13,7 +13,7 @@
 # mutmut refuses to run on native Windows (it requires WSL); cosmic-ray is Windows-native.
 
 [cosmic-ray]
-module-path = "kiln/framework/kiln/scheduler"
+module-path = "src/kiln/scheduler"
 timeout = 60.0
 # The I/O-bound modules are excluded here: their tests drive real git and SQLite, so a
 # whole-module mutation run costs hours rather than minutes. They are covered by
