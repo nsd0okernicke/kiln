@@ -360,23 +360,42 @@ def work_item_messages(
 
 def pending_for_role(db_path: str | Path, branch: str, role: str) -> list[dict]:
     """
-    Everything still waiting in one role's queue — what the cockpit's Attention rail reads.
+    Everything one role has not explicitly acknowledged — what Attention reads.
 
     `count_queued_by_role` answers how many; this answers which, which is what a human
-    reviewing completed cycles actually needs. Includes `delivered`: a message handed to a
-    role that has not finished with it is still outstanding work, and for the human's own
-    queue — served by the inbox pane, which marks `processed` the moment it displays one —
-    the distinction is invisible anyway.
+    reviewing completed cycles actually needs. Inbox delivery marks a human-target message
+    processed as soon as it is displayed, which is deliberately distinct from the operator
+    acknowledging it in the cockpit. `acked_at` records that second event.
     """
     with closing(connect(db_path)) as conn:
         cur = conn.cursor()
         cur.execute(
             "SELECT id, sender, target, status, content, created_at, work_item "
-            "FROM messages WHERE branch=? AND target=? AND status IN (?, ?) "
+            "FROM messages WHERE branch=? AND target=? AND acked_at IS NULL "
+            "AND status IN (?, ?, ?) "
             "ORDER BY created_at DESC",
-            (branch, role, STATUS_QUEUED, STATUS_DELIVERED),
+            (branch, role, STATUS_QUEUED, STATUS_DELIVERED, STATUS_PROCESSED),
         )
         return [dict(row) for row in cur.fetchall()]
+
+
+def acknowledge_message(
+    db_path: str | Path, message_id: str, role: str, branch: str
+) -> dict | None:
+    """Acknowledge one message addressed to `role`; return it, or None if out of scope."""
+    with closing(connect(db_path)) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"""
+            UPDATE messages SET acked_at={_UTC_NOW}
+            WHERE id=? AND target=? AND branch=? AND acked_at IS NULL
+            RETURNING id, sender, target, branch, work_item, acked_at
+            """,
+            (message_id, role, branch),
+        )
+        row = cur.fetchone()
+        conn.commit()
+    return dict(row) if row else None
 
 
 def mark_processing(db_path: str | Path, message_id: str) -> bool:

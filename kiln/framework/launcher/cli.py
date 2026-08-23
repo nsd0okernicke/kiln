@@ -227,7 +227,7 @@ def prepare(profile: Profile, paths: KilnPaths) -> str:
             role, paths, branch, workspace.worktree_for(role, paths), profile
         )
 
-    workspace.write_sessions_file(profile, paths)
+    workspace.write_sessions_file(profile, paths, branch)
     return branch
 
 

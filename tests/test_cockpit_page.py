@@ -205,6 +205,37 @@ class TestComposer:
         # is stay quiet about it.
         assert 'role.state === "halted"' in page
 
+    def test_it_sits_inside_the_work_queue_section(self, page):
+        queue_section = page.partition("<h2>Work queue</h2>")[2].partition("</section>")[0]
+
+        assert 'id="send-target"' in queue_section
+        assert 'id="queue"' in queue_section
+
+
+class TestOperationalQueue:
+    def test_board_lanes_show_worktrees_instead_of_item_counts(self, page):
+        board = page.partition("function renderBoard")[2].partition("function renderQueue")[0]
+
+        assert "laneRole.worktree" in board
+        assert '" Worktree: "' in board and '"#i-branch"' in board
+        assert 'cards.length, "count"' not in board
+
+    def test_lane_title_sits_above_the_worktree_identity(self, page):
+        assert ".lane > h3 > span:first-child" in page
+        heading_rule = page.partition(".lane > h3 {")[2].partition("}")[0]
+        assert "flex-direction: column" in heading_rule
+
+    def test_cards_do_not_show_ambiguous_message_counts(self, page):
+        board = page.partition("function renderBoard")[2].partition("function renderQueue")[0]
+
+        assert 'card.cycles + " msgs"' not in board
+
+    def test_technical_metrics_live_in_expanded_details(self, page):
+        queue = page.partition("function renderQueue")[2].partition("async function pollLog")[0]
+
+        assert '"Tokens"' in queue and '"Cache share"' in queue
+        assert "cell.append(metrics)" in queue
+
     def test_a_halted_role_is_warned_about_rather_than_blocked(self, page):
         # Queueing work for after the role recovers is legitimate; the composer must not
         # disable itself.

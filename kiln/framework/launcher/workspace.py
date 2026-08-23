@@ -674,7 +674,7 @@ def seed_codex_auth(home: Path) -> bool:
     return True
 
 
-def write_sessions_file(profile: Profile, paths: KilnPaths) -> Path:
+def write_sessions_file(profile: Profile, paths: KilnPaths, branch: str = "") -> Path:
     """
     Tab-separated role inventory, read by the status bar and `-Stop`.
 
@@ -692,10 +692,16 @@ def write_sessions_file(profile: Profile, paths: KilnPaths) -> Path:
     always the better answer; a wrapper role has no scheduler, so nothing writes one and its
     model would otherwise be permanently unknown. Empty is normal — it means the backend's
     CLI picks its own.
+
+    The seventh column is the worktree's full branch identity (`run1-coder`, for example),
+    so monitoring surfaces can show where a role writes without guessing from its name.
+    `branch` is optional only for callers reading the legacy configured name in isolation;
+    the launcher always supplies it.
     """
     lines = [
         f"{index}\t{role.role}\t{role.agent}\t{role.display_name}"
         f"\t{role.scheduler or 'agent'}\t{role.model}"
+        f"\t{role.branch_name(branch) if branch else role.worktree}"
         for index, role in enumerate(profile.roles, start=1)
     ]
     paths.state_dir.mkdir(parents=True, exist_ok=True)

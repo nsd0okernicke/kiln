@@ -159,6 +159,35 @@ class TestState:
         assert status == 200
         assert payload["board"]["lanes"] == ["specifier", "coder", "done"]
 
+    def test_inbox_delivery_does_not_clear_human_attention(
+        self, client, add_message, db_path
+    ):
+        message_id = add_message(
+            sender="architect", target="human-in-the-loop", work_item="CAT-5",
+            content="completed CAT-5",
+        )
+        db.mark_processed(db_path, message_id)  # what the inbox does after displaying it
+
+        _, payload = client.get("/api/state")
+
+        assert [item["work_item"] for item in payload["attention"]] == ["CAT-5"]
+
+    def test_acknowledging_a_review_clears_it_from_attention(
+        self, client, add_message, db_path
+    ):
+        message_id = add_message(
+            sender="architect", target="human-in-the-loop", work_item="CAT-5",
+            content="completed CAT-5",
+        )
+        db.mark_processed(db_path, message_id)
+
+        status, acknowledged = client.post(f"/api/ack/{message_id}", {})
+        _, payload = client.get("/api/state")
+
+        assert status == 200
+        assert acknowledged["acknowledged"] is True
+        assert payload["attention"] == []
+
     def test_responses_are_never_cached(self, client, config):
         # A browser reusing a stored `/api/state` is a cockpit showing a run that has moved on.
         conn = http.client.HTTPConnection("127.0.0.1", client.port, timeout=5)
@@ -216,6 +245,47 @@ class TestDocuments:
         status, _ = client.get("/api/status/..%2F..%2Fsessions")
 
         assert status == 404
+
+
+class TestLogs:
+    def test_nonzero_offset_returns_only_new_bytes(self, client, swarm):
+        logs = swarm["db_path"].parent / "logs"
+        logs.mkdir()
+        path = logs / "scheduler-coder.log"
+        path.write_text("first\n", encoding="utf-8")
+        status, first = client.get("/api/logs/coder")
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write("second\n")
+
+        status2, second = client.get(f"/api/logs/coder?after={first['offset']}")
+
+        assert status == status2 == 200
+        assert first["lines"] == ["first"]
+        assert second["lines"] == ["second"]
+        assert second["offset"] > first["offset"]
+
+    def test_unknown_and_traversing_roles_are_refused(self, client):
+        assert client.get("/api/logs/attacker")[0] == 404
+        assert client.get("/api/logs/..%2F..%2Fsessions")[0] == 404
+
+    def test_truncated_file_resets_offset(self, client, swarm):
+        logs = swarm["db_path"].parent / "logs"
+        logs.mkdir()
+        (logs / "scheduler-coder.log").write_bytes(b"new\n")
+
+        status, payload = client.get("/api/logs/coder?after=999")
+
+        assert status == 200
+        assert payload["truncated"] is True
+        assert payload["lines"] == ["new"]
+        assert payload["offset"] == len(b"new\n")
+
+    def test_missing_log_is_an_empty_success(self, client):
+        status, payload = client.get("/api/logs/specifier")
+
+        assert status == 200
+        assert payload["lines"] == []
+        assert payload["offset"] == 0
 
 
 class TestGuardHeader:

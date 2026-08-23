@@ -37,6 +37,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from launcher import ports
 from scheduler import dashboard, db
@@ -75,6 +76,7 @@ NO_BROWSER_ENV = "KILN_COCKPIT_NO_BROWSER"
 
 #: How many recent handoffs the activity feed carries in one response.
 DEFAULT_ACTIVITY_LIMIT = 12
+INITIAL_LOG_BYTES = 64 * 1024
 
 #: Grace period between answering a teardown request and carrying it out. `stop_all` kills
 #: this process, so without a gap the operator's browser would see a dropped connection
@@ -158,7 +160,8 @@ class CockpitHandler(BaseHTTPRequestHandler):
     # --- routing -------------------------------------------------------------------
 
     def do_GET(self) -> None:
-        path = self.path.split("?", 1)[0].rstrip("/") or "/"
+        parsed = urlsplit(self.path)
+        path = parsed.path.rstrip("/") or "/"
         if path == "/":
             return self._send_page()
         if path == "/api/state":
@@ -166,7 +169,13 @@ class CockpitHandler(BaseHTTPRequestHandler):
         if path.startswith("/api/messages/"):
             return self._guarded(lambda: self._send_message(path.rsplit("/", 1)[-1]))
         if path.startswith("/api/status/"):
-            return self._guarded(lambda: self._send_status(path.rsplit("/", 1)[-1]))
+            return self._guarded(lambda: self._send_status(unquote(path.rsplit("/", 1)[-1])))
+        if path.startswith("/api/logs/"):
+            return self._guarded(
+                lambda: self._send_log(
+                    unquote(path.rsplit("/", 1)[-1]), parse_qs(parsed.query)
+                )
+            )
         self._send_json(404, {"error": f"no route for {path}"})
 
     def do_POST(self) -> None:
@@ -192,6 +201,9 @@ class CockpitHandler(BaseHTTPRequestHandler):
         if handler is None and path.startswith("/api/retry/"):
             message_id = path.rsplit("/", 1)[-1]
             handler = lambda body: self._retry(message_id, body)  # noqa: E731
+        if handler is None and path.startswith("/api/ack/"):
+            message_id = path.rsplit("/", 1)[-1]
+            handler = lambda body: self._ack(message_id)  # noqa: E731
         if handler is None:
             return self._send_json(404, {"error": f"no route for {path}"})
 
@@ -232,6 +244,15 @@ class CockpitHandler(BaseHTTPRequestHandler):
             message_id=message_id,
             guidance=str(body.get("guidance") or ""),
         )
+
+    def _ack(self, message_id: str) -> dict:
+        row = db.acknowledge_message(
+            self.config.dashboard.db_path, message_id,
+            self.config.cockpit.human_role, self.config.cockpit.branch,
+        )
+        if row is None:
+            raise ActionError("that message is not awaiting acknowledgement")
+        return {"acknowledged": True, "message_id": message_id}
 
     def _teardown(self, body: dict) -> dict:
         """
@@ -283,6 +304,43 @@ class CockpitHandler(BaseHTTPRequestHandler):
         if status is None:
             return self._send_json(404, {"error": f"{role} has not reported a status yet"})
         self._send_json(200, status)
+
+    def _send_log(self, role: str, query: dict[str, list[str]]) -> None:
+        """Return the newly appended bytes of one role log, bounded on first read."""
+        known = {session.role for session in dashboard.read_sessions(
+            self.config.dashboard.sessions_file
+        )}
+        if role not in known:
+            return self._send_json(404, {"error": f"{role!r} is not a role in this swarm"})
+
+        stream = (query.get("stream") or ["scheduler"])[0]
+        if stream not in {"scheduler", "worker"}:
+            return self._send_json(400, {"error": "stream must be scheduler or worker"})
+        try:
+            after = max(0, int((query.get("after") or ["0"])[0]))
+        except ValueError:
+            return self._send_json(400, {"error": "after must be a non-negative integer"})
+
+        path = self.config.dashboard.db_path.parent / "logs" / f"{stream}-{role}.log"
+        if not path.is_file():
+            return self._send_json(200, {
+                "role": role, "stream": stream, "offset": 0, "lines": [],
+                "truncated": False,
+            })
+        size = path.stat().st_size
+        truncated = size < after
+        start = 0 if truncated else after
+        if after == 0 and size > INITIAL_LOG_BYTES:
+            start = size - INITIAL_LOG_BYTES
+            truncated = True
+        with path.open("rb") as handle:
+            handle.seek(start)
+            raw = handle.read()
+        return self._send_json(200, {
+            "role": role, "stream": stream, "offset": start + len(raw),
+            "lines": raw.decode("utf-8", errors="replace").splitlines(),
+            "truncated": truncated,
+        })
 
     # --- plumbing ------------------------------------------------------------------
 

@@ -333,6 +333,24 @@ class TestWorkerOutputEmitter:
         role_scheduler._make_worker_output_emitter()("hello")
         assert capsys.readouterr().out == "hello\n"
 
+    def test_output_is_also_appended_to_the_worker_log(self, tmp_path, capsys):
+        target = tmp_path / "logs" / "worker-coder.log"
+
+        role_scheduler._make_worker_output_emitter(target)("hello")
+
+        assert capsys.readouterr().out == "hello\n"
+        assert target.read_text(encoding="utf-8") == "hello\n"
+
+    def test_an_unwritable_log_does_not_stop_output(self, tmp_path, capsys):
+        parent_is_file = tmp_path / "not-a-directory"
+        parent_is_file.write_text("x", encoding="utf-8")
+        emit = role_scheduler._make_worker_output_emitter(parent_is_file / "worker.log")
+
+        emit("first")
+        emit("second")
+
+        assert capsys.readouterr().out == "first\nsecond\n"
+
 
 class TestStartupBanner:
     """

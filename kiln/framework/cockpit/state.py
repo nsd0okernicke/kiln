@@ -109,6 +109,7 @@ def role_rows(snapshot: SwarmSnapshot, work_items: list[dict]) -> list[dict]:
             # The sessions file is the fallback, and the only answer a *wrapper* role has --
             # nothing writes a status model for a role with no scheduler behind it.
             "model": (status or {}).get("model") or session.model or None,
+            "worktree": session.worktree or None,
             "state": status["state"] if status else None,
             "since": (status or {}).get("since"),
             "since_ago": _since_ago(status, snapshot.now_utc),
@@ -119,7 +120,9 @@ def role_rows(snapshot: SwarmSnapshot, work_items: list[dict]) -> list[dict]:
             "cycles": (status or {}).get("cycles"),
             "cost_usd": (status or {}).get("cost_usd"),
             "tokens": (status or {}).get("tokens"),
+            "token_usage": (status or {}).get("token_usage") or {},
             "cache_share": cache_share((status or {}).get("token_usage")),
+            "worker_timeout_sec": (status or {}).get("worker_timeout_sec"),
             "heat": activity_heat(status, queue),
             "work_item": holding.get(session.role),
         })

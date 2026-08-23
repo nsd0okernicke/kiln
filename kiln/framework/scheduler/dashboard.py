@@ -78,6 +78,8 @@ class RoleSession:
     #: writes the model it actually resolved into its status file, and that always wins.
     #: Empty means the backend's CLI chooses, which is a real answer, not a missing one.
     model: str = ""
+    #: Configured worktree name (`@current` or the name below `.worktrees/`).
+    worktree: str = ""
 
     @property
     def passive(self) -> bool:
@@ -107,10 +109,10 @@ def read_sessions(path: Path) -> list[RoleSession]:
         _, role, agent, display_name = parts[:4]
         kind = parts[4].strip() if len(parts) > 4 and parts[4].strip() else DEFAULT_KIND
         model = parts[5].strip() if len(parts) > 5 else ""
+        worktree = parts[6].strip() if len(parts) > 6 else ""
         sessions.append(
-            RoleSession(
-                role=role, agent=agent, display_name=display_name, kind=kind, model=model
-            )
+            RoleSession(role=role, agent=agent, display_name=display_name, kind=kind,
+                        model=model, worktree=worktree)
         )
     return sessions
 

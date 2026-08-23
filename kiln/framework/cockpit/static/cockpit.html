@@ -139,9 +139,10 @@
   .lanes { display: flex; gap: 12px; overflow-x: auto; padding: 12px 14px; }
   .lane { min-width: 210px; flex: 1 1 210px; }
   .lane > h3 {
-    font-size: 12px; margin: 0 0 8px; color: var(--dim); display: flex; gap: 6px;
-    align-items: baseline;
+    margin: 0 0 10px; color: var(--dim); display: flex; flex-direction: column;
+    gap: 2px; align-items: flex-start;
   }
+  .lane > h3 > span:first-child { color: var(--ink); font-size: 16px; font-weight: 600; }
   .lane .count { font-variant-numeric: tabular-nums; }
   .card {
     background: var(--surface); border: 1px solid var(--line);
@@ -241,6 +242,21 @@
     border-left: 3px solid var(--warn); border-radius: 4px; padding: 6px 9px; margin-bottom: 8px;
   }
   .row-send { padding: 2px 8px; font-size: 12px; }
+  #queue tr.role-row { cursor: pointer; }
+  #queue tr.role-row:hover { background: var(--surface); }
+  .log-cell { padding: 10px; background: var(--code-bg); }
+  .log-toolbar { display: flex; gap: 6px; margin-bottom: 6px; }
+  .log-toolbar button { padding: 2px 8px; font-size: 12px; }
+  .log-toolbar button.active { color: var(--accent); border-color: var(--accent); }
+  .live-log { margin: 0; max-height: 320px; white-space: pre-wrap; }
+  .lane-worktree { display: inline-flex; align-items: center; color: var(--dim); font-size: 11px; font-weight: 400; }
+  .role-details { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--dim); font-size: 12px; margin-bottom: 8px; }
+  .role-details b { color: var(--ink); font-weight: 500; }
+  .queue-composer { border-bottom: 1px solid var(--line); }
+  .queue-compose-grid { display: grid; grid-template-columns: 1fr 1fr 2fr auto; gap: 8px; align-items: end; }
+  .queue-compose-grid .field { display: block; margin: 0; }
+  .queue-compose-grid .field label { display: block; width: auto; margin-bottom: 3px; }
+  .queue-compose-grid textarea { min-height: 38px; resize: vertical; }
   dialog {
     background: var(--panel); color: var(--ink); border: 1px solid var(--line);
     border-radius: 10px; width: min(620px, 92vw); padding: 0;
@@ -259,7 +275,9 @@
   }
   #toast.bad { border-left-color: var(--bad); }
   .grid-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 18px; }
-  @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+  @media (max-width: 900px) {
+    .grid-2, .queue-compose-grid { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
@@ -348,15 +366,10 @@
     <div class="lanes" id="lanes"></div>
   </section>
 
-  <div class="grid-2">
-    <section>
-      <h2>Work queue</h2>
-      <div class="body" style="padding:0"><table id="queue"></table></div>
-    </section>
-
-    <section>
-      <h2>Send</h2>
-      <div class="body">
+  <section>
+    <h2>Work queue</h2>
+    <div class="body queue-composer">
+      <div class="queue-compose-grid">
         <div class="field">
           <label for="send-target">To</label>
           <select id="send-target"></select>
@@ -365,13 +378,18 @@
           <label for="send-item">Work item</label>
           <select id="send-item"></select>
         </div>
-        <input type="text" id="send-item-other" placeholder="Work-item name" style="display:none">
-        <div id="send-warning" class="warn-note" style="display:none"></div>
-        <textarea id="send-text" rows="3" placeholder="e.g. restart with CAT-3 — the acceptance criteria changed."></textarea>
-        <div class="row"><button class="primary" id="send-go">Send</button><span class="branch" id="send-hint"></span></div>
+        <div class="field">
+          <label for="send-text">Message</label>
+          <textarea id="send-text" rows="1" placeholder="e.g. restart with CAT-3 — the acceptance criteria changed."></textarea>
+        </div>
+        <button class="primary" id="send-go">Send</button>
       </div>
-    </section>
-  </div>
+      <input type="text" id="send-item-other" placeholder="Work-item name" style="display:none">
+      <div id="send-warning" class="warn-note" style="display:none"></div>
+      <span class="branch" id="send-hint"></span>
+    </div>
+    <div class="body" style="padding:0"><table id="queue"></table></div>
+  </section>
 
   <section>
     <h2>Recent activity</h2>
@@ -405,6 +423,10 @@ const GUARD = { "X-Kiln-Cockpit": "1", "Content-Type": "application/json" };
 
 const $ = (id) => document.getElementById(id);
 let latest = null;
+let expandedRole = null;
+let logStream = "scheduler";
+const logOffsets = { scheduler: 0, worker: 0 };
+const logText = { scheduler: "", worker: "" };
 
 function toast(message, bad) {
   const el = $("toast");
@@ -546,6 +568,10 @@ function renderAttention(state) {
       const retry = text("button", "Retry");
       retry.onclick = () => retryMessage(item.message_id, "");
       row.append(retry);
+    } else if (item.kind === "review") {
+      const acknowledge = text("button", "Acknowledge");
+      acknowledge.onclick = () => acknowledgeMessage(item.message_id);
+      row.append(acknowledge);
     }
     host.append(row);
   }
@@ -559,7 +585,21 @@ function renderBoard(state) {
     const column = text("div", null, "lane");
     const heading = text("h3");
     heading.append(text("span", lane));
-    heading.append(text("span", cards.length, "count"));
+    const laneRole = state.roles.find((role) => role.role === lane);
+    const identity = text("span", null, "lane-worktree");
+    if (lane !== "done") {
+      const gitIcon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      gitIcon.setAttribute("class", "icon");
+      const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+      use.setAttribute("href", "#i-branch");
+      gitIcon.append(use);
+      identity.append(gitIcon, document.createTextNode(
+        " Worktree: " + ((laneRole && laneRole.worktree) || "unknown")
+      ));
+    } else {
+      identity.textContent = "completed work";
+    }
+    heading.append(identity);
     column.append(heading);
     if (!cards.length) column.append(text("div", "—", "empty"));
     for (const card of cards) {
@@ -574,7 +614,7 @@ function renderBoard(state) {
       // a blank card, which is what made every new task invisible until the specifier
       // finished naming it.
       el.append(text("div", card.title, "name"));
-      el.append(text("div", card.sender + " → " + card.target + " · " + card.cycles + " msgs · " + (card.age || ""), "meta"));
+      el.append(text("div", card.sender + " → " + card.target + " · " + (card.age || ""), "meta"));
       // An unnamed card borrows its title from the summary, so printing both would say the
       // same sentence twice.
       if (card.summary && card.summary !== card.title) el.append(text("div", card.summary, "summary"));
@@ -587,15 +627,17 @@ function renderBoard(state) {
 
 function renderQueue(state) {
   const table = $("queue");
+  const oldLog = $("live-log");
+  const wasPinned = !oldLog || oldLog.scrollHeight - oldLog.scrollTop - oldLog.clientHeight < 24;
+  const oldScrollTop = oldLog ? oldLog.scrollTop : 0;
   table.replaceChildren();
   const head = table.insertRow();
-  // Two trailing blanks: the heat bar and the row's Send button. A header short of the row
-  // leaves the last column unlabelled and the table one cell wider than its own head.
-  for (const label of ["Role", "Agent", "State", "Since", "Work item", "Queue", "Wait", "Cycles", "Cost", "Tokens", "Cache", "", ""]) {
+  for (const label of ["Role", "Agent / model", "State", "Current work", "Waiting", "Last activity", "Cost", ""]) {
     head.append(text("th", label));
   }
   for (const role of state.roles) {
     const row = table.insertRow();
+    row.className = "role-row";
     row.append(text("td", role.role));
 
     // Which backend runs this role, and on which model. The agent comes from the sessions
@@ -612,21 +654,14 @@ function renderQueue(state) {
     stateCell.append(text("span", (role.state || "—") + (role.attempt ? " " + role.attempt : ""), "state " + (role.state || "")));
     row.append(stateCell);
 
+    row.append(text("td", role.work_item || "—"));
+    row.append(text(
+      "td", role.queue ? role.queue + (role.wait ? " · " + role.wait : "") : "—", "num",
+    ));
     const since = text("td", (role.stalled ? "⚠ " : "") + (role.since_ago || "—"));
     if (role.stalled) since.className = "stall";
     row.append(since);
-
-    row.append(text("td", role.work_item || "—"));
-    row.append(text("td", role.queue, "num"));
-    row.append(text("td", role.wait || "—", "num"));
-    row.append(text("td", count(role.cycles), "num"));
     row.append(text("td", money(role.cost_usd), "num"));
-    row.append(text("td", count(role.tokens), "num"));
-    row.append(text("td", percent(role.cache_share), "num"));
-
-    const heat = text("td");
-    heat.append(text("span", "", "heat " + (role.heat >= 1 ? "hot" : role.heat > 0 ? "warm" : "")));
-    row.append(heat);
 
     // The direct path for "restart the specifier with CAT-3": prefill the composer with
     // this role and whatever it is currently holding.
@@ -639,7 +674,77 @@ function renderQueue(state) {
     };
     action.append(send);
     row.append(action);
+    row.onclick = (event) => {
+      if (event.target.closest("button")) return;
+      if (expandedRole === role.role) expandedRole = null;
+      else {
+        expandedRole = role.role;
+        logStream = "scheduler";
+        logOffsets.scheduler = logOffsets.worker = 0;
+        logText.scheduler = logText.worker = "";
+      }
+      renderQueue(state);
+      pollLog();
+    };
+
+    if (expandedRole === role.role) {
+      const detail = table.insertRow();
+      const cell = detail.insertCell();
+      cell.colSpan = 8;
+      cell.className = "log-cell";
+      const metrics = text("div", null, "role-details");
+      const usage = role.token_usage || {};
+      const details = [
+        ["Worktree", role.worktree || "unknown"],
+        ["Cycles", count(role.cycles)],
+        ["Tokens", count(role.tokens)],
+        ["Input", count(usage.input)],
+        ["Output", count(usage.output)],
+        ["Cache read", count(usage.cache_read)],
+        ["Cache share", percent(role.cache_share)],
+        ["Worker timeout", role.worker_timeout_sec ? role.worker_timeout_sec + "s" : "—"],
+      ];
+      for (const [label, value] of details) {
+        const item = text("span");
+        item.append(text("b", label + ": "));
+        item.append(document.createTextNode(value));
+        metrics.append(item);
+      }
+      cell.append(metrics);
+      const toolbar = text("div", null, "log-toolbar");
+      for (const stream of ["scheduler", "worker"]) {
+        const button = text("button", stream, stream === logStream ? "active" : "");
+        button.onclick = () => { logStream = stream; renderQueue(state); pollLog(); };
+        toolbar.append(button);
+      }
+      cell.append(toolbar);
+      const output = text("pre", logText[logStream], "live-log");
+      output.id = "live-log";
+      cell.append(output);
+      output.scrollTop = wasPinned ? output.scrollHeight : oldScrollTop;
+    }
   }
+}
+
+async function pollLog() {
+  if (!expandedRole || !$("live-log")) return;
+  const stream = logStream;
+  const response = await fetch(
+    "/api/logs/" + encodeURIComponent(expandedRole) + "?stream=" + stream +
+      "&after=" + logOffsets[stream],
+    { headers: { "X-Kiln-Cockpit": "1" } },
+  );
+  if (!response.ok) return;
+  const payload = await response.json();
+  if (payload.truncated) logText[stream] = "";
+  if (payload.lines.length) logText[stream] += payload.lines.join("\n") + "\n";
+  logOffsets[stream] = payload.offset;
+  if (stream !== logStream || expandedRole !== payload.role) return;
+  const output = $("live-log");
+  if (!output) return;
+  const pinned = output.scrollHeight - output.scrollTop - output.clientHeight < 24;
+  output.textContent = logText[stream];
+  if (pinned) output.scrollTop = output.scrollHeight;
 }
 
 function renderActivity(state) {
@@ -698,6 +803,7 @@ async function poll() {
     renderQueue(latest);
     renderActivity(latest);
     renderSend(latest);
+    pollLog();
   } catch (error) {
     // A failed poll marks the page stale rather than blanking it: the last known state is
     // more useful than an empty screen, and the swarm itself is unaffected either way.
@@ -725,6 +831,14 @@ async function retryMessage(messageId, guidance) {
   try {
     const result = await post("/api/retry/" + messageId, { guidance: guidance || "" });
     toast("sent back to " + result.target);
+    poll();
+  } catch (error) { toast(error.message, true); }
+}
+
+async function acknowledgeMessage(messageId) {
+  try {
+    await post("/api/ack/" + messageId, {});
+    toast("acknowledged");
     poll();
   } catch (error) { toast(error.message, true); }
 }

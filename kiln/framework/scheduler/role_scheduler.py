@@ -669,8 +669,9 @@ def _no_op(
             branch=ctx.branch,
             commit=git_ops.head_commit(ctx.worktree) or inbound.commit,
             summary=(
-                f"Chain ended at {ctx.role}: the cycle produced no changes, so nothing was "
-                f"handed off. Worker reported: {summary}"
+                f"{ctx.role.capitalize()} reviewed the inbound handoff and produced no "
+                f"additional changes. The chain ended without creating another role "
+                f"handoff. Worker reported: {summary}"
             ),
             next_role=ESCALATION_TARGET,
             timestamp=ctx.timestamp(),
@@ -965,7 +966,12 @@ def format_banner(ctx: SchedulerContext, args: argparse.Namespace) -> list[str]:
     ]
 
 
-def _make_worker_output_emitter() -> Callable[[str], None]:
+WORKER_LOG_MAX_BYTES = 4 * 1024 * 1024
+
+
+def _make_worker_output_emitter(
+    log_file: str | Path | None = None,
+) -> Callable[[str], None]:
     """
     Print streamed worker output tinted, so it reads as a distinct voice from the
     scheduler's own (unstyled) log lines sharing the same pane.
@@ -973,9 +979,30 @@ def _make_worker_output_emitter() -> Callable[[str], None]:
     Piped or captured output (tests, `> log.txt`) must stay free of escape sequences,
     matching pane_status.StatusBar's own rule for the same reason.
     """
-    if not sys.stdout.isatty():
-        return lambda line: print(line, flush=True)
-    return lambda line: print(pane_status.tint_worker_output(line), flush=True)
+    path = Path(log_file) if log_file else None
+    log_failed = False
+
+    def emit(line: str) -> None:
+        nonlocal log_failed
+        rendered = pane_status.tint_worker_output(line) if sys.stdout.isatty() else line
+        print(rendered, flush=True)
+        if path is None or log_failed:
+            return
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            encoded = (line + "\n").encode("utf-8")
+            if path.is_file() and path.stat().st_size + len(encoded) > WORKER_LOG_MAX_BYTES:
+                rollover = path.with_suffix(path.suffix + ".1")
+                if rollover.exists():
+                    rollover.unlink()
+                path.replace(rollover)
+            with path.open("ab") as handle:
+                handle.write(encoded)
+        except OSError as exc:
+            log_failed = True
+            log.warning("could not write worker log %s; capture disabled: %s", path, exc)
+
+    return emit
 
 
 def build_context(args: argparse.Namespace) -> SchedulerContext:
@@ -990,7 +1017,9 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
 
     definition = load_worker_definition(args.worker_agent)
     model = resolve_model(args, definition)
-    emit_worker_output = _make_worker_output_emitter()
+    emit_worker_output = _make_worker_output_emitter(
+        Path(args.db_path).parent / "logs" / f"worker-{args.role}.log"
+    )
 
     def run_worker(
         *, prompt: str, attempt: int = 1, max_budget_usd: float | None = None

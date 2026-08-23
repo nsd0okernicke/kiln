@@ -752,7 +752,9 @@ class TestSessionsFile:
         assert len(lines) == 2
         # Trailing empty model: this fixture's roles configure none, which is a real state
         # meaning "the backend's CLI chooses", not a missing value.
-        assert lines[0].split("\t") == ["1", "specifier", "claude", "Specifier", "agent", ""]
+        assert lines[0].split("\t") == [
+            "1", "specifier", "claude", "Specifier", "agent", "", "@current",
+        ]
 
     def test_it_records_each_panes_kind(self, paths):
         # This file is the only thing the terminal dashboard and the web cockpit read; the
@@ -822,6 +824,16 @@ class TestSessionsFile:
 
         assert [s.role for s in sessions] == ["specifier", "coder"]
         assert all(s.passive is False for s in sessions)
+        assert [s.worktree for s in sessions] == ["@current", "coder"]
+
+    def test_the_launcher_can_record_full_worktree_identities(self, paths):
+        from scheduler import dashboard
+
+        sessions = dashboard.read_sessions(
+            workspace.write_sessions_file(PROFILE, paths, branch="run1")
+        )
+
+        assert [session.worktree for session in sessions] == ["run1", "run1-coder"]
 
 
 class TestTemplateCopying:

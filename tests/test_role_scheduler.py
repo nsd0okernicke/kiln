@@ -505,7 +505,8 @@ class TestNoOpCycle:
 
         messages = queued_for(db_path, "human-in-the-loop")
         assert len(messages) == 1
-        assert "produced no changes" in messages[0]["content"]
+        assert "reviewed the inbound handoff" in messages[0]["content"]
+        assert "produced no additional changes" in messages[0]["content"]
 
     def test_that_message_is_informational_not_an_escalation(self, make_ctx, inbound, db_path):
         # The run concluded correctly; it just concluded. Flagging it as an escalation would
