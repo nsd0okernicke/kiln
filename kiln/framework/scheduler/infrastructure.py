@@ -8,7 +8,7 @@ from pathlib import Path
 
 from . import db, git_ops
 from .adapters import WorkerInvocation
-from .models import DEFAULT_PRIORITY, QueueMessage, WorkerRequest
+from .models import DEFAULT_PRIORITY, InboundMessage, QueueMessage, WorkerRequest
 
 log = logging.getLogger(__name__)
 
@@ -33,10 +33,10 @@ class SQLiteMessageQueue:
     def __init__(self, path: str | Path):
         self.path = Path(path)
 
-    def fetch(self, role: str, branch: str) -> QueueMessage | None:
+    def fetch(self, role: str, branch: str) -> InboundMessage | None:
         return db.fetch_and_deliver(self.path, role, branch)
 
-    def fetch_resume(self, role: str, branch: str) -> QueueMessage | None:
+    def fetch_resume(self, role: str, branch: str) -> InboundMessage | None:
         return db.fetch_resume(self.path, role, branch)
 
     def mark_processing(self, message_id: str) -> bool:

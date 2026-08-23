@@ -33,6 +33,13 @@ class QueueMessage(TypedDict, total=False):
     work_item: str | None
 
 
+class InboundMessage(TypedDict):
+    """The fields guaranteed by queue delivery operations."""
+
+    id: str
+    content: str
+
+
 @dataclass(frozen=True)
 class WorkerRequest:
     """One application-level request to execute a role worker."""

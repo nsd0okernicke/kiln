@@ -18,7 +18,7 @@ from contextlib import closing
 from pathlib import Path
 from typing import cast
 
-from .models import DEFAULT_PRIORITY, MessageStatus, QueueMessage, can_transition
+from .models import DEFAULT_PRIORITY, InboundMessage, MessageStatus, QueueMessage, can_transition
 
 log = logging.getLogger(__name__)
 
@@ -26,6 +26,11 @@ log = logging.getLogger(__name__)
 def _message(row: sqlite3.Row) -> QueueMessage:
     """Give SQLite's runtime mapping the queue contract known from each SELECT."""
     return cast(QueueMessage, dict(row))
+
+
+def _inbound_message(row: sqlite3.Row) -> InboundMessage:
+    """Type a row from the delivery SELECT, which always includes id and content."""
+    return cast(InboundMessage, dict(row))
 
 STATUS_QUEUED = MessageStatus.QUEUED.value
 STATUS_DELIVERED = MessageStatus.DELIVERED.value
@@ -108,7 +113,7 @@ def ensure_schema(db_path: str | Path) -> None:
         conn.commit()
 
 
-def fetch_and_deliver(db_path: str | Path, role: str, branch: str) -> QueueMessage | None:
+def fetch_and_deliver(db_path: str | Path, role: str, branch: str) -> InboundMessage | None:
     """
     Return the next queued-or-delivered message for a role and mark it delivered.
 
@@ -119,7 +124,7 @@ def fetch_and_deliver(db_path: str | Path, role: str, branch: str) -> QueueMessa
     return _fetch_and_deliver(db_path, role, branch, resumed_only=False)
 
 
-def fetch_resume(db_path: str | Path, role: str, branch: str) -> QueueMessage | None:
+def fetch_resume(db_path: str | Path, role: str, branch: str) -> InboundMessage | None:
     """
     As `fetch_and_deliver`, but only messages a human explicitly sent back.
 
@@ -134,7 +139,7 @@ def fetch_resume(db_path: str | Path, role: str, branch: str) -> QueueMessage | 
 
 def _fetch_and_deliver(
     db_path: str | Path, role: str, branch: str, resumed_only: bool
-) -> QueueMessage | None:
+) -> InboundMessage | None:
     kind = "resumed" if resumed_only else "queued/delivered"
     log.debug("polling DB for %s messages (role=%s branch=%s)", kind, role, branch)
     with closing(connect(db_path)) as conn:
@@ -166,7 +171,7 @@ def _fetch_and_deliver(
         )
         conn.commit()
         log.info("marked id=%s as delivered", row["id"])
-        return _message(row)
+        return _inbound_message(row)
 
 
 def recover_stale_processing(
