@@ -7,36 +7,21 @@ does, so the two views cannot report different numbers for the same run. That is
 reason `dashboard.collect` was split out of `dashboard.snapshot` — the ASCII renderer answers
 in `list[str]`, which nothing can turn back into JSON.
 
-Formatting decisions that already exist are reused rather than restated: `dashboard.format_age`
-for ages, `dashboard.is_stalled` for the stall rule, `dashboard.cache_share` for the cache
-ratio, `handoff.is_escalation` for escalations. A second definition of any of them is a
-second thing to keep in sync with the dashboard, and the point of the split was that there
-is only one.
+The projection owns its JSON formatting rules and depends only on scheduler domain values.
+The HTTP adapter gathers the concrete dashboard snapshot and SQLite rows, then passes those
+plain values across this boundary.
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Protocol
 
 from kiln.scheduler.domain import handoff
-from kiln.scheduler.infrastructure.cli.dashboard import (
-    WORKING_STATES,
-    SwarmSnapshot,
-    attempt_suffix,
-    cache_share,
-    cost_is_partial,
-    extract_summary,
-    format_age,
-    is_stalled,
-    parse_local_timestamp,
-    parse_status_since,
-    render_totals,
-    total_token_usage,
-    visible_roles,
-)
-from kiln.scheduler.infrastructure.cli.role_scheduler import is_pending
-from kiln.scheduler.infrastructure.persistence import db
+from kiln.scheduler.domain.models import MessageStatus
+from kiln.scheduler.domain.status_contract import PENDING_HANDOFF
 
 #: The lane a card reaches when nothing is holding it any more. Not a role, so it can never
 #: collide with one: `render_board` puts it last and the page paints it differently.
@@ -48,6 +33,111 @@ CARD_SUMMARY_CHARS = 140
 
 #: Shown on a card for a request that has neither a name nor readable prose to borrow.
 UNNAMED_TITLE = "new request"
+WORKING_STATES = frozenset({"working", "retrying", "delegating"})
+COST_REPORTING_AGENTS = frozenset({"claude", "grok"})
+_SUMMARY_RE = re.compile(
+    re.escape(handoff.SEPARATOR) + r".*\n" + re.escape(handoff.SEPARATOR)
+    + r"\n(?P<summary>.*)", re.DOTALL,
+)
+
+
+class RoleSession(Protocol):
+    role: str
+    agent: str
+    display_name: str
+    model: str
+    worktree: str
+    passive: bool
+
+
+class SwarmSnapshot(Protocol):
+    sessions: list[RoleSession]
+    statuses: dict[str, dict]
+    queue_depth: dict[str, int]
+    oldest_queued: dict[str, str]
+    messages: list[dict]
+    request_stats: dict[str, dict[str, int]]
+    now_utc: datetime
+    now_local: datetime
+
+
+def visible_roles(sessions):
+    return [session for session in sessions if not session.passive]
+
+
+def extract_summary(content: str, max_chars: int = 60) -> str:
+    match = _SUMMARY_RE.search(content)
+    text = match.group("summary") if match else content
+    line = next((item.strip() for item in text.splitlines() if item.strip()), "")
+    return line[: max_chars - 1] + "…" if len(line) > max_chars else line
+
+
+def parse_status_since(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def parse_local_timestamp(value: str) -> datetime:
+    return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+
+
+def format_age(value: datetime, now: datetime) -> str:
+    seconds = max(0, int((now - value).total_seconds()))
+    if seconds < 60:
+        return f"{seconds}s ago"
+    if seconds < 3600:
+        return f"{seconds // 60}m ago"
+    if seconds < 86400:
+        return f"{seconds // 3600}h ago"
+    return f"{seconds // 86400}d ago"
+
+
+def is_stalled(status: dict | None, now_utc: datetime) -> bool:
+    if not status or status.get("state") not in WORKING_STATES:
+        return False
+    timeout, since = status.get("worker_timeout_sec"), status.get("since")
+    if not timeout or not since:
+        return False
+    try:
+        return (now_utc - parse_status_since(since)).total_seconds() > timeout
+    except ValueError:
+        return False
+
+
+def attempt_suffix(status: dict | None) -> str:
+    if not status:
+        return ""
+    attempt, limit = status.get("attempt"), status.get("max_attempts")
+    return f" {attempt}/{limit}" if attempt and limit and attempt > 1 else ""
+
+
+def cache_share(usage: dict | None) -> float | None:
+    if not usage:
+        return None
+    total = sum(usage.values())
+    return usage.get("cache_read", 0) / total if total > 0 else None
+
+
+def render_totals(statuses: dict[str, dict]) -> tuple[float, int, int]:
+    return (
+        sum(status.get("cost_usd") or 0 for status in statuses.values()),
+        sum(status.get("cycles") or 0 for status in statuses.values()),
+        sum(status.get("tokens") or 0 for status in statuses.values()),
+    )
+
+
+def total_token_usage(statuses: dict[str, dict]) -> dict[str, int]:
+    totals: dict[str, int] = {}
+    for status in statuses.values():
+        for kind, count in (status.get("token_usage") or {}).items():
+            totals[kind] = totals.get(kind, 0) + count
+    return totals
+
+
+def cost_is_partial(sessions, statuses: dict[str, dict]) -> bool:
+    return any(
+        session.agent not in COST_REPORTING_AGENTS and session.role in statuses
+        for session in sessions
+    )
 
 
 def named_work_item(row: dict) -> str | None:
@@ -65,7 +155,7 @@ def named_work_item(row: dict) -> str | None:
     `is_pending` is reused rather than restated so there is one definition of the placeholder.
     """
     work_item = row.get("work_item")
-    return None if not work_item or is_pending(work_item) else work_item
+    return None if not work_item or work_item.strip().lower() == PENDING_HANDOFF else work_item
 
 
 @dataclass(frozen=True)
@@ -170,7 +260,7 @@ def lane_for(row: dict) -> str:
     shape; "done when the last message was consumed and nothing followed" is true of all of
     them and needs no routing table to evaluate.
     """
-    if row["status"] == db.STATUS_PROCESSED:
+    if row["status"] == MessageStatus.PROCESSED:
         return LANE_DONE
     return row["target"]
 
@@ -361,7 +451,7 @@ def _card(row: dict, cycles: dict[str, int], now_local: datetime) -> dict:
         # grouping key, so `cycles_by_work_item` has no entry to look up. Reporting the 0 that
         # lookup returns would put "0 msgs" on a card that visibly exists.
         "cycles": cycles.get(work_item, 0) if work_item else 1,
-        "failed": row["status"] == db.STATUS_FAILED,
+        "failed": row["status"] == MessageStatus.FAILED,
         "error": row.get("error"),
     }
 
@@ -384,7 +474,7 @@ def _latest_per_work_item(rows: list[dict]) -> list[dict]:
     latest = []
     for row in rows:
         work_item = named_work_item(row)
-        if work_item is None and row["status"] == db.STATUS_PROCESSED:
+        if work_item is None and row["status"] == MessageStatus.PROCESSED:
             continue
         key = work_item or f"id:{row['id']}"
         if key in seen:
@@ -425,7 +515,7 @@ def _work_item_by_role(work_items: list[dict]) -> dict[str, str]:
     """
     holding: dict[str, str] = {}
     for row in work_items:
-        if row["status"] in (db.STATUS_PROCESSED, db.STATUS_FAILED):
+        if row["status"] in (MessageStatus.PROCESSED, MessageStatus.FAILED):
             continue
         if row["target"] in holding:
             continue

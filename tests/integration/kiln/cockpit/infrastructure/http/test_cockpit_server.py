@@ -19,6 +19,8 @@ import pytest
 
 from kiln.cockpit.application import actions
 from kiln.cockpit.application import state as cockpit_state
+from kiln.cockpit.infrastructure import actions_gateway
+from kiln.cockpit.infrastructure.actions_gateway import KilnActionGateway
 from kiln.cockpit.infrastructure.http.server import (
     GUARD_HEADER,
     CockpitConfig,
@@ -73,6 +75,7 @@ def config(swarm):
         actions=actions.ActionContext(
             db_path=swarm["db_path"], branch="main", human_role="human-in-the-loop",
             intake_role="specifier", sessions_file=swarm["sessions"],
+            gateway=KilnActionGateway(),
         ),
     )
 
@@ -402,7 +405,7 @@ class TestRetry:
 class TestTeardown:
     def test_it_refuses_without_the_confirmation_string(self, client, monkeypatch):
         stopped = []
-        monkeypatch.setattr(actions.stop, "stop_all", lambda roles: stopped.append(roles))
+        monkeypatch.setattr(actions_gateway.stop, "stop_all", lambda roles: stopped.append(roles))
 
         status, payload = client.post("/api/teardown", {})
 
@@ -416,7 +419,7 @@ class TestTeardown:
         # the exact moment the operator needs to know what happened.
         done = threading.Event()
         monkeypatch.setattr(
-            actions.stop, "stop_all", lambda roles: done.set() or [],
+            actions_gateway.stop, "stop_all", lambda roles: done.set() or [],
         )
 
         status, payload = client.post("/api/teardown", {"confirm": "TEARDOWN"})

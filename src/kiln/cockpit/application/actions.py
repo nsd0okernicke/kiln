@@ -29,10 +29,9 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from kiln.launcher.infrastructure import stop
 from kiln.scheduler.domain.status_contract import PENDING_HANDOFF, is_valid_work_item_name
-from kiln.scheduler.infrastructure.cli import dashboard, retry, send
-from kiln.scheduler.infrastructure.persistence import db
+
+from .ports import ActionGateway
 
 log = logging.getLogger(__name__)
 
@@ -56,6 +55,7 @@ class ActionContext:
     human_role: str
     intake_role: str
     sessions_file: Path
+    gateway: ActionGateway
 
 
 def send_to(ctx: ActionContext, *, target: str, summary: str, work_item: str = "") -> dict:
@@ -95,7 +95,7 @@ def send_to(ctx: ActionContext, *, target: str, summary: str, work_item: str = "
     # A role must not appear to send itself mail, and the inbox pane prints the sender, so
     # the operator can tell a browser-typed note from a real inbound handoff.
     sender = "cockpit" if target == ctx.human_role else ctx.human_role
-    message_id = send.send(
+    message_id = ctx.gateway.send(
         db_path=ctx.db_path,
         sender=sender,
         target=target,
@@ -156,8 +156,8 @@ def _resolve_target(ctx: ActionContext, target: str) -> str:
     if not target:
         raise ActionError("no target role given")
 
-    sessions = dashboard.read_sessions(ctx.sessions_file)
-    addressable = [session.role for session in dashboard.visible_roles(sessions)]
+    sessions = ctx.gateway.sessions(ctx.sessions_file)
+    addressable = [session.role for session in sessions if not session.passive]
     if target in addressable:
         return target
 
@@ -181,7 +181,9 @@ def retry_message(ctx: ActionContext, *, message_id: str, guidance: str = "") ->
     be a guess. Every Attention row carries the id, so the browser has it either way.
     """
     message_id = _resolve_message_id(ctx, message_id)
-    row = retry.resume(db_path=ctx.db_path, message_id=message_id, guidance=guidance.strip())
+    row = ctx.gateway.retry(
+        db_path=ctx.db_path, message_id=message_id, guidance=guidance.strip()
+    )
     if row is None:
         raise ActionError(
             f"{message_id[:8]} is not a failed message, so there is nothing to send back."
@@ -217,8 +219,8 @@ def teardown(ctx: ActionContext, *, confirm: str) -> dict:
     will see, and the server calls this only after its reply has gone out.
     """
     check_confirmation(confirm)
-    roles = _session_roles(ctx.sessions_file)
-    pids = stop.stop_all(roles)
+    roles = _session_roles(ctx)
+    pids = ctx.gateway.stop_all(roles)
     log.info("cockpit teardown stopped %d process(es)", len(pids))
     return {"stopped": len(pids), "pids": pids}
 
@@ -233,12 +235,12 @@ def _resolve_message_id(ctx: ActionContext, prefix: str) -> str:
     prefix = prefix.strip()
     if not prefix:
         raise ActionError("no message id given")
-    if db.get_message(ctx.db_path, prefix) is not None:
+    if ctx.gateway.message(ctx.db_path, prefix) is not None:
         return prefix
 
     matches = [
         str(row["id"])
-        for row in db.failed_messages(ctx.db_path, ctx.branch)
+        for row in ctx.gateway.failed_messages(ctx.db_path, ctx.branch)
         if str(row["id"]).startswith(prefix)
     ]
     if len(matches) == 1:
@@ -248,12 +250,10 @@ def _resolve_message_id(ctx: ActionContext, prefix: str) -> str:
     raise ActionError(f"{prefix!r} matches {len(matches)} failed messages")
 
 
-def _session_roles(sessions_file: Path) -> list[str]:
+def _session_roles(ctx: ActionContext) -> list[str]:
     """
     Role names from `.kiln/sessions`, or none when the file is gone.
 
-    Through `dashboard.read_sessions` rather than splitting tabs here: that function already
-    owns the file's format, and a second parser is one more thing to fix when the format
-    grows a column.
+    Parsing stays behind the gateway so the application layer does not own the file format.
     """
-    return [session.role for session in dashboard.read_sessions(sessions_file)]
+    return [session.role for session in ctx.gateway.sessions(ctx.sessions_file)]

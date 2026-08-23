@@ -1,6 +1,6 @@
 {
   "phase": "observe",
-  "baseline_commit": "4a71c492f9a11549b0949400c50dfc52bafa3639",
+  "baseline_commit": "644d691dd710ebb1b89fbf5710ac879517762248",
   "worktree_dirty": true,
   "generated_at": "2026-08-23",
   "environment": {
@@ -8,44 +8,44 @@
     "python": "3.14"
   },
   "tests": {
-    "passed": 1832,
+    "passed": 1864,
     "skipped": 2,
-    "warnings": 29,
-    "duration_seconds": 242.29
+    "warnings": 0,
+    "duration_seconds": 274.4
   },
   "coverage": {
-    "statement_percent": 90.49,
-    "branch_percent": 85.31,
-    "covered_lines": 4796,
-    "missing_lines": 504,
-    "covered_branches": 1307,
-    "missing_branches": 225
+    "statement_percent": 91.36,
+    "branch_percent": 86.07,
+    "covered_lines": 5242,
+    "missing_lines": 496,
+    "covered_branches": 1341,
+    "missing_branches": 217
   },
   "complexity": {
-    "functions_measured": 543,
+    "functions_measured": 624,
     "c_or_worse": 27,
     "d_or_worse": 3,
     "lowest_maintainability_modules": [
-      "src/scheduler/role_scheduler.py",
-      "src/scheduler/dashboard.py",
-      "src/kiln/launcher/config.py",
-      "src/kiln/launcher/workspace.py",
-      "src/kiln/launcher/cli.py"
+      "src/kiln/scheduler/infrastructure/cli/dashboard.py",
+      "src/kiln/launcher/domain/profile.py",
+      "src/kiln/launcher/infrastructure/cli.py",
+      "src/kiln/launcher/infrastructure/workspace.py",
+      "src/kiln/cockpit/infrastructure/http/server.py"
     ]
   },
   "crap": {
     "threshold": 6,
-    "above_threshold": 98,
+    "above_threshold": 101,
     "top_hotspots": [
-      "src/kiln/launcher/cli.py:389 run_launch",
-      "src/kiln/launcher/stop.py:178 stop_all",
-      "src/kiln/cockpit/server.py:514 main",
-      "src/kiln/launcher/cli.py:584 resolve_queue_context",
-      "src/kiln/resources/tools/set-status.py:209 main"
+      "src/kiln/launcher/infrastructure/cli.py:401 run_launch",
+      "src/kiln/cockpit/infrastructure/http/server.py:533 main",
+      "src/kiln/launcher/infrastructure/cli.py:661 resolve_queue_context",
+      "src/kiln/resources/tools/set-status.py:209 main",
+      "src/kiln/launcher/infrastructure/cli.py:706 main"
     ]
   },
   "typing": {
-    "modules_enrolled": 5,
+    "modules_enrolled": 6,
     "errors": 0,
     "warnings": 0
   },
@@ -54,7 +54,7 @@
   },
   "formatting": {
     "status": "observe-only",
-    "files_would_reformat": 70
+    "files_would_reformat": 67
   },
   "mutation": {
     "status": "existing Cosmic Ray tiers retained; execution remains on-demand",

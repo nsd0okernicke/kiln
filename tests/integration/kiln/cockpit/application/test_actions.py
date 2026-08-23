@@ -11,6 +11,8 @@ from __future__ import annotations
 import pytest
 
 from kiln.cockpit.application import actions
+from kiln.cockpit.infrastructure import actions_gateway
+from kiln.cockpit.infrastructure.actions_gateway import KilnActionGateway
 from kiln.scheduler.infrastructure.persistence import db
 
 pytestmark = pytest.mark.integration
@@ -34,6 +36,7 @@ def ctx(tmp_path, db_path):
         human_role="human-in-the-loop",
         intake_role="specifier",
         sessions_file=sessions,
+        gateway=KilnActionGateway(),
     )
 
 
@@ -149,6 +152,7 @@ class TestNewTask:
                 actions.ActionContext(
                     db_path=ctx.db_path, branch="main", human_role="human-in-the-loop",
                     intake_role="", sessions_file=ctx.sessions_file,
+                    gateway=ctx.gateway,
                 ),
                 summary="Add order intake",
             )
@@ -216,7 +220,7 @@ class TestRetryMessage:
 class TestTeardown:
     def test_it_refuses_without_the_confirmation(self, ctx, monkeypatch):
         called = []
-        monkeypatch.setattr(actions.stop, "stop_all", lambda *a, **k: called.append(a))
+        monkeypatch.setattr(actions_gateway.stop, "stop_all", lambda *a, **k: called.append(a))
 
         with pytest.raises(actions.ActionError):
             actions.teardown(ctx, confirm="yes")
@@ -224,7 +228,7 @@ class TestTeardown:
         assert called == []
 
     def test_it_stops_every_kiln_process_when_confirmed(self, ctx, monkeypatch):
-        monkeypatch.setattr(actions.stop, "stop_all", lambda roles: [101, 102])
+        monkeypatch.setattr(actions_gateway.stop, "stop_all", lambda roles: [101, 102])
 
         assert actions.teardown(ctx, confirm="TEARDOWN")["stopped"] == 2
 
@@ -233,7 +237,7 @@ class TestTeardown:
         # the sessions file is the only thing that can close them.
         seen = {}
         monkeypatch.setattr(
-            actions.stop, "stop_all", lambda roles: seen.setdefault("roles", roles) or []
+            actions_gateway.stop, "stop_all", lambda roles: seen.setdefault("roles", roles) or []
         )
 
         actions.teardown(ctx, confirm="TEARDOWN")

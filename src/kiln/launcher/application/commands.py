@@ -17,7 +17,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from kiln.scheduler.domain.routing import format_routing_rules
-from kiln.scheduler.infrastructure.agents import codex_adapter
 
 from ..domain.paths import KilnPaths, python_command
 from ..domain.profile import Profile, RoleConfig
@@ -41,16 +40,21 @@ DEFAULT_CLAUDE_MODEL = "sonnet"
 #: nothing or breaks their auth.
 PROXY_CAPABLE_AGENTS = frozenset({"claude", "codex"})
 
+#: Kiln-owned bridge variable used to carry a Codex proxy URL into both interactive and
+#: one-shot invocations.  Translating that value into Codex CLI flags happens at each
+#: adapter edge; the application layer only decides whether a role should receive it.
+CODEX_PROXY_BASE_URL_ENV = "KILN_PROXY_BASE_URL"
+
 #: Env var each proxy-capable backend reads for its API base URL.
 #:
 #: Codex is the odd one: it has no base-URL variable of its own and needs `-c` overrides on
 #: the command line instead. Kiln carries the URL in its own variable and each Codex call
-#: translates it (`codex_adapter.proxy_config_args`), so the transport stays uniform —
+#: translates it into Codex `-c` flags, so the transport stays uniform —
 #: pane environment, inherited by the one-shot worker — while the CLI-specific spelling
 #: lives with the adapter.
 PROXY_BASE_URL_VARS = {
     "claude": "ANTHROPIC_BASE_URL",
-    "codex": codex_adapter.PROXY_BASE_URL_ENV,
+    "codex": CODEX_PROXY_BASE_URL_ENV,
 }
 
 #: Upstream each routed backend's traffic must actually reach, as `host[/base-path]`.
@@ -173,7 +177,7 @@ def _codex_command(
     # then read identically here and in the one-shot worker call, which cannot use a config
     # file at all (it passes --ignore-user-config).
     argv = ["codex", "--dangerously-bypass-approvals-and-sandbox"]
-    argv += codex_adapter.proxy_config_args(_proxy_base_url(role, proxy_url))
+    argv += _codex_proxy_config_args(_proxy_base_url(role, proxy_url))
     argv.append(START_PROMPT)
     return AgentCommand(
         argv=argv,
@@ -184,6 +188,23 @@ def _codex_command(
 def _proxy_base_url(role: RoleConfig, proxy_url: str | None) -> str | None:
     """The role's proxy URL, or None when this role is not routed."""
     return proxy_env(role, proxy_url).get(PROXY_BASE_URL_VARS.get(role.agent, ""))
+
+
+def _codex_proxy_config_args(base_url: str | None) -> list[str]:
+    """Render Codex's CLI-specific base-URL override at the command adapter edge."""
+    if not base_url:
+        return []
+    provider = "model_providers.kiln"
+    return [
+        "-c",
+        "model_provider=kiln",
+        "-c",
+        f'{provider}.name="kiln"',
+        "-c",
+        f'{provider}.base_url="{base_url.rstrip("/")}"',
+        "-c",
+        f'{provider}.wire_api="responses"',
+    ]
 
 
 def _scheduler_command(

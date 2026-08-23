@@ -95,6 +95,41 @@ def test_cockpit_application_does_not_import_http_transport():
         assert not imports(path) & {"http", "server"}, path.name
 
 
+def test_cockpit_action_use_cases_do_not_import_concrete_infrastructure():
+    assert not imports(ROOT / "cockpit" / "application" / "actions.py") & {
+        "dashboard",
+        "db",
+        "infrastructure",
+        "retry",
+        "send",
+        "stop",
+    }
+
+
+def test_cockpit_application_does_not_import_any_concrete_infrastructure_package():
+    for path in (ROOT / "cockpit" / "application").glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        concrete = {
+            node.module
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom) and node.module
+            and ".infrastructure" in node.module
+        }
+        assert not concrete, f"{path.name} imports {concrete}"
+
+
+def test_launcher_application_does_not_import_scheduler_infrastructure():
+    for path in (ROOT / "launcher" / "application").glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        concrete = {
+            node.module
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom) and node.module
+            and ".infrastructure" in node.module
+        }
+        assert not concrete, f"{path.name} imports {concrete}"
+
+
 def test_proxy_domain_does_not_import_transport_or_persistence():
     for path in (ROOT / "proxy" / "domain").glob("*.py"):
         assert not imports(path) & {"http", "socket", "sqlite3"}, path.name

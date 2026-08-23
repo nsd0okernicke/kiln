@@ -56,6 +56,7 @@ from ...application.actions import (
     send_to,
     teardown,
 )
+from ..actions_gateway import KilnActionGateway
 
 log = logging.getLogger(__name__)
 
@@ -523,6 +524,7 @@ def config_from_args(args: argparse.Namespace) -> CockpitConfig:
             human_role=args.human_role,
             intake_role=args.intake_role,
             sessions_file=sessions_file,
+            gateway=KilnActionGateway(),
         ),
         activity_limit=args.activity_limit,
     )
