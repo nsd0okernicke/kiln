@@ -20,31 +20,35 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field, replace
-from datetime import datetime
+from dataclasses import replace
 from pathlib import Path
 
 from . import handoff, pane_status, policies, status_contract, verify
 from .adapters import DEFAULT_IDLE_TIMEOUT_SEC, TokenUsage, WorkerInvocation
+from .application import (
+    COST_CAP,
+    ESCALATED,
+    HALTED,
+    HANDED_OFF,
+    IDLE,
+    MAX_CYCLES,
+    MERGE_FAILED,
+    NO_OP,
+    NO_ROUTE,
+    PING_FORWARDED,
+    Attempts,
+    CycleResult,
+    SchedulerContext,
+    SchedulerState,
+    should_retry,
+)
 from .infrastructure import GitWorktree, SQLiteMessageQueue
 from .models import DEFAULT_PRIORITY, WorkerRequest
-from .ports import MessageQueue, WorkerRunner, Worktree
-from .routing import RoutingTable, load_routing_table, parse_routing_arguments
+from .ports import MessageQueue, Worktree
+from .routing import load_routing_table, parse_routing_arguments
 from .worker_prompt import WorkerDefinition, build_task_prompt, load_worker_definition
 
 log = logging.getLogger(__name__)
-
-# Cycle outcomes.
-IDLE = "idle"
-HANDED_OFF = "handed_off"
-PING_FORWARDED = "ping_forwarded"
-ESCALATED = "escalated"
-MERGE_FAILED = "merge_failed"
-NO_ROUTE = "no_route"
-HALTED = "halted"
-NO_OP = "no_op"
-MAX_CYCLES = "max_cycles"
-COST_CAP = "cost_cap"
 
 ESCALATION_TARGET = "human-in-the-loop"
 DEFAULT_POLL_INTERVAL_SEC = 2.0
@@ -114,119 +118,7 @@ def merge_commit_message(role: str, inbound: handoff.InboundHandoff) -> str:
     return f"{subject}\n\n{body}"
 
 
-@dataclass
-class SchedulerContext:
-    """Everything one scheduler process needs; injected so run_once stays testable."""
-
-    role: str
-    branch: str
-    db_path: Path
-    worktree: Path
-    routing: RoutingTable
-    definition: WorkerDefinition
-    worker_runner: WorkerRunner
-    queue: MessageQueue
-    worktree_port: Worktree
-    clock: Callable[[], datetime] = datetime.now
-    set_status: Callable[..., None] = lambda _state, **_kwargs: None
-    #: One retry, then escalate — matches loop-auto-*.md step 4.
-    max_attempts: int = 2
-    #: Consecutive escalations before this role stops polling entirely.
-    escalation_limit: int = 3
-    #: How many times one work item may reach this role before the cycle escalates instead
-    #: of running. None means no ceiling — the shipped default, since an unbounded loop is
-    #: only expensive, not wrong, and a badly-chosen ceiling stops real work.
-    max_cycles: int | None = None
-    #: Dollars this role may spend on one work item before escalating. Also handed to the
-    #: worker CLI as a per-invocation ceiling, minus what has already been spent, on backends
-    #: whose adapter supports the flag. None means no ceiling.
-    max_budget_usd: float | None = None
-    #: Runs the role's `verify` command, or None when it declares none. Injected like
-    #: `run_worker` so the cycle stays testable without spawning a real test suite.
-    run_verify: Callable[[], verify.VerifyResult] | None = None
-
-    def timestamp(self) -> str:
-        return self.clock().strftime("%Y-%m-%d %H:%M:%S")
-
-
-@dataclass
-class SchedulerState:
-    """Mutable state that must survive across cycles."""
-
-    consecutive_escalations: int = 0
-    halted: bool = False
-    #: Whether the loop has already announced the halt. A parked scheduler polls forever, so
-    #: without this the pane fills with the same line every poll interval.
-    parked: bool = False
-    #: Dollars this process has spent per work item. In memory, like
-    #: `consecutive_escalations`: the queue stores no per-message cost, so persisting this
-    #: would mean a schema change. The consequence is worth knowing -- a restarted scheduler
-    #: starts the tally at zero, so the cap bounds one process's spend on one work item, not
-    #: the work item's lifetime spend.
-    spend_by_work_item: dict[str, float] = field(default_factory=dict)
-
-    def spend_on(self, work_item: str | None) -> float:
-        return self.spend_by_work_item.get(work_item or "", 0.0)
-
-    def record_spend(self, work_item: str | None, cost: float) -> None:
-        key = work_item or ""
-        self.spend_by_work_item[key] = self.spend_by_work_item.get(key, 0.0) + cost
-
-
-@dataclass(frozen=True)
-class CycleResult:
-    outcome: str
-    message_id: str | None = None
-    target: str | None = None
-    detail: str = ""
-    cost_usd: float = 0.0
-    attempts: int = 0
-    tokens: TokenUsage = field(default_factory=TokenUsage)
-
-
-@dataclass
-class _Attempts:
-    """Worker attempts for one message, newest last."""
-
-    invocations: list[WorkerInvocation] = field(default_factory=list)
-
-    @property
-    def last(self) -> WorkerInvocation:
-        return self.invocations[-1]
-
-    @property
-    def cost(self) -> float:
-        return sum(inv.cost_usd for inv in self.invocations)
-
-    @property
-    def tokens(self) -> TokenUsage:
-        """
-        Usage across every attempt, retries included, kept broken down by kind.
-
-        A retried cycle costs the sum of its attempts, not the last one -- reporting only
-        the successful attempt would make the expensive cycles look like the cheap ones.
-        Invocations reporting no usage (`tokens is None`) contribute nothing rather than
-        being counted as zero-token successes.
-
-        Summed field-wise via `TokenUsage.__add__` rather than collapsed to a total,
-        because which *kind* of token a role burns is the actionable part -- see
-        `PaneStatus.tokens`.
-        """
-        total = TokenUsage()
-        for invocation in self.invocations:
-            if invocation.tokens is not None:
-                total = total + invocation.tokens
-        return total
-
-
-def should_retry(invocations: Sequence[WorkerInvocation], max_attempts: int) -> bool:
-    """
-    Pure policy: retry only while a *failed* attempt has budget left.
-
-    Kept separate from run_once so the retry/escalate rule can be tested as a function over
-    a sequence of results, with no DB, git or worker involved.
-    """
-    return policies.should_retry(invocations, max_attempts)
+_Attempts = Attempts
 
 
 def _queue(ctx: SchedulerContext) -> MessageQueue:

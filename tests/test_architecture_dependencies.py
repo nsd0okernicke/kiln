@@ -38,6 +38,18 @@ def test_scheduler_ports_do_not_import_concrete_adapters():
     }
 
 
+def test_scheduler_application_does_not_import_cli_or_concrete_infrastructure():
+    assert not imports(ROOT / "scheduler" / "application.py") & {
+        "argparse",
+        "db",
+        "git_ops",
+        "infrastructure",
+        "pane_status",
+        "sqlite3",
+        "subprocess",
+    }
+
+
 def test_cockpit_state_projection_does_not_depend_on_http_server():
     assert "server" not in imports(ROOT / "cockpit" / "state.py")
 

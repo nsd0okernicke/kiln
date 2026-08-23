@@ -43,3 +43,9 @@ class Worktree(Protocol):
 
 class WorkerRunner(Protocol):
     def __call__(self, request: WorkerRequest) -> WorkerInvocation: ...
+
+
+class VerificationResult(Protocol):
+    ok: bool
+    summary: str
+    output: str
