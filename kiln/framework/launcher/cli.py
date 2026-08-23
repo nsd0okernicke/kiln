@@ -622,7 +622,7 @@ def run_subcommand(name: str, argv: list[str]) -> int:
     top-level parser exists to accept the PowerShell flag spellings the shims forward
     unchanged, and bolting subparsers onto it changes how those are matched.
     """
-    from kiln.scheduler.entrypoints import inbox, retry, send
+    from kiln.scheduler.infrastructure.cli import inbox, retry, send
 
     handlers = {"send": send.main, "inbox": inbox.main, "retry": retry.main}
     return handlers[name](resolve_queue_context(argv))

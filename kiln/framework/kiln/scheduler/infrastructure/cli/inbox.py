@@ -26,16 +26,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..domain import handoff
-from ..infrastructure.persistence import db
-from ..infrastructure.terminal import pane_status
-from ..infrastructure.vcs import git as git_ops
-from .role_scheduler import (
-    configure_logging,
-    enable_unicode_output,
-    merge_commit_message,
-    persist_inbound,
-)
+from ...application.use_cases.process_next_message import merge_commit_message
+from ...domain import handoff
+from ..persistence import db
+from ..runtime import configure_logging, enable_unicode_output
+from ..terminal import pane_status
+from ..vcs import GitWorktree
+from ..vcs import git as git_ops
 
 log = logging.getLogger(__name__)
 
@@ -51,6 +48,11 @@ ICON_MERGE_FAILED = "\N{NO ENTRY}"
 #: ASCII BEL. A human is not watching this pane — that is the whole point of it existing —
 #: so an arriving message rings the terminal rather than relying on being seen.
 BELL = "\a"
+
+
+def persist_inbound(worktree: str | Path, content: str) -> Path | None:
+    """Persist the human inbox's inbound handoff in its worktree."""
+    return GitWorktree(worktree).persist_inbound(content)
 
 
 @dataclass

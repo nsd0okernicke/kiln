@@ -340,7 +340,7 @@ class TestScheduler:
         assert argv[:3] == [
             python_command(),
             "-m",
-            "kiln.scheduler.entrypoints.role_scheduler",
+            "kiln.scheduler.infrastructure.cli.role_scheduler",
         ]
 
     def test_names_an_interpreter_that_actually_exists(self, paths):
@@ -460,7 +460,7 @@ class TestInboxPane:
 
     def test_runs_the_inbox_module(self, paths):
         argv = self._command(paths).argv
-        assert argv[:3] == [python_command(), "-m", "kiln.scheduler.entrypoints.inbox"]
+        assert argv[:3] == [python_command(), "-m", "kiln.scheduler.infrastructure.cli.inbox"]
 
     def test_watches_the_role_it_was_told_to(self, paths):
         # Not its own name: the pane is 'inbox', the queue belongs to 'human-in-the-loop'.
@@ -517,7 +517,7 @@ class TestDashboardPane:
 
     def test_runs_the_dashboard_module(self, paths):
         argv = self._command(paths).argv
-        assert argv[:3] == [python_command(), "-m", "kiln.scheduler.entrypoints.dashboard"]
+        assert argv[:3] == [python_command(), "-m", "kiln.scheduler.infrastructure.cli.dashboard"]
 
     def test_its_knobs_are_reachable_from_the_profile(self, paths):
         argv = self._command(paths, poll_interval=5, activity_limit=20).argv
@@ -702,7 +702,7 @@ class TestPosixRendering:
             build(paths, scheduler="python", mode="auto", worktree="coder")
         )
         assert "export PYTHONPATH=" in rendered
-        assert f"{python_command()} -m kiln.scheduler.entrypoints.role_scheduler" in rendered
+        assert f"{python_command()} -m kiln.scheduler.infrastructure.cli.role_scheduler" in rendered
 
 
 class TestProfileRoutingReachesTheScheduler:
@@ -756,4 +756,4 @@ class TestProfileRoutingReachesTheScheduler:
         command = build_agent_command(
             self._profile().role("coder"), paths, "main"
         )
-        assert "kiln.scheduler.entrypoints.role_scheduler" in " ".join(command.argv)
+        assert "kiln.scheduler.infrastructure.cli.role_scheduler" in " ".join(command.argv)

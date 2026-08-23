@@ -186,14 +186,14 @@ def _scheduler_command(
     """
     Launch the deterministic scheduler instead of an LLM wrapper session.
 
-    Invoked as `python -m kiln.scheduler.entrypoints.role_scheduler`, NOT as a bare script path:
-    the package
+    Invoked as `python -m kiln.scheduler.infrastructure.cli.role_scheduler`, not as a bare
+    script path: the package
     uses relative imports, so running the file directly fails with "attempted relative
     import with no known parent package". PYTHONPATH points at kiln/framework so both
     `scheduler` and `launcher` resolve.
     """
     argv = [
-        python_command(), "-m", "kiln.scheduler.entrypoints.role_scheduler",
+        python_command(), "-m", "kiln.scheduler.infrastructure.cli.role_scheduler",
         "--role", role.role,
         "--branch", branch,
         "--db-path", str(paths.db_path),
@@ -277,7 +277,7 @@ def _inbox_command(role: RoleConfig, paths: KilnPaths, branch: str) -> AgentComm
     messages it shows are addressed to `human-in-the-loop`.
     """
     argv = [
-        python_command(), "-m", "kiln.scheduler.entrypoints.inbox",
+        python_command(), "-m", "kiln.scheduler.infrastructure.cli.inbox",
         "--role", role.watched_role,
         "--branch", branch,
         "--db-path", str(paths.db_path),
@@ -308,7 +308,7 @@ def _dashboard_command(role: RoleConfig, paths: KilnPaths, branch: str) -> Agent
     directory, and the role inventory `workspace.write_sessions_file` already wrote.
     """
     argv = [
-        python_command(), "-m", "kiln.scheduler.entrypoints.dashboard",
+        python_command(), "-m", "kiln.scheduler.infrastructure.cli.dashboard",
         "--branch", branch,
         "--db-path", str(paths.db_path),
         "--status-dir", str(paths.status_dir),

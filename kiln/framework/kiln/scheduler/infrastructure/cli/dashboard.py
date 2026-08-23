@@ -24,10 +24,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from ..domain import handoff
-from ..infrastructure.persistence import db
-from ..infrastructure.terminal import pane_status
-from .role_scheduler import configure_logging, enable_unicode_output
+from ...domain import handoff
+from ..persistence import db
+from ..runtime import configure_logging, enable_unicode_output
+from ..terminal import pane_status
 
 log = logging.getLogger(__name__)
 

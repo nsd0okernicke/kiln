@@ -19,9 +19,9 @@ from kiln.scheduler.domain import handoff
 from kiln.scheduler.domain.models import TokenUsage, WorkerRequest
 from kiln.scheduler.domain.routing import parse_routing_table
 from kiln.scheduler.domain.worker_prompt import WorkerDefinition
-from kiln.scheduler.entrypoints import role_scheduler
-from kiln.scheduler.entrypoints.role_scheduler import SchedulerContext, SchedulerState
 from kiln.scheduler.infrastructure.agents.worker_runner import CallableWorkerRunner
+from kiln.scheduler.infrastructure.cli import role_scheduler
+from kiln.scheduler.infrastructure.cli.role_scheduler import SchedulerContext, SchedulerState
 from kiln.scheduler.infrastructure.diagnostics import FileWorkerDebugSink
 from kiln.scheduler.infrastructure.diagnostics import file_worker_debug_sink as debug_sink_module
 from kiln.scheduler.infrastructure.persistence import SQLiteMessageQueue, db, queue_commands

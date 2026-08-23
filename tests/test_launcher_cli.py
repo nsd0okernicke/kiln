@@ -422,7 +422,7 @@ class TestReclaimingLeftoverProxies:
 
         db = tmp_path / ".kiln" / "traffic.db"
         self._processes(monkeypatch, [
-            (33, f"python -m kiln.scheduler.entrypoints.dashboard --traffic-db {db}"),
+            (33, f"python -m kiln.scheduler.infrastructure.cli.dashboard --traffic-db {db}"),
         ])
         assert stop.find_project_proxies(db) == []
 

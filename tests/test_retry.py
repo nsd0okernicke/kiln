@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 from kiln.scheduler.domain import handoff
-from kiln.scheduler.entrypoints import retry
+from kiln.scheduler.infrastructure.cli import retry
 from kiln.scheduler.infrastructure.persistence import db
 
 

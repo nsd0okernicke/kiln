@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 from kiln.scheduler.domain import handoff
-from kiln.scheduler.entrypoints import inbox, send
+from kiln.scheduler.infrastructure.cli import inbox, send
 from kiln.scheduler.infrastructure.persistence import db
 
 pytestmark = pytest.mark.integration

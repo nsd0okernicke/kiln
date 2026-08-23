@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 
 import pytest
 from kiln.scheduler.domain import handoff
-from kiln.scheduler.entrypoints import dashboard
+from kiln.scheduler.infrastructure.cli import dashboard
 from kiln.scheduler.infrastructure.persistence import db
 
 pytestmark = pytest.mark.integration

@@ -32,8 +32,8 @@ dev = [
 
 [project.scripts]
 kiln = "launcher.cli:main"
-kiln-scheduler = "kiln.scheduler.entrypoints.role_scheduler:main"
-kiln-dashboard = "kiln.scheduler.entrypoints.dashboard:main"
+kiln-scheduler = "kiln.scheduler.infrastructure.cli.role_scheduler:main"
+kiln-dashboard = "kiln.scheduler.infrastructure.cli.dashboard:main"
 kiln-cockpit = "cockpit.server:main"
 
 [tool.setuptools]

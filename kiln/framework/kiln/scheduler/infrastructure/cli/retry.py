@@ -25,8 +25,8 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from ..domain import handoff
-from ..infrastructure.persistence import db
+from ...domain import handoff
+from ..persistence import db
 
 log = logging.getLogger(__name__)
 

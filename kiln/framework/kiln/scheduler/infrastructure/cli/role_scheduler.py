@@ -13,7 +13,6 @@ remain the canonical prose spec and the thing to diff this behaviour against.
 from __future__ import annotations
 
 import argparse
-import contextlib
 import logging
 import subprocess
 import sys
@@ -21,22 +20,23 @@ import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-from ..application.use_cases import process_next_message as scheduler_application
-from ..application.use_cases.process_next_message import (
+from ...application.use_cases import process_next_message as scheduler_application
+from ...application.use_cases.process_next_message import (
     CycleResult,
     SchedulerContext,
     SchedulerState,
 )
-from ..application.use_cases.recover_interrupted_work import recover_interrupted_work
-from ..domain.models import TokenUsage, WorkerInvocation, WorkerRequest
-from ..domain.routing import load_routing_table, parse_routing_arguments
-from ..domain.worker_prompt import WorkerDefinition, load_worker_definition
-from ..infrastructure.agents import DEFAULT_IDLE_TIMEOUT_SEC
-from ..infrastructure.diagnostics import FileWorkerDebugSink
-from ..infrastructure.diagnostics import verification as verify
-from ..infrastructure.persistence import SQLiteMessageQueue
-from ..infrastructure.terminal import pane_status
-from ..infrastructure.vcs import GitWorktree
+from ...application.use_cases.recover_interrupted_work import recover_interrupted_work
+from ...domain.models import TokenUsage, WorkerInvocation, WorkerRequest
+from ...domain.routing import load_routing_table, parse_routing_arguments
+from ...domain.worker_prompt import WorkerDefinition, load_worker_definition
+from ..agents import DEFAULT_IDLE_TIMEOUT_SEC
+from ..diagnostics import FileWorkerDebugSink
+from ..diagnostics import verification as verify
+from ..persistence import SQLiteMessageQueue
+from ..runtime import configure_logging, enable_unicode_output
+from ..terminal import pane_status
+from ..vcs import GitWorktree
 
 log = logging.getLogger(__name__)
 
@@ -76,23 +76,6 @@ ICON_ESCALATE = "\N{POLICE CARS REVOLVING LIGHT}"
 ICON_HALT = "\N{OCTAGONAL SIGN}"
 ICON_PING = "\N{TABLE TENNIS PADDLE AND BALL}"
 ICON_START = "\N{ROCKET}"
-
-
-def enable_unicode_output() -> None:
-    """
-    Force UTF-8 on stdout/stderr so the narration glyphs cannot crash the process.
-
-    On Windows these default to the console codepage (cp1252 on this machine); writing an
-    emoji then raises UnicodeEncodeError and takes the scheduler down mid-cycle. The
-    launcher also sets PYTHONIOENCODING, but this covers running the module directly.
-    `errors="replace"` means a terminal that genuinely cannot render a glyph shows a
-    placeholder instead of failing.
-    """
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is not None:
-            with contextlib.suppress(OSError, ValueError):  # exotic stream types
-                reconfigure(encoding="utf-8", errors="replace")
 
 
 commit_prefix = scheduler_application.commit_prefix
@@ -226,7 +209,7 @@ def format_banner(ctx: SchedulerContext, args: argparse.Namespace) -> list[str]:
     The pane header: what this scheduler was actually configured to do.
 
     A pane otherwise opens on the echoed
-    `python -m kiln.scheduler.entrypoints.role_scheduler --role ...`
+    `python -m kiln.scheduler.infrastructure.cli.role_scheduler --role ...`
     command line — complete, and unreadable. Same facts, laid out for a human, including
     the resolved routing so a misrouted handoff is diagnosable before it happens.
     """
@@ -300,7 +283,7 @@ def _make_worker_output_emitter(
 
 def build_context(args: argparse.Namespace) -> SchedulerContext:
     """Assemble a context from CLI arguments."""
-    from ..infrastructure.agents import (
+    from ..agents import (
         claude_adapter,
         codex_adapter,
         copilot_adapter,
@@ -555,34 +538,6 @@ def _record_cycle(bar: pane_status.StatusBar, result: CycleResult) -> None:
         tokens=bar.status.tokens + result.tokens,
         target=result.target or bar.status.target,
         detail=detail,
-    )
-
-
-def configure_logging(log_file: str | Path | None = None, label: str = "kiln-scheduler") -> None:
-    """
-    Log to the pane, and to a file when one is given.
-
-    Without a file, a scheduler that dies takes its own explanation with it — the pane
-    scrollback is the only record, and it is gone as soon as the window closes.
-
-    `label` names the emitter in every line; the inbox reuses this function and is not a
-    scheduler, so a pane full of `[kiln-scheduler/...]` would misattribute its output.
-    """
-    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
-    if log_file:
-        path = Path(log_file)
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            handlers.append(logging.FileHandler(path, encoding="utf-8"))
-        except OSError as exc:  # pragma: no cover - permissions/full disk
-            print(f"warning: could not open scheduler log {path}: {exc}", file=sys.stderr)
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format=f"%(asctime)s [{label}/%(levelname)s] %(message)s",
-        datefmt="%H:%M:%S",
-        handlers=handlers,
-        force=True,
     )
 
 

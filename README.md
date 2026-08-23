@@ -250,7 +250,7 @@ kiln/
 │       │   │   ├── agents/               # Claude, Codex, Copilot and Grok adapters
 │       │   │   ├── terminal/             # Pane status presentation
 │       │   │   └── diagnostics/          # Verification and worker debug output
-│       │   └── entrypoints/               # Scheduler, inbox, dashboard, send and retry CLIs
+│       │   └── infrastructure/cli/               # Scheduler, inbox, dashboard, send and retry CLIs
 │       │
 │       ├── proxy/                    # Opt-in traffic capture (`--proxy`, see "Traffic Capture")
 │       │   ├── server.py                 # Forwarding proxy; streams through, never buffers
@@ -348,7 +348,7 @@ What changes when a role is scheduled:
 
 | | Wrapper mode | Scheduler mode |
 | --- | --- | --- |
-| Pane runs | a persistent LLM session | `python -m kiln.scheduler.entrypoints.role_scheduler` |
+| Pane runs | a persistent LLM session | `python -m kiln.scheduler.infrastructure.cli.role_scheduler` |
 | Loop control | prose in a loop template | `role_scheduler.run_once()` |
 | Queue access | `kiln-db` + `kiln-channel` MCP | direct SQLite |
 | Turn is done when | the model decides | the worker prints `KILN-STATUS: done` |
@@ -400,7 +400,7 @@ not a launch failure: `codex login` says it better than the launcher can.
 
 ### Inbox mode (`"scheduler": "inbox"`)
 
-A third kind of pane, and the human's half of the same idea. It runs `kiln.scheduler.entrypoints.inbox`: it
+A third kind of pane, and the human's half of the same idea. It runs `kiln.scheduler.infrastructure.cli.inbox`: it
 watches another role's queue, prints each arriving message, marks it processed and rings the
 terminal bell. No agent, no worktree, no generated instructions, no MCP.
 
@@ -431,7 +431,7 @@ an empty one.
 ### Dashboard mode (`"scheduler": "dashboard"`)
 
 A fourth kind of pane, and the swarm-wide counterpart to the inbox's one-role view. It runs
-`kiln.scheduler.entrypoints.dashboard`: a `top`-style live view that aggregates every role at once instead of
+`kiln.scheduler.infrastructure.cli.dashboard`: a `top`-style live view that aggregates every role at once instead of
 watching one — no agent, no worktree, no generated instructions, no MCP, same "no agent" shape
 as `inbox`.
 
@@ -523,7 +523,7 @@ The dashboard and the pane status bar now report the same cycle and cost numbers
 cycle. They used to differ by one: the status file is written during the cycle, and the totals
 were only folded in after it returned.
 
-Run it standalone against any project with `python -m kiln.scheduler.entrypoints.dashboard --once ...` (see
+Run it standalone against any project with `python -m kiln.scheduler.infrastructure.cli.dashboard --once ...` (see
 `--help` for the required paths), or just launch a profile that includes it.
 
 **Try it:** the shipped `full` profile runs all four `auto` roles on the scheduler, keeps

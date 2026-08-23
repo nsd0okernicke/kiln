@@ -93,3 +93,15 @@ def test_cockpit_state_projection_does_not_depend_on_http_server():
 def test_agent_adapters_do_not_depend_on_launcher_ui():
     for path in (SCHEDULER / "infrastructure" / "agents").glob("*_adapter.py"):
         assert "launcher" not in imports(path), path.name
+
+
+def test_cli_adapters_do_not_import_other_cli_adapters():
+    cli = SCHEDULER / "infrastructure" / "cli"
+    for path in cli.glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        sibling_imports = {
+            node.module
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom) and node.level == 1 and node.module
+        }
+        assert not sibling_imports, f"{path.name} imports CLI sibling(s): {sibling_imports}"

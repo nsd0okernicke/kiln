@@ -40,9 +40,9 @@ log = logging.getLogger(__name__)
 #: dies with its window.
 KILN_PROCESS_MARKERS = (
     "channel.py",
-    "kiln.scheduler.entrypoints.role_scheduler",
-    "kiln.scheduler.entrypoints.inbox",
-    "kiln.scheduler.entrypoints.dashboard",
+    "kiln.scheduler.infrastructure.cli.role_scheduler",
+    "kiln.scheduler.infrastructure.cli.inbox",
+    "kiln.scheduler.infrastructure.cli.dashboard",
     "cockpit.server",
     "proxy.server",
 )

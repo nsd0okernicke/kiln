@@ -17,7 +17,7 @@ def test_namespaced_layers_are_importable():
     from kiln.scheduler.application.ports import MessageQueue
     from kiln.scheduler.application.use_cases.process_next_message import run_once
     from kiln.scheduler.domain.models import MessageStatus
-    from kiln.scheduler.entrypoints.role_scheduler import main
+    from kiln.scheduler.infrastructure.cli.role_scheduler import main
     from kiln.scheduler.infrastructure.persistence import SQLiteMessageQueue
 
     assert all((MessageQueue, run_once, MessageStatus, main, SQLiteMessageQueue))
@@ -25,7 +25,7 @@ def test_namespaced_layers_are_importable():
 
 def test_namespaced_scheduler_entrypoint_is_executable():
     result = subprocess.run(
-        [sys.executable, "-m", "kiln.scheduler.entrypoints.role_scheduler", "--help"],
+        [sys.executable, "-m", "kiln.scheduler.infrastructure.cli.role_scheduler", "--help"],
         capture_output=True,
         check=False,
         text=True,

@@ -12,9 +12,9 @@ from __future__ import annotations
 import logging
 
 import pytest
-from kiln.scheduler.entrypoints import role_scheduler
-from kiln.scheduler.entrypoints.role_scheduler import CycleResult
 from kiln.scheduler.infrastructure.agents.worker_runner import CallableWorkerRunner
+from kiln.scheduler.infrastructure.cli import role_scheduler
+from kiln.scheduler.infrastructure.cli.role_scheduler import CycleResult
 from kiln.scheduler.infrastructure.diagnostics import FileWorkerDebugSink
 from kiln.scheduler.infrastructure.persistence import SQLiteMessageQueue
 from kiln.scheduler.infrastructure.vcs import GitWorktree
