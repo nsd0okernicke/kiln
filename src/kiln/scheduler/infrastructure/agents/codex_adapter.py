@@ -1,42 +1,4 @@
-"""
-One-shot Codex CLI worker invocation.
-
-Every flag here was verified live against `codex-cli` 0.147.0 in scratch spikes this session,
-the same methodology claude_adapter.py's own flags were verified with. The non-obvious ones:
-
-- `codex exec` has **no `--agent <name>` flag** the way Copilot does -- it can't load a saved
-  custom agent by name, only a raw prompt. So the worker's persona (the generated
-  `.codex/agents/<role>-worker.toml`'s `developer_instructions`, already parsed into
-  `WorkerDefinition.prompt` by `worker_prompt.parse_toml_worker_definition`) is embedded
-  directly ahead of the task prompt, rather than referenced by name.
-- `-o/--output-last-message <file>`: writes the final agent message straight to a file --
-  verified live to be simpler and more reliable than scanning the JSON stream for it the way
-  the Claude/Copilot adapters have to.
-- `--ignore-user-config`: skips `$CODEX_HOME/config.toml` (auth still comes from
-  `CODEX_HOME`/its default). The per-role `config.toml` `workspace.prepare_agent_configs()`
-  writes is meant for the *wrapper*'s interactive session (trust records, MCP servers); this
-  one-shot call doesn't need or want any of that, so it's simplest to ignore it outright
-  rather than depend on its contents being worker-safe.
-- **No `CODEX_HOME` override on purpose.** Verified live: a fresh, empty `CODEX_HOME`
-  directory gets `401 Unauthorized` immediately -- `auth.json` genuinely has to already be in
-  that exact directory, and nothing in this codebase copies it there per role. The wrapper's
-  isolated `paths.codex_home(role)` exists to protect the user's real `~/.codex/config.toml`
-  from being overwritten, which `--ignore-user-config` already makes irrelevant to this call.
-  Reusing the ambient (already-authenticated) `CODEX_HOME` is what makes this runnable today
-  without a separate login per role. If concurrent scheduler roles calling `codex exec`
-  against the same session/state files ever proves to be a real contention problem, revisit
-  this -- don't "fix" it into isolation by default, that reintroduces the 401.
-- `--dangerously-bypass-approvals-and-sandbox`: matches the flag the wrapper-mode
-  `_codex_command` in `launcher/commands.py` already uses.
-- No dollar cost anywhere in the output -- only token usage (`turn.completed.usage`, now
-  verified live; see `_USAGE_ALIASES`). `cost_usd` is left at its dataclass default (`0.0`),
-  same rationale as the Copilot adapter.
-- stdin is redirected from devnull, same reasoning as the Claude adapter.
-- The resolved binary is looked up with `shutil.which` before `Popen` rather than handed the
-  bare `"codex"` string, same as the Copilot adapter -- `codex.exe` happens to be a native
-  executable on this machine so the bare name works either way, but nothing guarantees that
-  everywhere Codex CLI installs itself, and the resolution is free.
-"""
+"""One-shot Codex worker using inline instructions and ambient authentication."""
 
 from __future__ import annotations
 

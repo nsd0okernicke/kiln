@@ -36,29 +36,15 @@ DEFAULT_ACTIVITY_LIMIT = 8
 
 ICON_TITLE = "\N{BAR CHART}"
 
-#: Everything after a handoff message's closing banner rule, up to the next blank line --
-#: matches `handoff.format_handoff`'s layout exactly (SEPARATOR, banner, SEPARATOR, summary).
+#: Matches the summary section emitted by `handoff.format_handoff`.
 _SEPARATOR_RE = re.escape(handoff.SEPARATOR)
 _SUMMARY_RE = re.compile(_SEPARATOR_RE + r".*\n" + _SEPARATOR_RE + r"\n(?P<summary>.*)", re.DOTALL)
 
 
-#: Pane kinds that run no agent and report no state.
-#:
-#: Nothing ever hands these panes a `--status-script`, so they never write
-#: `.kiln/status/<role>.json` -- not "have not yet", but structurally cannot. Listing them
-#: beside roles that do report state produced a row of dashes in every view, and in WezTerm
-#: something worse: the tab-bar Lua defaults a `manual` role with no status file to
-#: `waiting`, so a perfectly healthy cockpit pane advertised itself as waiting for something.
-#:
-#: Restated here rather than imported: launcher profile models own and write these strings
-#: into the sessions file, but `scheduler` must not import `launcher` -- the dependency runs
-#: the other way. `test_dashboard` pins the two sets against each other, which a test can do
-#: because it may import both.
+#: Pane kinds that run no agent and therefore report no status.
 PASSIVE_KINDS = frozenset({"inbox", "dashboard", "cockpit"})
 
-#: What a pane whose kind the sessions file does not record is assumed to be. Only a file
-#: written before the kind column existed can produce this, and treating those roles as
-#: agents keeps an older launch rendering exactly as it used to.
+#: Backward-compatible kind for sessions files written before the kind column existed.
 DEFAULT_KIND = "agent"
 
 
@@ -72,13 +58,9 @@ class RoleSession:
     role: str
     agent: str
     display_name: str
-    #: `agent`, `python`, `inbox`, `dashboard` or `cockpit` — the profile's `scheduler` value.
     kind: str = DEFAULT_KIND
-    #: The profile's configured model. A fallback for wrapper roles only: a scheduler role
-    #: writes the model it actually resolved into its status file, and that always wins.
-    #: Empty means the backend's CLI chooses, which is a real answer, not a missing one.
+    #: Profile model fallback; resolved scheduler status takes precedence.
     model: str = ""
-    #: Configured worktree name (`@current` or the name below `.worktrees/`).
     worktree: str = ""
 
     @property
@@ -184,8 +166,7 @@ def _colorize(padded_text: str, state: str) -> str:
     return f"\x1b[48;2;{r};{g};{b}m\x1b[38;2;0;0;0m{padded_text}{pane_status.RESET_STYLE}"
 
 
-#: States in which a role is waiting on a worker subprocess, and therefore the only ones a
-#: stall means anything in. An `idle` role with an old `since` is not stuck, it is unemployed.
+#: States in which a worker subprocess can stall.
 WORKING_STATES = frozenset({"working", "retrying", "delegating"})
 
 #: Marks a role whose worker has run longer than the timeout it was launched with.
@@ -241,9 +222,6 @@ def render_state_grid(
         f"{'COST':>8} {'TOKENS':>9} {'CACHE':>6}"
     )
     lines = [header, "\N{BOX DRAWINGS LIGHT HORIZONTAL}" * len(header)]
-    # Stateless panes are skipped here rather than by the caller: `render_dashboard` also
-    # hands `sessions` to `cost_is_partial`, which needs the full inventory to judge whether
-    # a non-cost-reporting backend is in play.
     for session in visible_roles(sessions):
         lines.append(
             _state_row(
@@ -349,10 +327,7 @@ def cache_share(usage: dict | None) -> float | None:
     return usage.get("cache_read", 0) / total
 
 
-#: Backends whose one-shot adapter reports real dollars. Copilot and Codex report token
-#: usage but no cost at all (see their module docstrings), so a swarm containing either has
-#: a TOTAL COST that is structurally incomplete rather than merely small -- which looked
-#: identical to a genuinely cheap run until this marker existed.
+#: Backends whose one-shot adapters report monetary cost.
 COST_REPORTING_AGENTS = frozenset({"claude", "grok"})
 
 

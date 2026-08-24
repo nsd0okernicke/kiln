@@ -157,22 +157,7 @@ def _render_json_line(
 
 
 def terminate_tree(process: subprocess.Popen) -> None:
-    """
-    Kill the worker *and everything it spawned*.
-
-    `Popen.kill()` reaches only the direct child. Every worker shells out — codex runs
-    `pwsh -Command 'uv run pytest ...'` — and the grandchildren inherit the stdout pipe, so
-    killing the child alone leaves the reader loop blocked on a pipe that still has writers.
-    The watchdog fires, and the worker keeps running anyway.
-
-    Observed live: an 1800s cap released at 2698s (898s over) because a `testcontainers`
-    fixture was still waiting on a Docker daemon that was not running. The first attempt of
-    the same handoff released on time, so the overrun is unbounded rather than constant —
-    it is however long the deepest surviving descendant takes to give up.
-
-    Best effort by design: a process that is already gone, or that we may not signal, is not
-    an error worth failing a cycle over. The caller has a timeout either way.
-    """
+    """Best-effort termination of a worker and its descendants."""
     if process.poll() is not None:
         return
 
@@ -197,14 +182,7 @@ def terminate_tree(process: subprocess.Popen) -> None:
 
 
 def _killpg(process: subprocess.Popen) -> None:
-    """
-    Signal the child's whole process group, but never our own.
-
-    This is only safe because the adapters spawn with `start_new_session=True`, which makes
-    the child a group leader. Without it `getpgid(child)` returns *the scheduler's* group and
-    the kill takes down the scheduler with the worker — so the guard below is load-bearing,
-    not defensive padding.
-    """
+    """Signal the child's process group without ever signalling our own."""
     try:
         group = os.getpgid(process.pid)
     except OSError:

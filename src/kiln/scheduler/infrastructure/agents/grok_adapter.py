@@ -1,39 +1,4 @@
-"""
-One-shot Grok CLI worker invocation.
-
-Every flag here was verified live against `grok` 1.0.0 (3cd0d0cbce, stable) in scratch spikes
-this session, the same methodology claude_adapter.py's own flags were verified with. The
-non-obvious ones:
-
-- `--output-format streaming-messages-json`: documented by the CLI itself as "NDJSON in the
-  Anthropic Messages API wire format" -- and verified live, its event shapes (`system`/
-  `assistant`/`user`/`result`, `tool_use`/`tool_result` content blocks) are structurally
-  identical to what claude_adapter.py already parses, right down to the `result` event's
-  `is_error`/`result`/`total_cost_usd` fields. Only the tool *names* differ (grok's are
-  lowercase/snake_case: `write`, `run_terminal_command`, `read_file`, ... vs Claude's
-  PascalCase), so this module needs its own tool-name table but can reuse the rest of the
-  parsing/rendering shape.
-- `--agents '<json>' --agent <name>`: the same inline-definition mechanism Claude uses
-  (`{name: {description, prompt}}`) -- no per-worktree file mirroring needed, and
-  `worker_prompt.build_agents_payload()` is reused unchanged.
-- `--always-approve`: required for non-interactive execution, same role as Claude's
-  `--permission-mode bypassPermissions`.
-- `--no-subagents`: disables grok's own `spawn_subagent` tool -- the isolation-from-recursive-
-  delegation equivalent of the Claude worker having no `Agent` tool, and Codex's
-  `mcp_servers = {}`.
-- **Grok reports real USD cost** (`total_cost_usd`, same field name as Claude, confirmed live)
-  -- unlike the Copilot/Codex adapters, `cost_usd` here is genuinely populated, not left at
-  the dataclass default.
-- MCP isolation: verified live, a fresh session reports `"mcp_servers":[]` with nothing
-  configured (`grok mcp list` confirms the same). Kiln has never wired grok into any MCP
-  registration, so there is nothing to defensively disable today -- but note this CLI has no
-  `--strict-mcp-config`-equivalent override flag the way Claude/Copilot do. If a future
-  feature ever registers an MCP server globally for grok, this adapter needs revisiting.
-- The resolved binary is looked up with `shutil.which` before `Popen`, same reasoning as the
-  Copilot/Codex adapters: nothing guarantees `grok` ships as a native `.exe` everywhere the
-  way it happens to on this machine.
-- stdin is redirected from devnull, same reasoning as the Claude adapter.
-"""
+"""One-shot Grok worker using Anthropic-shaped streaming JSON events."""
 
 from __future__ import annotations
 

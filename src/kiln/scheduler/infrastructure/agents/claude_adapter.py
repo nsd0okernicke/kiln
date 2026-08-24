@@ -1,21 +1,4 @@
-"""
-One-shot Claude Code worker invocation.
-
-Every flag here was verified live against Claude Code 2.1.224 (see "Spike results: Claude"
-in full-python-plan.md). The non-obvious ones:
-
-- `--strict-mcp-config` with no `--mcp-config`: verified to yield zero MCP tools, which is
-  what keeps a worker from reaching kiln-db/kiln-channel and sending its own handoffs.
-- `--setting-sources project`: project skills stay available, the operator's *user-global*
-  plugin skills do not leak into the worker's context.
-- `--agents` + `--agent`: feeds the generated worker definition; its prompt demonstrably
-  governs the response.
-- `--model` is always passed explicitly. The CLI default is Opus, which measured 5-10x the
-  cost of Sonnet on an identical trivial call.
-- `--bare` is deliberately NOT used: it would suppress CLAUDE.md, but its auth is strictly
-  ANTHROPIC_API_KEY and it fails outright for OAuth/subscription users.
-- stdin is redirected from devnull: without it the CLI blocks ~3s waiting for input.
-"""
+"""One-shot Claude worker with isolated MCP and user-global settings."""
 
 from __future__ import annotations
 

@@ -31,19 +31,7 @@ from ..domain.profile import Profile, RoleConfig
 
 log = logging.getLogger(__name__)
 
-#: Patterns every Kiln project needs ignored.
-#:
-#: `.kiln` deliberately has NO trailing slash: it is a symlink in each worktree, and a
-#: trailing-slash pattern only matches real directories — with the slash the symlink stays
-#: untracked-but-not-ignored and can be swept into a commit, breaking later merges.
-#:
-#: CLAUDE.md / AGENTS.md / .mcp.json / tmp/ are regenerated per role with different content,
-#: so tracking them makes every role's copy differ and turns each merge into an add/add
-#: conflict.
-#:
-#: `.claude/settings.json` is copied into every worktree from the same template. Left
-#: trackable, the scheduler's `git add -A` commits one role's copy and every other role's
-#: next merge aborts on it. Observed live; see git_ops.GENERATED_WORKTREE_PATHS.
+#: Generated per-worktree files. `.kiln` has no slash because it may be a symlink.
 REQUIRED_GITIGNORE_ENTRIES = (
     ".kiln",
     ".worktrees/",
@@ -108,13 +96,7 @@ def write_directory_gitignore(directory: Path) -> None:
         marker.write_text("*\n", encoding="utf-8")
 
 
-#: Committed counterpart to `git_ops.ensure_union_merge`'s local-only repair.
-#:
-#: Both exist on purpose. The `info/attributes` write is what actually unblocks a *running*
-#: swarm -- it is shared across worktrees and effective immediately. This file is what carries
-#: the rule to a fresh clone, another machine, or a human merging these branches by hand,
-#: none of which see a local-only attributes file. Same split as `.gitignore` (committed) and
-#: `info/exclude` (local repair).
+#: Committed counterpart to the immediate local rule installed by `ensure_union_merge`.
 GITATTRIBUTES = (
     "# Every role appends to logbook.md in its own worktree, so two branches always add\n"
     "# different lines to the end of one file. `union` keeps both instead of conflicting.\n"
@@ -210,10 +192,6 @@ def initialize_repo(paths: KilnPaths) -> None:
 
     ensure_gitignore(paths)
     ensure_gitattributes(paths)
-    # Every launch, not just a new project: this is what repairs a project scaffolded before
-    # the rule existed, and the file it writes is local-only and shared across worktrees, so
-    # one call here covers every role for the whole run -- without waiting for the committed
-    # `.gitattributes` above to propagate onto each role's branch.
     git_ops.ensure_union_merge(paths.project_root)
 
     if is_new:
@@ -271,10 +249,7 @@ def prepare_state_dirs(paths: KilnPaths) -> None:
     paths.logs_dir.mkdir(parents=True, exist_ok=True)
     paths.status_dir.mkdir(parents=True, exist_ok=True)
 
-    # `kiln/` is version-controlled — it holds the constitution and roles every worktree
-    # needs to check out. An earlier version blanket-ignored it, which silently excluded
-    # kiln/project/ from every commit and left new worktrees with no kiln/ at all. Self-heal
-    # projects still carrying that file (fingerprint: a lone "*").
+    # Repair the obsolete blanket ignore that excluded the version-controlled kiln directory.
     stray = paths.kiln_dir / ".gitignore"
     if stray.is_file() and stray.read_text(encoding="utf-8").strip() == "*":
         stray.unlink()
@@ -418,13 +393,7 @@ def prepare_worktrees(profile: Profile, paths: KilnPaths, branch: str) -> list[P
                     f"could not create worktree for role {role.role!r}: {result.stderr.strip()}"
                 )
         else:
-            # `.worktrees/` is gitignored (see REQUIRED_GITIGNORE_ENTRIES) and so survives a
-            # `branch` reset/reinit untouched, while the branch above is only (re)created when
-            # the worktree directory is absent -- an existing worktree left over from an
-            # earlier, unrelated run silently carries its old branch straight into this one.
-            # A dry-run merge against the current branch tip surfaces that here, before any
-            # pane opens, instead of failing later as a real conflicted `git merge` inside
-            # kiln-receive (observed live: an add/add conflict on logbook.md).
+            # Surface stale-worktree conflicts before launching panes.
             warn_if_worktree_conflicts(paths, role_branch, branch)
         created.append(worktree)
 
@@ -474,32 +443,14 @@ def _copy_worker_definitions(paths: KilnPaths, worktree: Path) -> None:
             copy_template_file(item, destination / item.name)
 
 
-#: Every project-level convention a supported CLI might scan for skills, relative to a
-#: worktree root. Confirmed live via `copilot skill --help`: Copilot alone checks all three
-#: ("Project .github/skills/, .agents/skills/, or .claude/skills/"), not just the one usually
-#: thought of as "its own" -- so a directory left over from an earlier profile/agent change
-#: (e.g. a role that used to be `agent: claude` leaving `.claude/skills` behind after switching
-#: to `agent: copilot`) is just as visible to Copilot as `.github/skills`. Every convention is
-#: therefore kept in sync in every worktree, not just whichever one nominally belongs to that
-#: role's current agent.
-#:
-#: Grok needs no fourth entry. Verified with `grok inspect` against 1.0.5: it discovers
-#: project skills from `.claude/skills` and `.agents/skills` (and a `.grok/skills` of its own,
-#: which Kiln has no reason to populate as well) but NOT `.github/skills` -- so the two it
-#: shares with this list already reach it, including the wrapper-only filtering below.
+#: Project skill directories scanned by supported agent CLIs.
 SKILL_DIR_CONVENTIONS = (
     (".claude", "skills"),
     (".github", "skills"),
     (".agents", "skills"),
 )
 
-#: Skills that only make sense inside an interactive wrapper session, which discovers a
-#: handoff/message by reading these skills itself. A scheduler-mode worker never needs them --
-#: the scheduler handles receive/merge/handoff mechanically in Python -- and a one-shot worker
-#: that sees them anyway has been observed trying to follow their message-queue protocol
-#: (checking tmp/handoff-in.md, hunting for the kiln-channel MCP server) against MCP access
-#: the scheduler adapter deliberately disables, turning an expected denial into a confused,
-#: credit-burning session that never produces a result.
+#: Wrapper-only queue protocol skills; scheduler mode handles these operations in Python.
 WRAPPER_ONLY_SKILLS = frozenset({"kiln-receive", "kiln-handoff", "kiln-ping"})
 
 

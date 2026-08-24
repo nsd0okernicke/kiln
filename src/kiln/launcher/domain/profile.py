@@ -53,24 +53,13 @@ CURRENT_DIR_ALIASES = ("@current", "none", "master")
 #: Opt-in value for the deterministic Python scheduler, per role.
 SCHEDULER_PYTHON = "python"
 
-#: Turns a role entry into a notification pane rather than an agent. It runs
-#: the namespaced scheduler inbox against the queue of the role named by `watches`, and has no
-#: worktree,
-#: no generated instructions, no worker definition and no agent CLI.
+#: Runs a passive notification pane for the role named by `watches`.
 SCHEDULER_INBOX = "inbox"
 
-#: Turns a role entry into a live cross-role dashboard rather than an agent. It runs
-#: the namespaced scheduler dashboard, aggregating every role in the profile instead of
-#: watching one, and
-#: has no worktree, no generated instructions, no worker definition and no agent CLI --
-#: the same shape as an inbox pane (see `RoleConfig.is_passive`).
+#: Runs the passive cross-role terminal dashboard.
 SCHEDULER_DASHBOARD = "dashboard"
 
-#: Turns a role entry into the local web cockpit (issue #22) rather than an agent. It runs
-#: The HTTP adapter serves one page on 127.0.0.1 over the same `messages.db` and
-#: status files the dashboard reads. Same passive shape as `inbox` and `dashboard`, and
-#: deliberately alongside them rather than instead: the TTY dashboard is the only view that
-#: works over SSH or without a browser.
+#: Runs the passive local web cockpit instead of an agent.
 SCHEDULER_COCKPIT = "cockpit"
 
 VALID_SCHEDULERS = (SCHEDULER_PYTHON, SCHEDULER_INBOX, SCHEDULER_DASHBOARD, SCHEDULER_COCKPIT)
@@ -94,50 +83,33 @@ class RoleConfig:
     scheduler: str | None = None
     #: Whose queue an inbox pane watches. Ignored for every other kind of role.
     watches: str = ""
-    #: Scheduler-mode only: write the backend CLI's own internal debug trace per attempt
-    #: (Claude's `--debug-file`, Copilot's `--log-dir`/`--log-level all`) to `.kiln/logs/`.
-    #: Off by default -- it's substantial volume for a healthy run, worth paying for only
-    #: while actively diagnosing a failure like the copilot "permission denied" investigation.
+    #: Write the backend's debug trace for each scheduler attempt.
     worker_debug: bool = False
-    #: Scheduler-mode only. How many times one work item may reach this role before it
-    #: escalates instead of working. None means no ceiling, which is the shipped default --
-    #: the existing stop conditions all catch failure, and this is the one that catches
-    #: expensive success (spec<->code ping-pong runs until a human notices).
+    #: Maximum visits by one work item; None disables the limit.
     max_cycles: int | None = None
-    #: Scheduler-mode only. Dollar ceiling handed to the worker CLI per invocation.
-    #: **Only meaningful on a backend that reports cost** -- see `COST_REPORTING_AGENTS`.
+    #: Per-invocation budget for backends that support and report cost.
     max_budget_usd: float | None = None
-    #: Scheduler-mode only. Shell command run in this role's worktree after the worker
-    #: reports done and before the handoff. A non-zero exit costs an attempt. Empty means
-    #: the role is trusted on its own word, which is the behaviour every role had before.
-    #: **This is arbitrary code from the profile, run with the scheduler's privileges** --
-    #: the same trust the profile already carries by choosing which agent binaries run.
+    #: Verification command run with scheduler privileges before handoff.
     verify: str = ""
     #: Seconds before `verify` is killed and treated as a failure.
     verify_timeout: int | None = None
-    #: Seconds between polls of this role's queue. Applies to scheduler, inbox and dashboard
-    #: panes alike -- all three poll, and all three had the flag with no way to set it.
+    #: Seconds between queue polls.
     poll_interval: float | None = None
     #: Seconds before one worker invocation is abandoned.
     worker_timeout: int | None = None
     #: Silence, not duration -- see adapters.Watchdog. None keeps the module default.
     worker_idle_timeout: float | None = None
-    #: Worker attempts per handoff before escalating. Was a `SchedulerContext` dataclass
-    #: default with no CLI flag at all -- changeable only from code, despite being one of the
-    #: two numbers that decide how an unattended swarm gives up.
+    #: Worker attempts per handoff before escalation.
     max_attempts: int | None = None
-    #: Consecutive escalations before this role stops taking new work. The other one.
+    #: Consecutive escalations before the role halts.
     escalation_limit: int | None = None
     #: Dashboard panes only: how many recent messages the activity list shows.
     activity_limit: int | None = None
     #: Inbox panes only: ring the terminal bell on arrival. True is the shipped behaviour.
     bell: bool = True
-    #: Cockpit panes only: the port to prefer. The cockpit probes upward when it is taken,
-    #: so this is a preference rather than a reservation. None keeps the HTTP adapter's own
-    #: default -- one number, in one place, rather than a copy of it here.
+    #: Preferred cockpit port; occupied ports are skipped.
     port: int | None = None
-    #: Cockpit panes only: open a browser tab at launch. True is the shipped behaviour;
-    #: `KILN_COCKPIT_NO_BROWSER` overrides it per machine for headless boxes.
+    #: Open the cockpit in a browser unless overridden by the environment.
     open_browser: bool = True
 
     @property
@@ -166,36 +138,17 @@ class RoleConfig:
 
     @property
     def is_inbox(self) -> bool:
-        """
-        True for a notification pane rather than an agent.
-
-        An inbox has no agent, no worktree and no generated files. Every per-role step in
-        the launch sequence has to skip it, so this is checked in a lot of places — the
-        alternative was a second, parallel notion of "pane" running through the whole
-        kiln.launcher.
-        """
+        """Whether this role is an inbox pane."""
         return self.scheduler == SCHEDULER_INBOX
 
     @property
     def is_dashboard(self) -> bool:
-        """
-        True for a cross-role dashboard pane rather than an agent.
-
-        Same shape as `is_inbox` -- no agent, no worktree, no generated files -- except it
-        aggregates every role in the profile instead of watching one, so it has no `watches`
-        equivalent.
-        """
+        """Whether this role is a terminal dashboard pane."""
         return self.scheduler == SCHEDULER_DASHBOARD
 
     @property
     def is_cockpit(self) -> bool:
-        """
-        True for the web cockpit pane rather than an agent.
-
-        Passive like `is_dashboard` -- no agent, no worktree, no generated files -- but it
-        binds a port and accepts writes, so it is the one passive pane that can start and
-        stop work. That difference lives in what it runs, not in how the launcher treats it.
-        """
+        """Whether this role is a web cockpit pane."""
         return self.scheduler == SCHEDULER_COCKPIT
 
     @property
@@ -239,9 +192,7 @@ class Profile:
     #: the file and two shapes cannot both define the same role's default row — see
     #: `scheduler.routing.parse_profile_routing`.
     routing: RoutingTable = field(default_factory=RoutingTable)
-    #: A test fixture rather than a profile anyone should pick for real work. Hidden from
-    #: `--list-profiles` unless asked for: the profile list is the one menu users choose from,
-    #: and entries that exist to exercise Kiln itself do not belong on it.
+    #: Hidden test fixture profile.
     fixture: bool = False
 
     def role(self, name: str) -> RoleConfig | None:

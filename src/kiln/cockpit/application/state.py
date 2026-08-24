@@ -23,12 +23,10 @@ from kiln.scheduler.domain import handoff
 from kiln.scheduler.domain.models import MessageStatus
 from kiln.scheduler.domain.status_contract import PENDING_HANDOFF
 
-#: The lane a card reaches when nothing is holding it any more. Not a role, so it can never
-#: collide with one: `render_board` puts it last and the page paints it differently.
+#: Terminal board lane for completed work.
 LANE_DONE = "done"
 
-#: How much of a handoff's opening prose a card shows. Longer than the dashboard's 60-column
-#: budget because a browser card is not fighting a fixed-width grid for space.
+#: Maximum handoff summary displayed on a card.
 CARD_SUMMARY_CHARS = 140
 
 #: Shown on a card for a request that has neither a name nor readable prose to borrow.
@@ -168,8 +166,7 @@ class CockpitContext:
 
     project_name: str
     branch: str
-    #: Roles that get a swimlane, in board order. Empty means "infer from the traffic",
-    #: which is what a cockpit started by hand outside a launch has to do.
+    #: Board lanes in display order; empty infers lanes from traffic.
     lanes: tuple[str, ...] = ()
     #: The role a human's queue belongs to. Messages waiting here are completed cycles
     #: asking for review, which is what the Attention rail is mostly made of.
@@ -294,9 +291,7 @@ def build_board(
 
     grouped: dict[str, list[dict]] = {lane: [] for lane in order}
     for card in cards:
-        # A card in a lane the board does not know about (a role that left the profile
-        # between runs) is still real work and must not vanish; it gets its own lane at
-        # the end rather than being dropped or silently folded into Done.
+        # Preserve work for roles removed from the current profile.
         grouped.setdefault(card["lane"], []).append(card)
     return {"lanes": list(grouped), "cards": grouped}
 
@@ -407,8 +402,6 @@ def build_totals(snapshot: SwarmSnapshot) -> dict:
     cost, cycles, tokens = render_totals(snapshot.statuses)
     return {
         "cost_usd": cost,
-        # A swarm containing a role whose backend reports no cost has a structurally
-        # incomplete total, not a small one. The page renders the `+` this flag earns.
         "cost_partial": cost_is_partial(snapshot.sessions, snapshot.statuses),
         "cycles": cycles,
         "tokens": tokens,
@@ -434,10 +427,6 @@ def build_state(
         "intake_role": ctx.intake_role,
         "generated_at": snapshot.now_local.isoformat(timespec="seconds"),
         "roles": role_rows(snapshot, work_items),
-        # Names the composer offers, newest-first by first appearance -- `cycles_by_work_item`
-        # already orders them that way. Picking from this list rather than retyping is what
-        # stops a near-miss ("cat3" for "CAT-3") silently forking one feature into two
-        # grouping buckets, which would break its cost total, its lap count and its card.
         "work_items": list(cycles),
         "totals": build_totals(snapshot),
         "board": build_board(work_items, cycles, snapshot.now_local, ctx.lanes),
@@ -461,9 +450,6 @@ def _card(row: dict, cycles: dict[str, int], now_local: datetime) -> dict:
     summary = extract_summary(row["content"], CARD_SUMMARY_CHARS)
     return {
         "work_item": work_item,
-        # What the card is called on screen. A named item is its own best label; an unnamed
-        # one borrows the request's opening line, because "what did I ask for" is the only
-        # thing that distinguishes two requests waiting to be specified.
         "title": work_item or summary or UNNAMED_TITLE,
         "unnamed": work_item is None,
         "lane": lane_for(row),
@@ -474,9 +460,6 @@ def _card(row: dict, cycles: dict[str, int], now_local: datetime) -> dict:
         "summary": summary,
         "created_at": row["created_at"],
         "age": _age(row["created_at"], now_local),
-        # An unnamed request is exactly one message and nothing counts it: `work_item` is the
-        # grouping key, so `cycles_by_work_item` has no entry to look up. Reporting the 0 that
-        # lookup returns would put "0 msgs" on a card that visibly exists.
         "cycles": cycles.get(work_item, 0) if work_item else 1,
         "failed": row["status"] == MessageStatus.FAILED,
         "error": row.get("error"),

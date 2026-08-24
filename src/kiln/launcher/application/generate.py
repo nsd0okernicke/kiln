@@ -37,11 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from kiln.scheduler.domain.routing import load_routing_table, render_routing_table
 from kiln.scheduler.domain.status_contract import WORKER_STATUS_INSTRUCTION
 
-#: The interpreter `.mcp.json` names for kiln-channel. Deliberately the bare command rather
-#: than sys.executable: the agent CLI resolves it from PATH at spawn time, which may not be
-#: the interpreter running the kiln.launcher. `cli.warn_if_channel_unavailable` probes this exact
-#: command so the preflight check tests what will actually run. Which bare name is resolved
-#: per platform -- see `paths.python_command()`; `python` alone is absent on stock Ubuntu.
+#: Bare interpreter resolved by the agent CLI when it starts the MCP server.
 MCP_PYTHON = python_command()
 
 #: What channel.py imports, mirroring its mcp 1.x/2.x compatibility fallback.
@@ -52,28 +48,10 @@ CHANNEL_IMPORT_PROBE = (
     "    from mcp.server.mcpserver import MCPServer\n"
 )
 
-#: Backends whose wrapper loop *blocks* on kiln-channel's `wait_for_message()` instead of
-#: polling kiln-db.
-#:
-#: Only Claude is verified to tolerate a long-blocking MCP tool call; the same unknown is why
-#: Codex's and Copilot's loop templates poll, and Grok's now do too. This is what decides
-#: whether a worktree's `.mcp.json` advertises the channel at all, because a registered server
-#: the loop is told never to call is an invitation to call it anyway.
-#:
-#: It matters for Grok specifically: verified with `grok inspect` against 1.0.5, Grok reads
-#: `.mcp.json` directly — the same file Claude does — so anything listed there is a tool it can
-#: genuinely see and reach. (`grok mcp list` shows only Grok's *own* config-file entries and
-#: reports "no MCP servers configured" for a worktree wired purely through `.mcp.json`, which
-#: makes it a misleading way to check this.) Codex and Copilot read neither, so for them this
-#: is a no-op that keeps a latent trap from opening if they ever start.
+#: Backends verified to tolerate a blocking `wait_for_message()` MCP call.
 BLOCKING_CHANNEL_AGENTS = frozenset({"claude"})
 
-#: Backends with real in-session worker delegation, so their wrapper gets the delegating
-#: prompt rather than the role's own work rules.
-#:
-#: `grok` qualifies on both counts, verified live against 1.0.5: `grok inspect` reports
-#: `.grok/agents/<role>-worker.md` as a *project* agent — the file `write_worker_file`
-#: already puts there — and the CLI has a `spawn_subagent` tool to dispatch to it.
+#: Backends with in-session worker delegation.
 DELEGATING_AGENTS = ("claude", "copilot", "codex", "grok")
 
 DEFAULT_HANDOFF_TARGET = "specifier"
@@ -135,9 +113,6 @@ def build_substitutions(
     worktree: Path,
     profile: Profile | None = None,
 ) -> dict[str, str]:
-    # A profile with its own routing replaces workflow.md's table, so the instructions a
-    # wrapper role is handed must name that profile's target. Rendering the file's answer
-    # here would tell the agent to hand off to a role its own profile never launches.
     routing = (
         profile.routing
         if profile is not None and profile.routing.rules
@@ -145,10 +120,6 @@ def build_substitutions(
     )
     target = routing.resolve(role.role) or DEFAULT_HANDOFF_TARGET
     return {
-        # workflow.md carries a placeholder rather than a hand-written table: the file is
-        # injected verbatim into wrapper-mode instructions, so a table written there and a
-        # profile that overrides routing are two sources that can disagree -- and the agent
-        # obeys the one in front of it.
         "{{ROUTING_TABLE}}": render_routing_table(routing),
         "{{ROLE}}": role.role,
         "{{ROLE_UPPER}}": role.role.upper(),
@@ -179,15 +150,7 @@ def render_instructions(
     has_inbox = bool(profile and profile.inbox_watches(role.role))
     loop_name = f"loop-{role.mode}-{role.agent}"
     if has_inbox:
-        # A companion `inbox` pane already receives and merges for this role (see
-        # roles/human-in-the-loop.md -> "Receiving Messages"). The plain loop template's
-        # Step 1/5 "receive" cycle assumes this role does its own polling and merging --
-        # if used here anyway, either the session blocks forever racing the inbox for the
-        # same message, or (observed live) it silently skips its own receive step and,
-        # with it, the `set-status.py waiting` call that step starts with, leaving the tab
-        # title stuck on whatever state it last reported (e.g. "handoff") forever. The
-        # `-with-inbox` variant replaces that whole cycle with an explicit, mandatory
-        # "waiting" status reset right after sending a handoff.
+        # The companion inbox owns receiving; this variant only resets the wrapper to waiting.
         loop_name += "-with-inbox"
     loop = read_template(paths, loop_name)
     runtime = read_template(paths, f"runtime-{role.agent}")
@@ -229,16 +192,7 @@ def write_instructions(
     Returns the path written, or None when the role is scheduler-driven.
     """
     if role.is_passive:
-        # A passive pane (inbox, dashboard) has no worktree and no generated files of its
-        # own (RoleConfig.is_passive) -- it shares its worktree (@current) with a real role,
-        # e.g. an inbox with the human-in-the-loop it watches in the default profile.
-        # instruction_file_for() would resolve to *that* role's CLAUDE.md, so deleting "a
-        # stale file for this role" here deletes a real, just-written file instead: the real
-        # role is processed first in profile.roles and writes CLAUDE.md correctly, then the
-        # passive pane is processed right after and (observed live, for inbox specifically)
-        # silently deletes the same path, leaving the real role's session with no
-        # instructions at all -- it never learns to call set-status.py, so its tab-bar badge
-        # sticks on whatever state it last managed to report.
+        # Passive panes share another role's worktree and must not alter its generated files.
         return None
 
     if role.uses_scheduler:
@@ -400,13 +354,7 @@ def build_copilot_mcp_config(paths: KilnPaths) -> dict:
     }
 
 
-#: Seconds Codex waits for an MCP server to come up before giving up on it.
-#:
-#: Its own default is far too short for this one: `npx mcp-sqlite` resolves (and on a cold
-#: cache downloads) the package before the server says anything, which took longer than the
-#: default on a live Windows run and failed the whole MCP startup with
-#: "MCP client for `kiln-db` timed out". A role that loses `kiln-db` cannot send a handoff at
-#: all, so the cost of waiting is far lower than the cost of giving up early.
+#: Allows cold `npx mcp-sqlite` startup before Codex abandons the MCP server.
 CODEX_MCP_STARTUP_TIMEOUT_SEC = 120
 
 

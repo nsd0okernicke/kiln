@@ -55,25 +55,7 @@ def move_to(row: int, column: int = 1) -> str:
 
 # --- appearance ---------------------------------------------------------------------
 
-#: `#rrggbb`, keyed by the states role_scheduler reports through `set_status`.
-#:
-#: This is the single source of truth for state colour, full stop -- launcher/terminals/
-#: wezterm.py's tab-bar badges read the same table (exported as JSON via an env var, see
-#: `build_environment`) rather than keeping a second, hand-copied one. They used to be two
-#: independently-maintained palettes that happened to use the same state *names*; in
-#: practice they drifted (a role's pane bar and its own tab-bar badge showed different
-#: colours for the same state) because nothing forced them to agree on *values*. Now there
-#: is exactly one table, and both surfaces render from it.
-#:
-#: `blocked` / `escalated` / `halted` step from amber-red to pure red so repeated trouble
-#: reads as escalating, not as one flat "something's wrong" red.
-#:
-#: `working` / `delegating` is teal, not the orange it used to be: orange reads as caution,
-#: but this is the normal, desired, productive state -- the one an operator most wants to
-#: see -- so it should read as calm, positive activity instead. Teal was picked because
-#: green (waiting/idle) and blue (receiving) -- the palette's other "calm" hues -- are
-#: already spoken for; reusing either would make working indistinguishable from an idle or
-#: just-arrived role at a glance.
+#: Shared state palette for pane bars and WezTerm tab badges.
 STATE_COLORS_HEX = {
     "starting": "#8a8a88",
     "waiting": "#5ab363",
@@ -81,8 +63,6 @@ STATE_COLORS_HEX = {
     "receiving": "#7aadff",
     "working": "#2fbf9f",
     "delegating": "#2fbf9f",
-    # Same family as working -- still busy, just on the role's own quality gate rather than
-    # on the worker.
     "verifying": "#2fbf9f",
     "approval": "#ffdd6a",
     "retrying": "#ffdd6a",
@@ -105,14 +85,7 @@ def style_for(state: str) -> tuple[int, int, int]:
     return _hex_to_rgb(STATE_COLORS_HEX.get(state, DEFAULT_COLOR_HEX))
 
 
-#: A faint background wash, applied per line, for one-shot worker output specifically --
-#: the streamed `render_event()` lines in adapters/claude_adapter.py (and future
-#: copilot/codex adapters), never the scheduler's own `log.info` lines. The scheduler's
-#: log line and the worker's own words were, until now, visually identical plain text
-#: sharing one pane; a glance couldn't tell "Kiln talking" from "the agent talking" apart.
-#: Background only, no foreground override -- deliberately faint enough to read as a
-#: wash behind the existing text colour rather than a competing highlight, since the
-#: worker's own tool-call icons and text already carry the visual weight in that stream.
+#: Background tint distinguishing worker output from scheduler log lines.
 WORKER_OUTPUT_BG_HEX = "#1c2333"
 
 
@@ -131,11 +104,7 @@ class PaneStatus:
     target: str = ""
     cycles: int = 0
     cost_usd: float = 0.0
-    #: Cumulative usage across every cycle this role has run, kept broken down rather than
-    #: summed to a single count. The breakdown is the actionable part: a large
-    #: `cache_read_tokens` is cheap and healthy, a large `input_tokens` is prompt bloat, and
-    #: a total alone cannot tell an operator which one they are looking at. All zero on a
-    #: backend that reports no usage, which is why the bar hides the segment entirely.
+    #: Cumulative usage across all cycles.
     tokens: TokenUsage = field(default_factory=TokenUsage)
     detail: str = ""
 
@@ -176,9 +145,6 @@ def _bar_segments(status: PaneStatus) -> list[str]:
     if status.cost_usd:
         segments.append(f"${status.cost_usd:.2f}")
     if status.tokens.total:
-        # Hidden at zero, like cost: a Codex/Copilot role whose usage could not be read
-        # should show nothing rather than assert it spent no tokens. The bar shows the
-        # total only -- the breakdown is a dashboard-width thing, not a one-row thing.
         segments.append(format_tokens(status.tokens.total))
     if status.target:
         segments.append(f"\N{RIGHTWARDS ARROW} {status.target}")
@@ -317,21 +283,9 @@ class StatusBar:
 
         rows, columns = self._size()
         if (rows, columns) != (self._rows, self._columns):
-            # The pane was resized: the region and the bar row both moved.
             if rows < MIN_USABLE_ROWS:
                 return
-            # WezTerm's gui-startup splits panes in sequence, resizing every pane already
-            # created each time a new one is split off -- a grid layout resizes an
-            # early-created pane once per *later* pane split off it (up to three times for a
-            # 2x2 grid's first pane), not just once. Clearing only the immediately-preceding
-            # bar row assumed exactly one clean transition; with several resizes landing
-            # between two `refresh()` calls, that left stale header/bar text behind anyway
-            # (observed live: a duplicated banner rule and two "waiting" bars in one pane).
-            # A full clear-and-redraw on every detected size change removes the whole class
-            # of bug regardless of how many intermediate resizes happened, at the cost of
-            # whatever had already scrolled into the region since `start()` -- normally
-            # nothing yet, since these resizes land within the first second or two of
-            # startup, well before the first real cycle has anything to say.
+            # Multiple resize events may occur between refreshes; redraw the entire frame.
             self._rows, self._columns = rows, columns
             self._painted = None
             self._paint_frame(rows)

@@ -56,14 +56,10 @@ should_retry = scheduler_application.should_retry
 ESCALATION_TARGET = "human-in-the-loop"
 DEFAULT_POLL_INTERVAL_SEC = 2.0
 
-#: Priority for messages a human should see but need not act on -- workflow.md's "100+:
-#: informational". A terminated chain is reported at this level so it lands in the inbox
-#: without competing with real work for attention.
+#: Workflow priority for informational messages.
 INFORMATIONAL_PRIORITY = 100
 
-# The scheduler pane is the operator's only window into work that used to be a visible chat
-# session, so each state transition gets a glyph to make the cycle scannable at a glance.
-# Rendering these requires UTF-8 stdout — see enable_unicode_output().
+# State glyphs require UTF-8 output; see `enable_unicode_output`.
 ICON_RECEIVED = "\N{INBOX TRAY}"
 ICON_MERGE = "\N{TWISTED RIGHTWARDS ARROWS}"
 ICON_DELEGATE = "\N{ROBOT FACE}"
@@ -142,23 +138,12 @@ def make_status_writer(
             command.append(f"--attempt={attempt}")
         if max_attempts is not None:
             command.append(f"--max-attempts={max_attempts}")
-        # Constant for the process, written on every status so the dashboard always has it.
-        # It travels through the status file rather than being re-derived from the profile:
-        # the dashboard would otherwise have to parse profiles and could disagree with what
-        # the scheduler was actually launched with.
         if worker_timeout is not None:
             command.append(f"--worker-timeout={worker_timeout}")
-        # Constant for the process, like the timeout above, and travelling the same way and
-        # for the same reason: this is the *resolved* model (flag, else the worker
-        # definition's frontmatter, else a backend default), and only this process knows it.
-        # A reader that consulted the profile would show nothing for a role whose model
-        # comes from frontmatter.
         if model:
             command.append(f"--model={model}")
         if tokens is not None:
-            # Each kind as its own flag rather than one total: set-status.py is copied
-            # verbatim into every worktree and cannot import TokenUsage to unpack a
-            # structured value, so the breakdown has to survive as flat scalars.
+            # The standalone status script accepts the usage breakdown as scalar flags.
             command += [
                 f"--tokens-in={tokens.input_tokens}",
                 f"--tokens-out={tokens.output_tokens}",
@@ -318,9 +303,6 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
         if args.worker_debug:
             logs_dir = Path(args.db_path).parent / "logs"
             debug_base = logs_dir / f"agent-debug-{args.role}-attempt{request.attempt}"
-        # Only Claude's CLI takes a budget flag today; its adapter advertises that rather
-        # than this function hardcoding a backend name. Grok reports cost but has no such
-        # flag, so its cap is enforced by the scheduler's own tally alone.
         budget: dict[str, object] = {}
         if request.max_budget_usd is not None and getattr(adapter, "SUPPORTS_BUDGET_FLAG", False):
             budget["max_budget_usd"] = request.max_budget_usd
@@ -330,8 +312,7 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
             cwd=args.worktree,
             model=model,
             timeout=args.worker_timeout,
-            # 0 means "off", not "kill immediately" -- the watchdog reads None as disabled,
-            # and a bare 0 would trip on the first poll before the worker printed anything.
+            # The watchdog uses None to disable idle detection.
             idle_timeout=args.worker_idle_timeout or None,
             on_output=emit_worker_output,
             debug_base=debug_base,
@@ -342,8 +323,6 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
         role=args.role,
         branch=args.branch,
         worktree=Path(args.worktree),
-        # A profile with its own routing sends it as --route arguments and replaces
-        # workflow.md's table outright; without them the file stays the source.
         routing=(
             parse_routing_arguments(args.route) if args.route else load_routing_table(args.workflow)
         ),
@@ -357,8 +336,6 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
             args.role,
             args.status_script,
             worker_timeout=args.worker_timeout,
-            # `resolve_model`, not `args.model`: the same value the worker is actually
-            # invoked with, including the frontmatter and default fallbacks.
             model=model,
         ),
         max_attempts=args.max_attempts,
@@ -497,10 +474,6 @@ def attach_status_bar(ctx: SchedulerContext, args: argparse.Namespace) -> pane_s
     write_status = ctx.set_status
 
     def set_status(state: str, **extra: object) -> None:
-        # bar.status.cycles/cost_usd/tokens are already tracked (see _record_cycle) -- this
-        # just threads the current totals one hop further, into the JSON file the dashboard
-        # reads, rather than tracking them a second time. `extra` carries per-call facts the
-        # bar does not track, like which attempt is running.
         write_status(
             state,
             cycles=bar.status.cycles,
@@ -542,8 +515,6 @@ def _record_cycle(bar: pane_status.StatusBar, result: CycleResult) -> None:
     bar.update(
         cycles=bar.status.cycles + 1,
         cost_usd=bar.status.cost_usd + result.cost_usd,
-        # Field-wise accumulation, so the running totals keep their input/output/cache
-        # split across the whole run rather than only within one cycle.
         tokens=bar.status.tokens + result.tokens,
         target=result.target or bar.status.target,
         detail=detail,
@@ -559,10 +530,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     state = SchedulerState()
     bar = attach_status_bar(ctx, args)
 
-    # The banner is written by the bar rather than logged: it is a layout, and every line
-    # would otherwise carry a timestamp/level prefix that defeats the alignment. The log
-    # file gets the same facts as one structured line below, so a post-mortem still knows
-    # the configuration.
     bar.start(format_banner(ctx, args))
     log.info(
         "scheduler started role=%s branch=%s worker=%s model=%s worktree=%s",
@@ -573,16 +540,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         ctx.worktree,
     )
 
-    # The launcher normally covers this, but a scheduler started by hand — or in a project
-    # scaffolded before these entries existed — would otherwise commit its own scaffolding.
+    # Also protect schedulers started without the launcher.
     _worktree(ctx).ensure_generated_ignored()
 
-    # The bar owns the pane's scrolling region, so it must be released on every exit path
-    # — including a crash. A region that outlives the process leaves the shell prompt
-    # underneath it behaving strangely, long after the scheduler is gone.
     try:
-        # Inside the try, not before it: recovery touches the database, and a failure there
-        # must still release the scrolling region rather than leave the pane wedged.
         recover_stale_messages(ctx)
         return _run_loop(ctx, state, args, bar)
     finally:

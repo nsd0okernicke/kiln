@@ -31,37 +31,19 @@ START_PROMPT = "Start your role session."
 #: Fallback when a Claude role omits `model` in its profile entry.
 DEFAULT_CLAUDE_MODEL = "sonnet"
 
-#: Backends whose traffic can be routed through the local kiln.proxy.
-#:
-#: Both entries are *verified live*, not assumed: each CLI honours the override and still
-#: attaches its own subscription credential to a local, non-vendor host — Claude via OAuth,
-#: Codex via its ChatGPT token. `grok` is unspiked and `copilot` talks to GitHub's endpoints
-#: with no override anyone has found, so routing either would be a guess that silently does
-#: nothing or breaks their auth.
+#: Backends verified to support routing through the local proxy.
 PROXY_CAPABLE_AGENTS = frozenset({"claude", "codex"})
 
-#: Kiln-owned bridge variable used to carry a Codex proxy URL into both interactive and
-#: one-shot invocations.  Translating that value into Codex CLI flags happens at each
-#: adapter edge; the application layer only decides whether a role should receive it.
+#: Carries a Codex proxy URL to adapters that translate it into CLI flags.
 CODEX_PROXY_BASE_URL_ENV = "KILN_PROXY_BASE_URL"
 
-#: Env var each proxy-capable backend reads for its API base URL.
-#:
-#: Codex is the odd one: it has no base-URL variable of its own and needs `-c` overrides on
-#: the command line instead. Kiln carries the URL in its own variable and each Codex call
-#: translates it into Codex `-c` flags, so the transport stays uniform —
-#: pane environment, inherited by the one-shot worker — while the CLI-specific spelling
-#: lives with the adapter.
+#: Environment variable carrying each backend's API base URL.
 PROXY_BASE_URL_VARS = {
     "claude": "ANTHROPIC_BASE_URL",
     "codex": CODEX_PROXY_BASE_URL_ENV,
 }
 
-#: Upstream each routed backend's traffic must actually reach, as `host[/base-path]`.
-#:
-#: The proxy defaults to Anthropic, so only the exception is listed. Codex sends
-#: `POST /responses` relative to its base URL; upstream that has to become
-#: `/backend-api/codex/responses`, which is what the base path supplies.
+#: Non-default proxy upstreams as `host[/base-path]`.
 PROXY_UPSTREAMS = {"codex": "chatgpt.com/backend-api/codex"}
 
 
@@ -162,20 +144,13 @@ def _grok_command(role: RoleConfig, paths: KilnPaths) -> AgentCommand:
     if role.model:
         argv += ["-m", role.model]
     argv.append(START_PROMPT)
-    # Banner for the same reason Copilot gets one: no `-n`/`--name` flag, so nothing in the
-    # session itself says which role this pane is.
     return AgentCommand(argv=argv, banner=role.display_name)
 
 
 def _codex_command(
     role: RoleConfig, paths: KilnPaths, proxy_url: str | None = None
 ) -> AgentCommand:
-    # CODEX_HOME relocates Codex's whole config dir, so each role gets isolated trust and
-    # MCP settings without touching the user's real ~/.codex/config.toml.
-    #
-    # The proxy overrides go on the argv rather than in that config, because the same flags
-    # then read identically here and in the one-shot worker call, which cannot use a config
-    # file at all (it passes --ignore-user-config).
+    # Isolate each role's Codex trust and MCP configuration from the user's config.
     argv = ["codex", "--dangerously-bypass-approvals-and-sandbox"]
     argv += _codex_proxy_config_args(_proxy_base_url(role, proxy_url))
     argv.append(START_PROMPT)
@@ -269,10 +244,6 @@ def _scheduler_command(
         "--agent",
         role.agent,
     ]
-    # A profile that declares its own routing replaces workflow.md's table -- the scheduler
-    # runs in its own process and cannot read the launcher's parsed profile, so the resolved
-    # rules travel as arguments. `--workflow` stays either way: a profile with no routing of
-    # its own keeps reading the file, which is what every role-complete profile does.
     argv += _scheduler_options(role, profile)
     argv += _tuning_args(
         role,
@@ -287,17 +258,13 @@ def _scheduler_command(
 
     status_script = paths.state_tools_dir / "set-status.py"
     argv += ["--status-script", str(status_script)]
-    # A pane's scrollback disappears with the window; a crashed scheduler must still be
-    # diagnosable afterwards.
     argv += ["--log-file", str(paths.scheduler_log(role.role))]
 
     return AgentCommand(
         argv=argv,
         env={
             "PYTHONPATH": str(paths.python_package_root),
-            # Python's stdout defaults to the console codepage on Windows (cp1252 here), and
-            # printing a non-Latin-1 character then raises UnicodeEncodeError and kills the
-            # scheduler mid-cycle. The narration uses emoji, so force UTF-8.
+            # Scheduler narration contains Unicode glyphs.
             "PYTHONIOENCODING": "utf-8",
         },
         banner=f"{role.display_name} (scheduler)",
@@ -338,9 +305,6 @@ def _inbox_command(role: RoleConfig, paths: KilnPaths, branch: str) -> AgentComm
         branch,
         "--db-path",
         str(paths.db_path),
-        # The human is a real role in the graph, not just a notification target: an inbound
-        # handoff must be merged into their tree or the work they are asked to review is not
-        # actually there. This is /kiln-receive steps 1 and 4, done deterministically.
         "--worktree",
         str(_worktree_for(role, paths)),
         "--log-file",
@@ -382,9 +346,6 @@ def _dashboard_command(role: RoleConfig, paths: KilnPaths, branch: str) -> Agent
         paths.project_root.name,
         "--log-file",
         str(paths.scheduler_log(role.role)),
-        # Always passed, never conditional on the proxy being enabled: the dashboard hides
-        # the panel when the store is absent, so one code path covers both cases and a
-        # swarm launched without the proxy is not a different dashboard.
         "--traffic-db",
         str(paths.traffic_db),
     ]
@@ -444,8 +405,6 @@ def _cockpit_command(
         str(paths.cockpit_pid_file),
         "--log-file",
         str(paths.scheduler_log(role.role)),
-        # As with the dashboard: always passed, and hidden by the cockpit when the store is
-        # absent, so a swarm launched without the proxy is not a different kiln.cockpit.
         "--traffic-db",
         str(paths.traffic_db),
         "--human-role",

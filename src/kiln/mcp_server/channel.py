@@ -20,15 +20,7 @@ from pathlib import Path
 # running from a checkout. Installed console environments already have the package available.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-# mcp 2.0 deleted `mcp.server.fastmcp` and renamed the class to `MCPServer`. The surface this
-# module uses — `@server.tool()` and `.run()` defaulting to stdio — is identical in both, so a
-# compatibility import supports either release.
-#
-# This is worth an import dance rather than a version pin because the server is launched by the
-# *user's* interpreter (the generated .mcp.json calls bare `python`), so Kiln does not control
-# which mcp is installed. Pinning would only move the failure to pip. Found live: an mcp 2.0.0
-# install made kiln-channel fail to start at all, which silently degraded every wrapper-mode
-# role to asking its human for help instead of receiving handoffs.
+# Support the compatible MCP 1.x and 2.x server APIs in the user's interpreter.
 try:
     from mcp.server.fastmcp import FastMCP  # mcp 1.x
 except ImportError:  # pragma: no cover - depends on the installed mcp release

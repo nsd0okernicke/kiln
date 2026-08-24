@@ -24,17 +24,7 @@ from enum import StrEnum
 
 from kiln.scheduler.domain.models import TokenUsage
 
-#: Headers that must never be written to the store, lower-cased for comparison.
-#:
-#: `authorization` and `x-api-key` are the obvious ones. `cookie`/`set-cookie` are here
-#: because a session cookie is a bearer credential in every way that matters, and
-#: `proxy-authorization` because this *is* a proxy and it would be a special kind of failure
-#: to leak the credential for the hop we ourselves introduced.
-#:
-#: `chatgpt-account-id` and `x-codex-turn-metadata` were added after a live Codex capture:
-#: neither is a bearer credential, but the first is a stable real-account identifier and the
-#: second carries `installation_id` plus session/thread ids. A store that lives in the repo
-#: tree should not be the place those accumulate, and nothing in Kiln reads them.
+#: Credentials and stable account/session identifiers excluded from storage.
 SENSITIVE_HEADERS = frozenset(
     {
         "authorization",
@@ -47,28 +37,19 @@ SENSITIVE_HEADERS = frozenset(
     }
 )
 
-#: Placeholder written in place of a dropped value, so a reader can tell "this header was
-#: present and withheld" from "this header was absent" -- the two mean different things
-#: when debugging an auth failure through the kiln.proxy.
+#: Distinguishes a withheld header from an absent one.
 REDACTED = "<redacted>"
 
-#: Bodies larger than this are truncated. A single Claude Code request routinely carries a
-#: six-figure-token system prompt; keeping them whole would outgrow the repo it measures.
+#: Maximum stored bytes per body.
 DEFAULT_BODY_LIMIT_BYTES = 256 * 1024
 
 #: Appended to a truncated body so nobody measures a prompt against a clipped copy.
 TRUNCATION_MARKER = "\n…[truncated by kiln proxy]"
 
-#: Total stored body bytes before the oldest rows are degraded to metadata-only.
-#:
-#: Bodies are what actually grows: measured on a real store, 107.6MB across 676 requests was
-#: 98.3% bodies, at roughly 160KB per request. Metadata is ~2.9KB a row, so a metadata-only
-#: store would need some 370,000 requests to reach a gigabyte and never comes near this.
-#: The budget exists for `--capture full`, which reaches it in about 1,600 requests.
+#: Body budget before oldest records are degraded to metadata-only.
 DEFAULT_BODY_BUDGET_BYTES = 256 * 1024 * 1024
 
-#: Writes between budget checks. The check is a full-table SUM over the body columns, which
-#: is cheap but not free, and the budget is a ceiling rather than a precise line.
+#: Amortizes the full-table body-budget calculation.
 BODY_BUDGET_CHECK_EVERY = 100
 
 
@@ -131,13 +112,7 @@ def extract_model(request_body: str | None) -> str | None:
     return str(model) if isinstance(model, str) else None
 
 
-#: Top-level request sections worth measuring separately, mapped to their column names.
-#:
-#: These three are the whole optimization argument. Measured on a real cycle: `tools` was
-#: 28-34KB per request, `system` (the generated worker instructions) 5-6KB, and `messages`
-#: 30-92KB and growing with the conversation. Anyone reasoning about token spend needs the
-#: split, because the intuitive target -- the worker instructions -- turns out to be ~5% of
-#: a request while the conversation is 60-70%.
+#: Request sections measured separately, mapped to storage columns.
 COMPOSITION_SECTIONS = {
     "tools": "tools_bytes",
     "system": "system_bytes",

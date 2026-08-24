@@ -23,19 +23,7 @@ log = logging.getLogger(__name__)
 #: Guards against a hung git invocation wedging a headless scheduler with nobody watching.
 DEFAULT_TIMEOUT_SEC = 120
 
-#: Files the launcher writes, untracked, into every worktree.
-#:
-#: These are the scheduler's own footprint, and they are radioactive: `squash_since` runs
-#: `git add -A` to capture whatever the worker produced, which also sweeps up any of these
-#: that git does not ignore. The commit then carries a file that every *other* worktree
-#: still holds as untracked, and that role's next merge aborts with "untracked working tree
-#: files would be overwritten" — a deadlock needing manual git surgery to clear.
-#:
-#: Observed live: `.claude/settings.json` was committed by the specifier's squash and
-#: instantly wedged the coder. `tmp/` was the same bug found earlier.
-#:
-#: Mirrors the launcher's required gitignore entries, duplicated on purpose so the
-#: scheduler stays runnable without the launcher package on the path.
+#: Generated files excluded before `git add -A`; duplicated to keep scheduler independent.
 GENERATED_WORKTREE_PATHS = (
     "tmp/",
     ".claude/settings.json",
@@ -128,10 +116,7 @@ def merge_commit(commit: str, cwd: str | Path, message: str | None = None) -> Gi
     if result.ok:
         return result
 
-    # A merge blocked *only* by Kiln's own scaffolding is recoverable: the incoming commit
-    # carries the same generated content, and the launcher rewrites these files on the next
-    # launch anyway. Retry once after clearing them rather than escalating a deadlock that
-    # a human could only fix with the same `rm`.
+    # Generated scaffolding is reproducible, so clear it and retry once.
     if _clear_generated_blockers(result.output, cwd):
         result = run_git(args, cwd)
         if result.ok:
@@ -176,10 +161,7 @@ def squash_merge_commit(commit: str, cwd: str | Path, message: str) -> GitResult
         return result
 
     if not has_pending_changes(cwd):
-        # Content identical to what's already there (e.g. a re-sent or no-op handoff) -- that
-        # is success, not failure. Nothing to commit; reuse HEAD as the resulting commit.
-        # Still worth a provenance link: identical content is exactly the case where git has
-        # no other way to learn that this branch already carries the sender's work.
+        # Preserve ancestry even when the squash contains no new content.
         record_provenance(commit, cwd)
         return GitResult(True, head_commit(cwd), "", 0)
 
@@ -390,21 +372,7 @@ def ensure_generated_ignored(cwd: str | Path) -> None:
         ensure_ignored(pattern, cwd)
 
 
-#: Files every role appends to independently, in its own worktree, which therefore conflict
-#: on every merge unless git is told they are append-only.
-#:
-#: `logbook.md` is the whole list today: `/kiln-receive`, `/kiln-handoff` and `/kiln-ping` all
-#: instruct the agent to append a line and commit it. Two branches adding different lines to
-#: the end of one tracked file is the classic changelog conflict, and it fires every cycle
-#: regardless of what the swarm is actually building.
-#:
-#: It degrades further than a normal textual conflict. The squash mechanics -- `reset --soft`
-#: per role, `merge --squash` onto the human's branch -- leave commits with no link back to
-#: where their content came from, so the merge base often has no `logbook.md` at all. Git then
-#: sees the file as independently created on both sides and reports `add/add`, which it will
-#: not attempt to merge. Observed live twice; the first time it was attributed to a stale
-#: worktree branch (see `workspace.warn_if_worktree_conflicts`), which is a real but different
-#: problem.
+#: Append-only files that use Git's union merge driver.
 UNION_MERGE_PATHS = ("logbook.md",)
 
 

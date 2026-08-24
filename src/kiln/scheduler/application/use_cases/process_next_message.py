@@ -249,10 +249,7 @@ def _finish_attempts(
 def _fetch_next_message(
     ctx: SchedulerContext, state: SchedulerState
 ) -> tuple[InboundMessage | None, CycleResult | None]:
-    # A halted role keeps polling, but only for a message a human explicitly sent back. It
-    # has already failed three cycles in a row; taking the next ordinary handoff would fail a
-    # fourth time. Waiting here rather than exiting is what makes `kiln retry` able to reach
-    # it at all -- a re-queued message for a dead scheduler goes into a queue nobody reads.
+    # Halted roles accept only an explicit human retry.
     if state.halted:
         ctx.set_status("halted")
         message = _queue(ctx).fetch_resume(ctx.role, ctx.branch)
@@ -306,10 +303,7 @@ def _merge_inbound(
     message_id: str,
     inbound: handoff.InboundHandoff,
 ) -> CycleResult | None:
-    # Merge whatever the sender pointed at -- their commit, or failing that the branch they
-    # named. `already_contains` first: `merge_commit`'s `--no-ff` is what leaves an anchor for
-    # `squash_anchor`, and merging something we already have produces no commit and therefore
-    # no anchor.
+    # A no-op merge would not create the required squash anchor.
     merge_target = inbound.merge_target
     if merge_target and not _worktree(ctx).already_contains(merge_target):
         log.info(f"{ICON_MERGE} merging %s from %s", merge_target[:8], inbound.branch or "?")
@@ -328,17 +322,7 @@ def _persist_inbound(ctx: SchedulerContext, content: str) -> None:
 def _persist_worker_debug(
     ctx: SchedulerContext, invocation: WorkerInvocation, attempt: int
 ) -> None:
-    """
-    Save a blocked worker's raw output for post-mortem, in `.kiln/logs/`.
-
-    `WorkerInvocation.raw_output` is captured in memory but the scheduler only ever logs
-    `.result.summary` — a one-line detail, not the actual stream. That's fine when the
-    summary is trustworthy, but it stopped being enough the moment a real failure showed
-    "0 stream events seen" while the worker's own resumed transcript proved substantial
-    activity happened: the summary alone gave no way to tell whether nothing was captured or
-    nothing was written. Never raises — a debug artefact must not fail the cycle it exists to
-    explain.
-    """
+    """Persist blocked-worker output for diagnostics."""
     ctx.debug_sink.save(ctx.role, attempt, invocation.raw_output)
 
 
@@ -353,9 +337,7 @@ def _delegate(
     the attempts, so recording per-outcome would mean four places to forget.
     """
     attempts = _Attempts()
-    # A resumed message starts with the human's instructions already in the retry slot, so
-    # the worker's first attempt sees them the way a retry's second attempt sees the previous
-    # failure -- the same channel, which is why no new prompt plumbing was needed.
+    # Human guidance uses the same prompt slot as an earlier failed attempt.
     retry_of: str | None = inbound.guidance or None
 
     while True:
@@ -737,11 +719,7 @@ def _escalate(
         escalation=True,
     )
     _insert_verified(ctx, ESCALATION_TARGET, outbound, work_item=work_item_of(inbound.handoff))
-    # `failed`, not `processed`: the escalated message stays addressable, with its reason in
-    # the `error` column, so `kiln retry` can send this exact row back rather than the human
-    # having to start a new work item carrying none of the failed cycle's context. It is
-    # still out of `processing`, which is what marking it processed was protecting against,
-    # and `fetch_and_deliver` does not select `failed`, so nothing re-serves it by accident.
+    # Keep the row addressable by `kiln retry` but out of normal delivery.
     _queue(ctx).mark_failed(message_id, detail)
 
     state.consecutive_escalations += 1

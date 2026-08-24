@@ -1,36 +1,4 @@
-"""
-One-shot GitHub Copilot CLI worker invocation.
-
-Every flag here was verified live against GitHub Copilot CLI 1.0.78 in scratch spikes this
-session, the same methodology claude_adapter.py's own flags were verified with. The
-non-obvious ones:
-
-- `--disable-mcp-server kiln-db --disable-builtin-mcps`: `workspace.prepare_agent_configs()`
-  writes `kiln-db` into Copilot's *global* `~/.copilot/mcp-config.json` whenever any role uses
-  copilot, so an unflagged worker invocation would otherwise have live handoff-queue access --
-  the same isolation break Claude's `--strict-mcp-config` exists to prevent. Verified live:
-  with both flags, a session shows zero MCP-related events at all.
-- `--agent <name>`: resolves the already-generated `.github/agents/<name>.agent.md` in `cwd`
-  by name. Unlike Claude, no inline JSON payload is needed -- Copilot reads the worker's
-  actual instructions straight off disk.
-- `--output-format json`: JSONL, one event per line. The final answer is the **last**
-  `assistant.message` event with non-empty `content` -- verified live: a turn that calls
-  tools first emits an `assistant.message` with empty `content` (the tool calls live in
-  `toolRequests` instead), then a second, final `assistant.message` with the real reply and
-  no tool requests. "Last one with content" is what `parse_cli_output` looks for.
-- No dollar cost anywhere in the output -- only `usage.premiumRequests`/token counts in the
-  final `result` event. `cost_usd` is left at its dataclass default (`0.0`), same as an
-  untracked wrapper-mode role; the dashboard and pane status bar already treat that as
-  "no cost data" rather than displaying a real, misleadingly-precise number.
-- stdin is redirected from devnull, same reasoning as the Claude adapter.
-- The resolved binary is looked up with `shutil.which` before `Popen` rather than handed the
-  bare `"copilot"` string. Verified live: Copilot CLI installs as `copilot.cmd` (an npm shim,
-  not a native `.exe`), and Windows' `CreateProcess` -- what `subprocess.Popen` calls without
-  `shell=True` -- does not apply `PATHEXT` resolution to a bare command name the way a real
-  shell does, so the bare name fails with `WinError 2` even though `copilot` is genuinely on
-  `PATH`. `claude_adapter.py` doesn't need this (Claude Code ships a native `.exe`), but a
-  worker invocation must not depend on which of the two happens to be true.
-"""
+"""One-shot Copilot worker with MCP isolation and JSONL event parsing."""
 
 from __future__ import annotations
 

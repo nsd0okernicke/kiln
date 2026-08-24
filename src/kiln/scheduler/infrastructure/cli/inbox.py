@@ -1,21 +1,4 @@
-"""
-The human's inbox — a pane that shows messages addressed to a person.
-
-Kiln's other roles are agents: they receive a handoff, do work, and hand off again. A human
-is not that. They need to *see* what arrived, and they need to still be able to type.
-
-Those two needs are what the wrapper-mode `human-in-the-loop` role could not satisfy at once.
-Its loop template blocks in `wait_for_message()`, which polls `while True:` with no timeout,
-so a session that is listening is not available to its human, and a session talking to its
-human is not listening. Found live: a coder escalation sat `queued` for a day because the
-human role was never in the listening half of that dilemma at the right moment.
-
-This process takes the listening half and gives it to Python, exactly as `role_scheduler`
-took the cycle mechanics. It never blocks anything the human needs, needs no MCP server, and
-leaves the human's own Claude session free to be an ordinary session.
-
-Sending is the other half, and lives in `send.py`.
-"""
+"""Non-blocking queue listener for messages addressed to a human role."""
 
 from __future__ import annotations
 

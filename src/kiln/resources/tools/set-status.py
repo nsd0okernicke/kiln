@@ -45,35 +45,19 @@ USAGE = (
     "[--attempt=N] [--max-attempts=N] [--worker-timeout=SECONDS]"
 )
 
-#: Flag -> status key, for integers the dashboard reads but the pane bar does not track.
-#: `attempt`/`max_attempts` let it show "2/2", so an about-to-escalate role stops looking
-#: like a healthy one. `worker_timeout_sec` is what a stall is measured against, and it
-#: travels through this file rather than being re-derived from the profile: the dashboard
-#: would otherwise have to parse profiles and could disagree with what the scheduler was
-#: actually launched with.
+#: Integer flags persisted for dashboard rendering.
 EXTRA_INT_FLAGS = {
     "--attempt=": "attempt",
     "--max-attempts=": "max_attempts",
     "--worker-timeout=": "worker_timeout_sec",
 }
 
-#: Flag -> key for extras that are text rather than numbers.
-#:
-#: `model` is the *resolved* model, which only the scheduler knows: it is the CLI flag, else
-#: the worker definition's frontmatter, else a backend-specific default (`resolve_model`).
-#: A reader that took the profile's value instead would show nothing for a role whose model
-#: comes from frontmatter -- the same trap `worker_timeout_sec` documents, and the same fix.
+#: Text flags persisted for dashboard rendering.
 EXTRA_TEXT_FLAGS = {
     "--model=": "model",
 }
 
-#: Flag -> key in the status file's `token_usage` object. Each kind arrives as its own
-#: scalar flag because this script is copied verbatim into every worktree and cannot import
-#: scheduler.adapters.TokenUsage to unpack a structured value.
-#:
-#: The breakdown is kept rather than pre-summed because it is the actionable part: a large
-#: `cache_read` is cheap and healthy, a large `input` is prompt bloat, and one total cannot
-#: tell those apart.
+#: Scalar flags forming the status file's token-usage breakdown.
 TOKEN_FLAGS = {
     "--tokens-in=": "input",
     "--tokens-out=": "output",
@@ -164,8 +148,6 @@ def build_status(
     if state not in STATE_EMOJIS:
         raise ValueError(f"unknown state '{state}'")
 
-    # The display title is built once, shared by the JSON file and the OSC sequence, so
-    # renderers (e.g. the WezTerm status bar) don't need their own copy of STATE_EMOJIS.
     emoji = STATE_EMOJIS[state]
     title = f"{role} {emoji} {state}"
     if detail:
@@ -179,12 +161,7 @@ def build_status(
         "since": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "title": title,
     }
-    # Omitted, not written as 0/None, when absent: a wrapper-mode role's status file should
-    # not claim "$0.00 spent, 0 cycles" when it never tracked either in the first place.
     _add_metrics(status, cycles, cost_usd, tokens)
-    # Same omit-when-absent rule: a role that never reported an attempt must not appear to
-    # be on attempt 0, and a dashboard cannot call a role stalled against a timeout it was
-    # never told about.
     status.update(extras or {})
     return status
 
@@ -195,7 +172,6 @@ def _add_metrics(status, cycles, cost_usd, tokens):
     if cost_usd is not None:
         status["cost_usd"] = cost_usd
     if tokens:
-        # Keep both the display total and the actionable input/output/cache breakdown.
         status["tokens"] = sum(tokens.values())
         status["token_usage"] = tokens
 

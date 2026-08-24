@@ -60,17 +60,13 @@ from ..actions_gateway import KilnActionGateway
 
 log = logging.getLogger(__name__)
 
-#: Where the cockpit prefers to listen. Probed upward when taken, the same way the capture
-#: proxy handles its port: two projects open at once is normal, and the second one silently
-#: failing to bind while its URL file still names the port would point the operator at the
-#: *other* project's swarm.
+#: Preferred port; startup probes upward when occupied.
 DEFAULT_PORT = 8765
 
 #: How many ports above the preferred one to try before giving up.
 PORT_ATTEMPTS = 20
 
-#: Required on every mutating request. Presence is the whole check — its value carries no
-#: secret and is not one. See the module docstring for why a header is sufficient here.
+#: Presence guard on mutating requests; not an authentication secret.
 GUARD_HEADER = "X-Kiln-Cockpit"
 
 #: Set this to anything non-empty to stop the cockpit opening a browser tab on launch.
@@ -80,9 +76,7 @@ NO_BROWSER_ENV = "KILN_COCKPIT_NO_BROWSER"
 DEFAULT_ACTIVITY_LIMIT = 12
 INITIAL_LOG_BYTES = 64 * 1024
 
-#: Grace period between answering a teardown request and carrying it out. `stop_all` kills
-#: this process, so without a gap the operator's browser would see a dropped connection
-#: instead of a confirmation and could not tell a teardown from a crash.
+#: Lets the teardown response flush before `stop_all` kills this process.
 TEARDOWN_DELAY_SEC = 0.5
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -201,15 +195,10 @@ class CockpitHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = self.path.split("?", 1)[0].rstrip("/") or "/"
-        # Drained before any decision, including the ones that refuse. An HTTP reply sent
-        # while unread request bytes are still in the socket makes Windows reset the
-        # connection, so the browser sees a dropped request instead of the 403 or 404
-        # explaining what it did wrong (caught by the guard-header test on Windows).
+        # Drain request bytes before replying to avoid connection resets on Windows.
         raw = self._read_body()
 
         if self.headers.get(GUARD_HEADER) is None:
-            # Not authentication — see the module docstring. It refuses the one shape of
-            # request a hostile page can make against loopback without asking permission.
             return self._send_json(403, {"error": f"missing {GUARD_HEADER} header"})
 
         handler = self._post_handler(path)
@@ -408,8 +397,6 @@ class CockpitHandler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
-        # No caching: every response is live swarm state, and a browser reusing a stored
-        # `/api/state` is a cockpit showing a run that has since moved on.
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
