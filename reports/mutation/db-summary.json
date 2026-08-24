@@ -1,15 +1,23 @@
 {
   "db": {
-    "database": "C:\\projekte\\kiln\\.kiln-mutation\\db.sqlite",
+    "database": ".kiln-mutation\\db.sqlite",
     "outcomes": {
-      "normal": 443,
+      "exception": 1,
+      "normal": 442,
       "incompetent": 1,
-      "killed": 29,
-      "survived": 413
+      "killed": 43,
+      "survived": 399
     },
-    "killed": 29,
-    "survived": 413,
-    "mutation_score": 0.06561085972850679,
-    "score_formula": "killed / (killed + survived)"
+    "killed": 43,
+    "survived": 399,
+    "mutation_score": 0.09728506787330317,
+    "score_formula": "killed / (killed + survived)",
+    "annotation_outcomes": {
+      "survived": 385
+    },
+    "behavioral_killed": 43,
+    "behavioral_survived": 14,
+    "behavioral_mutation_score": 0.7543859649122807,
+    "behavioral_score_formula": "(killed - annotation killed) / ((killed + survived) - (annotation killed + annotation survived))"
   }
 }

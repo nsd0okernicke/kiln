@@ -18,6 +18,19 @@ def test_token_usage_addition_is_a_commutative_monoid(
     assert (left + right) + third == left + (right + third)
 
 
+@given(left=usage, right=usage)
+def test_token_usage_addition_sums_each_billing_category(
+    left: TokenUsage, right: TokenUsage
+) -> None:
+    combined = left + right
+    assert combined.input_tokens == left.input_tokens + right.input_tokens
+    assert combined.output_tokens == left.output_tokens + right.output_tokens
+    assert combined.cache_read_tokens == left.cache_read_tokens + right.cache_read_tokens
+    assert combined.cache_creation_tokens == (
+        left.cache_creation_tokens + right.cache_creation_tokens
+    )
+
+
 @given(value=usage)
 def test_token_total_is_the_sum_of_all_billing_categories(value: TokenUsage) -> None:
     assert value.total == sum(

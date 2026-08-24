@@ -5,11 +5,14 @@ what keep two agents from picking up the same handoff or stranding one forever.
 
 from __future__ import annotations
 
+import sqlite3
 from contextlib import closing
 
 import pytest
 
-from kiln.scheduler.infrastructure.persistence import db
+from kiln.scheduler.application.ports import QueueAccessError
+from kiln.scheduler.infrastructure.persistence import db, queue_commands
+from kiln.scheduler.infrastructure.persistence.sqlite_message_queue import SQLiteMessageQueue
 
 
 class TestSchema:
@@ -142,6 +145,11 @@ class TestRecentMessages:
             add_message(target="coder")
         assert len(db.recent_messages(db_path, "main", limit=3)) == 3
 
+    def test_default_limit_is_ten(self, db_path, add_message):
+        for _ in range(12):
+            add_message(target="coder")
+        assert len(db.recent_messages(db_path, "main")) == 10
+
     def test_only_this_branch(self, db_path, add_message):
         add_message(target="coder", branch="main")
         add_message(target="coder", branch="other")
@@ -150,6 +158,18 @@ class TestRecentMessages:
 
     def test_empty_db_is_an_empty_list(self, db_path):
         assert db.recent_messages(db_path, "main") == []
+
+
+class TestWorkItemMessages:
+    def test_default_window_returns_the_latest_120_messages(self, db_path, add_message):
+        for index in range(121):
+            add_message(target="coder", content=str(index))
+
+        messages = db.work_item_messages(db_path, "main")
+
+        assert len(messages) == 120
+        assert messages[0]["content"] == "120"
+        assert messages[-1]["content"] == "1"
 
 
 class TestStatusTransitions:
@@ -173,6 +193,15 @@ class TestStatusTransitions:
     @pytest.mark.parametrize("operation", [db.mark_processing, db.mark_processed])
     def test_unknown_id_reports_failure(self, db_path, operation):
         assert operation(db_path, "does-not-exist") is False
+
+    @pytest.mark.parametrize("operation", [db.mark_processing, db.mark_processed])
+    def test_unknown_stored_status_reports_failure(self, db_path, add_message, operation):
+        message_id = add_message(status="not-a-status")
+        assert operation(db_path, message_id) is False
+
+    def test_invalid_transition_reports_failure(self, db_path, add_message):
+        message_id = add_message(status=db.STATUS_PROCESSED)
+        assert db.mark_processing(db_path, message_id) is False
 
     def test_full_lifecycle(self, db_path, add_message, read_message):
         message_id = add_message(target="coder")
@@ -245,6 +274,17 @@ class TestRecoverStaleProcessing:
         assert db.recover_stale_processing(db_path, "coder", "main") == []
 
 
+class TestSQLiteMessageQueue:
+    def test_recovery_translates_sqlite_errors(self, db_path, monkeypatch):
+        def fail_recovery(*_args):
+            raise sqlite3.OperationalError("database is locked")
+
+        monkeypatch.setattr(queue_commands, "recover_stale_processing", fail_recovery)
+
+        with pytest.raises(QueueAccessError, match="database is locked"):
+            SQLiteMessageQueue(db_path).recover_processing("coder", "main")
+
+
 class TestCountWorkItemArrivals:
     """
     The unit behind the max-cycles guard: how many times one work item has reached one role.
@@ -292,6 +332,17 @@ class TestFailedAndResume:
         stored = read_message(message_id)
         assert stored["status"] == db.STATUS_FAILED
         assert stored["error"] == "worker blocked: missing fixtures"
+
+    def test_failing_an_unknown_message_reports_failure(self, db_path):
+        assert db.mark_failed(db_path, "does-not-exist", "nope") is False
+
+    def test_failing_a_message_with_an_unknown_status_reports_failure(self, db_path, add_message):
+        message_id = add_message(status="not-a-status")
+        assert db.mark_failed(db_path, message_id, "nope") is False
+
+    def test_failing_a_processed_message_reports_failure(self, db_path, add_message):
+        message_id = add_message(status=db.STATUS_PROCESSED)
+        assert db.mark_failed(db_path, message_id, "nope") is False
 
     def test_failing_leaves_processed_at_unset(self, db_path, add_message, read_message):
         # It did not complete. Stamping processed_at would make it look like it did.
@@ -416,6 +467,21 @@ class TestInsertHandoff:
         content = "Sender: coder\nHandoff: order-intake\nBranch: main\nCommit: abc123\n\n✓ DONE"
         message_id = db.insert_handoff(db_path, "coder", "refactorer", content, "main")
         assert read_message(message_id)["content"] == content
+
+
+class TestMessageLookup:
+    def test_returns_an_existing_message(self, db_path, add_message):
+        message_id = add_message(content="payload")
+        assert db.get_message(db_path, message_id)["content"] == "payload"
+
+    def test_returns_none_for_an_unknown_message(self, db_path):
+        assert db.get_message(db_path, "does-not-exist") is None
+
+
+class TestAcknowledgeMessage:
+    def test_returns_none_when_the_message_is_out_of_scope(self, db_path, add_message):
+        message_id = add_message(target="coder")
+        assert db.acknowledge_message(db_path, message_id, "refactorer", "main") is None
 
 
 class TestMessageExists:

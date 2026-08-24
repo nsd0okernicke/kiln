@@ -57,9 +57,15 @@
     "files_would_reformat": 0
   },
   "mutation": {
-    "status": "existing Cosmic Ray tiers retained; execution remains on-demand",
-    "pure_mutants": 2085,
-    "db_mutants": 397,
+    "status": "validated Cosmic Ray baselines; execution remains on-demand",
+    "pure_mutants": 704,
+    "pure_raw_score_percent": 68.8,
+    "pure_annotation_only_survivors": 154,
+    "pure_behavioral_score_percent": 88.6,
+    "db_mutants": 443,
+    "db_raw_score_percent": 9.73,
+    "db_annotation_only_survivors": 385,
+    "db_behavioral_score_percent": 75.44,
     "pure_target_percent": 80,
     "db_target_percent": 70
   },

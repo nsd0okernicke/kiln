@@ -1,7 +1,34 @@
 from hypothesis import given
 from hypothesis import strategies as st
 
-from kiln.scheduler.domain.policies import budget_breach, cycle_limit_breach, escalation_halts
+from kiln.scheduler.domain.models import WorkerInvocation
+from kiln.scheduler.domain.policies import (
+    budget_breach,
+    cycle_limit_breach,
+    escalation_halts,
+    should_retry,
+)
+from kiln.scheduler.domain.status_contract import STATUS_BLOCKED, STATUS_DONE, WorkerResult
+
+
+@given(
+    attempt_count=st.integers(min_value=0, max_value=10),
+    max_attempts=st.integers(min_value=0, max_value=10),
+    last_done=st.booleans(),
+)
+def test_retry_requires_a_failed_last_attempt_and_remaining_capacity(
+    attempt_count: int, max_attempts: int, last_done: bool
+) -> None:
+    result = WorkerResult(
+        status=STATUS_DONE if last_done else STATUS_BLOCKED,
+        summary="",
+        sentinel_found=True,
+    )
+    invocations = [WorkerInvocation(result=result, raw_output="") for _ in range(attempt_count)]
+
+    assert should_retry(invocations, max_attempts) is (
+        attempt_count > 0 and not last_done and attempt_count < max_attempts
+    )
 
 
 @given(arrivals=st.integers(min_value=0), limit=st.integers(min_value=0))
