@@ -1,28 +1,28 @@
 {
-  "phase": "observe",
-  "baseline_commit": "644d691dd710ebb1b89fbf5710ac879517762248",
-  "worktree_dirty": true,
-  "generated_at": "2026-08-23",
+  "phase": "reviewed",
+  "baseline_commit": "5b9bc31a799c14d653273746319d1c70ae43ad39",
+  "worktree_dirty": false,
+  "generated_at": "2026-08-24",
   "environment": {
     "os": "Windows",
     "python": "3.14"
   },
   "tests": {
-    "passed": 1942,
-    "skipped": 2,
+    "passed": 2013,
+    "skipped": 4,
     "warnings": 0,
-    "duration_seconds": 331.48
+    "duration_seconds": 420.83
   },
   "coverage": {
-    "statement_percent": 96.33,
-    "branch_percent": 91.44,
-    "covered_lines": 5692,
-    "missing_lines": 217,
-    "covered_branches": 1432,
-    "missing_branches": 134
+    "statement_percent": 97.49,
+    "branch_percent": 92.68,
+    "covered_lines": 6067,
+    "missing_lines": 156,
+    "covered_branches": 1444,
+    "missing_branches": 114
   },
   "complexity": {
-    "functions_measured": 693,
+    "functions_measured": 841,
     "c_or_worse": 0,
     "d_or_worse": 0,
     "lowest_maintainability_modules": [
@@ -35,39 +35,33 @@
   },
   "crap": {
     "threshold": 6,
-    "above_threshold": 93,
-    "top_hotspots": [
-      "src/kiln/launcher/infrastructure/workspace.py:556 _trust_copilot_worktrees",
-      "src/kiln/launcher/domain/profile.py:603 _validate_layout",
-      "src/kiln/launcher/infrastructure/cli.py:414 _capture_url",
-      "src/kiln/scheduler/application/use_cases/process_next_message.py:172 run_once",
-      "src/kiln/scheduler/domain/routing.py:204 parse_profile_routing"
-    ]
+    "above_threshold": 0,
+    "top_hotspots": []
   },
   "typing": {
-    "modules_enrolled": 6,
+    "modules_enrolled": 31,
     "errors": 0,
     "warnings": 0
   },
   "duplication": {
-    "identical_function_groups": 1
+    "identical_function_groups": 2
   },
   "formatting": {
-    "status": "observe-only",
+    "status": "passed",
     "files_would_reformat": 0
   },
   "mutation": {
-    "status": "validated Cosmic Ray baselines; execution remains on-demand",
-    "pure_mutants": 704,
-    "pure_raw_score_percent": 68.8,
-    "pure_annotation_only_survivors": 154,
-    "pure_behavioral_score_percent": 88.6,
+    "status": "fresh Cosmic Ray runs; both behavioral targets met",
+    "pure_mutants": 767,
+    "pure_raw_score_percent": 63.7,
+    "pure_annotation_only_survivors": 220,
+    "pure_behavioral_score_percent": 90.04,
     "db_mutants": 443,
-    "db_raw_score_percent": 9.73,
-    "db_annotation_only_survivors": 385,
-    "db_behavioral_score_percent": 75.44,
+    "db_raw_score_percent": 10.41,
+    "db_annotation_only_survivors": 383,
+    "db_behavioral_score_percent": 77.19,
     "pure_target_percent": 80,
     "db_target_percent": 70
   },
-  "policy": "No new gates beyond pytest and Ruff until this baseline is reviewed."
+  "policy": "Reviewed post-refactor reference. Pytest and Ruff remain hard gates; CRAP must remain at or below 6, and coverage and behavioral mutation scores should not regress without review."
 }

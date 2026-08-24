@@ -1,8 +1,8 @@
 # Quality metrics
 
-Kiln records an observe-first quality baseline before architectural refactoring. Generated
-artifacts live under the ignored `reports/` directory and contain the Git commit, Python and OS
-details, tool versions, commands, and exit statuses in `reports/metadata.json`.
+Kiln keeps a reviewed quality baseline in `quality-baseline.json`. Generated artifacts live under
+the ignored `reports/` directory and contain the Git commit, Python and OS details, tool versions,
+commands, and exit statuses in `reports/metadata.json`.
 
 Install the development environment:
 
@@ -19,12 +19,11 @@ python -m tools.quality_metrics --tier fast
 The full deterministic report suite is:
 
 ```text
-python -m tools.quality_metrics --tier deterministic --observe
+python -m tools.quality_metrics --tier deterministic
 ```
 
-Remove `--observe` when pytest and Ruff should be enforced locally. The observe flag does not
-hide failures: every command's exit status and output remain in the reports; it only lets the
-driver finish collecting the rest of a previously unknown baseline.
+Add `--observe` only when collecting all reports despite a known failing gate. It does not hide
+failures: every command's exit status and output remain in the reports.
 
 The deterministic run creates:
 
@@ -65,15 +64,14 @@ Each command starts with a fresh enumeration so changed source or configuration 
 reuse stale mutants. Pass `--reuse` only to resume an interrupted session. Existing reports remain
 under `reports/mutation/` until a completed run replaces them.
 
-Mutation is slower and stays on-demand/nightly until its accepted baseline is known.
-Use `--init-only` to enumerate a tier without executing it. Mutant counts are recorded in the
-accepted baseline after enumeration rather than hardcoded here, because they change whenever
-the domain or Cosmic Ray configuration changes. Mutation remains intentionally outside the
-ordinary deterministic command.
+Mutation is slower and stays on-demand or nightly. Use `--init-only` to enumerate a tier without
+executing it. Mutant counts and accepted behavioral scores are recorded in
+`quality-baseline.json`; they change whenever the domain or Cosmic Ray configuration changes.
+Mutation remains intentionally outside the ordinary deterministic command.
 
 ## Policy
 
-Pytest and Ruff remain hard gates. All newly introduced metrics begin as reports. Thresholds are
-added only after reviewing the baseline, and should ratchet from that accepted state rather than
-using arbitrary aspirational numbers. Existing hotspots belong in a reviewed baseline file, not
-in broad exclusions.
+Pytest and Ruff are hard gates. CRAP must remain at or below 6. Coverage and behavioral mutation
+scores should ratchet from the reviewed baseline rather than regress without an explicit review.
+Annotation-only mutation survivors are reported separately because changing a runtime-erased type
+annotation does not exercise application behavior.
