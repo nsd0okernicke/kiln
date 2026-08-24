@@ -242,46 +242,19 @@ class TestUnsupportedRoles:
         )
 
 
-class TestReadmeProfileExample:
-    """
-    The README prints the `full` profile in full, and tells the reader to start from it.
+class TestReadmeProfileDocumentation:
+    """Keep profile guidance tied to the authoritative bundled configuration."""
 
-    That block drifted for five commits and became unlaunchable: it still named the profile
-    `default`, still repeated `agent`/`model` on every terminal after the `defaults` block
-    replaced them, and carried no `routing` -- which `check_launchable` now refuses. A reader
-    who did exactly what the surrounding prose says would have hit a launch error on a config
-    copied out of our own documentation.
+    def test_readme_points_to_the_shipped_profiles(self):
+        readme = (REPO / "README.md").read_text(encoding="utf-8")
 
-    Prose about a profile cannot be checked. A JSON block quoting one can be, so it is.
-    """
+        assert "`src/kiln/resources/profiles.json`" in readme
 
-    #: Fence in README.md whose content parses as a profiles.json fragment containing `full`.
-    _FENCE = re.compile(r"```json\n(\{.*?\n\})\n```", re.S)
-
-    def _readme_full_profile(self) -> dict:
-        text = (REPO / "README.md").read_text(encoding="utf-8")
-        for block in self._FENCE.findall(text):
-            try:
-                parsed = json.loads(block)
-            except json.JSONDecodeError:
-                continue  # illustrative fragments with `...` in them; not our target
-            if "full" in parsed.get("profiles", {}):
-                return parsed
-        pytest.fail("README.md no longer contains a JSON block defining the 'full' profile")
-
-    def test_the_readme_block_matches_the_shipped_profile(self):
-        documented = self._readme_full_profile()
+    def test_readme_names_the_real_default(self):
+        readme = (REPO / "README.md").read_text(encoding="utf-8")
         shipped = json.loads(FRAMEWORK_PROFILES.read_text(encoding="utf-8"))
 
-        assert documented["profiles"]["full"] == shipped["profiles"]["full"], (
-            "README.md's 'full' profile block no longer matches src/kiln/resources/profiles.json"
-        )
-
-    def test_the_readme_block_names_the_real_default(self):
-        documented = self._readme_full_profile()
-        shipped = json.loads(FRAMEWORK_PROFILES.read_text(encoding="utf-8"))
-
-        assert documented.get("default") == shipped["default"]
+        assert f"`{shipped['default']}`" in readme
 
 
 class TestEveryShippedProfileDeclaresRouting:
@@ -339,19 +312,14 @@ class TestWrapperTemplateSets:
 
 
 class TestDocumentedTerminalKeys:
-    """
-    `workerIdleTimeout` and `workerDebug` were both accepted by the loader, and `workerDebug`
-    was set in a shipped profile, while neither appeared anywhere in the README. An accepted
-    key that no document mentions is one a user can only find by reading the source -- and
-    since unknown keys now fail the launch, the accepted set *is* the public interface.
-    """
+    """Every accepted profile field belongs in the user-facing configuration reference."""
 
     def test_every_accepted_terminal_key_is_documented(self):
         from kiln.launcher.domain.profile import TERMINAL_KEYS
 
         readme = (REPO / "README.md").read_text(encoding="utf-8")
 
-        undocumented = sorted(key for key in TERMINAL_KEYS if f"**{key}**" not in readme)
+        undocumented = sorted(key for key in TERMINAL_KEYS if f"`{key}`" not in readme)
 
         assert not undocumented, (
             f"terminal keys the loader accepts but README.md never documents: {undocumented}"

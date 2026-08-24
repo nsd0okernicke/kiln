@@ -21,13 +21,8 @@ venv/
 .coverage
 .coverage.*
 coverage.xml
-# Quality runs create many local artifacts. Keep only the compact mutation evidence that is
-# intentionally portable between development machines.
-reports/*
-!reports/mutation/
-reports/mutation/*
-!reports/mutation/*.txt
-!reports/mutation/*-summary.json
+# Generated quality reports
+reports/
 .ruff_cache/
 
 # Mutation testing sessions
