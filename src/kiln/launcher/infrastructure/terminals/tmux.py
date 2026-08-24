@@ -56,10 +56,7 @@ def launch(panes: list[PaneSpec], layout: dict | None, dry_run: bool = False) ->
     """Create one detached session per role. Existing sessions are left untouched."""
     planned: list[str] = []
 
-    if not dry_run and not shutil.which("tmux"):
-        from . import TerminalError
-
-        raise TerminalError("tmux not found on PATH")
+    _require_tmux(dry_run)
 
     for pane in panes:
         if not dry_run and session_exists(pane.role):
@@ -67,9 +64,21 @@ def launch(panes: list[PaneSpec], layout: dict | None, dry_run: bool = False) ->
             continue
         planned.extend(_launch_pane(pane, dry_run))
 
-    if not dry_run and panes:
+    if _should_log_attach(dry_run, panes):
         log.info("attach with: tmux attach -t %s", session_name(panes[0].role))
     return planned
+
+
+def _require_tmux(dry_run: bool) -> None:
+    if dry_run or shutil.which("tmux"):
+        return
+    from . import TerminalError
+
+    raise TerminalError("tmux not found on PATH")
+
+
+def _should_log_attach(dry_run: bool, panes: list[PaneSpec]) -> bool:
+    return not dry_run and bool(panes)
 
 
 def _launch_pane(pane: PaneSpec, dry_run: bool) -> list[str]:

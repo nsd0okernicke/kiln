@@ -17,10 +17,12 @@ the mechanism, because the mechanism differs per platform (`taskkill /T` vs `kil
 from __future__ import annotations
 
 import os
+import signal
 import subprocess
 import sys
 import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -29,6 +31,50 @@ from kiln.scheduler.infrastructure.agents import REAP_TIMEOUT_SEC, Watchdog, ter
 #: Long enough that nothing finishes on its own during a test, so a passing assertion can
 #: only mean the kill worked.
 SLEEP_SEC = 120
+
+
+class TestKillProcessGroupLogic:
+    """Exercise POSIX signalling decisions even when the suite itself runs on Windows."""
+
+    def test_a_missing_process_needs_no_signal(self, monkeypatch):
+        from kiln.scheduler.infrastructure import agents
+
+        def gone(_pid):
+            raise OSError
+
+        monkeypatch.setattr(agents.os, "getpgid", gone, raising=False)
+        monkeypatch.setattr(
+            agents.os,
+            "killpg",
+            lambda *_args: pytest.fail("a missing process must not be signalled"),
+            raising=False,
+        )
+        agents._killpg(SimpleNamespace(pid=123))
+
+    def test_our_own_group_is_never_signalled(self, monkeypatch):
+        from kiln.scheduler.infrastructure import agents
+
+        monkeypatch.setattr(agents.os, "getpgid", lambda _pid: 7, raising=False)
+        monkeypatch.setattr(agents.os, "getpgrp", lambda: 7, raising=False)
+        monkeypatch.setattr(
+            agents.os,
+            "killpg",
+            lambda *_args: pytest.fail("our own group must not be signalled"),
+            raising=False,
+        )
+        agents._killpg(SimpleNamespace(pid=123))
+
+    def test_a_distinct_group_is_killed(self, monkeypatch):
+        from kiln.scheduler.infrastructure import agents
+
+        killed = []
+        monkeypatch.setattr(agents.os, "getpgid", lambda _pid: 8, raising=False)
+        monkeypatch.setattr(agents.os, "getpgrp", lambda: 7, raising=False)
+        monkeypatch.setattr(agents.os, "killpg", lambda *args: killed.append(args), raising=False)
+        monkeypatch.setattr(agents.signal, "SIGKILL", 9, raising=False)
+        agents._killpg(SimpleNamespace(pid=123))
+        assert killed == [(8, 9)]
+
 
 #: A parent that spawns a child inheriting its stdout, announces itself, then idles. The
 #: grandchild is the process `Popen.kill()` cannot reach.
@@ -283,3 +329,27 @@ class TestPosixBranch:
             process.kill()
 
         assert killed == [], "signalled our own process group"
+
+    def test_killpg_signals_a_distinct_child_group(self, monkeypatch):
+        from kiln.scheduler.infrastructure import agents as adapters
+
+        process = SimpleNamespace(pid=4321)
+        monkeypatch.setattr(os, "getpgid", lambda _pid: 9876)
+        monkeypatch.setattr(os, "getpgrp", lambda: 1234)
+        killed = []
+        monkeypatch.setattr(os, "killpg", lambda group, sig: killed.append((group, sig)))
+
+        adapters._killpg(process)
+
+        assert killed == [(9876, signal.SIGKILL)]
+
+    def test_killpg_tolerates_a_process_that_is_already_gone(self, monkeypatch):
+        from kiln.scheduler.infrastructure import agents as adapters
+
+        process = SimpleNamespace(pid=4321)
+
+        def gone(_pid):
+            raise ProcessLookupError
+
+        monkeypatch.setattr(os, "getpgid", gone)
+        adapters._killpg(process)

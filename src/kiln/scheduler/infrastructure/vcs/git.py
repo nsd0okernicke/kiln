@@ -166,9 +166,7 @@ def squash_merge_commit(commit: str, cwd: str | Path, message: str) -> GitResult
     silently fall back to the repository's ROOT commit, collapsing the whole project history
     into one commit on that role's next squash.
     """
-    result = run_git(["merge", "--squash", commit], cwd)
-    if not result.ok and _clear_generated_blockers(result.output, cwd):
-        result = run_git(["merge", "--squash", commit], cwd)
+    result = _squash_attempt(commit, cwd)
 
     if not result.ok:
         log.error("squash-merge of %s failed: %s", commit, result.output)
@@ -190,6 +188,14 @@ def squash_merge_commit(commit: str, cwd: str | Path, message: str) -> GitResult
         return committed
     record_provenance(commit, cwd)
     return GitResult(True, head_commit(cwd), "", 0)
+
+
+def _squash_attempt(commit: str, cwd: str | Path) -> GitResult:
+    args = ["merge", "--squash", commit]
+    result = run_git(args, cwd)
+    if not result.ok and _clear_generated_blockers(result.output, cwd):
+        return run_git(args, cwd)
+    return result
 
 
 def already_contains(target: str, cwd: str | Path) -> bool:
@@ -278,14 +284,14 @@ def blocking_untracked(output: str) -> list[str]:
     if _UNTRACKED_BLOCKER not in output:
         return []
 
-    paths: list[str] = []
-    collecting = False
-    for line in output.splitlines():
-        if _UNTRACKED_BLOCKER in line:
-            collecting = True
-            continue
-        if not collecting:
-            continue
+    lines = output.splitlines()
+    start = next(index for index, line in enumerate(lines) if _UNTRACKED_BLOCKER in line) + 1
+    return _indented_paths(lines[start:])
+
+
+def _indented_paths(lines: list[str]) -> list[str]:
+    paths = []
+    for line in lines:
         if not line[:1].isspace() or not line.strip():
             break
         paths.append(line.strip())
@@ -299,23 +305,32 @@ def _clear_generated_blockers(output: str, cwd: str | Path) -> list[str]:
     All-or-nothing on purpose: one unrecognised path means the worker (or the user) left
     something real there, and silently deleting it would be far worse than a failed merge.
     """
-    blockers = blocking_untracked(output)
-    if not blockers or not all(is_generated_path(path) for path in blockers):
+    blockers = _generated_blockers(output)
+    if not blockers:
         return []
-
-    removed: list[str] = []
-    for relative in blockers:
-        target = Path(cwd) / relative
-        try:
-            if target.is_file():
-                target.unlink()
-                removed.append(relative)
-        except OSError as exc:
-            log.warning("could not remove %s: %s", relative, exc)
+    removed = [
+        relative for relative in blockers if _remove_generated_file(Path(cwd) / relative, relative)
+    ]
 
     if removed:
         log.warning("cleared launcher-generated file(s) blocking the merge: %s", ", ".join(removed))
     return removed
+
+
+def _generated_blockers(output: str) -> list[str]:
+    blockers = blocking_untracked(output)
+    return blockers if blockers and all(is_generated_path(path) for path in blockers) else []
+
+
+def _remove_generated_file(target: Path, relative: str) -> bool:
+    try:
+        if not target.is_file():
+            return False
+        target.unlink()
+        return True
+    except OSError as exc:
+        log.warning("could not remove %s: %s", relative, exc)
+        return False
 
 
 def is_ignored(pattern: str, cwd: str | Path) -> bool:
@@ -418,14 +433,18 @@ def ensure_union_merge(cwd: str | Path, paths: tuple[str, ...] = UNION_MERGE_PAT
         missing = _missing_union_rules(existing, paths)
         if not missing:
             return
-        attributes_path.parent.mkdir(parents=True, exist_ok=True)
-        separator = "" if existing.endswith("\n") or not existing else "\n"
-        attributes_path.write_text(
-            f"{existing}{separator}" + "\n".join(missing) + "\n", encoding="utf-8"
-        )
+        _write_union_rules(attributes_path, existing, missing)
         log.info("declared %s union-merged in %s", ", ".join(paths), attributes_path)
     except OSError as exc:
         log.warning("could not update %s: %s", attributes_path, exc)
+
+
+def _write_union_rules(attributes_path: Path, existing: str, missing: list[str]) -> None:
+    attributes_path.parent.mkdir(parents=True, exist_ok=True)
+    separator = "" if existing.endswith("\n") or not existing else "\n"
+    attributes_path.write_text(
+        f"{existing}{separator}" + "\n".join(missing) + "\n", encoding="utf-8"
+    )
 
 
 def _git_path(cwd: str | Path, path: str) -> Path:
@@ -473,18 +492,25 @@ def squash_since(anchor: str, message: str, cwd: str | Path) -> GitResult:
     not silently lose its changes — the legacy prose assumed the worker committed, and a
     one-shot worker frequently does not.
     """
-    if has_pending_changes(cwd):
-        staged = run_git(["add", "-A"], cwd)
-        if not staged.ok:
-            return staged
+    staged = _stage_pending(cwd)
+    if staged is not None and not staged.ok:
+        return staged
 
-    if not has_commits_since(anchor, cwd) and not has_pending_changes(cwd):
+    if _nothing_to_squash(anchor, cwd):
         # Nothing to squash. Report the existing HEAD so the caller still has a commit to
         # reference in its handoff rather than treating this as a failure.
         current = head_commit(cwd)
         log.info("nothing to squash since %s; reusing HEAD %s", anchor, current)
         return GitResult(True, current, "", 0)
 
+    return _squash_commits(anchor, message, cwd)
+
+
+def _nothing_to_squash(anchor: str, cwd: str | Path) -> bool:
+    return not has_commits_since(anchor, cwd) and not has_pending_changes(cwd)
+
+
+def _squash_commits(anchor: str, message: str, cwd: str | Path) -> GitResult:
     reset = run_git(["reset", "--soft", anchor], cwd)
     if not reset.ok:
         return reset
@@ -494,6 +520,10 @@ def squash_since(anchor: str, message: str, cwd: str | Path) -> GitResult:
         return committed
 
     return GitResult(True, head_commit(cwd), "", 0)
+
+
+def _stage_pending(cwd: str | Path) -> GitResult | None:
+    return run_git(["add", "-A"], cwd) if has_pending_changes(cwd) else None
 
 
 def commit_all(message: str, cwd: str | Path) -> GitResult:

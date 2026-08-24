@@ -119,6 +119,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.list or not args.message_id:
         return _print_failures(db_path, args.branch)
 
+    return _retry_message(db_path, args)
+
+
+def _retry_message(db_path: Path, args: argparse.Namespace) -> int:
+
     message_id = _resolve_id(db_path, args.branch, args.message_id)
     if message_id is None:
         return 1

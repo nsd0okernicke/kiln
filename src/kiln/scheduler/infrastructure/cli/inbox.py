@@ -139,15 +139,25 @@ def receive(ctx: InboxContext, inbound: handoff.InboundHandoff, raw: str) -> lis
     result = git_ops.squash_merge_commit(
         target, ctx.worktree, message=merge_commit_message(ctx.role, inbound)
     )
+    lines.extend(_merge_result_lines(ctx, inbound, target, result))
+    return lines
+
+
+def _merge_result_lines(
+    ctx: InboxContext,
+    inbound: handoff.InboundHandoff,
+    target: str,
+    result: git_ops.GitResult,
+) -> list[str]:
     if result.ok:
         log.info("squash-merged %s into %s", target[:8], ctx.branch)
-        lines.append(f"   {ICON_MERGE} squash-merged {target[:8]} into {ctx.branch}")
-    else:
-        log.error("merge of %s failed: %s", target, result.output)
-        lines.append(f"   {ICON_MERGE_FAILED} MERGE FAILED for {inbound.commit[:8]}:")
-        lines.extend(f"      {line}" for line in result.output.splitlines())
-        lines.append("      the work above is NOT in your tree; resolve before continuing")
-    return lines
+        return [f"   {ICON_MERGE} squash-merged {target[:8]} into {ctx.branch}"]
+    log.error("merge of %s failed: %s", target, result.output)
+    return [
+        f"   {ICON_MERGE_FAILED} MERGE FAILED for {inbound.commit[:8]}:",
+        *(f"      {line}" for line in result.output.splitlines()),
+        "      the work above is NOT in your tree; resolve before continuing",
+    ]
 
 
 def poll_once(ctx: InboxContext, bar: pane_status.StatusBar | None = None) -> dict | None:
@@ -288,16 +298,27 @@ def _poll_loop(
             # An inbox that dies takes the human's only notification channel with it.
             log.exception("poll failed; continuing")
             message = None
-        if message is not None:
-            continue
-        if once:
-            return 0
-        bar.update(state="waiting")
-        try:
-            time.sleep(poll_interval)
-        except KeyboardInterrupt:
-            log.info("interrupted; shutting down")
-            return 130
+        exit_code = _after_poll(message, bar, once=once, poll_interval=poll_interval)
+        if exit_code is not None:
+            return exit_code
+
+
+def _after_poll(message, bar, *, once: bool, poll_interval: float) -> int | None:
+    if message is not None:
+        return None
+    if once:
+        return 0
+    bar.update(state="waiting")
+    return None if _sleep_until_next_poll(poll_interval) else 130
+
+
+def _sleep_until_next_poll(poll_interval: float) -> bool:
+    try:
+        time.sleep(poll_interval)
+    except KeyboardInterrupt:
+        log.info("interrupted; shutting down")
+        return False
+    return True
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

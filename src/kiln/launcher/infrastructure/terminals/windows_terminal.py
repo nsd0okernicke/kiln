@@ -62,8 +62,13 @@ def build_layout(panes: list[PaneSpec], layout: dict | None) -> list[str]:
     if not layout or not layout.get("tabs"):
         return build_tabs_layout(panes)
 
+    args = _build_defined_tabs(panes, layout["tabs"])
+    return args or build_tabs_layout(panes)
+
+
+def _build_defined_tabs(panes: list[PaneSpec], tabs: list[dict]) -> list[str]:
     args: list[str] = []
-    for tab_def in layout["tabs"]:
+    for tab_def in tabs:
         members = _tab_members(panes, tab_def)
         if not members:
             continue
@@ -72,7 +77,7 @@ def build_layout(panes: list[PaneSpec], layout: dict | None) -> list[str]:
             args.append(SEPARATOR)
         args += _tab_args(members, tab_def, args.count("new-tab"))
 
-    return args or build_tabs_layout(panes)
+    return args
 
 
 def _tab_members(panes: list[PaneSpec], tab_def: dict) -> list[PaneSpec]:

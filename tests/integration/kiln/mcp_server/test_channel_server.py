@@ -144,6 +144,12 @@ class TestMarkProcessing:
         assert result["success"] is False
         assert result["error"] == "message id missing-id not found"
 
+    def test_database_error_reports_failure(self, channel, monkeypatch):
+        monkeypatch.setattr(channel.db, "mark_processing", lambda *_: 1 / 0)
+        result = channel.mark_processing("message-id")
+        assert result["success"] is False
+        assert "division by zero" in result["error"]
+
 
 class TestMarkProcessed:
     def test_success_response_and_side_effect(self, channel, add_message, read_message):
@@ -161,6 +167,12 @@ class TestMarkProcessed:
         result = channel.mark_processed("missing-id")
         assert result["success"] is False
         assert result["error"] == "message id missing-id not found"
+
+    def test_database_error_reports_failure(self, channel, monkeypatch):
+        monkeypatch.setattr(channel.db, "mark_processed", lambda *_: 1 / 0)
+        result = channel.mark_processed("message-id")
+        assert result["success"] is False
+        assert "division by zero" in result["error"]
 
 
 class TestWaitForMessage:

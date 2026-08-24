@@ -153,9 +153,8 @@ def render_event(event: dict) -> list[str]:
     """
     kind = event.get("type")
 
-    if kind == "system" and event.get("subtype") == "init":
-        return [f"{ICON_SESSION} worker session started"]
-
+    if kind == "system":
+        return _render_system(event)
     if kind == "assistant":
         return _render_assistant(event)
 
@@ -163,26 +162,45 @@ def render_event(event: dict) -> list[str]:
         return _render_tool_errors(event)
 
     if kind == "result":
-        cost = event.get("total_cost_usd") or 0.0
-        icon = ICON_FAILED if event.get("is_error") else ICON_FINISHED
-        return [f"{icon} worker finished (cost ${float(cost):.4f})"]
+        return _render_result(event)
 
     return []
+
+
+def _render_system(event: dict) -> list[str]:
+    return [f"{ICON_SESSION} worker session started"] if event.get("subtype") == "init" else []
+
+
+def _render_result(event: dict) -> list[str]:
+    cost = event.get("total_cost_usd") or 0.0
+    icon = ICON_FAILED if event.get("is_error") else ICON_FINISHED
+    return [f"{icon} worker finished (cost ${float(cost):.4f})"]
 
 
 def _render_assistant(event: dict) -> list[str]:
     lines: list[str] = []
     for block in event.get("message", {}).get("content", []):
-        block_type = block.get("type")
-        if block_type == "text":
-            text = str(block.get("text", "")).strip()
-            if text:
-                lines.extend(f"    {line}" for line in text.splitlines())
-        elif block_type == "tool_use":
-            name = str(block.get("name", "tool"))
-            summary = summarise_tool_use(name, block.get("input") or {})
-            lines.append(f"  {ICON_TOOL} {summary}")
+        lines.extend(_render_assistant_block(block))
     return lines
+
+
+def _render_assistant_block(block: dict) -> list[str]:
+    if block.get("type") == "text":
+        return _render_text_block(block)
+    if block.get("type") == "tool_use":
+        return _render_tool_block(block)
+    return []
+
+
+def _render_text_block(block: dict) -> list[str]:
+    text = str(block.get("text", "")).strip()
+    return [f"    {line}" for line in text.splitlines()] if text else []
+
+
+def _render_tool_block(block: dict) -> list[str]:
+    name = str(block.get("name", "tool"))
+    summary = summarise_tool_use(name, block.get("input") or {})
+    return [f"  {ICON_TOOL} {summary}"]
 
 
 def _render_tool_errors(event: dict) -> list[str]:
@@ -201,6 +219,19 @@ def _result_text(block: dict) -> str:
     return str(content or "tool failed")
 
 
+def _json_events(stdout: str) -> list[dict]:
+    events = []
+    for line in stdout.splitlines():
+        candidate = line.strip()
+        if not candidate.startswith("{"):
+            continue
+        try:
+            events.append(json.loads(candidate))
+        except json.JSONDecodeError:
+            continue
+    return events
+
+
 def parse_cli_output(stdout: str) -> dict:
     """
     Pull the final `result` event out of a captured stream.
@@ -211,14 +242,7 @@ def parse_cli_output(stdout: str) -> dict:
     result: dict | None = None
     fallback: dict | None = None
 
-    for line in stdout.splitlines():
-        candidate = line.strip()
-        if not candidate.startswith("{"):
-            continue
-        try:
-            event = json.loads(candidate)
-        except json.JSONDecodeError:
-            continue
+    for event in _json_events(stdout):
         fallback = event
         if event.get("type") == "result":
             result = event
@@ -281,11 +305,9 @@ def _invocation_from_stream(definition, stdout: str, stderr: str) -> WorkerInvoc
     try:
         envelope = parse_cli_output(stdout)
     except ValueError:
-        detail = stderr.strip() or "grok produced no parseable output"
-        log.error("worker %s produced no result event: %s", definition.name, detail)
-        return _blocked(detail, stdout, is_error=True)
+        return _missing_stream_invocation(definition, stdout, stderr)
     text = str(envelope.get("result", ""))
-    cost = float(envelope.get("total_cost_usd") or 0.0)
+    cost = _envelope_cost(envelope)
     tokens = parse_usage(envelope)
     if envelope.get("is_error"):
         log.error("worker %s reported an error: %s", definition.name, text)
@@ -299,9 +321,23 @@ def _invocation_from_stream(definition, stdout: str, stderr: str) -> WorkerInvoc
         result.status,
         result.sentinel_found,
         cost,
-        tokens.total if tokens else "-",
+        _token_total(tokens),
     )
     return WorkerInvocation(result=result, raw_output=text, cost_usd=cost, tokens=tokens)
+
+
+def _missing_stream_invocation(definition, stdout, stderr):
+    detail = stderr.strip() or "grok produced no parseable output"
+    log.error("worker %s produced no result event: %s", definition.name, detail)
+    return _blocked(detail, stdout, is_error=True)
+
+
+def _envelope_cost(envelope: dict) -> float:
+    return float(envelope.get("total_cost_usd") or 0.0)
+
+
+def _token_total(tokens: TokenUsage | None):
+    return tokens.total if tokens else "-"
 
 
 def run_worker(
@@ -340,11 +376,9 @@ def run_worker(
         prompt=prompt,
         model=model,
     )
-    resolved = shutil.which(command[0])
-    if resolved:
-        command[0] = resolved
+    _resolve_executable(command)
 
-    emit = on_output or _default_emit
+    emit = _output_sink(on_output)
 
     try:
         process = subprocess.Popen(
@@ -382,5 +416,19 @@ def run_worker(
         log.error("worker %s killed: %s", definition.name, capture.timeout_reason)
         return _blocked(capture.timeout_reason, stdout, timed_out=True)
 
-    stderr = (process.stderr.read() if process.stderr else "") or ""
+    stderr = _stderr(process)
     return _invocation_from_stream(definition, stdout, stderr)
+
+
+def _resolve_executable(command: list[str]) -> None:
+    resolved = shutil.which(command[0])
+    if resolved:
+        command[0] = resolved
+
+
+def _output_sink(on_output):
+    return on_output or _default_emit
+
+
+def _stderr(process) -> str:
+    return (process.stderr.read() if process.stderr else "") or ""

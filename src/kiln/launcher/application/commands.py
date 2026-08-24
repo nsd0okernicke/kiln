@@ -530,20 +530,35 @@ def build_agent_command(
     to both scheduler and wrapper roles: a scheduler-mode worker is a subprocess of its pane
     and inherits the pane's environment, so setting it once on the pane covers both.
     """
+    special = _special_role_command(role, paths, branch, profile, proxy_url)
+    if special is not None:
+        return special
+    return _direct_agent_command(role, paths, proxy_url)
+
+
+def _special_role_command(
+    role: RoleConfig,
+    paths: KilnPaths,
+    branch: str,
+    profile: Profile | None,
+    proxy_url: str | None,
+) -> AgentCommand | None:
     if role.is_inbox:
         return _inbox_command(role, paths, branch)
-
     if role.is_dashboard:
         return _dashboard_command(role, paths, branch)
-
     if role.is_cockpit:
         return _cockpit_command(role, paths, branch, profile)
-
     if role.uses_scheduler:
         return _scheduler_command(role, paths, branch, profile).with_env(
             **proxy_env(role, proxy_url)
         )
+    return None
 
+
+def _direct_agent_command(
+    role: RoleConfig, paths: KilnPaths, proxy_url: str | None
+) -> AgentCommand:
     if role.agent == "claude":
         return _claude_command(role, paths).with_env(**proxy_env(role, proxy_url))
     if role.agent == "copilot":

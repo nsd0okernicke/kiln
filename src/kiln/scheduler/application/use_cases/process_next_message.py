@@ -380,17 +380,7 @@ def _delegate(
             len(attempts.invocations) + 1,
             ctx.max_attempts,
         )
-        max_budget_usd: float | None = None
-        if ctx.max_budget_usd is not None:
-            # The *remaining* budget, not the whole cap: a retry after a $4 first attempt
-            # under a $5 cap must not be handed $5 again. Passed only when configured, so
-            # adapters without the flag are unaffected.
-            # `state` already includes this cycle's earlier attempts -- record_spend runs
-            # after every invocation below -- so subtracting attempts.cost as well would
-            # charge the retry twice.
-            remaining = ctx.max_budget_usd - state.spend_on(work_item_of(inbound.handoff))
-            max_budget_usd = max(remaining, 0.0)
-
+        max_budget_usd = _remaining_budget(ctx, state, inbound)
         attempts.invocations.append(
             ctx.worker_runner(
                 WorkerRequest(
@@ -409,6 +399,16 @@ def _delegate(
             return attempts
         retry_of = attempts.last.result.summary
         log.warning(f"{ICON_RETRY} worker blocked, retrying once: %s", retry_of)
+
+
+def _remaining_budget(
+    ctx: SchedulerContext, state: SchedulerState, inbound: handoff.InboundHandoff
+) -> float | None:
+    if ctx.max_budget_usd is None:
+        return None
+    # `state` already includes this cycle's earlier attempts, so the retry is not charged twice.
+    remaining = ctx.max_budget_usd - state.spend_on(work_item_of(inbound.handoff))
+    return max(remaining, 0.0)
 
 
 def _hand_off(

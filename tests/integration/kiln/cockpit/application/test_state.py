@@ -75,6 +75,11 @@ def _row(
     }
 
 
+def test_invalid_status_timestamp_is_not_stalled():
+    status = {"state": "working", "worker_timeout_sec": 10, "since": "not-a-timestamp"}
+    assert cockpit_state.is_stalled(status, NOW_UTC) is False
+
+
 class TestLaneFor:
     """
     The one rule that decides where a card is drawn, and the only place role names could

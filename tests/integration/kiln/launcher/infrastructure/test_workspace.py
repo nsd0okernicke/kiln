@@ -525,6 +525,26 @@ class TestLogbookUnionMerge:
         text = attributes.read_text(encoding="utf-8")
         assert text.count("logbook.md merge=union") == 1
 
+    def test_it_warns_when_git_cannot_locate_attributes(self, git_repo, monkeypatch, caplog):
+        monkeypatch.setattr(
+            git_ops,
+            "run_git",
+            lambda *_args, **_kwargs: git_ops.GitResult(False, "", "not a repo", 1),
+        )
+        with caplog.at_level("WARNING"):
+            git_ops.ensure_union_merge(git_repo)
+        assert "could not locate info/attributes" in caplog.text
+
+    def test_it_warns_when_attributes_cannot_be_written(self, git_repo, monkeypatch, caplog):
+        monkeypatch.setattr(
+            git_ops,
+            "_write_union_rules",
+            lambda *_args: (_ for _ in ()).throw(OSError("read only")),
+        )
+        with caplog.at_level("WARNING"):
+            git_ops.ensure_union_merge(git_repo, ("another-log.md",))
+        assert "read only" in caplog.text
+
     def test_it_actually_resolves_an_add_add_conflict(self, git_repo, git_cmd):
         # The behaviour, not the file: an attributes entry that did not change the merge
         # outcome would be worthless, and `add/add` is the case a plain textual merge driver

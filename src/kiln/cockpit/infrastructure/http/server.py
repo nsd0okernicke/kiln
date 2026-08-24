@@ -158,6 +158,14 @@ def _log_query(query: dict[str, list[str]]) -> tuple[str, int] | str:
         return "after must be a non-negative integer"
 
 
+def _log_start(size: int, after: int) -> tuple[int, bool]:
+    if size < after:
+        return 0, True
+    if after == 0 and size > INITIAL_LOG_BYTES:
+        return size - INITIAL_LOG_BYTES, True
+    return after, False
+
+
 class CockpitHandler(BaseHTTPRequestHandler):
     """Routes. `config` is injected by `serve` onto a subclass of this."""
 
@@ -172,19 +180,24 @@ class CockpitHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlsplit(self.path)
         path = parsed.path.rstrip("/") or "/"
+        handler = self._get_handler(path, parsed.query)
+        if handler is None:
+            return self._send_json(404, {"error": f"no route for {path}"})
+        self._guarded(handler)
+
+    def _get_handler(self, path: str, query: str) -> Callable[[], None] | None:
         if path == "/":
-            return self._send_page()
+            return self._send_page
         if path == "/api/state":
-            return self._guarded(lambda: self._send_json(200, gather_state(self.config)))
+            return lambda: self._send_json(200, gather_state(self.config))
+        identifier = unquote(path.rsplit("/", 1)[-1])
         if path.startswith("/api/messages/"):
-            return self._guarded(lambda: self._send_message(path.rsplit("/", 1)[-1]))
+            return lambda: self._send_message(identifier)
         if path.startswith("/api/status/"):
-            return self._guarded(lambda: self._send_status(unquote(path.rsplit("/", 1)[-1])))
+            return lambda: self._send_status(identifier)
         if path.startswith("/api/logs/"):
-            return self._guarded(
-                lambda: self._send_log(unquote(path.rsplit("/", 1)[-1]), parse_qs(parsed.query))
-            )
-        self._send_json(404, {"error": f"no route for {path}"})
+            return lambda: self._send_log(identifier, parse_qs(query))
+        return None
 
     def do_POST(self) -> None:
         path = self.path.split("?", 1)[0].rstrip("/") or "/"
@@ -199,6 +212,17 @@ class CockpitHandler(BaseHTTPRequestHandler):
             # request a hostile page can make against loopback without asking permission.
             return self._send_json(403, {"error": f"missing {GUARD_HEADER} header"})
 
+        handler = self._post_handler(path)
+        if handler is None:
+            return self._send_json(404, {"error": f"no route for {path}"})
+
+        try:
+            body = parse_json_body(raw)
+        except ValueError as exc:
+            return self._send_json(400, {"error": str(exc)})
+        self._guarded(lambda: self._send_json(200, handler(body)))
+
+    def _post_handler(self, path: str) -> Callable[[dict], dict] | None:
         routes: dict[str, Callable[[dict], dict]] = {
             "/api/send": self._send,
             "/api/tasks": self._task,
@@ -212,14 +236,7 @@ class CockpitHandler(BaseHTTPRequestHandler):
         if handler is None and path.startswith("/api/ack/"):
             message_id = path.rsplit("/", 1)[-1]
             handler = lambda body: self._ack(message_id)  # noqa: E731
-        if handler is None:
-            return self._send_json(404, {"error": f"no route for {path}"})
-
-        try:
-            body = parse_json_body(raw)
-        except ValueError as exc:
-            return self._send_json(400, {"error": str(exc)})
-        self._guarded(lambda: self._send_json(200, handler(body)))
+        return handler
 
     # --- handlers ------------------------------------------------------------------
 
@@ -307,10 +324,7 @@ class CockpitHandler(BaseHTTPRequestHandler):
         name straight from the URL would make `../` a file-read primitive on a server with
         no authentication.
         """
-        known = {
-            session.role for session in dashboard.read_sessions(self.config.dashboard.sessions_file)
-        }
-        if role not in known:
+        if role not in self._known_roles():
             return self._send_json(404, {"error": f"{role!r} is not a role in this swarm"})
         status = dashboard.read_status(self.config.status_dir, role)
         if status is None:
@@ -319,10 +333,7 @@ class CockpitHandler(BaseHTTPRequestHandler):
 
     def _send_log(self, role: str, query: dict[str, list[str]]) -> None:
         """Return the newly appended bytes of one role log, bounded on first read."""
-        known = {
-            session.role for session in dashboard.read_sessions(self.config.dashboard.sessions_file)
-        }
-        if role not in known:
+        if role not in self._known_roles():
             return self._send_json(404, {"error": f"{role!r} is not a role in this swarm"})
 
         parsed = _log_query(query)
@@ -342,12 +353,7 @@ class CockpitHandler(BaseHTTPRequestHandler):
                     "truncated": False,
                 },
             )
-        size = path.stat().st_size
-        truncated = size < after
-        start = 0 if truncated else after
-        if after == 0 and size > INITIAL_LOG_BYTES:
-            start = size - INITIAL_LOG_BYTES
-            truncated = True
+        start, truncated = _log_start(path.stat().st_size, after)
         with path.open("rb") as handle:
             handle.seek(start)
             raw = handle.read()
@@ -361,6 +367,11 @@ class CockpitHandler(BaseHTTPRequestHandler):
                 "truncated": truncated,
             },
         )
+
+    def _known_roles(self) -> set[str]:
+        return {
+            session.role for session in dashboard.read_sessions(self.config.dashboard.sessions_file)
+        }
 
     # --- plumbing ------------------------------------------------------------------
 

@@ -77,20 +77,27 @@ def warn_if_channel_unavailable(profile: Profile) -> bool:
     no MCP at all, and even a wrapper swarm is worth launching so the operator can see it.
     Returns True when a warning was emitted.
     """
-    wrapper_roles = [role.role for role in profile.roles if not role.uses_scheduler]
+    wrapper_roles = _wrapper_roles(profile)
     if not wrapper_roles:
         return False
 
     if not shutil.which(MCP_PYTHON):
-        log.warning(
-            "%r is not on PATH, so the kiln-channel server cannot start. "
-            "Roles %s will be unable to receive handoffs.",
-            MCP_PYTHON,
-            ", ".join(wrapper_roles),
-        )
+        _warn_missing_channel_python(wrapper_roles)
         return True
 
-    probe = subprocess.run(
+    probe = _channel_probe()
+    if probe.returncode == 0:
+        return False
+    _warn_channel_probe(probe, wrapper_roles)
+    return True
+
+
+def _wrapper_roles(profile: Profile) -> list[str]:
+    return [role.role for role in profile.roles if not role.uses_scheduler]
+
+
+def _channel_probe() -> subprocess.CompletedProcess:
+    return subprocess.run(
         [MCP_PYTHON, "-c", CHANNEL_IMPORT_PROBE],
         capture_output=True,
         text=True,
@@ -100,9 +107,9 @@ def warn_if_channel_unavailable(profile: Profile) -> bool:
         check=False,
         timeout=30,
     )
-    if probe.returncode == 0:
-        return False
 
+
+def _warn_channel_probe(probe: subprocess.CompletedProcess, wrapper_roles: list[str]) -> None:
     detail = (probe.stderr or "").strip().splitlines()
     log.warning(
         "the kiln-channel MCP server will not start: %r cannot import the MCP SDK (%s). "
@@ -113,7 +120,15 @@ def warn_if_channel_unavailable(profile: Profile) -> bool:
         ", ".join(wrapper_roles),
         mcp_install_hint(),
     )
-    return True
+
+
+def _warn_missing_channel_python(wrapper_roles: list[str]) -> None:
+    log.warning(
+        "%r is not on PATH, so the kiln-channel server cannot start. "
+        "Roles %s will be unable to receive handoffs.",
+        MCP_PYTHON,
+        ", ".join(wrapper_roles),
+    )
 
 
 def mcp_install_hint() -> str:
@@ -415,13 +430,17 @@ def _log_proxy_routing(profile: Profile, url: str, capture: str, traffic_db: Pat
     log.info("capture proxy: %s (%s) -> %s", url, capture, traffic_db)
     routed = [role.role for role in profile.roles if proxy_env(role, url)]
     log.info("  routing: %s", ", ".join(routed) or "(no proxy-capable roles)")
-    unrouted = [
+    unrouted = _unrouted_roles(profile)
+    if unrouted:
+        log.warning("  not routed (no verified base-URL override): %s", ", ".join(unrouted))
+
+
+def _unrouted_roles(profile: Profile) -> list[str]:
+    return [
         role.role
         for role in profile.roles
         if not role.is_passive and role.agent not in PROXY_CAPABLE_AGENTS
     ]
-    if unrouted:
-        log.warning("  not routed (no verified base-URL override): %s", ", ".join(unrouted))
 
 
 def _capture_url(args: argparse.Namespace, paths: KilnPaths, profile: Profile) -> str | None:
@@ -757,15 +776,12 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(message)s",
     )
+    return _execute_args(args)
 
-    # `kiln init <dir>` is accepted alongside `--init`, matching both shells' spellings.
-    if args.command and args.command != "init":
-        log.error(
-            "Unknown argument %r. Expected 'init', 'send', 'inbox' or 'retry', or "
-            "named flags "
-            "like -WorkingDir.",
-            args.command,
-        )
+
+def _execute_args(args: argparse.Namespace) -> int:
+
+    if not _validate_command(args.command):
         return 1
 
     if args.init_target:
@@ -783,6 +799,17 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         log.error("interrupted")
         return 130
+
+
+def _validate_command(command: str | None) -> bool:
+    if not command or command == "init":
+        return True
+    log.error(
+        "Unknown argument %r. Expected 'init', 'send', 'inbox' or 'retry', or named flags "
+        "like -WorkingDir.",
+        command,
+    )
+    return False
 
 
 def _run_parsed_command(args: argparse.Namespace) -> int:

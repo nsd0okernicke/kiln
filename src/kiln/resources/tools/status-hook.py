@@ -37,9 +37,14 @@ def infer_status(payload):
     if event == "PreToolUse":
         return _pre_tool_status(tool_name, tool_input)
     if event == "PostToolUse":
-        response = payload.get("tool_response") or {}
-        if tool_name == "mcp__kiln-channel__wait_for_message" and response.get("received"):
-            return "receiving", None
+        return _post_tool_status(tool_name, payload.get("tool_response"))
+    return None, None
+
+
+def _post_tool_status(tool_name, response):
+    response = response or {}
+    if tool_name == "mcp__kiln-channel__wait_for_message" and response.get("received"):
+        return "receiving", None
     return None, None
 
 
@@ -62,23 +67,26 @@ def main():
     if not state:
         return
 
-    role = detect_role(cwd)
-    if not role:
-        return
-
-    script = Path(cwd) / ".kiln" / "tools" / "set-status.py"
-    if not script.exists():
+    command = _status_command(cwd, state, detail)
+    if command is None:
         return
 
     # sys.executable, not a bare "python": this file is copied into each worktree and run by
     # the agent CLI's hook runner, and stock Debian/Ubuntu has no `python` on PATH at all —
     # only `python3`. The interpreter already running this hook is by definition a working one.
+    subprocess.run(command, cwd=cwd, timeout=10, capture_output=True)
+
+
+def _status_command(cwd, state, detail):
+    role = detect_role(cwd)
+    script = Path(cwd) / ".kiln" / "tools" / "set-status.py"
+    if not role or not script.exists():
+        return None
     args = [sys.executable, str(script), role, state]
     if detail:
         args.append(detail)
     args.append("--mode=auto")
-
-    subprocess.run(args, cwd=cwd, timeout=10, capture_output=True)
+    return args
 
 
 if __name__ == "__main__":

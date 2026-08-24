@@ -123,6 +123,10 @@ class TestFindTurnFailure:
     def test_no_events_at_all_is_not_a_failure(self):
         assert codex_adapter.find_turn_failure("") is None
 
+    def test_non_json_lines_are_ignored(self):
+        stream = "progress\n{broken\n" + _stream({"type": "turn.failed"})
+        assert codex_adapter.find_turn_failure(stream) == "turn failed"
+
 
 class TestEventRendering:
     def test_successful_command_execution_is_shown(self):

@@ -161,6 +161,19 @@ def _tool_start_line(data: dict) -> str:
     return f"  {ICON_TOOL} {label}"
 
 
+def _json_events(stdout: str) -> list[dict]:
+    events = []
+    for line in stdout.splitlines():
+        candidate = line.strip()
+        if not candidate.startswith("{"):
+            continue
+        try:
+            events.append(json.loads(candidate))
+        except json.JSONDecodeError:
+            continue
+    return events
+
+
 def parse_cli_output(stdout: str) -> dict:
     """
     Pull the last non-empty `assistant.message` event out of a captured JSONL stream.
@@ -170,14 +183,7 @@ def parse_cli_output(stdout: str) -> dict:
     also be non-empty, or a tool-heavy turn would report an empty answer.
     """
     result: dict | None = None
-    for line in stdout.splitlines():
-        candidate = line.strip()
-        if not candidate.startswith("{"):
-            continue
-        try:
-            event = json.loads(candidate)
-        except json.JSONDecodeError:
-            continue
+    for event in _json_events(stdout):
         if (
             event.get("type") == "assistant.message"
             and str((event.get("data") or {}).get("content", "")).strip()
@@ -233,26 +239,22 @@ def find_usage(stdout: str) -> TokenUsage | None:
     The last `result` event wins.
     """
     usage: TokenUsage | None = None
-    for line in stdout.splitlines():
-        candidate = line.strip()
-        if not candidate.startswith("{"):
-            continue
-        try:
-            event = json.loads(candidate)
-        except json.JSONDecodeError:
-            continue
-        if event.get("type") != "result":
-            continue
-        # Copilot nests event payloads under `data`; the bare form is accepted too, since
-        # the exact shape here is documented rather than verified.
-        data = event.get("data") or {}
-        for payload in (data.get("usage"), event.get("usage"), data):
-            if isinstance(payload, dict):
-                found = _usage_from(payload)
-                if found is not None:
-                    usage = found
-                    break
+    for event in _json_events(stdout):
+        found = _event_usage(event)
+        if found is not None:
+            usage = found
     return usage
+
+
+def _event_usage(event: dict) -> TokenUsage | None:
+    if event.get("type") != "result":
+        return None
+    # Copilot nests payloads under `data`; accept the bare form until the wire shape is proven.
+    data = event.get("data") or {}
+    for payload in (data.get("usage"), event.get("usage"), data):
+        if isinstance(payload, dict) and (found := _usage_from(payload)) is not None:
+            return found
+    return None
 
 
 def _blocked(summary: str, raw: str, **kwargs) -> WorkerInvocation:
@@ -342,27 +344,11 @@ def run_worker(
     emit = on_output or _default_emit
 
     try:
-        process = subprocess.Popen(
-            command,
-            cwd=str(cwd),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,  # kept separate: merging would corrupt the event stream
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            stdin=subprocess.DEVNULL,
-            bufsize=1,  # line buffered, so the pane updates as the worker works
-            # A new session so the whole group can be signalled on timeout without
-            # touching the scheduler's own (POSIX); accepted and ignored on Windows.
-            start_new_session=True,
-        )
+        process = _start_process(command, cwd)
     except OSError as exc:
         log.error("could not launch worker %s: %s", definition.name, exc)
         return _blocked(f"could not launch copilot: {exc}", "", is_error=True)
 
-    # Two limits: `timeout` for a worker that is slow, `idle_timeout` for one that
-    # has stopped. Only the first existed, and it charged the full hour for a
-    # worker that had already gone quiet.
     capture = capture_json_stream(
         process,
         timeout=timeout,
@@ -372,11 +358,36 @@ def run_worker(
         watchdog_factory=Watchdog,
         terminate=terminate_tree,
     )
+    return _invocation_after_capture(definition, process, capture)
+
+
+def _start_process(command: list[str], cwd: str | Path) -> subprocess.Popen:
+    return subprocess.Popen(
+        command,
+        cwd=str(cwd),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,  # kept separate: merging would corrupt the event stream
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        stdin=subprocess.DEVNULL,
+        bufsize=1,  # line buffered, so the pane updates as the worker works
+        # A new session so the whole group can be signalled on timeout without
+        # touching the scheduler's own (POSIX); accepted and ignored on Windows.
+        start_new_session=True,
+    )
+
+
+def _invocation_after_capture(definition, process, capture) -> WorkerInvocation:
     stdout = capture.stdout
     if capture.timeout_reason:
         log.error("worker %s killed: %s", definition.name, capture.timeout_reason)
         return _blocked(capture.timeout_reason, stdout, timed_out=True)
 
+    return _completed_capture(definition, process, stdout)
+
+
+def _completed_capture(definition, process, stdout: str) -> WorkerInvocation:
     stderr = (process.stderr.read() if process.stderr else "") or ""
     # Read once, up front: a session that exits nonzero or never produces a final reply
     # still burned tokens, and those are exactly the sessions worth accounting for.

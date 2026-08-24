@@ -157,17 +157,29 @@ def _resolve_target(ctx: ActionContext, target: str) -> str:
         raise ActionError("no target role given")
 
     sessions = ctx.gateway.sessions(ctx.sessions_file)
-    addressable = [session.role for session in sessions if not session.passive]
+    addressable = _addressable_roles(sessions)
     if target in addressable:
         return target
 
-    known = ", ".join(addressable) or "(none — no swarm is running here)"
-    if any(session.role == target for session in sessions):
+    known = _known_roles_text(addressable)
+    if _known_passive_target(sessions, target):
         raise ActionError(
             f"{target!r} runs no agent, so nothing would ever read the message. "
             f"Addressable roles: {known}"
         )
     raise ActionError(f"{target!r} is not a role in this swarm. Addressable roles: {known}")
+
+
+def _known_passive_target(sessions, target: str) -> bool:
+    return any(session.role == target for session in sessions)
+
+
+def _addressable_roles(sessions) -> list[str]:
+    return [session.role for session in sessions if not session.passive]
+
+
+def _known_roles_text(roles: list[str]) -> str:
+    return ", ".join(roles) or "(none — no swarm is running here)"
 
 
 def retry_message(ctx: ActionContext, *, message_id: str, guidance: str = "") -> dict:
@@ -236,16 +248,20 @@ def _resolve_message_id(ctx: ActionContext, prefix: str) -> str:
     if ctx.gateway.message(ctx.db_path, prefix) is not None:
         return prefix
 
-    matches = [
-        str(row["id"])
-        for row in ctx.gateway.failed_messages(ctx.db_path, ctx.branch)
-        if str(row["id"]).startswith(prefix)
-    ]
+    matches = _matching_message_ids(ctx, prefix)
     if len(matches) == 1:
         return matches[0]
     if not matches:
         raise ActionError(f"no failed message starting with {prefix!r}")
     raise ActionError(f"{prefix!r} matches {len(matches)} failed messages")
+
+
+def _matching_message_ids(ctx: ActionContext, prefix: str) -> list[str]:
+    return [
+        str(row["id"])
+        for row in ctx.gateway.failed_messages(ctx.db_path, ctx.branch)
+        if str(row["id"]).startswith(prefix)
+    ]
 
 
 def _session_roles(ctx: ActionContext) -> list[str]:

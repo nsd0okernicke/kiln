@@ -126,33 +126,27 @@ def ensure_gitattributes(paths: KilnPaths) -> Path:
     """Create or top up the project `.gitattributes` with the entries Kiln requires."""
     path = paths.project_root / ".gitattributes"
     required = [line for line in GITATTRIBUTES.splitlines() if line and not line.startswith("#")]
-    if not path.exists():
-        path.write_text(GITATTRIBUTES, encoding="utf-8")
-        return path
-
-    existing = {line.strip() for line in path.read_text(encoding="utf-8").splitlines()}
-    missing = [entry for entry in required if entry not in existing]
-    if missing:
-        with path.open("a", encoding="utf-8") as handle:
-            handle.write("\n" + "\n".join(missing) + "\n")
+    _ensure_entries(path, required, initial=GITATTRIBUTES)
     return path
 
 
 def ensure_gitignore(paths: KilnPaths) -> Path:
     """Create or top up the project .gitignore with the entries Kiln requires."""
     path = paths.project_root / ".gitignore"
-    if not path.exists():
-        path.write_text(
-            BASE_GITIGNORE + "\n".join(REQUIRED_GITIGNORE_ENTRIES) + "\n", encoding="utf-8"
-        )
-        return path
+    initial = BASE_GITIGNORE + "\n".join(REQUIRED_GITIGNORE_ENTRIES) + "\n"
+    _ensure_entries(path, list(REQUIRED_GITIGNORE_ENTRIES), initial=initial)
+    return path
 
+
+def _ensure_entries(path: Path, required: list[str], *, initial: str) -> None:
+    if not path.exists():
+        path.write_text(initial, encoding="utf-8")
+        return
     existing = {line.strip() for line in path.read_text(encoding="utf-8").splitlines()}
-    missing = [entry for entry in REQUIRED_GITIGNORE_ENTRIES if entry not in existing]
+    missing = [entry for entry in required if entry not in existing]
     if missing:
         with path.open("a", encoding="utf-8") as handle:
             handle.write("\n" + "\n".join(missing) + "\n")
-    return path
 
 
 def install_git_hooks(paths: KilnPaths) -> Path | None:
@@ -342,11 +336,7 @@ def _link_or_copy(link: Path, target: Path, label: str) -> None:
     Windows needs Developer Mode or elevation for symlinks, so the fallback is a real
     scenario rather than defensive padding.
     """
-    if link.is_symlink() or link.exists():
-        if link.is_symlink() or link.is_file():
-            link.unlink()
-        else:
-            shutil.rmtree(link, ignore_errors=True)
+    _remove_existing_link(link)
     try:
         link.symlink_to(target, target_is_directory=True)
     except (OSError, NotImplementedError) as exc:
@@ -359,6 +349,15 @@ def _link_or_copy(link: Path, target: Path, label: str) -> None:
         if (target / "tools").is_dir():
             copy_template_tree(target / "tools", link / "tools")
         (link / "logs").mkdir(parents=True, exist_ok=True)
+
+
+def _remove_existing_link(link: Path) -> None:
+    if not (link.is_symlink() or link.exists()):
+        return
+    if link.is_symlink() or link.is_file():
+        link.unlink()
+    else:
+        shutil.rmtree(link, ignore_errors=True)
 
 
 def warn_if_worktree_conflicts(paths: KilnPaths, role_branch: str, branch: str) -> bool:
@@ -507,9 +506,7 @@ WRAPPER_ONLY_SKILLS = frozenset({"kiln-receive", "kiln-handoff", "kiln-ping"})
 def prepare_skills(profile: Profile, paths: KilnPaths) -> int:
     """Link every project skill into each role's worktree, across every skills-directory
     convention a backend's CLI might scan."""
-    if not paths.skills_dir.is_dir():
-        return 0
-    skills = [item for item in paths.skills_dir.iterdir() if item.is_dir()]
+    skills = _available_skills(paths.skills_dir)
     if not skills:
         return 0
 
@@ -518,6 +515,12 @@ def prepare_skills(profile: Profile, paths: KilnPaths) -> int:
         for root, uses_scheduler in _skill_targets(profile, paths)
         for parent, name in SKILL_DIR_CONVENTIONS
     )
+
+
+def _available_skills(skills_dir: Path) -> list[Path]:
+    if not skills_dir.is_dir():
+        return []
+    return [item for item in skills_dir.iterdir() if item.is_dir()]
 
 
 def _skill_targets(profile: Profile, paths: KilnPaths) -> list[tuple[Path, bool]]:

@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from kiln.proxy.domain.capture import (
     DEFAULT_BODY_LIMIT_BYTES,
     REDACTED,
@@ -216,6 +218,13 @@ class TestExtractUsage:
 
     def test_empty_body_is_none(self):
         assert extract_usage("") is None
+
+    def test_malformed_plain_json_is_none(self):
+        assert extract_usage('{"usage":') is None
+
+    @pytest.mark.parametrize("body", ["[]", '{"usage": 3}'])
+    def test_plain_json_without_a_usage_object_is_none(self, body):
+        assert extract_usage(body) is None
 
 
 class TestResponsesApiUsage:

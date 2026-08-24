@@ -162,6 +162,14 @@ def format_bar(status: PaneStatus, width: int) -> str:
     short line would leave the rest of the row unstyled and a long one would wrap onto the
     scrolling region and corrupt it.
     """
+    segments = _bar_segments(status)
+    line = "   ".join(segments)
+    if status.detail:
+        line = f"{line}   {status.detail}"
+    return _fit_bar(line, width)
+
+
+def _bar_segments(status: PaneStatus) -> list[str]:
     segments = [f" {status.role.upper()}", f"{STATE_GLYPH} {status.state}"]
     if status.cycles:
         segments.append(f"cycle {status.cycles}")
@@ -175,10 +183,10 @@ def format_bar(status: PaneStatus, width: int) -> str:
     if status.target:
         segments.append(f"\N{RIGHTWARDS ARROW} {status.target}")
 
-    line = "   ".join(segments)
-    if status.detail:
-        line = f"{line}   {status.detail}"
+    return segments
 
+
+def _fit_bar(line: str, width: int) -> str:
     if len(line) > width:
         return line[: max(width - 1, 0)] + "\N{HORIZONTAL ELLIPSIS}" if width else ""
     return line.ljust(width)

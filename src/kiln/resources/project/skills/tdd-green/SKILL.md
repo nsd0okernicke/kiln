@@ -46,10 +46,12 @@ Structure your output in this order:
 from dataclasses import dataclass
 from domain.lager import Lager
 
+
 @dataclass
 class BestellungErgebnis:
     abgelehnt: bool
     grund: str = ""
+
 
 def bestellung_aufgeben(artikel: str, menge: int, lager: Lager) -> BestellungErgebnis:
     if lager.bestand < menge:

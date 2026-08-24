@@ -175,17 +175,24 @@ def _render_completed_item(item: dict) -> list[str]:
     if item_type == "command_execution":
         return _render_command(item)
     if item_type == "file_change":
-        paths = ", ".join(
-            f"{change.get('kind', '?')} {change.get('path', '?')}"
-            for change in item.get("changes", [])
-        )
-        return [f"  {ICON_TOOL} file_change  {_condense(paths)}"]
+        return _render_file_change(item)
     if item_type == "agent_message":
-        text = str(item.get("text", "")).strip()
-        return [f"    {line}" for line in text.splitlines()] if text else []
+        return _render_agent_message(item)
     if item_type == "error":
         return [f"  {ICON_TOOL_ERROR} {_condense(item.get('message', 'error'))}"]
     return []
+
+
+def _render_file_change(item: dict) -> list[str]:
+    paths = ", ".join(
+        f"{change.get('kind', '?')} {change.get('path', '?')}" for change in item.get("changes", [])
+    )
+    return [f"  {ICON_TOOL} file_change  {_condense(paths)}"]
+
+
+def _render_agent_message(item: dict) -> list[str]:
+    text = str(item.get("text", "")).strip()
+    return [f"    {line}" for line in text.splitlines()] if text else []
 
 
 def _render_command(item: dict) -> list[str]:
@@ -278,6 +285,19 @@ def _usage_from(payload: dict) -> TokenUsage | None:
     return TokenUsage(**values)
 
 
+def _json_events(stdout: str) -> list[dict]:
+    events = []
+    for line in stdout.splitlines():
+        candidate = line.strip()
+        if not candidate.startswith("{"):
+            continue
+        try:
+            events.append(json.loads(candidate))
+        except json.JSONDecodeError:
+            continue
+    return events
+
+
 def find_usage(stdout: str) -> TokenUsage | None:
     """
     Scan a captured JSONL stream for the turn's token usage, or None when it reports none.
@@ -290,25 +310,21 @@ def find_usage(stdout: str) -> TokenUsage | None:
     The last `turn.completed` wins: a stream carrying more than one reports the final state.
     """
     usage: TokenUsage | None = None
-    for line in stdout.splitlines():
-        candidate = line.strip()
-        if not candidate.startswith("{"):
-            continue
-        try:
-            event = json.loads(candidate)
-        except json.JSONDecodeError:
-            continue
-        if event.get("type") != "turn.completed":
-            continue
-        # Both nestings are accepted for the same reason the key names are: the exact
-        # envelope shape is documented, not verified.
-        for payload in (event.get("usage"), (event.get("turn") or {}).get("usage")):
-            if isinstance(payload, dict):
-                found = _usage_from(payload)
-                if found is not None:
-                    usage = found
-                    break
+    for event in _json_events(stdout):
+        found = _event_usage(event)
+        if found is not None:
+            usage = found
     return usage
+
+
+def _event_usage(event: dict) -> TokenUsage | None:
+    if event.get("type") != "turn.completed":
+        return None
+    # Both nestings are accepted because the exact envelope is documented, not verified.
+    for payload in (event.get("usage"), (event.get("turn") or {}).get("usage")):
+        if isinstance(payload, dict) and (found := _usage_from(payload)) is not None:
+            return found
+    return None
 
 
 def _blocked(summary: str, raw: str, **kwargs) -> WorkerInvocation:

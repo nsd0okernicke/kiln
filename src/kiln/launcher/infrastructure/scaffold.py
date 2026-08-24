@@ -163,14 +163,18 @@ def copy_example(paths: KilnPaths, example: str, result: ScaffoldResult) -> None
         result.note(f"copied example brief from {example}")
 
     overrides = example_dir / "kiln" / "project" / "constitution"
-    if overrides.is_dir():
-        count = 0
-        for source in overrides.iterdir():
-            if source.is_file():
-                workspace.copy_template_file(source, paths.constitution_dir / source.name)
-                count += 1
-        if count:
-            result.note(f"applied {count} example constitution override(s)")
+    count = _copy_constitution_overrides(overrides, paths.constitution_dir)
+    if count:
+        result.note(f"applied {count} example constitution override(s)")
+
+
+def _copy_constitution_overrides(source_dir: Path, target_dir: Path) -> int:
+    if not source_dir.is_dir():
+        return 0
+    sources = [source for source in source_dir.iterdir() if source.is_file()]
+    for source in sources:
+        workspace.copy_template_file(source, target_dir / source.name)
+    return len(sources)
 
 
 def initialize_database(paths: KilnPaths, result: ScaffoldResult) -> None:

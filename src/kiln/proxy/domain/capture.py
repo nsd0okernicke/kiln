@@ -157,14 +157,8 @@ def extract_composition(request_body: str | None) -> dict[str, int]:
     written to disk. The most useful analysis the proxy offers therefore costs nothing in
     stored prompt text -- you can measure composition without keeping anyone's source code.
     """
-    if not request_body:
-        return {}
-    try:
-        payload = json.loads(request_body)
-    except (ValueError, TypeError):
-        # A truncated capture is not JSON. Better no numbers than wrong ones.
-        return {}
-    if not isinstance(payload, dict):
+    payload = _request_payload(request_body)
+    if payload is None:
         return {}
     if isinstance(payload.get("input"), list) and "messages" not in payload:
         return _responses_composition(payload)
@@ -173,6 +167,17 @@ def extract_composition(request_body: str | None) -> dict[str, int]:
         for section in COMPOSITION_SECTIONS
         if section in payload
     }
+
+
+def _request_payload(request_body: str | None) -> dict | None:
+    if not request_body:
+        return None
+    try:
+        payload = json.loads(request_body)
+    except (ValueError, TypeError):
+        # A truncated capture is not JSON. Better no numbers than wrong ones.
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def _responses_composition(payload: dict) -> dict[str, int]:
@@ -190,24 +195,30 @@ def _responses_composition(payload: dict) -> dict[str, int]:
     conversation -- is the same question regardless of which vendor's spelling answers it.
     Measured on a real Codex request: 23.3KB tools, 25.0KB instructions, 2.9KB conversation.
     """
-    sizes = {"tools": 0, "system": 0, "messages": 0}
-    if isinstance(payload.get("tools"), list):
-        sizes["tools"] += _section_bytes(payload["tools"])
-    if payload.get("instructions"):
-        sizes["system"] += _section_bytes(payload["instructions"])
-
+    sizes = _responses_top_level_sizes(payload)
     for item in payload["input"]:
-        if not isinstance(item, dict):
-            continue
-        # Type before role: an `additional_tools` item also carries `role: developer`, and
-        # counting 23KB of tool schemas as instructions would hide the largest section.
-        if item.get("type") == "additional_tools":
-            sizes["tools"] += _section_bytes(item)
-        elif item.get("role") == "developer":
-            sizes["system"] += _section_bytes(item)
-        else:
-            sizes["messages"] += _section_bytes(item)
+        _add_response_item(sizes, item)
     return {name: size for name, size in sizes.items() if size}
+
+
+def _responses_top_level_sizes(payload: dict) -> dict[str, int]:
+    return {
+        "tools": _section_bytes(payload["tools"]) if isinstance(payload.get("tools"), list) else 0,
+        "system": _section_bytes(payload["instructions"]) if payload.get("instructions") else 0,
+        "messages": 0,
+    }
+
+
+def _add_response_item(sizes: dict[str, int], item: object) -> None:
+    if not isinstance(item, dict):
+        return
+    if item.get("type") == "additional_tools":
+        bucket = "tools"
+    elif item.get("role") == "developer":
+        bucket = "system"
+    else:
+        bucket = "messages"
+    sizes[bucket] += _section_bytes(item)
 
 
 def _section_bytes(section: object) -> int:

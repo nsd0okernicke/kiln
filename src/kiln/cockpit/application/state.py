@@ -119,10 +119,14 @@ def cache_share(usage: dict | None) -> float | None:
 
 def render_totals(statuses: dict[str, dict]) -> tuple[float, int, int]:
     return (
-        sum(status.get("cost_usd") or 0 for status in statuses.values()),
-        sum(status.get("cycles") or 0 for status in statuses.values()),
-        sum(status.get("tokens") or 0 for status in statuses.values()),
+        _sum_status(statuses, "cost_usd"),
+        _sum_status(statuses, "cycles"),
+        _sum_status(statuses, "tokens"),
     )
+
+
+def _sum_status(statuses: dict[str, dict], field: str):
+    return sum(status.get(field) or 0 for status in statuses.values())
 
 
 def total_token_usage(statuses: dict[str, dict]) -> dict[str, int]:
@@ -199,8 +203,8 @@ def _role_row(snapshot: SwarmSnapshot, session: RoleSession, holding: dict[str, 
         "agent": session.agent,
         "display_name": session.display_name,
         # Status is authoritative because it includes worker-frontmatter model resolution.
-        "model": values.get("model") or session.model or None,
-        "worktree": session.worktree or None,
+        "model": _role_model(values, session),
+        "worktree": _present(session.worktree),
         "state": status["state"] if status else None,
         "since": values.get("since"),
         "since_ago": _since_ago(status, snapshot.now_utc),
@@ -211,12 +215,24 @@ def _role_row(snapshot: SwarmSnapshot, session: RoleSession, holding: dict[str, 
         "cycles": values.get("cycles"),
         "cost_usd": values.get("cost_usd"),
         "tokens": values.get("tokens"),
-        "token_usage": values.get("token_usage") or {},
+        "token_usage": _token_usage(values),
         "cache_share": cache_share(values.get("token_usage")),
         "worker_timeout_sec": values.get("worker_timeout_sec"),
         "heat": activity_heat(status, queue),
         "work_item": holding.get(session.role),
     }
+
+
+def _role_model(values: dict, session: RoleSession) -> str | None:
+    return values.get("model") or session.model or None
+
+
+def _present(value: str) -> str | None:
+    return value or None
+
+
+def _token_usage(values: dict) -> dict:
+    return values.get("token_usage") or {}
 
 
 def activity_heat(status: dict | None, queue_depth: int) -> float:
@@ -306,7 +322,15 @@ def build_attention(
     `failed` row already covers the same work item: `_escalate` writes both, and showing them
     twice would double-count the swarm's only genuinely alarming signal.
     """
-    items = [
+    items = _failed_attention(failed, now_local)
+    covered = {row["work_item"] for row in failed if row["work_item"]}
+    items += _escalation_attention(messages, covered, now_local)
+    items += _review_attention(awaiting_human, human_role, now_local)
+    return items
+
+
+def _failed_attention(failed: list[dict], now_local: datetime) -> list[dict]:
+    return [
         {
             "kind": "failed",
             "message_id": row["id"],
@@ -320,9 +344,12 @@ def build_attention(
         }
         for row in failed
     ]
-    covered = {row["work_item"] for row in failed if row["work_item"]}
 
-    items += [
+
+def _escalation_attention(
+    messages: list[dict], covered: set[str], now_local: datetime
+) -> list[dict]:
+    return [
         {
             "kind": "escalation",
             "message_id": row["id"],
@@ -338,7 +365,11 @@ def build_attention(
         if handoff.is_escalation(row["content"]) and row.get("work_item") not in covered
     ]
 
-    items += [
+
+def _review_attention(
+    awaiting_human: list[dict], human_role: str, now_local: datetime
+) -> list[dict]:
+    return [
         {
             "kind": "review",
             "message_id": row["id"],
@@ -352,7 +383,6 @@ def build_attention(
         }
         for row in awaiting_human
     ]
-    return items
 
 
 def build_activity(messages: list[dict], now_local: datetime, limit: int) -> list[dict]:

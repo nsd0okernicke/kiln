@@ -80,16 +80,8 @@ class RoutingTable:
         role_key = _normalise(role)
         sender_key = _normalise(sender) if sender is not None else None
 
-        default: str | None = None
-        for rule in self.rules:
-            if rule.role != role_key:
-                continue
-            if rule.when_sender is None:
-                if default is None:
-                    default = rule.target
-            elif sender_key is not None and rule.when_sender == sender_key:
-                return rule.target
-        return default
+        rules = _matching_rules(self.rules, role_key)
+        return _exact_target(rules, sender_key) or _default_target(rules)
 
     def roles(self) -> tuple[str, ...]:
         """Distinct roles that appear in the table, in first-seen order."""
@@ -101,6 +93,20 @@ class RoutingTable:
 
 def _normalise(value: str) -> str:
     return value.strip().lower()
+
+
+def _matching_rules(rules: tuple[RoutingRule, ...], role: str) -> list[RoutingRule]:
+    return [rule for rule in rules if rule.role == role]
+
+
+def _exact_target(rules: list[RoutingRule], sender: str | None) -> str | None:
+    if sender is None:
+        return None
+    return next((rule.target for rule in rules if rule.when_sender == sender), None)
+
+
+def _default_target(rules: list[RoutingRule]) -> str | None:
+    return next((rule.target for rule in rules if rule.when_sender is None), None)
 
 
 def _split_row(body: str) -> list[str]:
@@ -119,26 +125,35 @@ def _extract_section(markdown: str) -> str:
     subsections under it are included.
     """
     lines = markdown.splitlines()
-    start: int | None = None
-    start_level = 0
-
-    for index, line in enumerate(lines):
-        match = _HEADING_RE.match(line)
-        if not match:
-            continue
-        level = len(match.group(1))
-        title = match.group(2).strip().lower()
-
-        if start is None:
-            if title == SECTION_HEADING:
-                start = index + 1
-                start_level = level
-        elif level <= start_level:
-            return "\n".join(lines[start:index])
-
-    if start is None:
+    section = _section_start(lines)
+    if section is None:
         return markdown
-    return "\n".join(lines[start:])
+    start, start_level = section
+    end = _section_end(lines, start, start_level)
+    return "\n".join(lines[start:end])
+
+
+def _section_start(lines: list[str]) -> tuple[int, int] | None:
+    for index, line in enumerate(lines):
+        heading = _heading(line)
+        if heading is not None and heading[1] == SECTION_HEADING:
+            return index + 1, heading[0]
+    return None
+
+
+def _section_end(lines: list[str], start: int, start_level: int) -> int:
+    for index in range(start, len(lines)):
+        heading = _heading(lines[index])
+        if heading is not None and heading[0] <= start_level:
+            return index
+    return len(lines)
+
+
+def _heading(line: str) -> tuple[int, str] | None:
+    match = _HEADING_RE.match(line)
+    if not match:
+        return None
+    return len(match.group(1)), match.group(2).strip().lower()
 
 
 def _parse_rule(line: str) -> RoutingRule | None:
@@ -151,6 +166,10 @@ def _parse_rule(line: str) -> RoutingRule | None:
     if len(cells) < 2 or _is_separator_row(cells):
         return None
 
+    return _rule_from_cells(cells)
+
+
+def _rule_from_cells(cells: list[str]) -> RoutingRule | None:
     role, target = _normalise(cells[0]), _normalise(cells[1])
     if not role or not target or role == "role":  # "role" is the header; mirrors PowerShell
         return None

@@ -27,7 +27,9 @@ import pytest
 
 from kiln.proxy.domain.capture import CaptureMode
 from kiln.proxy.infrastructure.http.server import (
+    DEFAULT_PORT,
     Upstream,
+    build_parser,
     parse_routes,
     parse_upstream,
     serve,
@@ -214,6 +216,20 @@ class TestParseRoutes:
         # vendor, surfacing as a 401 a long way from its cause.
         with pytest.raises(ValueError):
             parse_routes([value])
+
+
+class TestBuildParser:
+    def test_defaults_and_repeatable_routes(self):
+        args = build_parser().parse_args(
+            ["--db-path", "traffic.db", "--route", "coder=example.test", "--stub"]
+        )
+
+        assert args.db_path == "traffic.db"
+        assert args.port == DEFAULT_PORT
+        assert args.host == "127.0.0.1"
+        assert args.route == ["coder=example.test"]
+        assert args.mode == CaptureMode.METADATA.value
+        assert args.stub is True
 
 
 class TestPerRoleUpstream:

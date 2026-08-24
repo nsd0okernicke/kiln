@@ -16,6 +16,7 @@ import pytest
 from kiln.launcher.application.commands import (
     START_PROMPT,
     AgentCommand,
+    _cockpit_lanes,
     build_agent_command,
     proxy_env,
     render_posix,
@@ -24,6 +25,10 @@ from kiln.launcher.application.commands import (
 from kiln.launcher.domain.paths import KilnPaths, python_command
 from kiln.launcher.domain.profile import Profile, RoleConfig
 from kiln.scheduler.domain.routing import parse_profile_routing
+
+
+def test_no_profile_has_no_cockpit_lanes():
+    assert _cockpit_lanes(None) == []
 
 
 @pytest.fixture

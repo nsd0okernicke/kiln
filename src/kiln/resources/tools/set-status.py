@@ -105,12 +105,14 @@ def parse_argv(argv):
     state = argv[1]
     detail = _detail(argv)
 
-    mode = "auto"
-    cycles = None
-    cost_usd = None
-    tokens = {}
-    extras = {}
-    for arg in argv[2:]:
+    mode, cycles, cost_usd, tokens, extras = _parse_options(argv[2:])
+    return role, state, detail, mode, cycles, cost_usd, tokens or None, extras
+
+
+def _parse_options(args):
+    mode, cycles, cost_usd = "auto", None, None
+    tokens, extras = {}, {}
+    for arg in args:
         if arg.startswith("--mode="):
             mode = _flag_value(arg)
         elif arg.startswith("--cycles="):
@@ -120,7 +122,7 @@ def parse_argv(argv):
         else:
             _parse_extra_flag(arg, tokens, extras)
 
-    return role, state, detail, mode, cycles, cost_usd, tokens or None, extras
+    return mode, cycles, cost_usd, tokens, extras
 
 
 def _flag_value(arg):
@@ -179,21 +181,23 @@ def build_status(
     }
     # Omitted, not written as 0/None, when absent: a wrapper-mode role's status file should
     # not claim "$0.00 spent, 0 cycles" when it never tracked either in the first place.
-    if cycles is not None:
-        status["cycles"] = cycles
-    if cost_usd is not None:
-        status["cost_usd"] = cost_usd
-    if tokens:
-        # Both: `tokens` is the one number the pane bar and the dashboard's TOKENS column
-        # want, `token_usage` is the breakdown the optimization work needs. Deriving the
-        # total here rather than accepting it as a flag keeps them from disagreeing.
-        status["tokens"] = sum(tokens.values())
-        status["token_usage"] = tokens
+    _add_metrics(status, cycles, cost_usd, tokens)
     # Same omit-when-absent rule: a role that never reported an attempt must not appear to
     # be on attempt 0, and a dashboard cannot call a role stalled against a timeout it was
     # never told about.
     status.update(extras or {})
     return status
+
+
+def _add_metrics(status, cycles, cost_usd, tokens):
+    if cycles is not None:
+        status["cycles"] = cycles
+    if cost_usd is not None:
+        status["cost_usd"] = cost_usd
+    if tokens:
+        # Keep both the display total and the actionable input/output/cache breakdown.
+        status["tokens"] = sum(tokens.values())
+        status["token_usage"] = tokens
 
 
 def project_root_from_own_path():

@@ -98,33 +98,44 @@ def run(
     """
     log.info("running verification: %s", command)
     try:
-        completed = subprocess.run(
-            command,
-            shell=True,
-            cwd=str(cwd),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            stdin=subprocess.DEVNULL,
-            timeout=timeout,
-            check=False,
-            # A worker may have left these pointing at the capture proxy; verification is
-            # not an agent call and has no business inheriting an LLM base URL.
-            env={k: v for k, v in os.environ.items() if not k.endswith("_BASE_URL")},
-        )
+        completed = _run_command(command, cwd, timeout)
     except subprocess.TimeoutExpired as expired:
-        output = _decode(expired.stdout) + _decode(expired.stderr)
-        log.error("verification timed out after %ss", timeout)
-        return VerifyResult(
-            ok=False,
-            output=tail(output or f"(no output before the {timeout}s timeout)"),
-            timed_out=True,
-        )
+        return _timed_out(expired, timeout)
     except OSError as exc:
         log.error("verification could not be started: %s", exc)
         return VerifyResult(ok=False, output=f"could not start {command!r}: {exc}")
+    return _completed_result(command, completed)
 
+
+def _run_command(command: str, cwd: str | Path, timeout: int) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        command,
+        shell=True,
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        stdin=subprocess.DEVNULL,
+        timeout=timeout,
+        check=False,
+        # A worker may have left these pointing at the capture proxy; verification is
+        # not an agent call and has no business inheriting an LLM base URL.
+        env={k: v for k, v in os.environ.items() if not k.endswith("_BASE_URL")},
+    )
+
+
+def _timed_out(expired: subprocess.TimeoutExpired, timeout: int) -> VerifyResult:
+    output = _decode(expired.stdout) + _decode(expired.stderr)
+    log.error("verification timed out after %ss", timeout)
+    return VerifyResult(
+        ok=False,
+        output=tail(output or f"(no output before the {timeout}s timeout)"),
+        timed_out=True,
+    )
+
+
+def _completed_result(command: str, completed: subprocess.CompletedProcess) -> VerifyResult:
     output = (completed.stdout or "") + (completed.stderr or "")
     if completed.returncode == 0:
         log.info("verification passed")

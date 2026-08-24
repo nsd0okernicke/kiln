@@ -7,6 +7,19 @@ import logging
 import pytest
 
 from kiln.cockpit.infrastructure.http import server
+from kiln.cockpit.infrastructure.http.server import _log_query
+
+
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        ({"stream": ["invalid"]}, "stream must be scheduler or worker"),
+        ({"after": ["invalid"]}, "after must be a non-negative integer"),
+        ({"after": ["-2"]}, ("scheduler", 0)),
+    ],
+)
+def test_log_query_validation(query, expected):
+    assert _log_query(query) == expected
 
 
 def required_args(tmp_path, *extra: str) -> list[str]:

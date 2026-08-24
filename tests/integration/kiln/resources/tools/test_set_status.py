@@ -312,6 +312,24 @@ class TestEndToEnd:
 class TestMainInProcess:
     """Entrypoint branches measured in this process rather than a child interpreter."""
 
+    def test_project_root_is_derived_from_installed_tool_path(
+        self, set_status, tmp_path, monkeypatch
+    ):
+        tool = tmp_path / ".kiln" / "tools" / "set-status.py"
+        tool.parent.mkdir(parents=True)
+        tool.touch()
+        monkeypatch.setattr(set_status, "__file__", str(tool))
+        assert set_status.project_root_from_own_path() == str(tmp_path)
+
+    def test_project_root_is_not_guessed_from_an_unexpected_path(
+        self, set_status, tmp_path, monkeypatch
+    ):
+        tool = tmp_path / "tools" / "set-status.py"
+        tool.parent.mkdir()
+        tool.touch()
+        monkeypatch.setattr(set_status, "__file__", str(tool))
+        assert set_status.project_root_from_own_path() is None
+
     def test_writes_status_and_terminal_title(self, set_status, tmp_path, monkeypatch):
         monkeypatch.setenv("KILN_PROJECT_DIR", str(tmp_path))
         monkeypatch.setattr(set_status.sys, "argv", ["set-status.py", "coder", "working"])

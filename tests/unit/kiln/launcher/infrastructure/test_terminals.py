@@ -324,6 +324,27 @@ class TestWindowsTerminal:
         command = windows_terminal.launch(PANES, None, dry_run=True)
         assert command[0] == "wt.exe"
 
+    def test_launch_requires_windows_terminal(self, monkeypatch):
+        monkeypatch.setattr(windows_terminal.shutil, "which", lambda _name: None)
+        with pytest.raises(TerminalError, match="not found on PATH"):
+            windows_terminal.launch(PANES, None)
+
+    def test_launch_starts_windows_terminal(self, monkeypatch):
+        launched = []
+        monkeypatch.setattr(windows_terminal.shutil, "which", lambda _name: "wt.exe")
+        monkeypatch.setattr(windows_terminal.subprocess, "Popen", launched.append)
+        command = windows_terminal.launch(PANES, None)
+        assert launched == [command]
+
+    def test_multiple_defined_tabs_have_a_separator(self):
+        layout = {
+            "tabs": [
+                {"panes": [{"role": "specifier"}]},
+                {"panes": [{"role": "coder"}]},
+            ]
+        }
+        assert windows_terminal.SEPARATOR in windows_terminal.build_layout(PANES, layout)
+
 
 class TestTmux:
     def test_session_name_is_role_scoped(self):

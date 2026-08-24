@@ -132,15 +132,7 @@ def capture_json_stream(
         for line in process.stdout:  # type: ignore[union-attr]
             watchdog.saw_output()
             captured.append(line)
-            stripped = line.strip()
-            if not stripped.startswith("{"):
-                continue
-            try:
-                event = json.loads(stripped)
-            except json.JSONDecodeError:
-                continue
-            for rendered in render_event(event):
-                emit(rendered)
+            _render_json_line(line, render_event, emit)
         try:
             process.wait(timeout=REAP_TIMEOUT_SEC)
         except subprocess.TimeoutExpired:
@@ -148,6 +140,20 @@ def capture_json_stream(
     finally:
         watchdog.stop()
     return StreamCapture("".join(captured), watchdog.reason)
+
+
+def _render_json_line(
+    line: str, render_event: Callable[[dict], Iterable[str]], emit: Callable[[str], None]
+) -> None:
+    stripped = line.strip()
+    if not stripped.startswith("{"):
+        return
+    try:
+        event = json.loads(stripped)
+    except json.JSONDecodeError:
+        return
+    for rendered in render_event(event):
+        emit(rendered)
 
 
 def terminate_tree(process: subprocess.Popen) -> None:

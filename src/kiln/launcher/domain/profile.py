@@ -537,10 +537,7 @@ def parse_profile(config: dict, name: str) -> Profile:
 
 def _selected_profile(config: dict, name: str) -> dict:
     profiles = config.get("profiles") or {}
-    if name not in profiles:
-        available = ", ".join(sorted(profiles)) or "(none)"
-        raise ProfileError(f"profile {name!r} not found. Available profiles: {available}")
-
+    _require_profile(profiles, name)
     selected = profiles[name] or {}
     # Before the "defines no terminals" check: a typo'd `terminls` otherwise reports the
     # symptom ("no terminals") instead of the cause.
@@ -550,6 +547,13 @@ def _selected_profile(config: dict, name: str) -> dict:
     if not entries:
         raise ProfileError(f"profile {name!r} defines no terminals")
     return selected
+
+
+def _require_profile(profiles: dict, name: str) -> None:
+    if name in profiles:
+        return
+    available = ", ".join(sorted(profiles)) or "(none)"
+    raise ProfileError(f"profile {name!r} not found. Available profiles: {available}")
 
 
 def _profile_defaults(selected: dict, name: str) -> dict:
@@ -664,14 +668,19 @@ def apply_agent_override(profile: Profile, agent: str, model: str = "") -> Profi
         role if role.is_passive else replace(role, agent=agent, model=model, worker_model=model)
         for role in profile.roles
     )
-    for role in rewritten:
-        if role.max_budget_usd is not None and role.agent not in COST_REPORTING_AGENTS:
-            raise ProfileError(
-                f"role {role.role!r} sets maxBudgetUsd, but the override to {agent!r} moves "
-                f"it onto a backend that reports no cost, so the cap could never fire. "
-                f"Cost caps work on: " + ", ".join(COST_REPORTING_AGENTS)
-            )
+    _validate_override_budgets(rewritten, agent)
     return replace(profile, roles=rewritten)
+
+
+def _validate_override_budgets(roles: tuple[RoleConfig, ...], agent: str) -> None:
+    for role in roles:
+        if role.max_budget_usd is None or role.agent in COST_REPORTING_AGENTS:
+            continue
+        raise ProfileError(
+            f"role {role.role!r} sets maxBudgetUsd, but the override to {agent!r} moves "
+            f"it onto a backend that reports no cost, so the cap could never fire. "
+            f"Cost caps work on: " + ", ".join(COST_REPORTING_AGENTS)
+        )
 
 
 def check_launchable(profile: Profile) -> None:
@@ -750,8 +759,13 @@ def list_profiles(
     """
     config = _read_config(find_profiles_config(project_root, framework_root))
     profiles = config.get("profiles") or {}
-    return [
-        (name, str((body or {}).get("description") or ""))
-        for name, body in profiles.items()
-        if include_fixtures or not (body or {}).get("fixture", False)
-    ]
+    return _profile_descriptions(profiles, include_fixtures)
+
+
+def _profile_descriptions(profiles: dict, include_fixtures: bool) -> list[tuple[str, str]]:
+    descriptions = []
+    for name, body in profiles.items():
+        profile_body = body or {}
+        if include_fixtures or not profile_body.get("fixture", False):
+            descriptions.append((name, str(profile_body.get("description") or "")))
+    return descriptions

@@ -72,15 +72,15 @@ def detect_backend(requested: str | None = None, env: dict | None = None) -> str
         return requested.lower()
     if environment.get("KILN_TERMINAL"):
         return environment["KILN_TERMINAL"].lower()
-    if environment.get("WEZTERM_PANE") and shutil.which("wezterm"):
-        return WEZTERM
     if shutil.which("wezterm"):
         return WEZTERM
-    if os.name == "nt":
+    return _platform_backend(os.name)
+
+
+def _platform_backend(os_name: str) -> str:
+    if os_name == "nt":
         return WINDOWS_TERMINAL
-    if shutil.which("tmux"):
-        return TMUX
-    return NONE
+    return TMUX if shutil.which("tmux") else NONE
 
 
 def launch(

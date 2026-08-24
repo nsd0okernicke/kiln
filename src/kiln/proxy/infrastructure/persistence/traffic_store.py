@@ -57,6 +57,37 @@ MIGRATIONS = (
 )
 
 
+def _record_values(entry: TrafficRecord, tokens: TokenUsage | None) -> tuple:
+    token_values = (
+        (
+            tokens.input_tokens,
+            tokens.output_tokens,
+            tokens.cache_read_tokens,
+            tokens.cache_creation_tokens,
+        )
+        if tokens
+        else (None, None, None, None)
+    )
+    return (
+        entry.ts,
+        entry.role,
+        entry.method,
+        entry.path,
+        entry.model,
+        entry.status_code,
+        entry.duration_ms,
+        entry.request_bytes,
+        entry.response_bytes,
+        *token_values,
+        entry.composition.get("tools"),
+        entry.composition.get("system"),
+        entry.composition.get("messages"),
+        json.dumps(entry.request_headers) if entry.request_headers else None,
+        entry.request_body,
+        entry.response_body,
+    )
+
+
 class TrafficStore:
     """
     SQLite-backed capture log, deliberately separate from `messages.db`.
@@ -99,27 +130,7 @@ class TrafficStore:
                   request_headers, request_body, response_body
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (
-                    entry.ts,
-                    entry.role,
-                    entry.method,
-                    entry.path,
-                    entry.model,
-                    entry.status_code,
-                    entry.duration_ms,
-                    entry.request_bytes,
-                    entry.response_bytes,
-                    tokens.input_tokens if tokens else None,
-                    tokens.output_tokens if tokens else None,
-                    tokens.cache_read_tokens if tokens else None,
-                    tokens.cache_creation_tokens if tokens else None,
-                    entry.composition.get("tools"),
-                    entry.composition.get("system"),
-                    entry.composition.get("messages"),
-                    json.dumps(entry.request_headers) if entry.request_headers else None,
-                    entry.request_body,
-                    entry.response_body,
-                ),
+                _record_values(entry, tokens),
             )
             conn.commit()
             row_id = int(cursor.lastrowid or 0)

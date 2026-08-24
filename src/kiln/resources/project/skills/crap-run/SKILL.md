@@ -108,17 +108,18 @@ Complexity: 6 (5 branches).
 def process_order(order):
     if order.status != "pending":
         return order
-    
+
     apply_discount_by_total(order)
-    
+
     if not order.items:
         reject_order(order, "No items")
     elif all(item.in_stock for item in order.items):
         confirm_order(order)
     else:
         reject_order(order, "Item out of stock")
-    
+
     return order
+
 
 def apply_discount_by_total(order):
     rate = 0.1 if order.total > 100 else 0.05
@@ -140,10 +141,12 @@ def test_process_order_high_value_with_discount():
     process_order(order)
     assert order.discount_rate == 0.1
 
+
 def test_process_order_low_value_with_discount():
     order = Order(status="pending", total=50, items=[...])
     process_order(order)
     assert order.discount_rate == 0.05
+
 
 def test_process_order_missing_items():
     order = Order(status="pending", items=[])

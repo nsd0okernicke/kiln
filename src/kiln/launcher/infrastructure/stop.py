@@ -111,12 +111,22 @@ def find_project_proxies(traffic_db: Path) -> list[tuple[int, str]]:
     wanted = str(traffic_db)
     if os.name == "nt":
         wanted = wanted.casefold()
-    matches = []
-    for pid, command in _windows_matches() if os.name == "nt" else _posix_matches():
-        haystack = command.casefold() if os.name == "nt" else command
-        if "kiln.proxy.infrastructure.http.server" in command and wanted in haystack:
-            matches.append((pid, command))
-    return matches
+    return _matching_proxies(_platform_matches(), wanted, casefold=os.name == "nt")
+
+
+def _platform_matches() -> list[tuple[int, str]]:
+    return _windows_matches() if os.name == "nt" else _posix_matches()
+
+
+def _matching_proxies(
+    candidates: list[tuple[int, str]], wanted: str, *, casefold: bool
+) -> list[tuple[int, str]]:
+    return [
+        (pid, command)
+        for pid, command in candidates
+        if "kiln.proxy.infrastructure.http.server" in command
+        and wanted in (command.casefold() if casefold else command)
+    ]
 
 
 def stop_project_proxies(traffic_db: Path) -> list[int]:
@@ -184,9 +194,14 @@ def stop_all(roles: list[str] | None = None, dry_run: bool = False) -> list[int]
         if not dry_run:
             kill_process(pid)
 
-    if roles and not dry_run:
-        stopped = kill_tmux_sessions(roles)
-        if stopped:
-            log.info("closed %d tmux session(s)", stopped)
+    _stop_tmux_roles(roles, dry_run)
 
     return [pid for pid, _ in found]
+
+
+def _stop_tmux_roles(roles: list[str] | None, dry_run: bool) -> None:
+    if not roles or dry_run:
+        return
+    stopped = kill_tmux_sessions(roles)
+    if stopped:
+        log.info("closed %d tmux session(s)", stopped)

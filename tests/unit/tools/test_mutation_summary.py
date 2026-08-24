@@ -29,8 +29,7 @@ def test_reports_annotation_mutants_separately(tmp_path, monkeypatch):
             "(job_id TEXT, module_path TEXT, start_pos_row INT, start_pos_col INT)"
         )
         conn.execute(
-            "CREATE TABLE work_results "
-            "(job_id TEXT, worker_outcome TEXT, test_outcome TEXT)"
+            "CREATE TABLE work_results (job_id TEXT, worker_outcome TEXT, test_outcome TEXT)"
         )
         conn.executemany(
             "INSERT INTO mutation_specs VALUES (?, ?, ?, ?)",

@@ -46,9 +46,7 @@ def _inside_span(row: int, column: int, span: tuple[int, int, int, int]) -> bool
 
 
 def _annotation_outcomes(conn: sqlite3.Connection) -> dict[str, int]:
-    tables = {
-        row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
-    }
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     if not {"mutation_specs", "work_results"}.issubset(tables):
         return {}
     spans_by_module: dict[str, list[tuple[int, int, int, int]]] = {}

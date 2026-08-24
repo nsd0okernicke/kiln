@@ -214,25 +214,7 @@ def format_banner(ctx: SchedulerContext, args: argparse.Namespace) -> list[str]:
     command line — complete, and unreadable. Same facts, laid out for a human, including
     the resolved routing so a misrouted handoff is diagnosable before it happens.
     """
-    routes = [
-        f"{rule.target} (when sender is {rule.when_sender})" if rule.when_sender else rule.target
-        for rule in ctx.routing.rules
-        if rule.role == ctx.role
-    ]
-    fields = [
-        ("role", ctx.role),
-        ("branch", ctx.branch),
-        ("worker", f"{ctx.definition.name} ({args.agent} {display_model(args, ctx.definition)})"),
-        ("hands off to", ", ".join(routes) or "(no route - handoffs will escalate)"),
-        ("worktree", str(ctx.worktree)),
-        ("workflow", str(args.workflow)),
-        ("queue", ctx.queue_label),
-        ("poll / worker timeout", f"{args.poll_interval:g}s / {args.worker_timeout}s"),
-        ("idle timeout", f"{args.worker_idle_timeout:g}s" if args.worker_idle_timeout else "off"),
-    ]
-    if args.log_file:
-        fields.append(("log", str(args.log_file)))
-
+    fields = _banner_fields(ctx, args)
     width = max(len(name) for name, _ in fields)
     rule = "\N{BOX DRAWINGS LIGHT HORIZONTAL}" * (width + 4 + 40)
     return [
@@ -241,6 +223,32 @@ def format_banner(ctx: SchedulerContext, args: argparse.Namespace) -> list[str]:
         *(f"  {name:<{width}}  {value}" for name, value in fields),
         rule,
     ]
+
+
+def _banner_fields(ctx: SchedulerContext, args: argparse.Namespace) -> list[tuple[str, str]]:
+    fields = [
+        ("role", ctx.role),
+        ("branch", ctx.branch),
+        ("worker", f"{ctx.definition.name} ({args.agent} {display_model(args, ctx.definition)})"),
+        ("hands off to", _route_summary(ctx)),
+        ("worktree", str(ctx.worktree)),
+        ("workflow", str(args.workflow)),
+        ("queue", ctx.queue_label),
+        ("poll / worker timeout", f"{args.poll_interval:g}s / {args.worker_timeout}s"),
+        ("idle timeout", f"{args.worker_idle_timeout:g}s" if args.worker_idle_timeout else "off"),
+    ]
+    if args.log_file:
+        fields.append(("log", str(args.log_file)))
+    return fields
+
+
+def _route_summary(ctx: SchedulerContext) -> str:
+    routes = [
+        f"{rule.target} (when sender is {rule.when_sender})" if rule.when_sender else rule.target
+        for rule in ctx.routing.rules
+        if rule.role == ctx.role
+    ]
+    return ", ".join(routes) or "(no route - handoffs will escalate)"
 
 
 WORKER_LOG_MAX_BYTES = 4 * 1024 * 1024
@@ -599,20 +607,28 @@ def _run_loop(
             return exit_code
         if result is None:
             continue
+        exit_code = _after_cycle(ctx, state, args, bar, result)
+        if exit_code is not None:
+            return exit_code
 
-        _record_cycle(bar, result)
-        _sync_status_totals(ctx, bar, result)
-        _log_cycle_result(result)
-        if state.halted:
-            exit_code = _park_halted(ctx, state, args)
-            if exit_code is not None:
-                return exit_code
-            continue
-        state.parked = False
-        if args.once:
-            return 0
-        if result.outcome == IDLE and _poll_was_interrupted(args.poll_interval):
-            return 130
+
+def _after_cycle(ctx, state, args, bar, result) -> int | None:
+    exit_code = _complete_cycle(ctx, state, args, bar, result)
+    if exit_code is not None or state.halted:
+        return exit_code
+    if result.outcome == IDLE and _poll_was_interrupted(args.poll_interval):
+        return 130
+    return None
+
+
+def _complete_cycle(ctx, state, args, bar, result) -> int | None:
+    _record_cycle(bar, result)
+    _sync_status_totals(ctx, bar, result)
+    _log_cycle_result(result)
+    if state.halted:
+        return _park_halted(ctx, state, args)
+    state.parked = False
+    return 0 if args.once else None
 
 
 def _try_cycle(

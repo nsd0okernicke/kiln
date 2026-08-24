@@ -51,6 +51,11 @@ def status_hook():
             ("receiving", None),
         ),
         ({"hook_event_name": "PostToolUse", "tool_name": "Task"}, (None, None)),
+        ({"hook_event_name": "SomethingElse"}, (None, None)),
+        (
+            {"hook_event_name": "PreToolUse", "tool_name": "Task", "tool_input": {}},
+            (None, None),
+        ),
     ],
 )
 def test_infer_status(status_hook, payload, expected):
@@ -119,4 +124,20 @@ def test_main_ignores_unmapped_events(status_hook, monkeypatch):
         lambda cwd: pytest.fail("role detection should not be reached"),
     )
 
+    status_hook.main()
+
+
+def test_main_ignores_a_missing_role(status_hook, tmp_path, monkeypatch):
+    payload = {
+        "cwd": str(tmp_path),
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__kiln-channel__wait_for_message",
+    }
+    monkeypatch.setattr(status_hook.json, "load", lambda stream: payload)
+    monkeypatch.setattr(status_hook, "detect_role", lambda cwd: None)
+    monkeypatch.setattr(
+        status_hook.subprocess,
+        "run",
+        lambda *args, **kwargs: pytest.fail("set-status should not run"),
+    )
     status_hook.main()

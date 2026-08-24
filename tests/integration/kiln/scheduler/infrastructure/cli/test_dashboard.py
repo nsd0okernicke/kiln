@@ -377,6 +377,10 @@ class TestStallDetection:
     def test_no_status_file_is_not_a_stall(self):
         assert dashboard.is_stalled(None, NOW_UTC) is False
 
+    def test_invalid_timestamp_is_not_a_stall(self):
+        status = _status(state="working", since="not-a-timestamp", worker_timeout_sec=10)
+        assert dashboard.is_stalled(status, NOW_UTC) is False
+
     def test_the_grid_marks_a_stalled_role(self):
         sessions = [dashboard.RoleSession("coder", "claude", "Coder")]
         statuses = {"coder": self._working(seconds_ago=1000)}

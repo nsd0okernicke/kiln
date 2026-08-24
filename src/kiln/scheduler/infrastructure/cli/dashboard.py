@@ -103,24 +103,21 @@ def read_sessions(path: Path) -> list[RoleSession]:
         return []
     sessions = []
     for line in path.read_text(encoding="utf-8").splitlines():
-        parts = line.split("\t")
-        if len(parts) < 4:
-            continue
-        _, role, agent, display_name = parts[:4]
-        kind = parts[4].strip() if len(parts) > 4 and parts[4].strip() else DEFAULT_KIND
-        model = parts[5].strip() if len(parts) > 5 else ""
-        worktree = parts[6].strip() if len(parts) > 6 else ""
-        sessions.append(
-            RoleSession(
-                role=role,
-                agent=agent,
-                display_name=display_name,
-                kind=kind,
-                model=model,
-                worktree=worktree,
-            )
-        )
+        session = _parse_session(line)
+        if session is not None:
+            sessions.append(session)
     return sessions
+
+
+def _parse_session(line: str) -> RoleSession | None:
+    parts = line.split("\t")
+    if len(parts) < 4:
+        return None
+    _, role, agent, display_name = parts[:4]
+    kind = parts[4].strip() if len(parts) > 4 and parts[4].strip() else DEFAULT_KIND
+    model = parts[5].strip() if len(parts) > 5 else ""
+    worktree = parts[6].strip() if len(parts) > 6 else ""
+    return RoleSession(role, agent, display_name, kind, model, worktree)
 
 
 def visible_roles(sessions: list[RoleSession]) -> list[RoleSession]:
@@ -282,11 +279,27 @@ def _state_row(
         f"{session.role:<20} {state_cell} {since:<12} "
         f"{queue_depth.get(session.role, 0):>5} "
         f"{queue_wait(oldest_queued, session.role, now_local):>8} "
-        f"{('-' if cycles is None else cycles):>7} "
-        f"{('-' if cost is None else f'${cost:.2f}'):>8} "
-        f"{('-' if not tokens else pane_status.format_tokens(tokens)):>9} "
-        f"{('-' if share is None else f'{share:.0%}'):>6}"
+        f"{_optional(cycles):>7} "
+        f"{_cost_cell(cost):>8} "
+        f"{_token_cell(tokens):>9} "
+        f"{_share_cell(share):>6}"
     )
+
+
+def _optional(value: object) -> object:
+    return "-" if value is None else value
+
+
+def _cost_cell(cost: float | None) -> str:
+    return "-" if cost is None else f"${cost:.2f}"
+
+
+def _token_cell(tokens: int | None) -> str:
+    return "-" if not tokens else pane_status.format_tokens(tokens)
+
+
+def _share_cell(share: float | None) -> str:
+    return "-" if share is None else f"{share:.0%}"
 
 
 def _status_age(status: dict | None, now_utc: datetime) -> str:
@@ -352,10 +365,14 @@ def cost_is_partial(sessions: list[RoleSession], statuses: dict[str, dict]) -> b
 
 
 def render_totals(statuses: dict[str, dict]) -> tuple[float, int, int]:
-    total_cost = sum(status.get("cost_usd") or 0 for status in statuses.values())
-    total_cycles = sum(status.get("cycles") or 0 for status in statuses.values())
-    total_tokens = sum(status.get("tokens") or 0 for status in statuses.values())
+    total_cost = _sum_status_field(statuses, "cost_usd")
+    total_cycles = _sum_status_field(statuses, "cycles")
+    total_tokens = _sum_status_field(statuses, "tokens")
     return total_cost, total_cycles, total_tokens
+
+
+def _sum_status_field(statuses: dict[str, dict], field: str):
+    return sum(status.get(field) or 0 for status in statuses.values())
 
 
 def total_token_usage(statuses: dict[str, dict]) -> dict[str, int]:
@@ -701,29 +718,43 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
     )
 
+    return _render_loop(ctx, once=args.once, poll_interval=args.poll_interval)
+
+
+def _render_loop(ctx: DashboardContext, *, once: bool, poll_interval: float) -> int:
     while True:
-        try:
-            frame = snapshot(ctx)
-        except KeyboardInterrupt:
-            log.info("interrupted; shutting down")
+        frame, interrupted = _snapshot_frame(ctx)
+        if interrupted:
             return 130
-        except Exception:
-            # A dashboard that dies over one bad poll takes the swarm-wide view with it.
-            log.exception("render failed; continuing")
-            frame = [
-                f"{ICON_TITLE} Kiln Dashboard \N{EM DASH} render failed, "
-                f"retrying\N{HORIZONTAL ELLIPSIS}"
-            ]
-
         print(pane_status.CLEAR_SCREEN + "\n".join(frame), flush=True)
-
-        if args.once:
+        if once:
             return 0
-        try:
-            time.sleep(args.poll_interval)
-        except KeyboardInterrupt:
-            log.info("interrupted; shutting down")
+        if not _sleep(poll_interval):
             return 130
+
+
+def _snapshot_frame(ctx: DashboardContext) -> tuple[list[str], bool]:
+    try:
+        return snapshot(ctx), False
+    except KeyboardInterrupt:
+        log.info("interrupted; shutting down")
+        return [], True
+    except Exception:
+        # A dashboard that dies over one bad poll takes the swarm-wide view with it.
+        log.exception("render failed; continuing")
+        return [
+            f"{ICON_TITLE} Kiln Dashboard \N{EM DASH} render failed, "
+            f"retrying\N{HORIZONTAL ELLIPSIS}"
+        ], False
+
+
+def _sleep(poll_interval: float) -> bool:
+    try:
+        time.sleep(poll_interval)
+        return True
+    except KeyboardInterrupt:
+        log.info("interrupted; shutting down")
+        return False
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

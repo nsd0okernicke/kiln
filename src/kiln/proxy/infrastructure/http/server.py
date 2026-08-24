@@ -311,24 +311,26 @@ class ProxyHandler(BaseHTTPRequestHandler):
     ) -> http.client.HTTPResponse:
         """Open the upstream connection and send the request through unchanged."""
         upstream = self.config.upstream_for(role)
+        connection = self._upstream_connection(upstream)
+        headers = self._forward_headers()
+        connection.request(method, upstream.target(path), body=body or None, headers=headers)
+        return connection.getresponse()
+
+    def _upstream_connection(self, upstream: Upstream) -> http.client.HTTPConnection:
         if self.config.use_tls:
-            connection: http.client.HTTPConnection = http.client.HTTPSConnection(
+            return http.client.HTTPSConnection(
                 upstream.host, context=ssl.create_default_context(), timeout=600
             )
-        else:
-            connection = http.client.HTTPConnection(upstream.host, timeout=600)
+        return http.client.HTTPConnection(upstream.host, timeout=600)
 
-        headers = {
+    def _forward_headers(self) -> dict[str, str]:
+        return {
             name: value
             for name, value in self.headers.items()
             if name.lower() not in HOP_BY_HOP_HEADERS
             and name.lower() not in STRIPPED_REQUEST_HEADERS
             and name.lower() != "host"
         }
-        # Credentials pass through untouched -- they are simply never *recorded*. Rewriting
-        # or dropping them here would break the very auth this proxy must stay invisible to.
-        connection.request(method, upstream.target(path), body=body or None, headers=headers)
-        return connection.getresponse()
 
     def _relay_response(
         self,
@@ -340,32 +342,14 @@ class ProxyHandler(BaseHTTPRequestHandler):
         started: float,
     ) -> None:
         """Stream the response to the client, parsing usage as it goes."""
-        passthrough = [
-            (name, value)
-            for name, value in response.getheaders()
-            if name.lower() not in HOP_BY_HOP_HEADERS and name.lower() != "content-length"
-        ]
-        # The upstream length cannot be reused: it describes the upstream framing, and for a
-        # streamed response there is none. Chunked framing lets bytes leave as they arrive
-        # while keeping the connection reusable.
+        passthrough = self._response_headers(response)
         self.send_response(response.status)
         for name, value in passthrough:
             self.send_header(name, value)
         self.send_header("Transfer-Encoding", "chunked")
         self.end_headers()
 
-        # Belt and braces behind the stripped Accept-Encoding: if a response still arrives
-        # compressed, relay it faithfully but read nothing from it. Recording gzip bytes as
-        # text produced 113 rows of mojibake and empty token columns once already; a visible
-        # gap is recoverable, silently wrong data is not.
-        encoding = (response.getheader("Content-Encoding") or "identity").lower()
-        readable = encoding in ("", "identity")
-        if not readable:
-            log.warning(
-                "response is %s-encoded; relaying it but skipping usage and body capture",
-                encoding,
-            )
-
+        readable = self._response_is_readable(response)
         captured, total, usage = self._stream_body(response, readable)
         self._finish_chunked_response()
         self._record(
@@ -379,6 +363,23 @@ class ProxyHandler(BaseHTTPRequestHandler):
             status=response.status,
             usage=usage,
         )
+
+    def _response_headers(self, response: http.client.HTTPResponse) -> list[tuple[str, str]]:
+        return [
+            (name, value)
+            for name, value in response.getheaders()
+            if name.lower() not in HOP_BY_HOP_HEADERS and name.lower() != "content-length"
+        ]
+
+    def _response_is_readable(self, response: http.client.HTTPResponse) -> bool:
+        encoding = (response.getheader("Content-Encoding") or "identity").lower()
+        readable = encoding in ("", "identity")
+        if not readable:
+            log.warning(
+                "response is %s-encoded; relaying it but skipping usage and body capture",
+                encoding,
+            )
+        return readable
 
     def _stream_body(self, response, readable: bool):
         tracker = StreamingUsageTracker()
@@ -394,12 +395,15 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 break
             total += len(chunk)
             if readable:
-                tracker.feed(chunk)
-                if len(captured) < self.config.body_limit:
-                    captured.extend(chunk[: self.config.body_limit - len(captured)])
+                self._capture_chunk(tracker, captured, chunk)
             if not self._write_chunk(chunk):
                 break
         return bytes(captured), total, tracker.usage
+
+    def _capture_chunk(self, tracker, captured: bytearray, chunk: bytes) -> None:
+        tracker.feed(chunk)
+        if len(captured) < self.config.body_limit:
+            captured.extend(chunk[: self.config.body_limit - len(captured)])
 
     def _finish_chunked_response(self) -> None:
         try:
