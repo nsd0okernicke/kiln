@@ -31,6 +31,17 @@ class WorkerDefinition:
     tools: str | None = None
 
 
+def _parse_frontmatter(lines: list[str]) -> tuple[dict[str, str], int]:
+    fields: dict[str, str] = {}
+    for index, line in enumerate(lines[1:], start=1):
+        if line.strip() == _FRONTMATTER_FENCE:
+            return fields, index + 1
+        key, separator, value = line.partition(":")
+        if separator:
+            fields[key.strip().lower()] = value.strip()
+    raise ValueError("worker definition is missing its closing '---' frontmatter fence")
+
+
 def parse_worker_definition(text: str) -> WorkerDefinition:
     """
     Split a generated worker agent file into frontmatter fields and body.
@@ -43,19 +54,7 @@ def parse_worker_definition(text: str) -> WorkerDefinition:
     if not lines or lines[0].strip() != _FRONTMATTER_FENCE:
         raise ValueError("worker definition is missing its opening '---' frontmatter fence")
 
-    fields: dict[str, str] = {}
-    body_start = None
-    for index, line in enumerate(lines[1:], start=1):
-        if line.strip() == _FRONTMATTER_FENCE:
-            body_start = index + 1
-            break
-        key, separator, value = line.partition(":")
-        if separator:
-            fields[key.strip().lower()] = value.strip()
-
-    if body_start is None:
-        raise ValueError("worker definition is missing its closing '---' frontmatter fence")
-
+    fields, body_start = _parse_frontmatter(lines)
     name = fields.get("name", "")
     if not name:
         raise ValueError("worker definition frontmatter has no 'name'")

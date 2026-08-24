@@ -346,20 +346,21 @@ def ensure_ignored(pattern: str, cwd: str | Path) -> None:
         log.warning("could not locate info/exclude; %s may be committed accidentally", pattern)
         return
 
-    exclude_path = (
-        Path(cwd) / located.stdout
-        if not Path(located.stdout).is_absolute()
-        else Path(located.stdout)
-    )
+    exclude_path = _git_path(cwd, located.stdout)
     try:
         exclude_path.parent.mkdir(parents=True, exist_ok=True)
         existing = exclude_path.read_text(encoding="utf-8") if exclude_path.exists() else ""
-        if pattern not in existing.splitlines():
-            separator = "" if existing.endswith("\n") or not existing else "\n"
-            exclude_path.write_text(f"{existing}{separator}{pattern}\n", encoding="utf-8")
-            log.info("added %r to %s", pattern, exclude_path)
+        _append_ignore_pattern(exclude_path, existing, pattern)
     except OSError as exc:
         log.warning("could not update %s: %s", exclude_path, exc)
+
+
+def _append_ignore_pattern(exclude_path: Path, existing: str, pattern: str) -> None:
+    if pattern in existing.splitlines():
+        return
+    separator = "" if existing.endswith("\n") or not existing else "\n"
+    exclude_path.write_text(f"{existing}{separator}{pattern}\n", encoding="utf-8")
+    log.info("added %r to %s", pattern, exclude_path)
 
 
 def ensure_generated_ignored(cwd: str | Path) -> None:

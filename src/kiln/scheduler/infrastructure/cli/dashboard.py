@@ -477,6 +477,47 @@ def render_escalations(messages: list[dict], now_local: datetime) -> list[str]:
     return lines
 
 
+def _render_dashboard_totals(
+    sessions: list[RoleSession], statuses: dict[str, dict], messages: list[dict], now_utc: datetime
+) -> list[str]:
+    total_cost, total_cycles, total_tokens = render_totals(statuses)
+    partial_cost = cost_is_partial(sessions, statuses)
+    cost_display = f"${total_cost:.2f}" + ("+" if partial_cost else "")
+    escalation_count = sum(1 for row in messages if handoff.is_escalation(row["content"]))
+    lines = [
+        f"TOTAL COST: {cost_display}        TOTAL CYCLES: {total_cycles}        "
+        f"TOKENS: {pane_status.format_tokens(total_tokens)}        "
+        f"ESCALATIONS: {escalation_count}"
+    ]
+    lines += _token_notes(statuses, partial_cost)
+    lines += _stalled_notes(sessions, statuses, now_utc)
+    return lines
+
+
+def _token_notes(statuses: dict[str, dict], partial_cost: bool) -> list[str]:
+    lines: list[str] = []
+    breakdown = format_token_breakdown(total_token_usage(statuses))
+    if breakdown:
+        lines.append(f"  tokens by kind: {breakdown}")
+    if partial_cost:
+        lines.append("  + partial: codex/copilot roles report tokens but no cost")
+    return lines
+
+
+def _stalled_notes(
+    sessions: list[RoleSession], statuses: dict[str, dict], now_utc: datetime
+) -> list[str]:
+    stalled = [
+        session.role for session in sessions if is_stalled(statuses.get(session.role), now_utc)
+    ]
+    if stalled:
+        return [
+            f"  {STALL_MARKER} past its worker timeout, so the worker may be hung: "
+            + ", ".join(stalled)
+        ]
+    return []
+
+
 def render_dashboard(
     *,
     project_name: str,
@@ -516,30 +557,7 @@ def render_dashboard(
     lines += grid
     lines.append(rule)
 
-    total_cost, total_cycles, total_tokens = render_totals(statuses)
-    escalation_count = sum(1 for row in messages if handoff.is_escalation(row["content"]))
-    cost_display = f"${total_cost:.2f}"
-    if cost_is_partial(sessions, statuses):
-        cost_display += "+"
-    lines.append(
-        f"TOTAL COST: {cost_display}        TOTAL CYCLES: {total_cycles}        "
-        f"TOKENS: {pane_status.format_tokens(total_tokens)}        "
-        f"ESCALATIONS: {escalation_count}"
-    )
-    breakdown = format_token_breakdown(total_token_usage(statuses))
-    if breakdown:
-        lines.append(f"  tokens by kind: {breakdown}")
-    if cost_is_partial(sessions, statuses):
-        lines.append("  + partial: codex/copilot roles report tokens but no cost")
-    # Only when it applies: a permanent legend for a condition that is usually absent trains
-    # people to stop reading the line, which is the opposite of an early warning.
-    stalled = [s.role for s in sessions if is_stalled(statuses.get(s.role), now_utc)]
-    if stalled:
-        lines.append(
-            f"  {STALL_MARKER} past its worker timeout, so the worker may be hung: "
-            + ", ".join(stalled)
-        )
-
+    lines += _render_dashboard_totals(sessions, statuses, messages, now_utc)
     lines += render_prompt_weight(request_stats or {}, scope=request_scope)
     lines += render_activity(messages, now_local, activity_limit)
     lines += render_escalations(messages, now_local)

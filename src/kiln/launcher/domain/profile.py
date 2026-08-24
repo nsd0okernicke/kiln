@@ -600,6 +600,26 @@ def _validate_watches(roles: list[RoleConfig], known: set[str], profile_name: st
             )
 
 
+def _tab_panes(tab: object) -> list[object]:
+    if not isinstance(tab, dict):
+        return []
+    panes = tab.get("panes")
+    return panes if isinstance(panes, list) else []
+
+
+def _pane_role(pane: object) -> str:
+    if not isinstance(pane, dict):
+        return ""
+    return str(pane.get("role") or "").strip()
+
+
+def _layout_role_names(layout: dict) -> list[str]:
+    names: list[str] = []
+    for tab in layout.get("tabs") or []:
+        names.extend(_pane_role(pane) for pane in _tab_panes(tab))
+    return names
+
+
 def _validate_layout(layout: dict, known: set[str], profile_name: str) -> None:
     """
     Every pane in the layout must name a real role.
@@ -608,14 +628,12 @@ def _validate_layout(layout: dict, known: set[str], profile_name: str) -> None:
     produces a launch that is simply missing a pane -- no error anywhere, and nothing to
     connect the missing agent to the character that caused it.
     """
-    for tab in layout.get("tabs") or []:
-        for pane in (tab or {}).get("panes") or []:
-            name = str((pane or {}).get("role") or "").strip()
-            if name and name not in known:
-                raise ProfileError(
-                    f"profile {profile_name!r}: layout references role {name!r}, which is "
-                    f"not in this profile. Known roles: {', '.join(sorted(known))}"
-                )
+    for name in _layout_role_names(layout):
+        if name and name not in known:
+            raise ProfileError(
+                f"profile {profile_name!r}: layout references role {name!r}, which is "
+                f"not in this profile. Known roles: {', '.join(sorted(known))}"
+            )
 
 
 def apply_agent_override(profile: Profile, agent: str, model: str = "") -> Profile:

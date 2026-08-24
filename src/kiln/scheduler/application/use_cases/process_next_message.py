@@ -177,12 +177,32 @@ def run_once(ctx: SchedulerContext, state: SchedulerState) -> CycleResult:
     assert message is not None
 
     message_id = str(message["id"])
-    content = str(message["content"])
+    inbound, target, early_result = _prepare_delegation(ctx, state, message_id, message)
+    if early_result is not None:
+        return early_result
+
+    anchor = _worktree(ctx).squash_anchor()
+    attempts = _delegate(ctx, state, inbound)
+
+    return _finish_attempts(ctx, state, message_id, inbound, target, anchor, attempts)
+
+
+def _receive_message(
+    ctx: SchedulerContext, message_id: str, content: str
+) -> handoff.InboundHandoff:
     ctx.set_status("receiving")
     _queue(ctx).mark_processing(message_id)
     _persist_inbound(ctx, content)
+    return handoff.parse_handoff(content)
 
-    inbound = handoff.parse_handoff(content)
+
+def _prepare_delegation(
+    ctx: SchedulerContext,
+    state: SchedulerState,
+    message_id: str,
+    message: InboundMessage,
+) -> tuple[handoff.InboundHandoff, str | None, CycleResult | None]:
+    inbound = _receive_message(ctx, message_id, str(message["content"]))
     if inbound.is_resume:
         log.info("human guidance attached: %s", inbound.guidance.replace("\n", " ")[:160])
     log.info(
@@ -192,36 +212,38 @@ def run_once(ctx: SchedulerContext, state: SchedulerState) -> CycleResult:
         inbound.handoff or "?",
     )
     target = ctx.routing.resolve(ctx.role, inbound.sender)
+    result = _pre_delegate_outcome(ctx, state, message_id, inbound, target)
+    if result is None:
+        result = _merge_inbound(ctx, state, message_id, inbound)
+    return inbound, target, result
 
-    early_result = _pre_delegate_outcome(ctx, state, message_id, inbound, target)
-    if early_result is not None:
-        return early_result
 
-    merge_result = _merge_inbound(ctx, state, message_id, inbound)
-    if merge_result is not None:
-        return merge_result
-
-    anchor = _worktree(ctx).squash_anchor()
-    attempts = _delegate(ctx, state, inbound)
-
-    if not attempts.last.is_done:
-        detail = f"worker blocked after {len(attempts.invocations)} attempt(s): " + (
-            attempts.last.result.summary
-        )
-        return _escalate(
-            ctx,
-            state,
-            message_id,
-            inbound,
-            detail,
-            ESCALATED,
-            cost=attempts.cost,
-            attempts=len(attempts.invocations),
-            tokens=attempts.tokens,
-        )
-
-    assert target is not None
-    return _hand_off(ctx, state, message_id, inbound, target, anchor, attempts)
+def _finish_attempts(
+    ctx: SchedulerContext,
+    state: SchedulerState,
+    message_id: str,
+    inbound: handoff.InboundHandoff,
+    target: str | None,
+    anchor: str,
+    attempts: _Attempts,
+) -> CycleResult:
+    if attempts.last.is_done:
+        assert target is not None
+        return _hand_off(ctx, state, message_id, inbound, target, anchor, attempts)
+    detail = f"worker blocked after {len(attempts.invocations)} attempt(s): " + (
+        attempts.last.result.summary
+    )
+    return _escalate(
+        ctx,
+        state,
+        message_id,
+        inbound,
+        detail,
+        ESCALATED,
+        cost=attempts.cost,
+        attempts=len(attempts.invocations),
+        tokens=attempts.tokens,
+    )
 
 
 def _fetch_next_message(

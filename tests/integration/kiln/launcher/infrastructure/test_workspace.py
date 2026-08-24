@@ -768,6 +768,40 @@ class TestTrustCopilotWorktrees:
         workspace.prepare_agent_configs(self._profile_with_copilot(paths), paths)
         assert self._config_path(fake_home).read_text(encoding="utf-8") == before
 
+    def test_unreadable_config_is_a_warning_not_a_crash(
+        self, paths, fake_home, monkeypatch, caplog
+    ):
+        self._seed_config(fake_home, [])
+        config_path = self._config_path(fake_home)
+        original = workspace.Path.read_text
+
+        def fail_read(path, *args, **kwargs):
+            if path == config_path:
+                raise OSError("read denied")
+            return original(path, *args, **kwargs)
+
+        monkeypatch.setattr(workspace.Path, "read_text", fail_read)
+        with caplog.at_level(logging.WARNING):
+            workspace._trust_copilot_worktrees(self._profile_with_copilot(paths), paths)
+        assert "could not read" in caplog.text
+
+    def test_unwritable_config_is_a_warning_not_a_crash(
+        self, paths, fake_home, monkeypatch, caplog
+    ):
+        self._seed_config(fake_home, [])
+        config_path = self._config_path(fake_home)
+        original = workspace.Path.write_text
+
+        def fail_write(path, *args, **kwargs):
+            if path == config_path:
+                raise OSError("write denied")
+            return original(path, *args, **kwargs)
+
+        monkeypatch.setattr(workspace.Path, "write_text", fail_write)
+        with caplog.at_level(logging.WARNING):
+            workspace._trust_copilot_worktrees(self._profile_with_copilot(paths), paths)
+        assert "could not write" in caplog.text
+
 
 class TestSessionsFile:
     def test_lists_every_role(self, paths):

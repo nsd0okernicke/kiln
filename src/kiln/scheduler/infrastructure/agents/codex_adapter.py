@@ -362,7 +362,16 @@ def _completed_process_invocation(
         detail = stderr.strip() or f"codex exited {process.returncode}"
         log.error("worker %s failed: %s", definition.name, detail)
         return _blocked(detail, stdout, is_error=True, tokens=tokens)
+    return _invocation_from_output(definition, output_file, stdout, stderr, tokens)
 
+
+def _invocation_from_output(
+    definition: WorkerDefinition,
+    output_file: Path,
+    stdout: str,
+    stderr: str,
+    tokens: TokenUsage | None,
+) -> WorkerInvocation:
     text = output_file.read_text(encoding="utf-8").strip() if output_file.is_file() else ""
     if not text:
         detail = stderr.strip() or "codex produced no output message"

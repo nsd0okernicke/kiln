@@ -132,19 +132,25 @@ def render_event(event: dict) -> list[str]:
 
     if kind == "tool.execution_start":
         return [_tool_start_line(data)]
-
-    if kind == "tool.execution_complete" and not data.get("success", True):
-        result = data.get("result") or {}
-        return [f"  {ICON_TOOL_ERROR} {_condense(result.get('content', 'tool failed'))}"]
-
-    if kind == "assistant.message" and str(data.get("content", "")).strip():
-        text = str(data["content"]).strip()
-        return [f"    {line}" for line in text.splitlines()]
-
+    if kind == "tool.execution_complete":
+        return _tool_completion_lines(data)
+    if kind == "assistant.message":
+        return _assistant_message_lines(data)
     if kind == "result":
         return [f"{ICON_FINISHED} worker finished"]
-
     return []
+
+
+def _tool_completion_lines(data: dict) -> list[str]:
+    if data.get("success", True):
+        return []
+    result = data.get("result") or {}
+    return [f"  {ICON_TOOL_ERROR} {_condense(result.get('content', 'tool failed'))}"]
+
+
+def _assistant_message_lines(data: dict) -> list[str]:
+    text = str(data.get("content", "")).strip()
+    return [f"    {line}" for line in text.splitlines()] if text else []
 
 
 def _tool_start_line(data: dict) -> str:

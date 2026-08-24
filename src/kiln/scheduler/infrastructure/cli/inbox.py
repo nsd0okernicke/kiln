@@ -172,23 +172,31 @@ def poll_once(ctx: InboxContext, bar: pane_status.StatusBar | None = None) -> di
     received = receive(ctx, inbound, raw)
     merge_failed = any("MERGE FAILED" in line for line in received)
 
+    _display_message(ctx, message, kind, received)
+    db.mark_processed(ctx.db_path, message["id"])
+    _update_bar(bar, message, kind, merge_failed)
+    return message
+
+
+def _display_message(ctx: InboxContext, message: dict, kind: str, received: list[str]) -> None:
     if ctx.bell:
         ctx.write(BELL)
-    for line in format_message(message, kind):
-        ctx.write(line)
-    for line in received:
+    for line in [*format_message(message, kind), *received]:
         ctx.write(line)
     if received:
         ctx.write("")
 
-    db.mark_processed(ctx.db_path, message["id"])
-    if bar is not None:
-        bar.update(
-            state="blocked" if (kind == "escalation" or merge_failed) else "receiving",
-            cycles=bar.status.cycles + 1,
-            detail=f"{kind} from {message.get('sender', '?')}",
-        )
-    return message
+
+def _update_bar(
+    bar: pane_status.StatusBar | None, message: dict, kind: str, merge_failed: bool
+) -> None:
+    if bar is None:
+        return
+    bar.update(
+        state="blocked" if (kind == "escalation" or merge_failed) else "receiving",
+        cycles=bar.status.cycles + 1,
+        detail=f"{kind} from {message.get('sender', '?')}",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -262,28 +270,34 @@ def main(argv: Sequence[str] | None = None) -> int:
         log.info("%d message(s) already waiting", waiting)
 
     try:
-        while True:
-            try:
-                message = poll_once(ctx, bar)
-            except KeyboardInterrupt:
-                log.info("interrupted; shutting down")
-                return 130
-            except Exception:
-                # An inbox that dies takes the human's only notification channel with it.
-                log.exception("poll failed; continuing")
-                message = None
-
-            if message is None:
-                if args.once:
-                    return 0
-                bar.update(state="waiting")
-                try:
-                    time.sleep(args.poll_interval)
-                except KeyboardInterrupt:
-                    log.info("interrupted; shutting down")
-                    return 130
+        return _poll_loop(ctx, bar, once=args.once, poll_interval=args.poll_interval)
     finally:
         bar.close()
+
+
+def _poll_loop(
+    ctx: InboxContext, bar: pane_status.StatusBar, *, once: bool, poll_interval: float
+) -> int:
+    while True:
+        try:
+            message = poll_once(ctx, bar)
+        except KeyboardInterrupt:
+            log.info("interrupted; shutting down")
+            return 130
+        except Exception:
+            # An inbox that dies takes the human's only notification channel with it.
+            log.exception("poll failed; continuing")
+            message = None
+        if message is not None:
+            continue
+        if once:
+            return 0
+        bar.update(state="waiting")
+        try:
+            time.sleep(poll_interval)
+        except KeyboardInterrupt:
+            log.info("interrupted; shutting down")
+            return 130
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

@@ -39,6 +39,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 #: Heading that delimits the routing table. Matched case-insensitively.
 SECTION_HEADING = "handoff routing"
@@ -201,6 +202,28 @@ def load_routing_table(path: str | Path) -> RoutingTable:
     return parse_routing_table(file_path.read_text(encoding="utf-8"))
 
 
+def _sender_rule(role: str, normalized_role: str, sender: object, target: object) -> RoutingRule:
+    if not isinstance(target, str) or not target.strip():
+        raise ValueError(f"routing target for {role!r} must be a non-empty role name")
+    normalized_sender = _normalise(str(sender))
+    return RoutingRule(
+        role=normalized_role,
+        target=target.strip(),
+        when_sender=None if normalized_sender == "default" else normalized_sender,
+    )
+
+
+def _profile_rules(role: str, value: object) -> list[RoutingRule]:
+    normalized_role = _normalise(role)
+    if isinstance(value, str):
+        return [RoutingRule(role=normalized_role, target=value.strip())]
+    if not isinstance(value, dict):
+        raise ValueError(
+            f"routing for {role!r} must be a target name or an object of sender -> target"
+        )
+    return [_sender_rule(role, normalized_role, sender, target) for sender, target in value.items()]
+
+
 def parse_profile_routing(entries: object) -> RoutingTable:
     """
     Build a routing table from a profile's own `routing` block.
@@ -233,21 +256,8 @@ def parse_profile_routing(entries: object) -> RoutingTable:
         raise ValueError("profile routing must be an object mapping role -> target")
 
     rules: list[RoutingRule] = []
-    for role, value in entries.items():
-        if isinstance(value, str):
-            rules.append(RoutingRule(role=_normalise(role), target=value.strip()))
-            continue
-        if not isinstance(value, dict):
-            raise ValueError(
-                f"routing for {role!r} must be a target name or an object of sender -> target"
-            )
-        for sender, target in value.items():
-            if not isinstance(target, str) or not target.strip():
-                raise ValueError(f"routing target for {role!r} must be a non-empty role name")
-            when = None if _normalise(sender) == "default" else _normalise(sender)
-            rules.append(
-                RoutingRule(role=_normalise(role), target=target.strip(), when_sender=when)
-            )
+    for role, value in cast(dict[str, object], entries).items():
+        rules.extend(_profile_rules(role, value))
     return RoutingTable(rules=tuple(rules))
 
 

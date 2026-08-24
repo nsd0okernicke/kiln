@@ -411,6 +411,19 @@ def _profile_for_launch(profile: Profile, args: argparse.Namespace) -> Profile:
     return overridden
 
 
+def _log_proxy_routing(profile: Profile, url: str, capture: str, traffic_db: Path) -> None:
+    log.info("capture proxy: %s (%s) -> %s", url, capture, traffic_db)
+    routed = [role.role for role in profile.roles if proxy_env(role, url)]
+    log.info("  routing: %s", ", ".join(routed) or "(no proxy-capable roles)")
+    unrouted = [
+        role.role
+        for role in profile.roles
+        if not role.is_passive and role.agent not in PROXY_CAPABLE_AGENTS
+    ]
+    if unrouted:
+        log.warning("  not routed (no verified base-URL override): %s", ", ".join(unrouted))
+
+
 def _capture_url(args: argparse.Namespace, paths: KilnPaths, profile: Profile) -> str | None:
     """Start or describe capture for this launch and report which roles are routed."""
     if not args.proxy:
@@ -427,16 +440,7 @@ def _capture_url(args: argparse.Namespace, paths: KilnPaths, profile: Profile) -
         profile,
         port_is_explicit=args.proxy_port != DEFAULT_PROXY_PORT,
     )
-    log.info("capture proxy: %s (%s) -> %s", url, args.capture, paths.traffic_db)
-    routed = [role.role for role in profile.roles if proxy_env(role, url)]
-    log.info("  routing: %s", ", ".join(routed) or "(no proxy-capable roles)")
-    unrouted = [
-        role.role
-        for role in profile.roles
-        if not role.is_passive and role.agent not in PROXY_CAPABLE_AGENTS
-    ]
-    if unrouted:
-        log.warning("  not routed (no verified base-URL override): %s", ", ".join(unrouted))
+    _log_proxy_routing(profile, url, args.capture, paths.traffic_db)
     return url
 
 

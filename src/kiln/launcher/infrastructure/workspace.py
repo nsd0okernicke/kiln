@@ -553,6 +553,47 @@ def _prepare_skill_directory(skills_dir: Path, skills: list[Path], uses_schedule
     return linked
 
 
+def _copilot_worktrees(profile: Profile, paths: KilnPaths) -> set[str]:
+    return {
+        str(paths.project_root if role.uses_current_dir else paths.worktree_path(role.worktree))
+        for role in profile.roles
+        if role.agent == "copilot"
+    }
+
+
+def _read_copilot_config(config_path: Path) -> tuple[str, dict[str, object]] | None:
+    if not config_path.is_file():
+        log.warning(
+            "no %s found; copilot worker writes in an untrusted worktree may be silently "
+            "denied -- run `copilot` interactively once first to create it",
+            config_path,
+        )
+        return None
+    try:
+        raw = config_path.read_text(encoding="utf-8")
+        brace = raw.index("{")
+        return raw[:brace], json.loads(raw[brace:])
+    except (OSError, ValueError) as exc:
+        log.warning("could not read %s to trust worktrees: %s", config_path, exc)
+        return None
+
+
+def _write_copilot_config(config_path: Path, header: str, body: dict[str, object]) -> bool:
+    try:
+        config_path.write_text(header + json.dumps(body, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        log.warning("could not write %s to trust worktrees: %s", config_path, exc)
+        return False
+    return True
+
+
+def _trusted_folders(body: dict[str, object]) -> set[str]:
+    value = body.get("trustedFolders")
+    if not isinstance(value, list):
+        return set()
+    return {item for item in value if isinstance(item, str)}
+
+
 def _trust_copilot_worktrees(profile: Profile, paths: KilnPaths) -> None:
     """
     Add every copilot-agent role's worktree to `~/.copilot/config.json`'s `trustedFolders`.
@@ -571,41 +612,23 @@ def _trust_copilot_worktrees(profile: Profile, paths: KilnPaths) -> None:
     appends what Kiln's own worktrees need, the same way `prepare_agent_configs()` already
     manages `mcp-config.json` in the same directory.
     """
-    worktrees = {
-        str(paths.project_root if role.uses_current_dir else paths.worktree_path(role.worktree))
-        for role in profile.roles
-        if role.agent == "copilot"
-    }
+    worktrees = _copilot_worktrees(profile, paths)
     if not worktrees:
         return
 
     config_path = Path.home() / ".copilot" / "config.json"
-    if not config_path.is_file():
-        log.warning(
-            "no %s found; copilot worker writes in an untrusted worktree may be silently "
-            "denied -- run `copilot` interactively once first to create it",
-            config_path,
-        )
+    loaded = _read_copilot_config(config_path)
+    if loaded is None:
         return
+    header, body = loaded
 
-    try:
-        raw = config_path.read_text(encoding="utf-8")
-        brace = raw.index("{")
-        header, body = raw[:brace], json.loads(raw[brace:])
-    except (OSError, ValueError) as exc:
-        log.warning("could not read %s to trust worktrees: %s", config_path, exc)
-        return
-
-    trusted = set(body.get("trustedFolders") or [])
+    trusted = _trusted_folders(body)
     missing = worktrees - trusted
     if not missing:
         return
 
     body["trustedFolders"] = sorted(trusted | missing)
-    try:
-        config_path.write_text(header + json.dumps(body, indent=2) + "\n", encoding="utf-8")
-    except OSError as exc:
-        log.warning("could not write %s to trust worktrees: %s", config_path, exc)
+    if not _write_copilot_config(config_path, header, body):
         return
     log.info("trusted for copilot: %s", ", ".join(sorted(missing)))
 
