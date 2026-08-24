@@ -244,6 +244,68 @@ class TestOperationalQueue:
         assert "disabled" not in page.partition("function renderSendWarning")[2][:800]
 
 
+class TestTestHealthPanel:
+    """
+    The Test health panel (issue #27).
+
+    Two properties matter here and both are mechanically checkable: the panel must not fetch
+    on its own timer (it rides the existing tick), and it must never build its rows from a
+    string, because the failing-test names it renders come out of a file this repo does not
+    write.
+    """
+
+    def test_the_panel_has_a_mount_point(self, page):
+        assert 'id="test-health"' in page
+        assert "<h2>Test health</h2>" in page
+
+    def test_it_rides_the_existing_poll_rather_than_its_own_timer(self, page):
+        # A monitoring surface that added a second interval would read reports more often
+        # than the swarm changes, for no extra information.
+        assert "pollTestMetrics()" in page.partition("async function poll()")[2][:900]
+        assert page.count("setInterval(") == 1
+
+    def test_failing_names_are_rendered_as_text_not_markup(self, page):
+        # The names come from a JUnit file produced by whatever the project runs. Building
+        # this panel with innerHTML would make a test named `<img onerror=...>` executable.
+        body = page.partition("function renderTestMetrics")[2].partition("\n}")[0]
+
+        assert "innerHTML" not in body
+        assert 'text("div", metrics.failed_names.join(", ")' in body
+
+    def test_every_status_the_server_can_send_has_a_verdict_glyph(self, page):
+        # A status with no glyph would render a bare em dash and read as "unavailable",
+        # which is the one state an operator must not confuse with the others.
+        glyphs = page.partition("const HEALTH_VERDICT = {")[2].partition("}")[0]
+
+        for status in ("passed", "failed", "stale", "unavailable"):
+            assert f"{status}:" in glyphs
+
+    def test_no_analyser_is_named_in_the_page(self, page):
+        # Tool names come out of the SARIF document at runtime. Hard-coding "ruff" or "PMD"
+        # here would put a language assumption in the one place the format was chosen to
+        # keep neutral.
+        body = page.partition("function lintFact")[2].partition("\n}")[0]
+
+        for tool in ("ruff", "eslint", "pmd", "spotbugs", "pytest"):
+            assert tool not in body.lower()
+        assert "lint.tools.join" in body
+
+    def test_an_unknown_metric_is_omitted_rather_than_shown_as_zero(self, page):
+        # "No coverage configured" and "nothing is covered" must not look alike.
+        body = page.partition("function renderTestMetrics")[2].partition("\n}")[0]
+
+        assert "if (metrics.coverage)" in body
+        assert "metrics.passed !== null" in body
+
+    def test_branch_coverage_is_omitted_when_it_was_not_measured(self, page):
+        # Most tools leave branch coverage off by default and write a zero rate beside a zero
+        # denominator. Rendering that would turn an unset flag into an apparent disaster.
+        body = page.partition("function coverageFacts")[2].partition("\n}")[0]
+
+        assert "coverage.branch_percent !== null" in body
+        assert "coverage.lines_valid" in body
+
+
 class TestPageIsSelfContained:
     def test_it_loads_nothing_from_the_network(self, page):
         # The cockpit is served by a stdlib HTTP server on a machine that may well be

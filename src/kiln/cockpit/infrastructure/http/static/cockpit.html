@@ -135,6 +135,17 @@
   .body { padding: 12px 14px; }
   .empty { color: var(--dim); font-style: italic; }
 
+  /* Test health: one operational line, plus failing names only when there are any. */
+  .health { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .health .verdict { font-weight: 600; white-space: nowrap; }
+  .health.passed .verdict { color: var(--ok); }
+  .health.failed .verdict { color: var(--bad); }
+  .health.stale .verdict { color: var(--warn); }
+  .health.unavailable .verdict { color: var(--dim); }
+  .health .facts { color: var(--dim); min-width: 0; word-break: break-word; }
+  .health .source { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); }
+  .health-names { margin-top: 6px; color: var(--bad); font-size: 12px; word-break: break-word; }
+
   /* Board */
   .lanes { display: flex; gap: 12px; overflow-x: auto; padding: 12px 14px; }
   .lane { min-width: 210px; flex: 1 1 210px; }
@@ -362,6 +373,11 @@
   </section>
 
   <section>
+    <h2>Test health</h2>
+    <div class="body" id="test-health"></div>
+  </section>
+
+  <section>
     <h2>Board</h2>
     <div class="lanes" id="lanes"></div>
   </section>
@@ -575,6 +591,87 @@ function renderAttention(state) {
     }
     host.append(row);
   }
+}
+
+// Reports are written by CI, a verify step or a developer — never by the cockpit, which only
+// reads them (issue #27). Unknown metrics are omitted rather than shown as zero: "no coverage
+// configured" and "nothing covered" must not look alike.
+const HEALTH_VERDICT = { passed: "✓", failed: "✕", stale: "⏱", unavailable: "—" };
+
+function renderTestMetrics(metrics) {
+  const host = $("test-health");
+  host.replaceChildren();
+  if (!metrics) return;
+
+  if (metrics.status === "unavailable" && !metrics.tests) {
+    // The server's sentence names the file and the fix; this fallback only covers a payload
+    // that somehow arrived without one.
+    host.append(text("div", metrics.error || "No test reports configured.", "empty"));
+    return;
+  }
+
+  const row = text("div", null, "health " + metrics.status);
+  row.append(text("span", HEALTH_VERDICT[metrics.status] || "—", "verdict"));
+
+  const facts = [];
+  if (metrics.failed) facts.push(metrics.failed + " failed");
+  if (metrics.passed !== null && metrics.passed !== undefined) facts.push(metrics.passed + " passed");
+  if (metrics.skipped) facts.push(metrics.skipped + " skipped");
+  if (metrics.duration_sec !== null && metrics.duration_sec !== undefined) {
+    facts.push(metrics.duration_sec.toFixed(1) + "s");
+  }
+  if (metrics.coverage) facts.push(...coverageFacts(metrics.coverage));
+  // A configured analyser that found nothing is "0 lint" — a fact. An unconfigured one is
+  // absent entirely, because unknown and zero are different answers.
+  if (metrics.lint) facts.push(lintFact(metrics.lint));
+  if (metrics.updated_at) facts.push("updated " + healthAge(metrics.updated_at));
+  row.append(text("span", facts.join(" · "), "facts"));
+  if (metrics.source) row.append(text("span", metrics.source, "source"));
+  host.append(row);
+
+  if (metrics.stale) {
+    host.append(text("div", "Older than " + metrics.max_age_minutes + " minutes — this result may not describe the current tree.", "empty"));
+  }
+  if (metrics.failed_names && metrics.failed_names.length) {
+    host.append(text("div", metrics.failed_names.join(", "), "health-names"));
+  }
+}
+
+// Line coverage keeps the bare word "coverage" because that is what it is usually taken to
+// mean. Branch coverage is shown only when the project measured it — most tools leave it off
+// by default, and an unmeasured 0% would read as a disaster rather than as a setting.
+// "statements" is the coverage tool's own count of executable lines, which is a size the
+// panel can state in any language without Kiln knowing one.
+function coverageFacts(coverage) {
+  const facts = [percent(coverage.line_percent) + " coverage"];
+  if (coverage.branch_percent !== null && coverage.branch_percent !== undefined) {
+    facts.push(percent(coverage.branch_percent) + " branch");
+  }
+  if (coverage.lines_valid) facts.push(coverage.lines_valid.toLocaleString() + " statements");
+  return facts;
+}
+
+function percent(value) {
+  return value.toFixed(0) + "%";
+}
+
+// Errors lead when there are any, because that is the number an operator acts on; otherwise
+// the total carries it. The tool names come from the SARIF document, so this says "ruff" or
+// "PMD" without either name appearing anywhere in Kiln.
+function lintFact(lint) {
+  const label = lint.tools.length ? " (" + lint.tools.join(", ") + ")" : "";
+  if (lint.error) return lint.error + " lint error" + (lint.error === 1 ? "" : "s") + label;
+  return lint.total + " lint" + label;
+}
+
+function healthAge(isoTimestamp) {
+  const seconds = Math.round((Date.now() - new Date(isoTimestamp).getTime()) / 1000);
+  if (!isFinite(seconds)) return "?";
+  if (seconds < 0) return "just now";          // clock skew, same call as the server makes
+  if (seconds < 60) return seconds + "s ago";
+  if (seconds < 3600) return Math.round(seconds / 60) + "m ago";
+  if (seconds < 86400) return Math.round(seconds / 3600) + "h ago";
+  return Math.round(seconds / 86400) + "d ago";
 }
 
 function renderBoard(state) {
@@ -803,12 +900,26 @@ async function poll() {
     renderQueue(latest);
     renderActivity(latest);
     renderSend(latest);
+    pollTestMetrics();
     pollLog();
   } catch (error) {
     // A failed poll marks the page stale rather than blanking it: the last known state is
     // more useful than an empty screen, and the swarm itself is unaffected either way.
     $("dot").className = "dot stale";
     $("updated").textContent = "no answer from the cockpit";
+  }
+}
+
+// Its own request on the same tick, so an unreadable report degrades this panel alone. A
+// failure here leaves the last known health on screen rather than blanking it, matching how
+// poll() treats a failed state fetch.
+async function pollTestMetrics() {
+  try {
+    const response = await fetch("/api/test-metrics", { headers: { "X-Kiln-Cockpit": "1" } });
+    if (!response.ok) throw new Error(response.statusText);
+    renderTestMetrics(await response.json());
+  } catch (error) {
+    /* keep the previous reading */
   }
 }
 

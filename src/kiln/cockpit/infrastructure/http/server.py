@@ -46,6 +46,7 @@ from kiln.scheduler.infrastructure.persistence import db
 from kiln.scheduler.infrastructure.runtime import configure_logging
 
 from ...application import state as state_builder
+from ...application import test_metrics as test_metrics_builder
 from ...application.actions import (
     ActionContext,
     ActionError,
@@ -56,6 +57,7 @@ from ...application.actions import (
     send_to,
     teardown,
 )
+from .. import test_reports
 from ..actions_gateway import KilnActionGateway
 
 log = logging.getLogger(__name__)
@@ -113,6 +115,13 @@ class CockpitConfig:
     cockpit: state_builder.CockpitContext
     actions: ActionContext
     activity_limit: int = DEFAULT_ACTIVITY_LIMIT
+    #: Where relative report paths resolve from. The project root, not the cockpit's cwd.
+    project_root: Path = Path()
+    #: Where the report configuration lives. The *path*, not the parsed config: it is re-read
+    #: on each poll so that creating or editing the file takes effect without restarting the
+    #: cockpit. Loading it once at startup meant a config written a minute after launch was
+    #: invisible until the whole swarm came down, which reads as the feature being broken.
+    test_metrics_path: Path = Path()
 
     @property
     def status_dir(self) -> Path:
@@ -140,6 +149,46 @@ def gather_state(config: CockpitConfig) -> dict:
         awaiting_human=db.pending_for_role(config.dashboard.db_path, ctx.branch, ctx.human_role),
         activity_limit=config.activity_limit,
     )
+
+
+def gather_test_metrics(config: CockpitConfig) -> dict:
+    """
+    Read the project's test reports and assemble `/api/test-metrics` (issue #27).
+
+    Deliberately its own endpoint rather than a key inside `/api/state`. The page fetches
+    both on the same tick, so the operator sees one refresh either way -- but a report that
+    is missing, huge or malformed can then only spoil its own panel. Folding it into the
+    state document would put an unparseable XML file on the path of the board, the queue and
+    the attention rail.
+
+    The configuration is read here rather than at startup, on the same poll as the reports.
+    One extra small read beside three report files is not a cost worth a restart -- and the
+    restart was the surprising part, because "the reports change, the configuration does not"
+    is false in exactly the case that matters: setting the feature up for the first time.
+    """
+    try:
+        metrics_config = test_reports.load_config(config.test_metrics_path)
+    except test_reports.ReportError as error:
+        # A broken config is not a missing one; saying "create one" would send the operator
+        # to write a file that is already sitting there with a typo in it.
+        return test_metrics_builder.unavailable(str(error))
+    if metrics_config is None:
+        # Names the path, and says who writes it. `.kiln/` is gitignored and Kiln re-adds that
+        # rule on every launch, so this file arrives by hand or not at all -- an operator who
+        # reads "not configured" and waits for a cycle to produce one waits forever.
+        return test_metrics_builder.unavailable(
+            f"no {test_reports.CONFIG_DISPLAY_PATH} — create one to show test health"
+        )
+    return test_reports.collect(metrics_config, root=config.project_root)
+
+
+#: Exact-match GET routes, each a builder that reads every source afresh on the request.
+#: A table rather than one `if` apiece: the prefix routes need the trailing identifier and
+#: cannot join it, but these two were only ever growing a branch each.
+DOCUMENT_ROUTES: dict[str, Callable[[CockpitConfig], dict]] = {
+    "/api/state": gather_state,
+    "/api/test-metrics": gather_test_metrics,
+}
 
 
 def _log_query(query: dict[str, list[str]]) -> tuple[str, int] | str:
@@ -182,8 +231,9 @@ class CockpitHandler(BaseHTTPRequestHandler):
     def _get_handler(self, path: str, query: str) -> Callable[[], None] | None:
         if path == "/":
             return self._send_page
-        if path == "/api/state":
-            return lambda: self._send_json(200, gather_state(self.config))
+        document = DOCUMENT_ROUTES.get(path)
+        if document is not None:
+            return lambda: self._send_json(200, document(self.config))
         identifier = unquote(path.rsplit("/", 1)[-1])
         if path.startswith("/api/messages/"):
             return lambda: self._send_message(identifier)
@@ -490,6 +540,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="where New Task sends; the routing target of --human-role",
     )
     parser.add_argument("--activity-limit", type=int, default=DEFAULT_ACTIVITY_LIMIT)
+    parser.add_argument(
+        "--project-root",
+        default="",
+        help="root that relative test-report paths resolve from (default: cwd)",
+    )
+    parser.add_argument(
+        "--test-metrics",
+        default="",
+        help=(
+            f"path to the report config; omitted looks for "
+            f"{test_reports.CONFIG_DISPLAY_PATH} under --project-root. "
+            "Reports are read, never produced -- the cockpit does not run test commands."
+        ),
+    )
     parser.add_argument("--url-file", default=None)
     parser.add_argument("--pid-file", default=None)
     parser.add_argument("--traffic-db", default=None)
@@ -502,11 +566,24 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _project_root(args: argparse.Namespace) -> Path:
+    """Where relative report paths resolve from -- the launcher always passes it explicitly."""
+    return Path(args.project_root) if args.project_root else Path.cwd()
+
+
+def _test_metrics_path(args: argparse.Namespace, project_root: Path) -> Path:
+    """An explicit `--test-metrics` wins; otherwise the one documented location."""
+    return Path(args.test_metrics) if args.test_metrics else test_reports.config_path(project_root)
+
+
 def config_from_args(args: argparse.Namespace) -> CockpitConfig:
     """Assemble the three contexts from parsed flags. No I/O beyond path building."""
     db_path = Path(args.db_path)
     sessions_file = Path(args.sessions_file)
+    project_root = _project_root(args)
     return CockpitConfig(
+        project_root=project_root,
+        test_metrics_path=_test_metrics_path(args, project_root),
         dashboard=DashboardContext(
             db_path=db_path,
             branch=args.branch,

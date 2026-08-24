@@ -461,6 +461,32 @@ class TestReclaimingLeftoverProxies:
         )
         assert stop.find_project_proxies(db) == []
 
+    def test_a_proxy_from_an_older_build_is_still_found(self, monkeypatch, tmp_path):
+        # The module path is the one thing about a leaked proxy guaranteed to be out of date:
+        # it leaked *because* it predates the rename. Matching the full dotted path meant a
+        # proxy started before the move to `src/kiln/` survived every `--stop` for days,
+        # holding its port and the inherited handle on its own log file.
+        from kiln.launcher.infrastructure import stop
+
+        db = tmp_path / ".kiln" / "traffic.db"
+        self._processes(
+            monkeypatch,
+            [(11, f"python -m proxy.server --db-path {db} --port 8787 --mode full")],
+        )
+        assert [pid for pid, _ in stop.find_project_proxies(db)] == [11]
+
+    def test_a_project_path_containing_the_word_proxy_is_not_a_proxy(self, monkeypatch, tmp_path):
+        # Why the module is read from `-m` rather than matched anywhere in the line: this
+        # dashboard names the store *and* the word, yet killing it at launch would be wrong.
+        from kiln.launcher.infrastructure import stop
+
+        db = tmp_path / "proxy-lab" / ".kiln" / "traffic.db"
+        self._processes(
+            monkeypatch,
+            [(33, f"python -m kiln.scheduler.infrastructure.cli.dashboard --traffic-db {db}")],
+        )
+        assert stop.find_project_proxies(db) == []
+
     def test_the_leftover_is_killed(self, monkeypatch, tmp_path):
         from kiln.launcher.infrastructure import stop
 

@@ -39,6 +39,9 @@ log = logging.getLogger(__name__)
 #: Interactive agent-CLI panes (claude/codex/copilot) are absent on purpose: they are not
 #: python processes, `_windows_matches` only ever considers python, and a wrapper session
 #: dies with its window.
+#:
+#: These are a fast path, not the whole test: see `STATE_DIR_FRAGMENTS` for why a list of
+#: dotted module paths cannot be the only way a Kiln process is recognised.
 KILN_PROCESS_MARKERS = (
     "channel.py",
     "kiln.scheduler.infrastructure.cli.role_scheduler",
@@ -47,6 +50,29 @@ KILN_PROCESS_MARKERS = (
     "kiln.cockpit.infrastructure.http.server",
     "kiln.proxy.infrastructure.http.server",
 )
+
+#: A `.kiln/` path in the command line, the identity that survives refactoring.
+#:
+#: Every marker above is a dotted module path, which makes `KILN_PROCESS_MARKERS` a list of
+#: names that are *free to change* -- and renaming one silently orphans every process already
+#: running under the old name. That is not hypothetical: the move to `src/kiln/` renamed the
+#: capture proxy's entry point from `proxy.server`, and a proxy started before the move went
+#: on running for days, invisible to every `--stop` after it, holding both its port and the
+#: inherited handle that made its own log file undeletable.
+#:
+#: A process pointed at a `.kiln/` state directory is a Kiln process by construction, whatever
+#: its module is called this month. Both separators are listed because the fragment is matched
+#: against a command line, which may spell paths either way regardless of the host OS.
+STATE_DIR_FRAGMENTS = (".kiln/", ".kiln\\")
+
+#: What the capture proxy's `-m` module is called, across every spelling of it.
+#:
+#: Deliberately the bare word rather than a dotted path, for the reason above; it is read from
+#: the `-m` argument rather than matched anywhere in the line so that a project directory
+#: containing the word cannot impersonate a module. Paired with the store path in
+#: `_matching_proxies` it stays precise: the dashboard and cockpit are handed the same
+#: `traffic.db`, but as `--traffic-db` to read, and neither runs a proxy module.
+PROXY_MODULE_FRAGMENT = "proxy"
 
 
 def _windows_matches() -> list[tuple[int, str]]:
@@ -90,14 +116,32 @@ def _parse_lines(output: str, separator: str | None) -> list[tuple[int, str]]:
     return matches
 
 
+def _module_argument(command: str) -> str:
+    """The `-m` module a python command line runs, or "" when invoked as a script."""
+    tokens = command.split()
+    for index, token in enumerate(tokens[:-1]):
+        if token == "-m":
+            return tokens[index + 1]
+    return ""
+
+
+def is_kiln_process(command: str) -> bool:
+    """
+    Whether a command line belongs to Kiln.
+
+    Two independent tests, deliberately OR-ed. The markers catch the current release
+    precisely; the state-directory fragment catches everything else that is demonstrably
+    Kiln's -- older builds, renamed modules, entry points nobody thought to add to the list
+    -- so that `--stop` cannot be defeated by a refactor it predates.
+    """
+    return any(marker in command for marker in KILN_PROCESS_MARKERS) or any(
+        fragment in command for fragment in STATE_DIR_FRAGMENTS
+    )
+
+
 def find_kiln_processes() -> list[tuple[int, str]]:
     """Processes this swarm started, identified by their command line."""
-    candidates = _windows_matches() if os.name == "nt" else _posix_matches()
-    return [
-        (pid, command)
-        for pid, command in candidates
-        if any(marker in command for marker in KILN_PROCESS_MARKERS)
-    ]
+    return [(pid, command) for pid, command in _platform_matches() if is_kiln_process(command)]
 
 
 def find_project_proxies(traffic_db: Path) -> list[tuple[int, str]]:
@@ -107,6 +151,11 @@ def find_project_proxies(traffic_db: Path) -> list[tuple[int, str]]:
     Matched on the `--db-path` argument rather than on the port, because the port is the
     thing that drifts: a leaked proxy holds 8787, the next launch takes 8788, and the store
     it writes to is the only stable identity either of them has.
+
+    The store alone is not enough to name the process, though -- the dashboard and cockpit are
+    handed the same file to read -- so it is paired with `PROXY_MODULE_FRAGMENT` rather than
+    with the full dotted module path a leaked proxy is precisely the least likely to still be
+    using.
     """
     wanted = str(traffic_db)
     if os.name == "nt":
@@ -124,7 +173,7 @@ def _matching_proxies(
     return [
         (pid, command)
         for pid, command in candidates
-        if "kiln.proxy.infrastructure.http.server" in command
+        if PROXY_MODULE_FRAGMENT in _module_argument(command)
         and wanted in (command.casefold() if casefold else command)
     ]
 

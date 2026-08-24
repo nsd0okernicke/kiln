@@ -105,6 +105,7 @@ include = [
     "src/kiln/scheduler/infrastructure/vcs",
     "src/kiln/scheduler/infrastructure/diagnostics",
     "src/kiln/cockpit/application/state.py",
+    "src/kiln/cockpit/application/test_metrics.py",
 ]
 extraPaths = ["src"]
 reportMissingTypeStubs = false

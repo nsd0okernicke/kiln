@@ -409,6 +409,10 @@ def _cockpit_command(
         str(paths.traffic_db),
         "--human-role",
         human_role,
+        # Relative report paths in .kiln/test-metrics.json resolve from the project root, not
+        # from wherever the cockpit process happens to have been started (issue #27).
+        "--project-root",
+        str(paths.project_root),
     ]
     lanes = _cockpit_lanes(profile)
     if lanes:

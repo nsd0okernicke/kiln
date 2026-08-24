@@ -107,3 +107,51 @@ def test_tmux_cleanup_counts_only_sessions_killed_successfully(monkeypatch):
         ["tmux", "kill-session", "-t", "kiln-human"],
         ["tmux", "kill-session", "-t", "kiln-coder"],
     ]
+
+
+def test_a_process_naming_a_kiln_state_directory_is_recognised_without_a_marker():
+    # The regression that motivated `STATE_DIR_FRAGMENTS`: the move to `src/kiln/` renamed the
+    # capture proxy's entry point, and a proxy started under the old name went on running for
+    # days, invisible to every `--stop` after it. Whatever a module is called this month, a
+    # process pointed at a `.kiln/` directory is Kiln's.
+    assert stop.is_kiln_process(
+        r"python -m proxy.server --db-path C:\projekte\app\.kiln\traffic.db --port 8787"
+    )
+    assert stop.is_kiln_process("python -m some.future.entry.point --db-path /w/app/.kiln/x.db")
+
+
+def test_a_current_marker_still_matches_without_any_state_directory_path():
+    assert stop.is_kiln_process("python -m kiln.cockpit.infrastructure.http.server --port 9000")
+
+
+def test_an_unrelated_python_process_is_left_alone():
+    # `--stop` is machine-wide, so over-matching here kills a bystander. The repository itself
+    # is named `kiln`, which is exactly the near-miss the leading dot has to exclude.
+    assert not stop.is_kiln_process("python -m http.server 8000")
+    assert not stop.is_kiln_process(r"python C:\projekte\agentic-coding\kiln\tools\report.py")
+
+
+def test_find_kiln_processes_matches_on_state_directory_as_well_as_markers(monkeypatch):
+    monkeypatch.setattr(stop.os, "name", "posix")
+    monkeypatch.setattr(
+        stop,
+        "_posix_matches",
+        lambda: [
+            (1, "python unrelated.py"),
+            (2, "python -m proxy.server --db-path /w/app/.kiln/traffic.db"),
+        ],
+    )
+    assert stop.find_kiln_processes() == [
+        (2, "python -m proxy.server --db-path /w/app/.kiln/traffic.db")
+    ]
+
+
+def test_module_argument_reads_the_dash_m_token_only():
+    assert stop._module_argument("python -m kiln.proxy.infrastructure.http.server --port 1") == (
+        "kiln.proxy.infrastructure.http.server"
+    )
+    assert stop._module_argument("python -m proxy.server --db-path x") == "proxy.server"
+    # Script-style invocations (channel.py) run no module at all, and a trailing `-m` has no
+    # argument to read -- neither may index past the end of the token list.
+    assert stop._module_argument("python /w/src/kiln/mcp_server/channel.py") == ""
+    assert stop._module_argument("python -m") == ""
