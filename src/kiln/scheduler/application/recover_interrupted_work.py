@@ -2,7 +2,7 @@
 
 import logging
 
-from ..ports import QueueAccessError
+from .ports import QueueAccessError
 from .process_next_message import SchedulerContext
 
 log = logging.getLogger(__name__)

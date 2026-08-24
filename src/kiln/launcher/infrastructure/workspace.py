@@ -20,7 +20,7 @@ from pathlib import Path
 
 from kiln.scheduler.infrastructure.vcs import git as git_ops
 
-from ..application.generate import (
+from ..application.artifacts import (
     build_codex_config_toml,
     build_copilot_mcp_config,
     channel_is_available,
@@ -400,7 +400,7 @@ def prepare_worktrees(profile: Profile, paths: KilnPaths, branch: str) -> list[P
         _link_or_copy(worktree / ".kiln", paths.state_dir, role.role)
         _copy_settings(paths, worktree)
         _copy_worker_definitions(paths, worktree)
-        # See generate.channel_is_available for why a role may not get the blocking channel.
+        # See artifacts.channel_is_available for why a role may not get the blocking channel.
         write_mcp_config(
             worktree,
             paths,

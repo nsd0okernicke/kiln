@@ -284,8 +284,8 @@ class TestWrapperTemplateSets:
     """
 
     def _expected(self, agent: str) -> set[str]:
-        """Every template `generate.render_instructions` can ask for, for one agent."""
-        from kiln.launcher.application.generate import DELEGATING_AGENTS
+        """Every template `artifacts.render_instructions` can ask for, for one agent."""
+        from kiln.launcher.application.artifacts import DELEGATING_AGENTS
 
         names = {
             f"loop-auto-{agent}.md",

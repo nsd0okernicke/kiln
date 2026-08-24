@@ -423,7 +423,7 @@ class TestGrokWorktreeSetup:
     """
 
     def test_the_worker_definition_is_mirrored_into_the_worktree(self, repo):
-        # Written to the project root by generate.write_worker_file, then copied per worktree
+        # Written to the project root by artifacts.write_worker_file, then copied per worktree
         # -- a grok wrapper discovers `<role>-worker` as a project agent from its own cwd.
         source = repo.project_root / ".grok" / "agents"
         source.mkdir(parents=True)

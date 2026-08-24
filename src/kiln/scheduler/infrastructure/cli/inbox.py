@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from ...application.use_cases.process_next_message import merge_commit_message
+from ...application.process_next_message import merge_commit_message
 from ...domain import handoff
 from ..persistence import db
 from ..runtime import configure_logging, enable_unicode_output

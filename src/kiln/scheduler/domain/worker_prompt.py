@@ -73,7 +73,7 @@ def parse_toml_worker_definition(text: str) -> WorkerDefinition:
     Parse a generated `.codex/agents/<role>-worker.toml` file.
 
     Structurally nothing like Claude/Copilot's frontmatter-markdown shape (see
-    `render_worker_file`'s `codex` branch in `launcher/generate.py`): a flat TOML document
+    `render_worker_file`'s `codex` branch in `launcher/artifacts.py`): a flat TOML document
     with `name`, `description`, `mcp_servers = {}`, and a `developer_instructions` literal
     string holding the *entire* worker body (role rules + constitution + status
     instruction). That field maps to `.prompt` -- after this, `WorkerDefinition.prompt` is

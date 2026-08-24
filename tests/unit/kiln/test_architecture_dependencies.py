@@ -44,22 +44,38 @@ def test_scheduler_ports_do_not_import_concrete_adapters():
 
 
 def test_scheduler_application_does_not_import_cli_or_concrete_infrastructure():
-    path = SCHEDULER / "application" / "use_cases" / "process_next_message.py"
-    assert not imports(path) & {
-        "adapters",
-        "argparse",
-        "db",
-        "git_ops",
-        "infrastructure",
-        "pane_status",
-        "sqlite3",
-        "subprocess",
-    }
-    assert not called_attributes(path) & {
-        "mkdir",
-        "open",
-        "write_text",
-    }
+    for name in ("process_next_message.py", "recover_interrupted_work.py"):
+        path = SCHEDULER / "application" / name
+        assert not imports(path) & {
+            "adapters",
+            "argparse",
+            "db",
+            "git_ops",
+            "infrastructure",
+            "pane_status",
+            "sqlite3",
+            "subprocess",
+        }
+        assert not called_attributes(path) & {
+            "mkdir",
+            "open",
+            "write_text",
+        }
+
+
+def test_application_layout_uses_semantic_modules_and_intentional_ports():
+    launcher = ROOT / "launcher"
+    cockpit = ROOT / "cockpit"
+
+    assert (SCHEDULER / "application" / "process_next_message.py").is_file()
+    assert (SCHEDULER / "application" / "recover_interrupted_work.py").is_file()
+    assert (SCHEDULER / "application" / "ports").is_dir()
+
+    assert (launcher / "application" / "artifacts.py").is_file()
+    assert (launcher / "infrastructure" / "networking.py").is_file()
+
+    assert (cockpit / "application" / "ports.py").is_file()
+    assert not (cockpit / "application" / "ports").exists()
 
 
 def test_scheduler_models_do_not_import_adapters_or_infrastructure():

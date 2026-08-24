@@ -254,20 +254,20 @@ class TestPrepare:
         )
         monkeypatch.setattr(db, "ensure_schema", lambda path: calls.append(("schema", path)))
         monkeypatch.setattr(
-            cli.generate,
+            cli.artifacts,
             "channel_is_available",
             lambda role: calls.append(("channel", role.role if role else None)) or True,
         )
         monkeypatch.setattr(
-            cli.generate,
+            cli.artifacts,
             "write_mcp_config",
             lambda *args, **kwargs: calls.append(("mcp", args[2], kwargs["include_channel"])),
         )
         monkeypatch.setattr(
-            cli.generate, "write_worker_file", lambda role, p: calls.append(("worker", role.role))
+            cli.artifacts, "write_worker_file", lambda role, p: calls.append(("worker", role.role))
         )
         monkeypatch.setattr(
-            cli.generate,
+            cli.artifacts,
             "write_instructions",
             lambda role, *args: calls.append(("instructions", role.role)),
         )
@@ -309,14 +309,14 @@ class TestPrepare:
         monkeypatch.setattr(cli.workspace, "current_branch", lambda p: "main")
         monkeypatch.setattr(cli.workspace, "worktree_for", lambda role, p: tmp_path)
         monkeypatch.setattr(db, "ensure_schema", lambda path: None)
-        monkeypatch.setattr(cli.generate, "channel_is_available", lambda role: role is not None)
+        monkeypatch.setattr(cli.artifacts, "channel_is_available", lambda role: role is not None)
         monkeypatch.setattr(
-            cli.generate,
+            cli.artifacts,
             "write_mcp_config",
             lambda root, p, owner, *args, **kwargs: owners.append(owner),
         )
-        monkeypatch.setattr(cli.generate, "write_worker_file", lambda *args: None)
-        monkeypatch.setattr(cli.generate, "write_instructions", lambda *args: None)
+        monkeypatch.setattr(cli.artifacts, "write_worker_file", lambda *args: None)
+        monkeypatch.setattr(cli.artifacts, "write_instructions", lambda *args: None)
         monkeypatch.setattr(cli, "_copy_root_settings", lambda p: None)
 
         cli.prepare(selected, paths)

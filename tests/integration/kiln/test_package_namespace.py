@@ -21,13 +21,27 @@ def test_legacy_scheduler_package_has_no_source_modules():
 
 
 def test_namespaced_layers_are_importable():
+    from kiln.launcher.application.artifacts import write_instructions
+    from kiln.launcher.infrastructure.networking import first_free_port
     from kiln.scheduler.application.ports import MessageQueue
-    from kiln.scheduler.application.use_cases.process_next_message import run_once
+    from kiln.scheduler.application.process_next_message import run_once
+    from kiln.scheduler.application.recover_interrupted_work import recover_interrupted_work
     from kiln.scheduler.domain.models import MessageStatus
     from kiln.scheduler.infrastructure.cli.role_scheduler import main
     from kiln.scheduler.infrastructure.persistence import SQLiteMessageQueue
 
-    assert all((MessageQueue, run_once, MessageStatus, main, SQLiteMessageQueue))
+    assert all(
+        (
+            write_instructions,
+            first_free_port,
+            MessageQueue,
+            run_once,
+            recover_interrupted_work,
+            MessageStatus,
+            main,
+            SQLiteMessageQueue,
+        )
+    )
 
 
 def test_namespaced_scheduler_entrypoint_is_executable():

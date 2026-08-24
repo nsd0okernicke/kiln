@@ -1,7 +1,7 @@
 from hypothesis import given
 from hypothesis import strategies as st
 
-from kiln.scheduler.application.use_cases.process_next_message import (
+from kiln.scheduler.application.process_next_message import (
     is_pending,
     resolve_work_item,
     work_item_of,

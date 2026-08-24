@@ -163,7 +163,7 @@ class RoleConfig:
         files at that path, or one passive-pane type's cleanup can delete another role's real
         file out from under it (observed live: an `inbox` role deleted the `human-in-the-loop`
         role's just-written CLAUDE.md this same session, because only `is_inbox` was checked
-        in `generate.write_instructions` and nothing generalized the pattern before a second
+        in `artifacts.write_instructions` and nothing generalized the pattern before a second
         passive-pane type was added). Only check `is_inbox`/`is_dashboard` directly where the
         code needs to know *which* passive pane it is, e.g. which command to build.
         """

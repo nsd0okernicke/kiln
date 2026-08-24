@@ -21,7 +21,8 @@ import sys
 import time
 from pathlib import Path
 
-from ..application import generate
+from ..application import artifacts
+from ..application.artifacts import CHANNEL_IMPORT_PROBE, MCP_PYTHON
 from ..application.commands import (
     PROXY_CAPABLE_AGENTS,
     PROXY_UPSTREAMS,
@@ -30,7 +31,6 @@ from ..application.commands import (
     render_posix,
     render_powershell,
 )
-from ..application.generate import CHANNEL_IMPORT_PROBE, MCP_PYTHON
 from ..application.templates import TemplateError, check_project_scaffolding, resolve_framework_root
 from ..domain.paths import KilnPaths, python_command
 from ..domain.profile import (
@@ -41,7 +41,7 @@ from ..domain.profile import (
     list_profiles,
     load_profile,
 )
-from . import ports, scaffold, stop, workspace
+from . import networking, scaffold, stop, workspace
 from .terminals import TMUX, WEZTERM, WINDOWS_TERMINAL, PaneSpec, TerminalError, detect_backend
 from .terminals import launch as launch_terminal
 
@@ -227,25 +227,25 @@ def prepare(profile: Profile, paths: KilnPaths) -> str:
     ensure_schema(paths.db_path)
 
     current = profile.current_dir_role
-    generate.write_mcp_config(
+    artifacts.write_mcp_config(
         paths.project_root,
         paths,
         current.role if current else None,
         branch,
-        include_channel=generate.channel_is_available(current),
+        include_channel=artifacts.channel_is_available(current),
     )
     _copy_root_settings(paths)
 
     # Worker definitions must exist before worktrees, which copy them in.
     for role in profile.roles:
-        generate.write_worker_file(role, paths)
+        artifacts.write_worker_file(role, paths)
 
     workspace.prepare_worktrees(profile, paths, branch)
     workspace.prepare_skills(profile, paths)
     workspace.prepare_agent_configs(profile, paths)
 
     for role in profile.roles:
-        generate.write_instructions(
+        artifacts.write_instructions(
             role, paths, branch, workspace.worktree_for(role, paths), profile
         )
 
@@ -285,10 +285,10 @@ def find_free_port(preferred: int, attempts: int = PROXY_PORT_ATTEMPTS) -> int:
 
     Raises LaunchError rather than falling back to an ephemeral port: a swarm whose proxy
     landed somewhere unpredictable is harder to reason about than one that refused to start.
-    The probe itself lives in `ports` because the cockpit needs the same one; the *message*
+    The probe itself lives in `networking` because the cockpit needs it too; the *message*
     stays here, because "launch with --no-proxy" is advice only this caller can give.
     """
-    port = ports.first_free_port(preferred, attempts)
+    port = networking.first_free_port(preferred, attempts)
     if port is None:
         raise LaunchError(
             f"no free port for the capture proxy in {preferred}-{preferred + attempts - 1}. "

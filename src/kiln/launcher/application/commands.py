@@ -125,13 +125,13 @@ def _grok_command(role: RoleConfig, paths: KilnPaths) -> AgentCommand:
 
     No `--agents` payload either, unlike the adapter: a wrapper session discovers
     `.grok/agents/<role>-worker.md` from the worktree as a *project* agent (verified via
-    `grok inspect`), which is the file `generate.write_worker_file` already writes there.
+    `grok inspect`), which is the file `artifacts.write_worker_file` already writes there.
 
     MCP is not on the argv at all — this CLI has no `--mcp-config` equivalent. It reads the
     worktree's `.mcp.json` directly, the same file Claude is pointed at explicitly, so
     `workspace.prepare_worktrees` has already wired this role's servers by the time the pane
     opens. That file carries `kiln-db` only for a grok role: see
-    `generate.BLOCKING_CHANNEL_AGENTS` for why the channel is withheld.
+    `artifacts.BLOCKING_CHANNEL_AGENTS` for why the channel is withheld.
     """
     permission_mode = "default" if role.mode == "manual" else "bypassPermissions"
     argv = [

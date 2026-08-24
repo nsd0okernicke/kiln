@@ -8,17 +8,17 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 
-from ...domain import handoff, policies, status_contract
-from ...domain.models import (
+from ..domain import handoff, policies, status_contract
+from ..domain.models import (
     DEFAULT_PRIORITY,
     InboundMessage,
     TokenUsage,
     WorkerInvocation,
     WorkerRequest,
 )
-from ...domain.routing import RoutingTable
-from ...domain.worker_prompt import WorkerDefinition, build_task_prompt
-from ..ports import MessageQueue, VerificationResult, WorkerDebugSink, WorkerRunner, Worktree
+from ..domain.routing import RoutingTable
+from ..domain.worker_prompt import WorkerDefinition, build_task_prompt
+from .ports import MessageQueue, VerificationResult, WorkerDebugSink, WorkerRunner, Worktree
 
 log = logging.getLogger(__name__)
 

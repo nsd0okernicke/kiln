@@ -33,6 +33,14 @@ expresses external needs through ports. Infrastructure owns concrete SQLite, Git
 and agent-CLI integrations. A layer is not created when a package has no corresponding concern;
 `mcp_server`, for example, remains a small transport boundary rather than gaining empty folders.
 
+Application modules use names that describe their responsibility. Scheduler use cases therefore
+live directly in `scheduler/application/process_next_message.py` and
+`recover_interrupted_work.py`, while launcher artifact generation lives in
+`launcher/application/artifacts.py`. Scheduler's several outbound protocols justify the
+`scheduler/application/ports/` package; cockpit's single contract remains
+`cockpit/application/ports.py`. The launcher's concrete socket probe is infrastructure and lives
+in `launcher/infrastructure/networking.py`, not in an application port module.
+
 Tests mirror the package beneath their test type:
 
 ```text

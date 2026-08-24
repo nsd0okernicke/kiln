@@ -39,7 +39,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from kiln.launcher.infrastructure import ports
+from kiln.launcher.infrastructure import networking
 from kiln.scheduler.infrastructure.cli import dashboard
 from kiln.scheduler.infrastructure.cli.dashboard import DashboardContext
 from kiln.scheduler.infrastructure.persistence import db
@@ -409,10 +409,10 @@ def find_free_port(preferred: int = DEFAULT_PORT, attempts: int = PORT_ATTEMPTS)
     Raises rather than falling back to an ephemeral port: the URL is written to a file and
     printed in a pane, and a cockpit that landed somewhere unpredictable is harder to find
     than one that refused to start. The probe is shared with the capture proxy through
-    `kiln.launcher.infrastructure.ports`, while
+    `kiln.launcher.infrastructure.networking`, while
     the identical one -- while the message stays here, since it is about cockpits.
     """
-    port = ports.first_free_port(preferred, attempts)
+    port = networking.first_free_port(preferred, attempts)
     if port is None:
         raise CockpitError(
             f"no free port for the cockpit in {preferred}-{preferred + attempts - 1}. "

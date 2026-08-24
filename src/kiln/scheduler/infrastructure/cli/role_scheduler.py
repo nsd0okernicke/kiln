@@ -20,13 +20,13 @@ import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-from ...application.use_cases import process_next_message as scheduler_application
-from ...application.use_cases.process_next_message import (
+from ...application import process_next_message as scheduler_application
+from ...application.process_next_message import (
     CycleResult,
     SchedulerContext,
     SchedulerState,
 )
-from ...application.use_cases.recover_interrupted_work import recover_interrupted_work
+from ...application.recover_interrupted_work import recover_interrupted_work
 from ...domain.models import TokenUsage, WorkerInvocation, WorkerRequest
 from ...domain.routing import load_routing_table, parse_routing_arguments
 from ...domain.worker_prompt import WorkerDefinition, load_worker_definition

@@ -592,12 +592,12 @@ class TestInboxIsNotAnAgent:
         )
 
     def test_no_worker_definition_is_written(self, paths):
-        from kiln.launcher.application.generate import write_worker_file
+        from kiln.launcher.application.artifacts import write_worker_file
 
         assert write_worker_file(self._role(), paths) is None
 
     def test_no_instruction_file_is_written(self, tmp_path, paths):
-        from kiln.launcher.application.generate import write_instructions
+        from kiln.launcher.application.artifacts import write_instructions
 
         assert write_instructions(self._role(), paths, "main", tmp_path) is None
 
@@ -611,8 +611,8 @@ class TestInboxIsNotAnAgent:
         # the default profile's terminals order does) silently erased that role's real,
         # just-written CLAUDE.md -- see TestInstructionFiles.
         # test_an_inbox_pane_does_not_delete_the_role_it_watches_claude_md in
-        # test_launcher_generate.py for the end-to-end version of this.
-        from kiln.launcher.application.generate import instruction_file_for, write_instructions
+        # test_artifacts.py for the end-to-end version of this.
+        from kiln.launcher.application.artifacts import instruction_file_for, write_instructions
 
         role = self._role()
         existing = instruction_file_for(role, tmp_path)
@@ -639,12 +639,12 @@ class TestDashboardIsNotAnAgent:
         )
 
     def test_no_worker_definition_is_written(self, paths):
-        from kiln.launcher.application.generate import write_worker_file
+        from kiln.launcher.application.artifacts import write_worker_file
 
         assert write_worker_file(self._role(), paths) is None
 
     def test_no_instruction_file_is_written(self, tmp_path, paths):
-        from kiln.launcher.application.generate import write_instructions
+        from kiln.launcher.application.artifacts import write_instructions
 
         assert write_instructions(self._role(), paths, "main", tmp_path) is None
 
@@ -652,7 +652,7 @@ class TestDashboardIsNotAnAgent:
         # Same collision class as the inbox regression: a dashboard also always uses
         # "@current", so instruction_file_for() for its config resolves to whatever real
         # role shares that worktree, not a file the dashboard ever owned.
-        from kiln.launcher.application.generate import instruction_file_for, write_instructions
+        from kiln.launcher.application.artifacts import instruction_file_for, write_instructions
 
         role = self._role()
         existing = instruction_file_for(role, tmp_path)
