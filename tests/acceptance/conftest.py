@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import sysconfig
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -83,10 +84,16 @@ class CommandRunner:
 
 def console_script(name: str) -> Path:
     suffix = ".exe" if os.name == "nt" else ""
-    path = Path(sys.executable).parent / f"{name}{suffix}"
-    if not path.is_file():
-        pytest.fail(f"console script is not installed beside the test interpreter: {path}")
-    return path
+    candidates = [
+        Path(found) if (found := shutil.which(name)) else None,
+        Path(sysconfig.get_path("scripts")) / f"{name}{suffix}",
+        Path(sys.executable).parent / f"{name}{suffix}",
+    ]
+    for path in candidates:
+        if path is not None and path.is_file():
+            return path
+    searched = ", ".join(str(path) for path in candidates if path is not None)
+    pytest.fail(f"console script {name!r} is not installed; searched: {searched}")
 
 
 @pytest.fixture

@@ -1,5 +1,7 @@
 """Acceptance scenario: resolve and prepare a profile."""
 
+import re
+
 from workflow_support import prepare
 
 
@@ -16,4 +18,7 @@ def test_dry_run_prepares_a_consistent_profile(initialized_project, command_runn
     assert "profile: spike" in dry_run
     assert "[coder]" in dry_run
     assert "kiln.scheduler.infrastructure.cli.role_scheduler" in dry_run
-    assert "'--route' 'coder=human-in-the-loop'" in dry_run
+    assert re.search(
+        r"['\"]?--route['\"]?\s+['\"]?coder=human-in-the-loop['\"]?",
+        dry_run,
+    )
