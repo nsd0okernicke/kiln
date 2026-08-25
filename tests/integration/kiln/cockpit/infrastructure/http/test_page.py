@@ -99,6 +99,62 @@ class TestThemeSwitcher:
             assert f'"{theme}"' in inline
 
 
+class TestCollapsibleSections:
+    SECTIONS = (
+        ("attention", "Attention"),
+        ("test-health", "Test health"),
+        ("board", "Board"),
+        ("work-queue", "Work queue"),
+        ("recent-activity", "Recent activity"),
+    )
+
+    @pytest.mark.parametrize(("section", "label"), SECTIONS)
+    def test_each_main_section_has_an_expanded_button_and_controlled_panel(
+        self, page, section, label
+    ):
+        markup = page.partition(f'data-section="{section}"')[2].partition("</section>")[0]
+
+        assert 'class="section-toggle"' in markup
+        assert 'type="button"' in markup
+        assert 'aria-expanded="true"' in markup
+        control = re.search(r'aria-controls="([^"]+)"', markup).group(1)
+        assert f'id="{control}"' in markup
+        assert f">{label}</button>" in markup
+
+    def test_collapsed_state_is_restored_from_browser_storage(self, page):
+        assert 'const SECTION_STATE_KEY = "kiln-cockpit-collapsed-sections"' in page
+        setup = page.partition("function initialiseSectionToggles")[2].partition(
+            "function toast"
+        )[0]
+
+        assert "collapsedSections.has(section.dataset.section)" in setup
+        assert "storeCollapsedSections()" in setup
+
+    def test_polling_does_not_reinitialise_the_section_state(self, page):
+        poll = page.partition("async function poll()")[2].partition(
+            "async function pollTestMetrics"
+        )[0]
+
+        assert "initialiseSectionToggles" not in poll
+        assert "setSectionExpanded" not in poll
+
+    def test_storage_failures_leave_the_page_usable(self, page):
+        reader = page.partition("function storedCollapsedSections")[2].partition(
+            "function setSectionExpanded"
+        )[0]
+
+        assert "try" in reader and "catch" in reader
+
+    def test_expanding_a_section_updates_markup_and_persistence(self, page):
+        helper = page.partition("function expandSection")[2].partition(
+            "function initialiseSectionToggles"
+        )[0]
+
+        assert "setSectionExpanded" in helper
+        assert "collapsedSections.delete(name)" in helper
+        assert "storeCollapsedSections()" in helper
+
+
 class TestIconography:
     def test_every_use_resolves_to_a_symbol_the_page_defines(self, page):
         # A `<use href="#missing">` renders nothing at all -- no error, no fallback, just a
@@ -207,10 +263,31 @@ class TestComposer:
         assert 'role.state === "halted"' in page
 
     def test_it_sits_inside_the_work_queue_section(self, page):
-        queue_section = page.partition("<h2>Work queue</h2>")[2].partition("</section>")[0]
+        queue_section = page.partition('data-section="work-queue"')[2].partition("</section>")[0]
 
         assert 'id="send-target"' in queue_section
         assert 'id="queue"' in queue_section
+
+    def test_new_task_reveals_the_composer_with_the_intake_preset(self, page):
+        handler = page.partition('$("new-task").onclick')[2].partition("};")[0]
+
+        assert "revealComposer(latest && latest.intake_role, ITEM_PENDING)" in handler
+
+    def test_role_send_reveals_the_composer_with_the_role_preset(self, page):
+        queue = page.partition("function renderQueue")[2].partition(
+            "function renderRoleDetails"
+        )[0]
+
+        assert "revealComposer(role.role, role.work_item || ITEM_PENDING)" in queue
+
+    def test_revealing_the_composer_expands_scrolls_and_focuses(self, page):
+        helper = page.partition("function revealComposer")[2].partition(
+            "function renderAttention"
+        )[0]
+
+        assert 'expandSection("work-queue")' in helper
+        assert '$("queue-composer").scrollIntoView({ block: "nearest" })' in helper
+        assert '$("send-text").focus()' in helper
 
 
 class TestOperationalQueue:
@@ -279,7 +356,7 @@ class TestTestHealthPanel:
 
     def test_the_panel_has_a_mount_point(self, page):
         assert 'id="test-health"' in page
-        assert "<h2>Test health</h2>" in page
+        assert ">Test health</button>" in page
 
     def test_it_rides_the_existing_poll_rather_than_its_own_timer(self, page):
         # A monitoring surface that added a second interval would read reports more often

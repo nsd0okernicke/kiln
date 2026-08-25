@@ -128,10 +128,24 @@
   .themes button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
   main { padding: 18px; display: grid; gap: 18px; }
   section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
-  section > h2 {
-    font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim);
-    margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--line);
+  section > h2 { margin: 0; }
+  .section-toggle {
+    width: 100%; display: flex; align-items: center; justify-content: space-between;
+    color: var(--dim); background: transparent; border: 0; border-radius: 10px 10px 0 0;
+    padding: 10px 14px; font-size: 12px; font-weight: 600; text-align: left;
+    text-transform: uppercase; letter-spacing: .08em;
   }
+  .section-toggle:hover { color: var(--ink); background: var(--surface); }
+  .section-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .section-toggle[aria-expanded="true"] { border-bottom: 1px solid var(--line); }
+  .section-toggle[aria-expanded="false"] { border-radius: 10px; }
+  .section-toggle::after {
+    content: ""; width: 7px; height: 7px; flex: none; margin-left: 12px;
+    border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+    transform: rotate(45deg); transition: transform .15s ease;
+  }
+  .section-toggle[aria-expanded="false"]::after { transform: rotate(-45deg); }
+  .section-panel[hidden] { display: none; }
   .body { padding: 12px 14px; }
   .empty { color: var(--dim); font-style: italic; }
 
@@ -186,6 +200,7 @@
   @media (prefers-reduced-motion: reduce) {
     .card.working, .card.working .name::after { animation: none; }
     .card.working { border-left-color: var(--hot); }
+    .section-toggle::after { transition: none; }
   }
   /* A request the specifier has not named yet. Dashed and muted so it reads as provisional:
      it is real work, but its identity is still being decided and its title is borrowed
@@ -369,24 +384,25 @@
 </header>
 
 <main>
-  <section>
-    <h2>Attention</h2>
-    <div class="attention" id="attention"></div>
+  <section data-section="attention">
+    <h2><button class="section-toggle" type="button" aria-expanded="true" aria-controls="attention-panel">Attention</button></h2>
+    <div class="section-panel" id="attention-panel"><div class="attention" id="attention"></div></div>
   </section>
 
-  <section>
-    <h2>Test health</h2>
-    <div class="body" id="test-health"></div>
+  <section data-section="test-health">
+    <h2><button class="section-toggle" type="button" aria-expanded="true" aria-controls="test-health-panel">Test health</button></h2>
+    <div class="section-panel body" id="test-health-panel"><div id="test-health"></div></div>
   </section>
 
-  <section>
-    <h2>Board</h2>
-    <div class="lanes" id="lanes"></div>
+  <section data-section="board">
+    <h2><button class="section-toggle" type="button" aria-expanded="true" aria-controls="board-panel">Board</button></h2>
+    <div class="section-panel lanes" id="board-panel"><div id="lanes" style="display:contents"></div></div>
   </section>
 
-  <section>
-    <h2>Work queue</h2>
-    <div class="body queue-composer">
+  <section data-section="work-queue">
+    <h2><button class="section-toggle" type="button" aria-expanded="true" aria-controls="work-queue-panel">Work queue</button></h2>
+    <div class="section-panel" id="work-queue-panel">
+    <div class="body queue-composer" id="queue-composer">
       <div class="queue-compose-grid">
         <div class="field">
           <label for="send-target">To</label>
@@ -407,11 +423,12 @@
       <span class="branch" id="send-hint"></span>
     </div>
     <div class="body" style="padding:0"><table id="queue"></table></div>
+    </div>
   </section>
 
-  <section>
-    <h2>Recent activity</h2>
-    <div class="body" style="padding:0"><table id="activity"></table></div>
+  <section data-section="recent-activity">
+    <h2><button class="section-toggle" type="button" aria-expanded="true" aria-controls="recent-activity-panel">Recent activity</button></h2>
+    <div class="section-panel body" id="recent-activity-panel" style="padding:0"><table id="activity"></table></div>
   </section>
 </main>
 
@@ -448,6 +465,7 @@ const POLL_MS = 2000;
 // authenticate anyone — it only makes the request one a cross-origin page cannot forge
 // without a preflight the server never approves.
 const GUARD = { "X-Kiln-Cockpit": "1", "Content-Type": "application/json" };
+const SECTION_STATE_KEY = "kiln-cockpit-collapsed-sections";
 
 const $ = (id) => document.getElementById(id);
 let latest = null;
@@ -455,6 +473,49 @@ let expandedRole = null;
 let logStream = "scheduler";
 const logOffsets = { scheduler: 0, worker: 0 };
 const logText = { scheduler: "", worker: "" };
+
+function storedCollapsedSections() {
+  try {
+    const value = JSON.parse(localStorage.getItem(SECTION_STATE_KEY) || "[]");
+    return new Set(Array.isArray(value) ? value : []);
+  } catch (error) { return new Set(); }
+}
+
+function setSectionExpanded(button, expanded) {
+  button.setAttribute("aria-expanded", String(expanded));
+  $(button.getAttribute("aria-controls")).hidden = !expanded;
+}
+
+const collapsedSections = storedCollapsedSections();
+
+function storeCollapsedSections() {
+  try { localStorage.setItem(SECTION_STATE_KEY, JSON.stringify([...collapsedSections])); }
+  catch (error) { /* preference is optional */ }
+}
+
+function expandSection(name) {
+  const section = document.querySelector('section[data-section="' + name + '"]');
+  if (!section) return;
+  setSectionExpanded(section.querySelector(".section-toggle"), true);
+  collapsedSections.delete(name);
+  storeCollapsedSections();
+}
+
+function initialiseSectionToggles() {
+  for (const section of document.querySelectorAll("section[data-section]")) {
+    const button = section.querySelector(".section-toggle");
+    setSectionExpanded(button, !collapsedSections.has(section.dataset.section));
+    button.onclick = () => {
+      const expanded = button.getAttribute("aria-expanded") !== "true";
+      setSectionExpanded(button, expanded);
+      if (expanded) collapsedSections.delete(section.dataset.section);
+      else collapsedSections.add(section.dataset.section);
+      storeCollapsedSections();
+    };
+  }
+}
+
+initialiseSectionToggles();
 
 function toast(message, bad) {
   const el = $("toast");
@@ -572,6 +633,13 @@ function prefillSend(role, workItem) {
   item.value = [...item.options].some((o) => o.value === workItem) ? workItem : ITEM_PENDING;
   $("send-item-other").style.display = "none";
   renderSendWarning();
+}
+
+function revealComposer(role, workItem) {
+  expandSection("work-queue");
+  prefillSend(role, workItem);
+  $("queue-composer").scrollIntoView({ block: "nearest" });
+  $("send-text").focus();
 }
 
 function renderAttention(state) {
@@ -785,8 +853,7 @@ function renderQueue(state) {
     const send = text("button", "Send", "row-send");
     send.title = "Send a message to " + role.role;
     send.onclick = () => {
-      prefillSend(role.role, role.work_item || ITEM_PENDING);
-      $("send-text").focus();
+      revealComposer(role.role, role.work_item || ITEM_PENDING);
     };
     action.append(send);
     row.append(action);
@@ -975,8 +1042,7 @@ async function acknowledgeMessage(messageId) {
 // The header button is a shortcut into the composer, not a second one: preset the target to
 // the intake role and let the operator type. Two composers for one INSERT is how they drift.
 $("new-task").onclick = () => {
-  prefillSend(latest && latest.intake_role, ITEM_PENDING);
-  $("send-text").focus();
+  revealComposer(latest && latest.intake_role, ITEM_PENDING);
 };
 
 $("send-item").onchange = () => {
