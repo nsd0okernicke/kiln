@@ -123,9 +123,9 @@ class TestCollapsibleSections:
 
     def test_collapsed_state_is_restored_from_browser_storage(self, page):
         assert 'const SECTION_STATE_KEY = "kiln-cockpit-collapsed-sections"' in page
-        setup = page.partition("function initialiseSectionToggles")[2].partition(
-            "function toast"
-        )[0]
+        setup = page.partition("function initialiseSectionToggles")[2].partition("function toast")[
+            0
+        ]
 
         assert "collapsedSections.has(section.dataset.section)" in setup
         assert "storeCollapsedSections()" in setup
@@ -274,16 +274,14 @@ class TestComposer:
         assert "revealComposer(latest && latest.intake_role, ITEM_PENDING)" in handler
 
     def test_role_send_reveals_the_composer_with_the_role_preset(self, page):
-        queue = page.partition("function renderQueue")[2].partition(
-            "function renderRoleDetails"
-        )[0]
+        queue = page.partition("function renderQueue")[2].partition("function renderRoleDetails")[0]
 
         assert "revealComposer(role.role, role.work_item || ITEM_PENDING)" in queue
 
     def test_revealing_the_composer_expands_scrolls_and_focuses(self, page):
-        helper = page.partition("function revealComposer")[2].partition(
-            "function renderAttention"
-        )[0]
+        helper = page.partition("function revealComposer")[2].partition("function renderAttention")[
+            0
+        ]
 
         assert 'expandSection("work-queue")' in helper
         assert '$("queue-composer").scrollIntoView({ block: "nearest" })' in helper

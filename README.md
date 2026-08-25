@@ -553,6 +553,7 @@ Run the test and quality gates:
 
 ```bash
 python -m pytest
+python -m pytest tests/acceptance
 ruff format --check src tests tools
 ruff check src tests tools
 pyright
@@ -560,7 +561,11 @@ python tools/quality_metrics.py --tier deterministic
 ```
 
 The implementation lives under `src/kiln/` and follows domain/application/infrastructure
-boundaries. Tests are split into unit, property, integration, system, and opt-in live tiers.
+boundaries. Tests are split into unit, property, integration, acceptance, and opt-in live tiers.
+The acceptance suite is separate from the default run and uses local fake workers; it needs no
+agent credentials. Add a system scenario for a public workflow or regression that crosses
+process, Git, database, filesystem, or HTTP boundaries and cannot be protected by one adapter's
+integration tests alone.
 
 ## Current limitations
 

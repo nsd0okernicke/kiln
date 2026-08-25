@@ -49,6 +49,17 @@ other stable invariants rather than wrapping every orchestration path in arbitra
 The cockpit, live agent CLIs, authenticated backends, and terminal emulators are not prerequisites.
 Tests marked `integration` still use only deterministic local SQLite, Git, filesystem, and HTTP.
 
+Selective acceptance scenarios live under `tests/acceptance/` and run separately:
+
+```text
+python -m pytest tests/acceptance
+```
+
+They invoke installed Kiln entry points with deterministic fake workers and local Git, SQLite,
+filesystem, and loopback HTTP resources. Add one when a public workflow or cross-process
+regression could remain broken while its individual adapters pass; keep adapter edge cases in
+the faster unit and integration suites.
+
 ## Mutation tiers
 
 Cosmic Ray remains split into the existing Windows-compatible pure-policy and SQLite tiers under

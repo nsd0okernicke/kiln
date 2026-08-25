@@ -58,6 +58,28 @@ jobs:
       - run: python -m compileall -q src
       - run: pyright
 
+  acceptance:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pip install -e .
+      - run: python -m pytest tests/acceptance --junitxml=reports/acceptance/junit.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: acceptance-test-reports-${{ matrix.os }}
+          path: reports/acceptance/
+          retention-days: 30
+
   mutation:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest

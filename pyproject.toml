@@ -64,7 +64,7 @@ pythonpath = ["src"]
 addopts = "-q --strict-markers"
 markers = [
     "integration: exercises multiple components or real infrastructure adapters",
-    "system: exercises a complete Kiln process topology",
+    "acceptance: exercises a complete Kiln process topology",
     "live: invokes external agent services or CLIs",
 ]
 
