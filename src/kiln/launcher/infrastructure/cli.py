@@ -19,7 +19,10 @@ import socket
 import subprocess
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
+
+from kiln.cockpit.infrastructure import test_reports
 
 from ..application import artifacts
 from ..application.artifacts import CHANNEL_IMPORT_PROBE, MCP_PYTHON
@@ -490,6 +493,7 @@ def run_launch(args: argparse.Namespace) -> int:
     profile = _profile_for_launch(
         load_profile(paths.project_root, paths.framework_root, args.profile), args
     )
+    profile = _apply_test_metrics_verification(profile, paths.project_root)
     check_launchable(profile)
     log.info("profile: %s (%d roles)", profile.name, len(profile.roles))
     warn_if_channel_unavailable(profile)
@@ -514,6 +518,36 @@ def run_launch(args: argparse.Namespace) -> int:
         for pane in panes:
             print(f"\n[{pane.role}] cwd={pane.path}\n  {pane.cmd}")
     return 0
+
+
+def _apply_test_metrics_verification(profile: Profile, project_root: Path) -> Profile:
+    """Attach a project's report-producing command to its nominated scheduler role."""
+    try:
+        config = test_reports.load_config(test_reports.config_path(project_root))
+    except test_reports.ReportError as error:
+        log.warning("test metrics verification disabled: %s", error)
+        return profile
+    if not config or not config.command or not config.verification_role:
+        return profile
+    selected = profile.role(config.verification_role)
+    if selected is None:
+        log.warning(
+            "test metrics verification role %r is not in profile %r; command disabled",
+            config.verification_role,
+            profile.name,
+        )
+        return profile
+    if not selected.uses_scheduler:
+        log.warning(
+            "test metrics verification role %r is not scheduler-driven; command disabled",
+            config.verification_role,
+        )
+        return profile
+    roles = tuple(
+        replace(role, verify=config.command) if role.role == config.verification_role else role
+        for role in profile.roles
+    )
+    return replace(profile, roles=roles)
 
 
 def run_stop(args: argparse.Namespace) -> int:

@@ -167,6 +167,11 @@ def copy_example(paths: KilnPaths, example: str, result: ScaffoldResult) -> None
     if count:
         result.note(f"applied {count} example constitution override(s)")
 
+    metrics = example_dir / "test-metrics.json"
+    if metrics.is_file():
+        workspace.copy_template_file(metrics, paths.state_dir / "test-metrics.json")
+        result.note(f"configured test metrics for {example}")
+
 
 def _copy_constitution_overrides(source_dir: Path, target_dir: Path) -> int:
     if not source_dir.is_dir():

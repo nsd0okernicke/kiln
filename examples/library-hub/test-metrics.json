@@ -1,0 +1,11 @@
+{
+  "framework": "pytest",
+  "command": "uv run --project {project} --extra dev python -m pytest --junitxml={reports}/junit.xml --cov=catalog --cov=loans --cov-branch --cov-report=xml:{reports}/coverage.xml && uv run --project {project} --extra dev ruff check --output-format=sarif > {reports}/ruff.sarif",
+  "verificationRole": "architect",
+  "reports": {
+    "junit": "reports/junit.xml",
+    "coverage": "reports/coverage.xml",
+    "lint": "reports/ruff.sarif"
+  },
+  "maxAgeMinutes": 30
+}

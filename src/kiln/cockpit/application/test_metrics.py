@@ -48,6 +48,8 @@ class TestMetricsConfig:
     lint: str = ""
     #: Recorded for other Kiln workflows. The cockpit must never run it -- see module docstring.
     command: str = ""
+    #: Scheduler role that enforces ``command`` before handing work onward.
+    verification_role: str = ""
     max_age_minutes: int = DEFAULT_MAX_AGE_MINUTES
 
     @property
@@ -72,6 +74,7 @@ def config_from_mapping(payload: dict) -> TestMetricsConfig:
         coverage=_text(reports, "coverage"),
         lint=_text(reports, "lint"),
         command=_text(payload, "command"),
+        verification_role=_text(payload, "verificationRole"),
         max_age_minutes=_positive_int(
             payload.get("maxAgeMinutes"), default=DEFAULT_MAX_AGE_MINUTES
         ),

@@ -17,6 +17,7 @@ from typing import ClassVar
 import pytest
 
 from kiln.launcher.domain.paths import KilnPaths
+from kiln.launcher.domain.profile import Profile, RoleConfig
 from kiln.launcher.infrastructure import cli, scaffold
 
 pytestmark = pytest.mark.integration
@@ -49,11 +50,36 @@ def framework(tmp_path):
 
     example = root / "examples" / "demo"
     (example / "kiln" / "project" / "constitution").mkdir(parents=True)
+    (example / "test-metrics.json").write_text(
+        '{"verificationRole":"architect","command":"pytest"}', encoding="utf-8"
+    )
     (example / "README.md").write_text("# Demo Brief\n", encoding="utf-8")
     (example / "kiln" / "project" / "constitution" / "project.md").write_text(
         "# Demo project rules\n", encoding="utf-8"
     )
     return root
+
+
+class TestMetricsVerification:
+    def test_project_command_is_attached_only_to_the_nominated_role(self, tmp_path):
+        config_dir = tmp_path / ".kiln"
+        config_dir.mkdir()
+        (config_dir / "test-metrics.json").write_text(
+            json.dumps({"command": "pytest -q", "verificationRole": "architect"}),
+            encoding="utf-8",
+        )
+        profile = Profile(
+            name="full",
+            roles=(
+                RoleConfig(role="coder", scheduler="python"),
+                RoleConfig(role="architect", scheduler="python"),
+            ),
+        )
+
+        configured = cli._apply_test_metrics_verification(profile, tmp_path)
+
+        assert configured.role("coder").verify == ""
+        assert configured.role("architect").verify == "pytest -q"
 
 
 class TestScaffold:
@@ -65,6 +91,24 @@ class TestScaffold:
         assert paths.roles_dir.is_dir()
         assert paths.skills_dir.is_dir()
         assert paths.state_dir.is_dir()
+
+    def test_an_example_can_supply_test_metrics_configuration(self, tmp_path, framework):
+        target = tmp_path / "proj"
+
+        scaffold.scaffold(target, framework, example="demo")
+
+        config = json.loads((target / ".kiln" / "test-metrics.json").read_text())
+        assert config["verificationRole"] == "architect"
+
+    def test_library_hub_verification_uses_its_project_environment(self):
+        root = Path(__file__).resolve().parents[5]
+        config = json.loads((root / "examples" / "library-hub" / "test-metrics.json").read_text())
+
+        assert config["command"].startswith(
+            "uv run --project {project} --extra dev python -m pytest"
+        )
+        assert "--cov=catalog --cov=loans" in config["command"]
+        assert "--cov=." not in config["command"]
 
     def test_copies_the_constitution_and_roles(self, tmp_path, framework):
         target = tmp_path / "proj"

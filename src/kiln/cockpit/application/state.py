@@ -281,8 +281,9 @@ def build_board(
     """
     Cards grouped into swimlanes: `{"lanes": [...], "cards": {lane: [card, ...]}}`.
 
-    `work_items` is `db.work_item_messages`' output — newest first, so the first row seen
-    for a work item is its latest message and the rest are its history.
+    `work_items` is `db.work_item_messages`' output — newest first. An active row outranks a
+    later processed escalation because retry reactivates the original row without changing
+    its creation time.
     """
     cards = [_card(row, cycles, now_local) for row in _latest_per_work_item(work_items)]
     order = list(lanes) or _observed_lanes(cards)
@@ -387,7 +388,7 @@ def build_activity(messages: list[dict], now_local: datetime, limit: int) -> lis
             "message_id": row["id"],
             "sender": row["sender"],
             "target": row["target"],
-            "status": row["status"],
+            "status": _activity_status(row),
             "summary": extract_summary(row["content"], CARD_SUMMARY_CHARS),
             "created_at": row["created_at"],
             "age": _age(row["created_at"], now_local),
@@ -395,6 +396,17 @@ def build_activity(messages: list[dict], now_local: datetime, limit: int) -> lis
         }
         for row in messages[:limit]
     ]
+
+
+def _activity_status(row: dict) -> str:
+    """Distinguish a human-resumed attempt from the row's ordinary processing lifecycle."""
+    if row.get("acked_at") and row["status"] in {
+        MessageStatus.QUEUED,
+        MessageStatus.DELIVERED,
+        MessageStatus.PROCESSING,
+    }:
+        return "retrying"
+    return row["status"]
 
 
 def build_totals(snapshot: SwarmSnapshot) -> dict:
@@ -468,7 +480,7 @@ def _card(row: dict, cycles: dict[str, int], now_local: datetime) -> dict:
 
 def _latest_per_work_item(rows: list[dict]) -> list[dict]:
     """
-    First row seen per work item, given newest-first input. Order is preserved.
+    Current row per work item, preferring active work and otherwise the newest history row.
 
     Unnamed rows are keyed by their own message id rather than by the `None` they all share:
     two people asking for two unrelated things are two cards, and grouping them under one
@@ -480,10 +492,17 @@ def _latest_per_work_item(rows: list[dict]) -> list[dict]:
     A `failed` one is kept: a request that stopped before it was ever named is precisely the
     thing a human has to see.
     """
+    active_by_item = {
+        named_work_item(row)
+        for row in rows
+        if named_work_item(row) is not None and row["status"] != MessageStatus.PROCESSED
+    }
     seen: set[str] = set()
     latest = []
     for row in rows:
         work_item = named_work_item(row)
+        if work_item in active_by_item and row["status"] == MessageStatus.PROCESSED:
+            continue
         if work_item is None and row["status"] == MessageStatus.PROCESSED:
             continue
         key = work_item or f"id:{row['id']}"

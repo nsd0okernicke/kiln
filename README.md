@@ -405,7 +405,8 @@ live. Create `.kiln/test-metrics.json`:
 ```json
 {
   "framework": "pytest",
-  "command": "python -m pytest --junitxml=reports/junit.xml --cov=yourpackage --cov-branch --cov-report=xml:reports/coverage.xml",
+  "command": "python -m pytest --junitxml={reports}/junit.xml --cov=yourpackage --cov-branch --cov-report=xml:{reports}/coverage.xml",
+  "verificationRole": "architect",
   "reports": {
     "junit": "reports/junit.xml",
     "coverage": "reports/coverage.xml",
@@ -414,6 +415,10 @@ live. Create `.kiln/test-metrics.json`:
   "maxAgeMinutes": 30
 }
 ```
+
+`verificationRole` makes that scheduler role run `command` after its worker succeeds and
+before handoff. Use `{reports}` in the command when reports must be written to the shared
+project rather than the role's worktree; Kiln creates and expands that directory portably.
 
 Three **formats** are read, never three tools — which is what keeps the panel working in any
 ecosystem:

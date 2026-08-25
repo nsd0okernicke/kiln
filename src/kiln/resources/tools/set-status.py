@@ -176,6 +176,16 @@ def _add_metrics(status, cycles, cost_usd, tokens):
         status["token_usage"] = tokens
 
 
+def preserve_state_since(status: dict, status_file: Path) -> None:
+    """Keep the state-entry timestamp when an unchanged state is reported again."""
+    try:
+        previous = json.loads(status_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if previous.get("state") == status["state"] and isinstance(previous.get("since"), str):
+        status["since"] = previous["since"]
+
+
 def project_root_from_own_path():
     """
     Derive the project root from where this script sits, as a fallback.
@@ -219,6 +229,7 @@ def main():
     status_dir.mkdir(parents=True, exist_ok=True)
 
     status_file = status_dir / f"{role}.json"
+    preserve_state_since(status, status_file)
     status_file.write_text(json.dumps(status, indent=2) + "\n", encoding="utf-8")
 
     # Emit OSC 0 title-set escape sequence (unreliable as a display channel —

@@ -343,7 +343,14 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
         max_cycles=args.max_cycles,
         max_budget_usd=args.max_budget_usd,
         run_verify=(
-            (lambda: verify.run(args.verify, args.worktree, timeout=args.verify_timeout))
+            (
+                lambda: verify.run(
+                    args.verify,
+                    args.worktree,
+                    timeout=args.verify_timeout,
+                    project_root=Path(args.db_path).parent.parent,
+                )
+            )
             if args.verify
             else None
         ),

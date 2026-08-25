@@ -214,6 +214,12 @@ class TestComposer:
 
 
 class TestOperationalQueue:
+    def test_state_age_is_labelled_by_what_it_measures(self, page):
+        queue = page.partition("function renderQueue")[2].partition("async function pollLog")[0]
+
+        assert '"In state"' in queue
+        assert '"Last activity"' not in queue
+
     def test_board_lanes_show_worktrees_instead_of_item_counts(self, page):
         board = page.partition("function renderBoard")[2].partition("function renderQueue")[0]
 
@@ -231,11 +237,28 @@ class TestOperationalQueue:
 
         assert 'card.cycles + " msgs"' not in board
 
-    def test_technical_metrics_live_in_expanded_details(self, page):
+    def test_role_details_open_in_a_dialog_instead_of_displacing_queue_rows(self, page):
         queue = page.partition("function renderQueue")[2].partition("async function pollLog")[0]
 
         assert '"Tokens"' in queue and '"Cache share"' in queue
-        assert "cell.append(metrics)" in queue
+        assert '$("role-dialog").showModal()' in queue
+        assert "const detail = table.insertRow()" not in queue
+        assert 'id="role-dialog"' in page
+
+    def test_a_role_without_a_log_gets_an_explanation(self, page):
+        assert '"No " + stream + " log for this role."' in page
+
+    def test_unknown_cache_share_cannot_abort_opening_the_dialog(self, page):
+        assert "function ratioPercent(value)" in page
+        assert 'value === null || value === undefined ? "—"' in page
+        assert '["Cache share", ratioPercent(role.cache_share)]' in page
+
+    def test_coverage_and_ratio_percentages_use_distinct_scales(self, page):
+        assert "function reportPercent(value)" in page
+        assert "function percent(value)" not in page
+
+    def test_closing_role_details_clears_the_selection(self, page):
+        assert '$("role-dialog").onclose = () => { expandedRole = null; }' in page
 
     def test_a_halted_role_is_warned_about_rather_than_blocked(self, page):
         # Queueing work for after the role recovers is legitimate; the composer must not
@@ -289,6 +312,19 @@ class TestTestHealthPanel:
         for tool in ("ruff", "eslint", "pmd", "spotbugs", "pytest"):
             assert tool not in body.lower()
         assert "lint.tools.join" in body
+
+    def test_every_nonzero_lint_severity_is_shown(self, page):
+        """An error must not hide warnings and notes reported by the same analyser."""
+        body = page.partition("function lintFact")[2].partition("\n}")[0]
+
+        for level in ("error", "warning", "note"):
+            assert f'["{level}", "lint {level}"]' in body
+        assert 'counts.join(" · ")' in body
+
+    def test_a_configured_clean_analyser_is_reported_as_zero_lint(self, page):
+        body = page.partition("function lintFact")[2].partition("\n}")[0]
+
+        assert '"0 lint"' in body
 
     def test_an_unknown_metric_is_omitted_rather_than_shown_as_zero(self, page):
         # "No coverage configured" and "nothing is covered" must not look alike.

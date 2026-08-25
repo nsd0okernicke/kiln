@@ -427,6 +427,7 @@ class TestConfigFromMapping:
             {
                 "framework": "pytest",
                 "command": "python -m pytest --junitxml=.kiln/reports/junit.xml",
+                "verificationRole": "architect",
                 "reports": {"junit": ".kiln/reports/junit.xml", "coverage": "cov.xml"},
                 "maxAgeMinutes": 15,
             }
@@ -437,6 +438,8 @@ class TestConfigFromMapping:
             "cov.xml",
         )
         assert config.max_age_minutes == 15
+        assert config.command.startswith("python -m pytest")
+        assert config.verification_role == "architect"
 
     def test_unknown_keys_are_ignored_rather_than_fatal(self):
         """The schema is explicitly open; a file written for a later Kiln must still load."""

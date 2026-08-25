@@ -39,6 +39,28 @@ class TestRun:
         script = "import pathlib,sys; sys.exit(0 if pathlib.Path('marker.txt').is_file() else 1)"
         assert verify.run(f'"{sys.executable}" -c "{script}"', tmp_path).ok is True
 
+    def test_shared_report_placeholder_is_expanded_and_created(self, tmp_path):
+        worktree = tmp_path / "worktree"
+        worktree.mkdir()
+        command = (
+            f'"{sys.executable}" -c '
+            "\"import pathlib; pathlib.Path(r'{reports}/junit.xml').write_text('ok')\""
+        )
+
+        result = verify.run(command, worktree, project_root=tmp_path)
+
+        assert result.ok is True
+        assert (tmp_path / "reports" / "junit.xml").read_text() == "ok"
+
+    def test_project_placeholder_is_shell_quoted(self, tmp_path):
+        root = tmp_path / "project with spaces"
+        root.mkdir()
+
+        expanded = verify._expand_paths("tool --root {project}", root)
+
+        assert str(root) in expanded
+        assert expanded != f"tool --root {root}"
+
     def test_a_hang_is_killed_and_treated_as_a_failure(self, tmp_path):
         # Not a scheduler crash: a role must not die over its own quality gate.
         hang = f'"{sys.executable}" -c "import time; time.sleep(30)"'

@@ -260,6 +260,8 @@
   .log-toolbar button { padding: 2px 8px; font-size: 12px; }
   .log-toolbar button.active { color: var(--accent); border-color: var(--accent); }
   .live-log { margin: 0; max-height: 320px; white-space: pre-wrap; }
+  #role-dialog { width: min(960px, 94vw); }
+  #role-dialog .live-log { min-height: 180px; max-height: 55vh; }
   .lane-worktree { display: inline-flex; align-items: center; color: var(--dim); font-size: 11px; font-weight: 400; }
   .role-details { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--dim); font-size: 12px; margin-bottom: 8px; }
   .role-details b { color: var(--ink); font-weight: 500; }
@@ -426,6 +428,16 @@
   </div>
 </dialog>
 
+<dialog id="role-dialog">
+  <h2 id="role-title">Role details</h2>
+  <div class="body">
+    <div id="role-metrics" class="role-details"></div>
+    <div id="role-log-toolbar" class="log-toolbar"></div>
+    <pre id="live-log" class="live-log"></pre>
+    <div class="row"><span class="spacer"></span><button id="role-close">Close</button></div>
+  </div>
+</dialog>
+
 <div id="toast"></div>
 
 <script>
@@ -471,7 +483,7 @@ function text(tag, value, className) {
 
 function money(value) { return value === null || value === undefined ? "—" : "$" + value.toFixed(2); }
 function count(value) { return value === null || value === undefined ? "—" : value.toLocaleString(); }
-function percent(value) { return value === null || value === undefined ? "—" : Math.round(value * 100) + "%"; }
+function ratioPercent(value) { return value === null || value === undefined ? "—" : Math.round(value * 100) + "%"; }
 
 function renderHeader(state) {
   // Project and branch are the two facts an operator re-checks constantly -- "am I looking
@@ -643,15 +655,15 @@ function renderTestMetrics(metrics) {
 // "statements" is the coverage tool's own count of executable lines, which is a size the
 // panel can state in any language without Kiln knowing one.
 function coverageFacts(coverage) {
-  const facts = [percent(coverage.line_percent) + " coverage"];
+  const facts = [reportPercent(coverage.line_percent) + " coverage"];
   if (coverage.branch_percent !== null && coverage.branch_percent !== undefined) {
-    facts.push(percent(coverage.branch_percent) + " branch");
+    facts.push(reportPercent(coverage.branch_percent) + " branch");
   }
   if (coverage.lines_valid) facts.push(coverage.lines_valid.toLocaleString() + " statements");
   return facts;
 }
 
-function percent(value) {
+function reportPercent(value) {
   return value.toFixed(0) + "%";
 }
 
@@ -660,8 +672,15 @@ function percent(value) {
 // "PMD" without either name appearing anywhere in Kiln.
 function lintFact(lint) {
   const label = lint.tools.length ? " (" + lint.tools.join(", ") + ")" : "";
-  if (lint.error) return lint.error + " lint error" + (lint.error === 1 ? "" : "s") + label;
-  return lint.total + " lint" + label;
+  const levels = [
+    ["error", "lint error"],
+    ["warning", "lint warning"],
+    ["note", "lint note"],
+  ];
+  const counts = levels
+    .filter(([level]) => lint[level])
+    .map(([level, name]) => lint[level] + " " + name + (lint[level] === 1 ? "" : "s"));
+  return (counts.length ? counts.join(" · ") : "0 lint") + label;
 }
 
 function healthAge(isoTimestamp) {
@@ -729,7 +748,7 @@ function renderQueue(state) {
   const oldScrollTop = oldLog ? oldLog.scrollTop : 0;
   table.replaceChildren();
   const head = table.insertRow();
-  for (const label of ["Role", "Agent / model", "State", "Current work", "Waiting", "Last activity", "Cost", ""]) {
+  for (const label of ["Role", "Agent / model", "State", "Current work", "Waiting", "In state", "Cost", ""]) {
     head.append(text("th", label));
   }
   for (const role of state.roles) {
@@ -781,46 +800,45 @@ function renderQueue(state) {
         logText.scheduler = logText.worker = "";
       }
       renderQueue(state);
+      if (expandedRole && !$("role-dialog").open) $("role-dialog").showModal();
       pollLog();
     };
-
-    if (expandedRole === role.role) {
-      const detail = table.insertRow();
-      const cell = detail.insertCell();
-      cell.colSpan = 8;
-      cell.className = "log-cell";
-      const metrics = text("div", null, "role-details");
-      const usage = role.token_usage || {};
-      const details = [
-        ["Worktree", role.worktree || "unknown"],
-        ["Cycles", count(role.cycles)],
-        ["Tokens", count(role.tokens)],
-        ["Input", count(usage.input)],
-        ["Output", count(usage.output)],
-        ["Cache read", count(usage.cache_read)],
-        ["Cache share", percent(role.cache_share)],
-        ["Worker timeout", role.worker_timeout_sec ? role.worker_timeout_sec + "s" : "—"],
-      ];
-      for (const [label, value] of details) {
-        const item = text("span");
-        item.append(text("b", label + ": "));
-        item.append(document.createTextNode(value));
-        metrics.append(item);
-      }
-      cell.append(metrics);
-      const toolbar = text("div", null, "log-toolbar");
-      for (const stream of ["scheduler", "worker"]) {
-        const button = text("button", stream, stream === logStream ? "active" : "");
-        button.onclick = () => { logStream = stream; renderQueue(state); pollLog(); };
-        toolbar.append(button);
-      }
-      cell.append(toolbar);
-      const output = text("pre", logText[logStream], "live-log");
-      output.id = "live-log";
-      cell.append(output);
-      output.scrollTop = wasPinned ? output.scrollHeight : oldScrollTop;
-    }
   }
+  const selected = state.roles.find((role) => role.role === expandedRole);
+  if (selected) renderRoleDetails(selected, state, wasPinned, oldScrollTop);
+}
+
+function renderRoleDetails(role, state, wasPinned, oldScrollTop) {
+  $("role-title").textContent = role.display_name || role.role;
+  const metrics = $("role-metrics");
+  metrics.replaceChildren();
+  const usage = role.token_usage || {};
+  const details = [
+    ["Worktree", role.worktree || "unknown"],
+    ["Cycles", count(role.cycles)],
+    ["Tokens", count(role.tokens)],
+    ["Input", count(usage.input)],
+    ["Output", count(usage.output)],
+    ["Cache read", count(usage.cache_read)],
+    ["Cache share", ratioPercent(role.cache_share)],
+    ["Worker timeout", role.worker_timeout_sec ? role.worker_timeout_sec + "s" : "—"],
+  ];
+  for (const [label, value] of details) {
+    const item = text("span");
+    item.append(text("b", label + ": "));
+    item.append(document.createTextNode(value));
+    metrics.append(item);
+  }
+  const toolbar = $("role-log-toolbar");
+  toolbar.replaceChildren();
+  for (const stream of ["scheduler", "worker"]) {
+    const button = text("button", stream, stream === logStream ? "active" : "");
+    button.onclick = () => { logStream = stream; renderRoleDetails(role, state, true, 0); pollLog(); };
+    toolbar.append(button);
+  }
+  const output = $("live-log");
+  output.textContent = logText[logStream] || "No " + logStream + " log for this role.";
+  output.scrollTop = wasPinned ? output.scrollHeight : oldScrollTop;
 }
 
 async function pollLog() {
@@ -840,7 +858,7 @@ async function pollLog() {
   const output = $("live-log");
   if (!output) return;
   const pinned = output.scrollHeight - output.scrollTop - output.clientHeight < 24;
-  output.textContent = logText[stream];
+  output.textContent = logText[stream] || "No " + stream + " log for this role.";
   if (pinned) output.scrollTop = output.scrollHeight;
 }
 
@@ -996,6 +1014,8 @@ $("teardown").onclick = async () => {
 };
 
 $("doc-close").onclick = () => $("doc-dialog").close();
+$("role-close").onclick = () => $("role-dialog").close();
+$("role-dialog").onclose = () => { expandedRole = null; };
 
 poll();
 setInterval(poll, POLL_MS);

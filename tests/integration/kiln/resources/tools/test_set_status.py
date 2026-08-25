@@ -341,6 +341,38 @@ class TestMainInProcess:
         )
         assert payload["state"] == "working"
 
+    def test_repeated_state_preserves_when_it_was_entered(self, set_status, tmp_path, monkeypatch):
+        status_dir = tmp_path / ".kiln" / "status"
+        status_dir.mkdir(parents=True)
+        status_file = status_dir / "coder.json"
+        status_file.write_text(
+            json.dumps({"state": "waiting", "since": "2026-08-25T08:00:00Z"}),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("KILN_PROJECT_DIR", str(tmp_path))
+        monkeypatch.setattr(set_status.sys, "argv", ["set-status.py", "coder", "waiting"])
+
+        set_status.main()
+
+        payload = json.loads(status_file.read_text(encoding="utf-8"))
+        assert payload["since"] == "2026-08-25T08:00:00Z"
+
+    def test_state_transition_gets_a_new_timestamp(self, set_status, tmp_path, monkeypatch):
+        status_dir = tmp_path / ".kiln" / "status"
+        status_dir.mkdir(parents=True)
+        status_file = status_dir / "coder.json"
+        status_file.write_text(
+            json.dumps({"state": "waiting", "since": "2020-01-01T00:00:00Z"}),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("KILN_PROJECT_DIR", str(tmp_path))
+        monkeypatch.setattr(set_status.sys, "argv", ["set-status.py", "coder", "working"])
+
+        set_status.main()
+
+        payload = json.loads(status_file.read_text(encoding="utf-8"))
+        assert payload["since"] != "2020-01-01T00:00:00Z"
+
     def test_bad_arguments_exit_cleanly(self, set_status, monkeypatch, capsys):
         monkeypatch.setattr(set_status.sys, "argv", ["set-status.py", "coder"])
         with pytest.raises(SystemExit) as caught:

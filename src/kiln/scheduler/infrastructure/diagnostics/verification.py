@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shlex
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -82,6 +83,7 @@ def run(
     command: str,
     cwd: str | Path,
     timeout: int = DEFAULT_VERIFY_TIMEOUT_SEC,
+    project_root: str | Path | None = None,
 ) -> VerifyResult:
     """
     Run one verification command in `cwd` and report whether it passed.
@@ -96,6 +98,7 @@ def run(
     scheduler would take down the role over its own quality gate, which is the opposite of
     what the gate is for.
     """
+    command = _expand_paths(command, project_root)
     log.info("running verification: %s", command)
     try:
         completed = _run_command(command, cwd, timeout)
@@ -105,6 +108,20 @@ def run(
         log.error("verification could not be started: %s", exc)
         return VerifyResult(ok=False, output=f"could not start {command!r}: {exc}")
     return _completed_result(command, completed)
+
+
+def _expand_paths(command: str, project_root: str | Path | None) -> str:
+    """Expand portable report placeholders without exposing shell-specific syntax to profiles."""
+    if project_root is None:
+        return command
+    root = Path(project_root)
+    reports = root / "reports"
+    if "{reports}" in command:
+        reports.mkdir(parents=True, exist_ok=True)
+    quote = subprocess.list2cmdline if os.name == "nt" else lambda values: shlex.quote(values[0])
+    return command.replace("{project}", quote([str(root)])).replace(
+        "{reports}", quote([str(reports)])
+    )
 
 
 def _run_command(command: str, cwd: str | Path, timeout: int) -> subprocess.CompletedProcess:

@@ -53,6 +53,7 @@ def _row(
     summary="did the thing",
     escalation=False,
     error=None,
+    acked_at=None,
 ):
     return {
         "id": message_id,
@@ -62,6 +63,7 @@ def _row(
         "work_item": work_item,
         "created_at": created_at,
         "error": error,
+        "acked_at": acked_at,
         "content": handoff.format_handoff(
             sender=sender,
             handoff=work_item,
@@ -121,6 +123,32 @@ class TestBuildBoard:
 
         assert [card["work_item"] for card in board["cards"]["refactorer"]] == ["ALPHA"]
         assert board["cards"]["coder"] == []
+
+    def test_a_retried_older_message_outranks_its_later_processed_escalation(self):
+        rows = [
+            _row(
+                work_item="ALPHA",
+                sender="architect",
+                target="human-in-the-loop",
+                status=db.STATUS_PROCESSED,
+                created_at="2026-08-09 16:59:00",
+                message_id="b" * 32,
+                escalation=True,
+            ),
+            _row(
+                work_item="ALPHA",
+                sender="refactorer",
+                target="architect",
+                status=db.STATUS_PROCESSING,
+                created_at="2026-08-09 16:50:00",
+                acked_at="2026-08-09T15:00:00Z",
+            ),
+        ]
+
+        board = cockpit_state.build_board(rows, {}, NOW_LOCAL, ("architect",))
+
+        assert [card["work_item"] for card in board["cards"]["architect"]] == ["ALPHA"]
+        assert board["cards"]["done"] == []
 
     def test_lanes_keep_profile_order_and_done_comes_last(self):
         board = cockpit_state.build_board([], {}, NOW_LOCAL, ("specifier", "coder"))
@@ -631,3 +659,17 @@ class TestBuildState:
         )
 
         assert len(payload["activity"]) == 2
+
+    def test_a_resumed_processing_message_is_identified_as_retrying(self):
+        messages = [_row(status=db.STATUS_PROCESSING, acked_at="2026-08-09T15:00:00Z")]
+
+        activity = cockpit_state.build_activity(messages, NOW_LOCAL, limit=5)
+
+        assert activity[0]["status"] == "retrying"
+
+    def test_ordinary_processing_is_not_mislabelled_as_a_retry(self):
+        activity = cockpit_state.build_activity(
+            [_row(status=db.STATUS_PROCESSING)], NOW_LOCAL, limit=5
+        )
+
+        assert activity[0]["status"] == db.STATUS_PROCESSING
