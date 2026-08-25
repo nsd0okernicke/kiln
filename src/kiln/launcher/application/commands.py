@@ -495,8 +495,8 @@ def build_agent_command(
     """
     special = _special_role_command(role, paths, branch, profile, proxy_url)
     if special is not None:
-        return special
-    return _direct_agent_command(role, paths, proxy_url)
+        return special.with_env(KILN_ROLE=role.role)
+    return _direct_agent_command(role, paths, proxy_url).with_env(KILN_ROLE=role.role)
 
 
 def _special_role_command(

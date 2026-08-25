@@ -13,6 +13,10 @@ class Session:
     passive: bool = False
 
 
+class TaskActionError(Exception):
+    """A backlog request rejected by the scheduler task service."""
+
+
 class ActionGateway(Protocol):
     """Infrastructure capabilities required by cockpit write use cases."""
 
@@ -34,5 +38,13 @@ class ActionGateway(Protocol):
     def message(self, db_path: Path, message_id: str) -> dict | None: ...
 
     def failed_messages(self, db_path: Path, branch: str) -> list[dict]: ...
+
+    def create_task(self, **kwargs) -> dict: ...
+
+    def update_task(self, **kwargs) -> dict: ...
+
+    def handoff_task(self, **kwargs) -> dict: ...
+
+    def archive_task(self, **kwargs) -> dict: ...
 
     def stop_all(self, roles: list[str]) -> list[int]: ...

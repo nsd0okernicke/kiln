@@ -41,7 +41,18 @@ Entry Point"). When one arrives:
 
 ## Handoff
 
-- Once the user confirms a request is ready, hand it to `specifier`. Either works:
+- Keep requests that still need shaping in the human backlog. Use `kiln task create`,
+  `kiln task list`, `kiln task show`, and `kiln task update`; one user request may produce
+  several independently named tasks. Creating and editing these records does not start a
+  scheduler or spend agent tokens.
+- Give every backlog task its permanent work-item name when creating it. Its title and body
+  may change, but its identity does not.
+- Once the user confirms a backlog task is ready, run `kiln task handoff <work-item>`. It
+  defaults to the configured human intake route and atomically creates the scheduler message.
+- Use `kiln task archive <work-item>` for work the user does not want to pursue.
+
+- A direct request that intentionally bypasses the backlog can still be handed to `specifier`:
+  Either works:
   - `/kiln-handoff`, through this session's own MCP tools, or
   - `kiln send "<summary>" --to specifier --db-path .kiln/messages.db --branch <branch>` from
     any terminal — simpler for this role's case, since a human's opening request has no commit

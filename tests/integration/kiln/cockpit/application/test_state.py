@@ -153,7 +153,7 @@ class TestBuildBoard:
     def test_lanes_keep_profile_order_and_done_comes_last(self):
         board = cockpit_state.build_board([], {}, NOW_LOCAL, ("specifier", "coder"))
 
-        assert board["lanes"] == ["specifier", "coder", "done"]
+        assert board["lanes"] == ["human-in-the-loop", "specifier", "coder", "done"]
 
     def test_a_card_for_a_role_that_is_not_a_lane_is_still_shown(self):
         # A role dropped from the profile between runs leaves real work behind. Losing the
@@ -169,7 +169,7 @@ class TestBuildBoard:
 
         board = cockpit_state.build_board(rows, {}, NOW_LOCAL, ())
 
-        assert board["lanes"] == ["coder", "done"]
+        assert board["lanes"] == ["human-in-the-loop", "coder", "done"]
 
     def test_an_unnamed_request_is_a_card_in_its_targets_lane(self):
         # The bug this fixes: a human's intake hop has no work item -- the specifier is what
@@ -190,6 +190,39 @@ class TestBuildBoard:
 
         assert board["cards"]["specifier"][0]["title"] == "handoff the next userstory"
         assert board["cards"]["specifier"][0]["work_item"] is None
+
+    def test_a_named_card_uses_the_latest_summary_as_its_title(self):
+        rows = [_row(work_item="CAT-1", target="coder", summary="Search books by author")]
+
+        board = cockpit_state.build_board(rows, {}, NOW_LOCAL, ("coder",))
+
+        card = board["cards"]["coder"][0]
+        assert card["work_item"] == "CAT-1"
+        assert card["title"] == "Search books by author"
+
+    def test_a_handed_off_task_keeps_its_backlog_title(self):
+        rows = [
+            _row(
+                work_item="CAT-2",
+                target="architect",
+                status=db.STATUS_PROCESSED,
+                summary="CAT-2",
+            )
+        ]
+        tasks = [
+            {
+                "work_item": "CAT-2",
+                "title": "Check book availability",
+                "status": "active",
+            }
+        ]
+
+        board = cockpit_state.build_board(rows, {}, NOW_LOCAL, ("architect",), tasks=tasks)
+
+        card = board["cards"]["done"][0]
+        assert card["work_item"] == "CAT-2"
+        assert card["title"] == "Check book availability"
+        assert card["summary"] == "CAT-2"
 
     def test_two_unnamed_requests_are_two_cards(self):
         # They share the absence of a name, which is not a thing to group by: two people

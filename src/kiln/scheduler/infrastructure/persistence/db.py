@@ -84,6 +84,15 @@ from .queue_queries import (
     work_item_messages as work_item_messages,
 )
 from .queue_storage import connect as connect
+from .task_store import (
+    TASK_ACTIVE as TASK_ACTIVE,
+)
+from .task_store import (
+    TASK_ARCHIVED as TASK_ARCHIVED,
+)
+from .task_store import (
+    TASK_BACKLOG as TASK_BACKLOG,
+)
 
 STATUS_QUEUED = MessageStatus.QUEUED.value
 STATUS_DELIVERED = MessageStatus.DELIVERED.value
@@ -119,6 +128,32 @@ INDEX_SQL = "CREATE INDEX IF NOT EXISTS idx_target_branch_status ON messages(tar
 #: and loop detection has nothing to count.
 WORK_ITEM_INDEX_SQL = "CREATE INDEX IF NOT EXISTS idx_work_item ON messages(work_item,created_at)"
 
+TASK_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS tasks (
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  branch TEXT NOT NULL,
+  work_item TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'backlog' CHECK (status IN ('backlog', 'active', 'archived')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+  dispatched_at TEXT,
+  message_id TEXT REFERENCES messages(id),
+  UNIQUE (branch, work_item)
+)
+"""
+TASK_STATUS_INDEX_SQL = (
+    "CREATE INDEX IF NOT EXISTS idx_tasks_branch_status ON tasks(branch,status,created_at)"
+)
+TASK_CONTEXT_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS task_context (
+  branch TEXT PRIMARY KEY,
+  human_role TEXT NOT NULL,
+  intake_role TEXT NOT NULL
+)
+"""
+
 
 def ensure_schema(db_path: str | Path) -> None:
     """
@@ -141,5 +176,8 @@ def ensure_schema(db_path: str | Path) -> None:
         conn.execute(SCHEMA_SQL)
         conn.execute(INDEX_SQL)
         conn.execute(WORK_ITEM_INDEX_SQL)
+        conn.execute(TASK_SCHEMA_SQL)
+        conn.execute(TASK_STATUS_INDEX_SQL)
+        conn.execute(TASK_CONTEXT_SCHEMA_SQL)
         conn.execute("PRAGMA journal_mode=WAL")
         conn.commit()

@@ -207,6 +207,10 @@
      prose, not a work-item name anything else can be grouped by. */
   .card.unnamed { border-left-style: dashed; border-left-color: var(--dim); }
   .card.unnamed .name { font-style: italic; color: var(--dim); }
+  .card .work-item-id {
+    color: var(--accent); font-size: 11px; font-weight: 600; letter-spacing: .04em;
+    margin-bottom: 3px; word-break: break-word;
+  }
   .card .name { font-weight: 600; word-break: break-word; }
   .card .meta { color: var(--dim); font-size: 12px; margin-top: 4px; }
   .card .summary { color: var(--dim); font-size: 12px; margin-top: 6px; }
@@ -455,6 +459,23 @@
   </div>
 </dialog>
 
+<dialog id="task-dialog">
+  <h2 id="task-dialog-title">New backlog task</h2>
+  <div class="body">
+    <div class="field"><label for="task-work-item">Work item</label><input id="task-work-item" type="text" maxlength="80" placeholder="e.g. cat-2"></div>
+    <div class="field"><label for="task-title">Title</label><input id="task-title" type="text" placeholder="Short board title"></div>
+    <div class="field"><label for="task-body">Body</label><textarea id="task-body" rows="10" placeholder="User story, context, and acceptance criteria"></textarea></div>
+    <div class="row">
+      <button id="task-archive" class="danger" style="display:none">Archive</button>
+      <span class="spacer"></span>
+      <select id="task-target" style="display:none"></select>
+      <button id="task-handoff" style="display:none">Hand off</button>
+      <button id="task-save" class="primary">Create</button>
+      <button id="task-close">Cancel</button>
+    </div>
+  </div>
+</dialog>
+
 <div id="toast"></div>
 
 <script>
@@ -470,6 +491,7 @@ const SECTION_STATE_KEY = "kiln-cockpit-collapsed-sections";
 const $ = (id) => document.getElementById(id);
 let latest = null;
 let expandedRole = null;
+let editingTask = null;
 let logStream = "scheduler";
 const logOffsets = { scheduler: 0, worker: 0 };
 const logText = { scheduler: "", worker: "" };
@@ -794,15 +816,24 @@ function renderBoard(state) {
         + (card.unnamed ? " unnamed" : "")
         + (card.status === "processing" && lane !== "done" ? " working" : "")
         + (lane === "done" ? " done" : ""));
+      // The task store preserves the real title as the card moves through message lanes.
+      if (card.work_item) el.append(text("div", card.work_item, "work-item-id"));
       // `title`, not `work_item`: an unnamed request has no work item yet and would render
       // a blank card, which is what made every new task invisible until the specifier
       // finished naming it.
       el.append(text("div", card.title, "name"));
-      el.append(text("div", card.sender + " → " + card.target + " · " + (card.age || ""), "meta"));
+      el.append(text(
+        "div",
+        card.kind === "backlog" ? "HITL backlog · updated " + (card.age || "")
+          : card.sender + " → " + card.target + " · " + (card.age || ""),
+        "meta",
+      ));
       // An unnamed card borrows its title from the summary, so printing both would say the
       // same sentence twice.
       if (card.summary && card.summary !== card.title) el.append(text("div", card.summary, "summary"));
-      el.onclick = () => openDocument(card.message_id, card.failed);
+      el.onclick = () => card.kind === "backlog"
+        ? openTaskEditor(card)
+        : openDocument(card.message_id, card.failed);
       column.append(el);
     }
     host.append(column);
@@ -1039,11 +1070,73 @@ async function acknowledgeMessage(messageId) {
   } catch (error) { toast(error.message, true); }
 }
 
-// The header button is a shortcut into the composer, not a second one: preset the target to
-// the intake role and let the operator type. Two composers for one INSERT is how they drift.
-$("new-task").onclick = () => {
-  revealComposer(latest && latest.intake_role, ITEM_PENDING);
+function populateTaskTargets(selected) {
+  const target = $("task-target");
+  target.replaceChildren(...(latest ? latest.roles : []).map((role) => option(role.role, role.role)));
+  target.value = selected || (latest && latest.intake_role) || "";
+  if (!target.value && target.options.length) target.selectedIndex = 0;
+}
+
+function openTaskEditor(card) {
+  editingTask = card || null;
+  const editing = Boolean(card);
+  $("task-dialog-title").textContent = editing ? "Edit " + card.work_item : "New backlog task";
+  $("task-work-item").value = editing ? card.work_item : "";
+  $("task-work-item").disabled = editing;
+  $("task-title").value = editing ? card.title : "";
+  $("task-body").value = editing ? card.body : "";
+  $("task-save").textContent = editing ? "Save" : "Create";
+  $("task-handoff").style.display = editing ? "" : "none";
+  $("task-target").style.display = editing ? "" : "none";
+  $("task-archive").style.display = editing ? "" : "none";
+  populateTaskTargets(latest && latest.intake_role);
+  $("task-dialog").showModal();
+  $(editing ? "task-title" : "task-work-item").focus();
+}
+
+$("new-task").onclick = () => openTaskEditor(null);
+
+$("task-save").onclick = async () => {
+  try {
+    const payload = {
+      work_item: $("task-work-item").value,
+      title: $("task-title").value,
+      body: $("task-body").value,
+    };
+    const path = editingTask
+      ? "/api/tasks/" + encodeURIComponent(editingTask.task_id)
+      : "/api/tasks";
+    await post(path, payload);
+    $("task-dialog").close();
+    toast(editingTask ? "backlog task updated" : "backlog task created");
+    poll();
+  } catch (error) { toast(error.message, true); }
 };
+
+$("task-handoff").onclick = async () => {
+  if (!editingTask) return;
+  try {
+    const result = await post(
+      "/api/tasks/" + encodeURIComponent(editingTask.task_id) + "/handoff",
+      { target: $("task-target").value },
+    );
+    $("task-dialog").close();
+    toast("handed " + editingTask.work_item + " to " + result.target);
+    poll();
+  } catch (error) { toast(error.message, true); }
+};
+
+$("task-archive").onclick = async () => {
+  if (!editingTask || !confirm("Archive " + editingTask.work_item + "?")) return;
+  try {
+    await post("/api/tasks/" + encodeURIComponent(editingTask.task_id) + "/archive", {});
+    $("task-dialog").close();
+    toast("backlog task archived");
+    poll();
+  } catch (error) { toast(error.message, true); }
+};
+
+$("task-close").onclick = () => $("task-dialog").close();
 
 $("send-item").onchange = () => {
   const other = $("send-item").value === ITEM_OTHER;

@@ -254,6 +254,10 @@ class TestPrepare:
         )
         monkeypatch.setattr(db, "ensure_schema", lambda path: calls.append(("schema", path)))
         monkeypatch.setattr(
+            "kiln.scheduler.infrastructure.persistence.task_store.configure_context",
+            lambda *args, **kwargs: calls.append(("task-context", kwargs)),
+        )
+        monkeypatch.setattr(
             cli.artifacts,
             "channel_is_available",
             lambda role: calls.append(("channel", role.role if role else None)) or True,
@@ -309,6 +313,10 @@ class TestPrepare:
         monkeypatch.setattr(cli.workspace, "current_branch", lambda p: "main")
         monkeypatch.setattr(cli.workspace, "worktree_for", lambda role, p: tmp_path)
         monkeypatch.setattr(db, "ensure_schema", lambda path: None)
+        monkeypatch.setattr(
+            "kiln.scheduler.infrastructure.persistence.task_store.configure_context",
+            lambda *args, **kwargs: None,
+        )
         monkeypatch.setattr(cli.artifacts, "channel_is_available", lambda role: role is not None)
         monkeypatch.setattr(
             cli.artifacts,

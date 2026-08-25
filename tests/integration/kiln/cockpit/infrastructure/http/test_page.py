@@ -242,10 +242,8 @@ class TestComposer:
     def test_it_offers_a_target_and_a_work_item(self, page):
         assert 'id="send-target"' in page and 'id="send-item"' in page
 
-    def test_the_old_separate_composers_are_gone(self, page):
-        # The New task dialog and the Chat panel were both replaced; leftovers would be dead
-        # ids that `$()` resolves to null at the first click.
-        for stale in ('id="task-dialog"', 'id="chat-text"', 'id="task-send"'):
+    def test_the_old_chat_composer_is_gone(self, page):
+        for stale in ('id="chat-text"', 'id="task-send"'):
             assert stale not in page, stale
 
     def test_the_work_item_sentinel_cannot_collide_with_a_real_name(self, page):
@@ -268,10 +266,23 @@ class TestComposer:
         assert 'id="send-target"' in queue_section
         assert 'id="queue"' in queue_section
 
-    def test_new_task_reveals_the_composer_with_the_intake_preset(self, page):
+    def test_new_task_opens_the_backlog_editor(self, page):
         handler = page.partition('$("new-task").onclick')[2].partition("};")[0]
 
-        assert "revealComposer(latest && latest.intake_role, ITEM_PENDING)" in handler
+        assert "openTaskEditor(null)" in handler
+        assert 'id="task-dialog"' in page
+
+    def test_backlog_editor_exposes_refine_handoff_and_archive(self, page):
+        for element in ("task-title", "task-body", "task-handoff", "task-archive"):
+            assert f'id="{element}"' in page
+        assert 'card.kind === "backlog"' in page
+
+    def test_all_named_cards_show_the_permanent_work_item_id(self, page):
+        board = page.partition("function renderBoard")[2].partition("function renderQueue")[0]
+
+        assert 'text("div", card.work_item, "work-item-id")' in board
+        assert 'if (card.work_item)' in board
+        assert ".card .work-item-id" in page
 
     def test_role_send_reveals_the_composer_with_the_role_preset(self, page):
         queue = page.partition("function renderQueue")[2].partition("function renderRoleDetails")[0]

@@ -179,7 +179,22 @@ Run `./bin/kiln.sh --help` for the complete list. PowerShell aliases such as `-W
 
 ### Send work
 
-Queue a new request while the swarm is running:
+Create work in the human backlog while the swarm is running:
+
+```bash
+./bin/kiln.sh task create cat-2 --title "Search by author" --body "Add author search to the catalog"
+./bin/kiln.sh task update cat-2 --body "Add author search, including partial-name matching"
+./bin/kiln.sh task list
+./bin/kiln.sh task show cat-2
+./bin/kiln.sh task handoff cat-2
+./bin/kiln.sh task archive cat-3
+```
+
+Tasks remain editable and consume no agent time until handoff. The Cockpit provides the same
+create, edit, handoff, and archive operations. Use `kiln task --help` for filters and for
+targeting a role other than the configured intake role.
+
+To bypass the backlog and queue a direct intervention:
 
 ```bash
 ./bin/kiln.sh send "add pagination to GET /books" --to specifier
@@ -286,7 +301,7 @@ Generated runtime state includes:
 
 ```text
 .kiln/
-├── messages.db                        # handoff queue and history
+├── messages.db                        # task backlog, handoff queue, and history
 ├── status/                            # current role state
 ├── logs/                              # scheduler and optional agent diagnostics
 ├── sessions                           # launched role inventory
@@ -390,10 +405,11 @@ The terminal dashboard shows:
 - recent handoffs and escalations;
 - optional traffic-capture statistics.
 
-The cockpit exposes the same state as a local web interface and adds actions for sending,
-retrying, stopping roles, and tearing down the swarm. It binds only to `127.0.0.1` and probes
-upward from its preferred port when necessary. The active URL is written to
-`.kiln/cockpit.url`.
+The cockpit exposes the same state as a local web interface and adds actions for managing the
+human-owned backlog in the HITL lane, sending work, retrying, stopping roles, and tearing down
+the swarm. Backlog tasks can be created, edited, handed off, or archived there. The cockpit
+binds only to `127.0.0.1` and probes upward from its preferred port when necessary. The active
+URL is written to `.kiln/cockpit.url`.
 
 ![Kiln Cockpit showing the role board, active work, queue controls, usage, and recent activity](docs/images/cockpit.png)
 

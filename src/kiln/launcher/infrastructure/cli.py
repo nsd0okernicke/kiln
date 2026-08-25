@@ -225,9 +225,18 @@ def prepare(profile: Profile, paths: KilnPaths) -> str:
     # The message queue's schema is owned by the scheduler package, so there is exactly one
     # definition of it rather than the launcher carrying a second copy.
     sys.path.insert(0, str(paths.python_package_root))
+    from kiln.scheduler.infrastructure.persistence import task_store
     from kiln.scheduler.infrastructure.persistence.db import ensure_schema
 
     ensure_schema(paths.db_path)
+    human = profile.current_dir_role
+    human_role = human.role if human and not human.is_passive else "human-in-the-loop"
+    task_store.configure_context(
+        paths.db_path,
+        branch=branch,
+        human_role=human_role,
+        intake_role=profile.routing.resolve(human_role) or "",
+    )
 
     current = profile.current_dir_role
     artifacts.write_mcp_config(
@@ -732,7 +741,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 #: Human entry points, delegated to the scheduler package rather than parsed here.
-SUBCOMMANDS = ("send", "inbox", "retry")
+SUBCOMMANDS = ("send", "inbox", "retry", "task")
 CLI_ERRORS = (
     LaunchError,
     ProfileError,
@@ -743,7 +752,7 @@ CLI_ERRORS = (
 )
 
 
-def resolve_queue_context(argv: list[str]) -> list[str]:
+def resolve_queue_context(argv: list[str], *, include_working_dir: bool = False) -> list[str]:
     """
     Fill in `--db-path` and `--branch` from the project so a human never types them.
 
@@ -768,9 +777,19 @@ def resolve_queue_context(argv: list[str]) -> list[str]:
             f"no message queue at {paths.db_path}. Launch the swarm in this project first."
         )
 
-    resolved = [*remaining, "--db-path", str(paths.db_path)]
+    if include_working_dir:
+        resolved = [
+            "--db-path",
+            str(paths.db_path),
+            "--working-dir",
+            str(paths.project_root),
+            *remaining,
+        ]
+    else:
+        resolved = [*remaining, "--db-path", str(paths.db_path)]
     if "--branch" not in resolved:
-        resolved += ["--branch", workspace.current_branch(paths)]
+        branch_args = ["--branch", workspace.current_branch(paths)]
+        resolved = [*branch_args, *resolved] if include_working_dir else [*resolved, *branch_args]
     return resolved
 
 
@@ -782,10 +801,10 @@ def run_subcommand(name: str, argv: list[str]) -> int:
     top-level parser exists to accept the PowerShell flag spellings the shims forward
     unchanged, and bolting subparsers onto it changes how those are matched.
     """
-    from kiln.scheduler.infrastructure.cli import inbox, retry, send
+    from kiln.scheduler.infrastructure.cli import inbox, retry, send, task
 
-    handlers = {"send": send.main, "inbox": inbox.main, "retry": retry.main}
-    return handlers[name](resolve_queue_context(argv))
+    handlers = {"send": send.main, "inbox": inbox.main, "retry": retry.main, "task": task.main}
+    return handlers[name](resolve_queue_context(argv, include_working_dir=name == "task"))
 
 
 def _subcommand_result(raw: list[str]) -> int | None:
@@ -839,7 +858,7 @@ def _validate_command(command: str | None) -> bool:
     if not command or command == "init":
         return True
     log.error(
-        "Unknown argument %r. Expected 'init', 'send', 'inbox' or 'retry', or named flags "
+        "Unknown argument %r. Expected 'init', 'send', 'inbox', 'retry' or 'task', or named flags "
         "like -WorkingDir.",
         command,
     )

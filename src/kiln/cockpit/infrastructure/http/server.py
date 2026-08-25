@@ -42,7 +42,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 from kiln.launcher.infrastructure import networking
 from kiln.scheduler.infrastructure.cli import dashboard
 from kiln.scheduler.infrastructure.cli.dashboard import DashboardContext
-from kiln.scheduler.infrastructure.persistence import db
+from kiln.scheduler.infrastructure.persistence import db, task_store
 from kiln.scheduler.infrastructure.runtime import configure_logging
 
 from ...application import state as state_builder
@@ -50,12 +50,15 @@ from ...application import test_metrics as test_metrics_builder
 from ...application.actions import (
     ActionContext,
     ActionError,
+    archive_task,
     chat,
     check_confirmation,
-    new_task,
+    create_task,
+    handoff_task,
     retry_message,
     send_to,
     teardown,
+    update_task,
 )
 from .. import test_reports
 from ..actions_gateway import KilnActionGateway
@@ -148,6 +151,7 @@ def gather_state(config: CockpitConfig) -> dict:
         failed=db.failed_messages(config.dashboard.db_path, ctx.branch),
         awaiting_human=db.pending_for_role(config.dashboard.db_path, ctx.branch, ctx.human_role),
         activity_limit=config.activity_limit,
+        tasks=task_store.list_tasks(config.dashboard.db_path, branch=ctx.branch),
     )
 
 
@@ -275,6 +279,17 @@ class CockpitHandler(BaseHTTPRequestHandler):
         if handler is None and path.startswith("/api/ack/"):
             message_id = path.rsplit("/", 1)[-1]
             handler = lambda body: self._ack(message_id)  # noqa: E731
+        if handler is None and path.startswith("/api/tasks/"):
+            parts = path.split("/")
+            if len(parts) == 4:
+                identifier = unquote(parts[3])
+                handler = lambda body: self._update_task(identifier, body)  # noqa: E731
+            elif len(parts) == 5 and parts[4] == "handoff":
+                identifier = unquote(parts[3])
+                handler = lambda body: self._handoff_task(identifier, body)  # noqa: E731
+            elif len(parts) == 5 and parts[4] == "archive":
+                identifier = unquote(parts[3])
+                handler = lambda body: self._archive_task(identifier)  # noqa: E731
         return handler
 
     # --- handlers ------------------------------------------------------------------
@@ -289,11 +304,30 @@ class CockpitHandler(BaseHTTPRequestHandler):
         )
 
     def _task(self, body: dict) -> dict:
-        return new_task(
+        return create_task(
             self.config.actions,
-            summary=str(body.get("summary") or body.get("body") or ""),
-            name=str(body.get("name") or ""),
+            work_item=str(body.get("work_item") or ""),
+            title=str(body.get("title") or ""),
+            body=str(body.get("body") or ""),
         )
+
+    def _update_task(self, identifier: str, body: dict) -> dict:
+        return update_task(
+            self.config.actions,
+            identifier=identifier,
+            title=str(body["title"]) if "title" in body else None,
+            body=str(body["body"]) if "body" in body else None,
+        )
+
+    def _handoff_task(self, identifier: str, body: dict) -> dict:
+        return handoff_task(
+            self.config.actions,
+            identifier=identifier,
+            target=str(body.get("target") or ""),
+        )
+
+    def _archive_task(self, identifier: str) -> dict:
+        return archive_task(self.config.actions, identifier=identifier)
 
     def _chat(self, body: dict) -> dict:
         return chat(
@@ -537,7 +571,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--intake-role",
         default="",
-        help="where New Task sends; the routing target of --human-role",
+        help="default destination when a backlog task is handed off",
     )
     parser.add_argument("--activity-limit", type=int, default=DEFAULT_ACTIVITY_LIMIT)
     parser.add_argument(

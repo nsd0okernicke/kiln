@@ -15,6 +15,7 @@ plain values across this boundary.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -171,8 +172,7 @@ class CockpitContext:
     #: The role a human's queue belongs to. Messages waiting here are completed cycles
     #: asking for review, which is what the Attention rail is mostly made of.
     human_role: str = "human-in-the-loop"
-    #: Where `New Task` sends. The routing table's answer for `human_role`, resolved at
-    #: launch — the cockpit does not re-parse profiles.
+    #: Default destination when a human explicitly hands a backlog task off.
     intake_role: str = ""
 
 
@@ -276,7 +276,12 @@ def lane_for(row: dict) -> str:
 
 
 def build_board(
-    work_items: list[dict], cycles: dict[str, int], now_local: datetime, lanes: tuple[str, ...]
+    work_items: list[dict],
+    cycles: dict[str, int],
+    now_local: datetime,
+    lanes: tuple[str, ...],
+    tasks: Sequence[dict] = (),
+    human_role: str = "human-in-the-loop",
 ) -> dict:
     """
     Cards grouped into swimlanes: `{"lanes": [...], "cards": {lane: [card, ...]}}`.
@@ -285,8 +290,15 @@ def build_board(
     later processed escalation because retry reactivates the original row without changing
     its creation time.
     """
-    cards = [_card(row, cycles, now_local) for row in _latest_per_work_item(work_items)]
+    backlog = [task for task in tasks if task["status"] == "backlog"]
+    task_titles = {task["work_item"]: task["title"] for task in tasks}
+    cards = [_backlog_card(task, now_local, human_role) for task in backlog]
+    cards += [
+        _card(row, cycles, now_local, task_titles) for row in _latest_per_work_item(work_items)
+    ]
     order = list(lanes) or _observed_lanes(cards)
+    if human_role not in order:
+        order.insert(0, human_role)
     if LANE_DONE not in order:
         order.append(LANE_DONE)
 
@@ -430,6 +442,7 @@ def build_state(
     failed: list[dict],
     awaiting_human: list[dict],
     activity_limit: int,
+    tasks: Sequence[dict] = (),
 ) -> dict:
     """The whole `/api/state` document. Pure: every input is already gathered."""
     return {
@@ -439,9 +452,21 @@ def build_state(
         "intake_role": ctx.intake_role,
         "generated_at": snapshot.now_local.isoformat(timespec="seconds"),
         "roles": role_rows(snapshot, work_items),
-        "work_items": list(cycles),
+        "work_items": list(
+            dict.fromkeys(
+                [task["work_item"] for task in tasks if task["status"] != "archived"]
+                + list(cycles)
+            )
+        ),
         "totals": build_totals(snapshot),
-        "board": build_board(work_items, cycles, snapshot.now_local, ctx.lanes),
+        "board": build_board(
+            work_items,
+            cycles,
+            snapshot.now_local,
+            ctx.lanes,
+            tasks=tasks,
+            human_role=ctx.human_role,
+        ),
         "attention": build_attention(
             failed=failed,
             awaiting_human=awaiting_human,
@@ -457,12 +482,14 @@ def build_state(
 # --- internals ---------------------------------------------------------------------
 
 
-def _card(row: dict, cycles: dict[str, int], now_local: datetime) -> dict:
+def _card(
+    row: dict, cycles: dict[str, int], now_local: datetime, task_titles: dict[str, str]
+) -> dict:
     work_item = named_work_item(row)
     summary = extract_summary(row["content"], CARD_SUMMARY_CHARS)
     return {
         "work_item": work_item,
-        "title": work_item or summary or UNNAMED_TITLE,
+        "title": task_titles.get(work_item, "") or summary or work_item or UNNAMED_TITLE,
         "unnamed": work_item is None,
         "lane": lane_for(row),
         "message_id": row["id"],
@@ -475,6 +502,29 @@ def _card(row: dict, cycles: dict[str, int], now_local: datetime) -> dict:
         "cycles": cycles.get(work_item, 0) if work_item else 1,
         "failed": row["status"] == MessageStatus.FAILED,
         "error": row.get("error"),
+        "kind": "handoff",
+    }
+
+
+def _backlog_card(task: dict, now_local: datetime, human_role: str) -> dict:
+    return {
+        "work_item": task["work_item"],
+        "title": task["title"],
+        "unnamed": False,
+        "lane": human_role,
+        "task_id": task["id"],
+        "message_id": None,
+        "sender": human_role,
+        "target": human_role,
+        "status": task["status"],
+        "summary": task["body"][:CARD_SUMMARY_CHARS],
+        "body": task["body"],
+        "created_at": task["created_at"],
+        "age": _age(task["updated_at"], now_local),
+        "cycles": 0,
+        "failed": False,
+        "error": None,
+        "kind": "backlog",
     }
 
 

@@ -184,7 +184,12 @@ class TestState:
         status, payload = client.get("/api/state")
 
         assert status == 200
-        assert payload["board"]["lanes"] == ["specifier", "coder", "done"]
+        assert payload["board"]["lanes"] == [
+            "human-in-the-loop",
+            "specifier",
+            "coder",
+            "done",
+        ]
 
     def test_inbox_delivery_does_not_clear_human_attention(self, client, add_message, db_path):
         message_id = add_message(
@@ -366,18 +371,48 @@ class TestSend:
 
 
 class TestTasks:
-    def test_a_new_task_is_queued_for_the_intake_role(self, client, db_path):
-        status, payload = client.post("/api/tasks", {"summary": "add order intake"})
+    def test_a_new_task_stays_in_the_human_backlog(self, client, db_path):
+        status, task = client.post(
+            "/api/tasks",
+            {"work_item": "CAT-2", "title": "Search", "body": "Search by author"},
+        )
+        _, state = client.get("/api/state")
 
         assert status == 200
-        assert payload["target"] == "specifier"
-        assert db.get_message(db_path, payload["message_id"])["target"] == "specifier"
+        assert db.recent_messages(db_path, "main") == []
+        assert state["board"]["cards"]["human-in-the-loop"][0]["task_id"] == task["id"]
 
     def test_an_empty_task_is_a_400_with_a_readable_reason(self, client):
-        status, payload = client.post("/api/tasks", {"summary": ""})
+        status, payload = client.post("/api/tasks", {})
 
         assert status == 400
-        assert "task needs a description" in payload["error"]
+        assert "work-item name" in payload["error"]
+
+    def test_edit_handoff_and_archive_routes_share_the_task_store(self, client, db_path):
+        _, editable = client.post(
+            "/api/tasks", {"work_item": "CAT-2", "title": "Draft", "body": "First"}
+        )
+        status, updated = client.post(
+            f"/api/tasks/{editable['id']}", {"title": "Ready", "body": "Final"}
+        )
+        handoff_status, active = client.post(
+            f"/api/tasks/{editable['id']}/handoff", {"target": "coder"}
+        )
+        _, archived = client.post(
+            "/api/tasks", {"work_item": "CAT-3", "title": "No", "body": "Later"}
+        )
+        archive_status, archived = client.post(f"/api/tasks/{archived['id']}/archive", {})
+
+        assert status == handoff_status == archive_status == 200
+        assert updated["title"] == "Ready"
+        assert db.get_message(db_path, active["message_id"])["target"] == "coder"
+        assert archived["status"] == "archived"
+
+        db.mark_processed(db_path, active["message_id"])
+        _, state = client.get("/api/state")
+        done_card = state["board"]["cards"]["done"][0]
+        assert done_card["work_item"] == "CAT-2"
+        assert done_card["title"] == "Ready"
 
     def test_a_chat_note_goes_to_the_human_role(self, client, db_path):
         status, payload = client.post("/api/chat", {"summary": "how is it going?"})
@@ -393,9 +428,9 @@ class TestTasks:
             body=None,
         )
 
-        # No body at all is an empty object, which fails the same way an empty summary does.
+        # No body at all is an empty object and fails required task identity validation.
         assert status == 400
-        assert "description" in payload["error"]
+        assert "work-item name" in payload["error"]
 
 
 class TestRetry:

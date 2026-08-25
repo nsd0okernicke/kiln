@@ -43,7 +43,7 @@ def ctx(tmp_path, db_path):
 class TestSendTo:
     """
     Addressing a role directly — "specifier, restart with CAT-3". The general form of
-    `new_task` and `chat`, and the same insert `kiln send --to <role>` has always made.
+    `chat` and operator interventions, and the same insert `kiln send --to <role>` makes.
     """
 
     def test_it_queues_for_the_role_the_operator_chose(self, ctx, db_path):
@@ -114,49 +114,52 @@ class TestSendTo:
         assert db.get_message(db_path, result["message_id"])["work_item"] is None
 
 
-class TestNewTask:
-    def test_a_task_reaches_the_role_routing_names(self, ctx, db_path):
-        result = actions.new_task(ctx, summary="Add order intake")
+class TestBacklogTask:
+    def test_creation_does_not_queue_a_message(self, ctx, db_path):
+        result = actions.create_task(
+            ctx, work_item="ORDER-INTAKE", title="Order intake", body="Add the workflow"
+        )
 
-        message = db.get_message(db_path, result["message_id"])
-        assert message["target"] == "specifier"
-        assert message["sender"] == "human-in-the-loop"
-        assert "Add order intake" in message["content"]
-
-    def test_an_unnamed_task_carries_no_work_item(self, ctx, db_path):
-        # `pending` is the placeholder the specifier replaces; storing it as a work item
-        # would put every unrelated new request in one grouping bucket, which is what the
-        # max-cycles and cost guards count against.
-        result = actions.new_task(ctx, summary="Add order intake")
-
-        assert db.get_message(db_path, result["message_id"])["work_item"] is None
-
-    def test_a_named_task_keeps_the_name_it_was_given(self, ctx, db_path):
-        result = actions.new_task(ctx, summary="Fix the totals", name="ORDER-INTAKE")
-
-        assert db.get_message(db_path, result["message_id"])["work_item"] == "ORDER-INTAKE"
-
-    def test_an_empty_task_is_refused_rather_than_queued(self, ctx, db_path):
-        with pytest.raises(actions.ActionError):
-            actions.new_task(ctx, summary="   ")
-
+        assert result["status"] == "backlog"
         assert db.recent_messages(db_path, "main") == []
 
-    def test_a_cockpit_with_no_intake_role_says_so_instead_of_guessing(self, ctx):
-        # Guessing `specifier` would queue work for a role this profile may not launch, and
-        # nothing polls a queue nobody owns: the message would vanish with no error anywhere.
-        with pytest.raises(actions.ActionError, match="intake role"):
-            actions.new_task(
-                actions.ActionContext(
-                    db_path=ctx.db_path,
-                    branch="main",
-                    human_role="human-in-the-loop",
-                    intake_role="",
-                    sessions_file=ctx.sessions_file,
-                    gateway=ctx.gateway,
-                ),
-                summary="Add order intake",
-            )
+    def test_a_task_can_be_refined_before_handoff(self, ctx):
+        task = actions.create_task(ctx, work_item="CAT-2", title="Old", body="First draft")
+
+        updated = actions.update_task(
+            ctx, identifier=task["id"], title="Search by author", body="Final story"
+        )
+
+        assert updated["work_item"] == "CAT-2"
+        assert (updated["title"], updated["body"]) == ("Search by author", "Final story")
+
+    def test_handoff_queues_the_snapshot_once(self, ctx, db_path):
+        task = actions.create_task(ctx, work_item="CAT-2", title="Search", body="By author")
+
+        result = actions.handoff_task(ctx, identifier=task["id"])
+        message = db.get_message(db_path, result["message_id"])
+
+        assert result["status"] == "active"
+        assert message["target"] == "specifier"
+        assert message["work_item"] == "CAT-2"
+        assert "Search\n\nBy author" in message["content"]
+        with pytest.raises(actions.ActionError, match="already left"):
+            actions.handoff_task(ctx, identifier=task["id"])
+        assert len(db.recent_messages(db_path, "main")) == 1
+
+    def test_archive_is_non_destructive(self, ctx):
+        task = actions.create_task(ctx, work_item="CAT-9", title="Maybe", body="Later")
+
+        archived = actions.archive_task(ctx, identifier=task["id"])
+
+        assert archived["status"] == "archived"
+
+    def test_invalid_and_duplicate_names_are_refused(self, ctx):
+        with pytest.raises(actions.ActionError, match="work-item name"):
+            actions.create_task(ctx, work_item="!", title="Bad", body="Bad")
+        actions.create_task(ctx, work_item="CAT-2", title="One", body="One")
+        with pytest.raises(actions.ActionError, match="already exists"):
+            actions.create_task(ctx, work_item="CAT-2", title="Two", body="Two")
 
 
 class TestChat:

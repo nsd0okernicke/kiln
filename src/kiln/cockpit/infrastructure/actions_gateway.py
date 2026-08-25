@@ -3,10 +3,11 @@
 from pathlib import Path
 
 from kiln.launcher.infrastructure import stop
+from kiln.scheduler.application import backlog
 from kiln.scheduler.infrastructure.cli import dashboard, retry, send
 from kiln.scheduler.infrastructure.persistence import db
 
-from ..application.ports import Session
+from ..application.ports import Session, TaskActionError
 
 
 class KilnActionGateway:
@@ -24,6 +25,25 @@ class KilnActionGateway:
 
     def failed_messages(self, db_path: Path, branch: str) -> list[dict]:
         return db.failed_messages(db_path, branch)
+
+    def create_task(self, **kwargs) -> dict:
+        return self._task_action(backlog.create, **kwargs)
+
+    def update_task(self, **kwargs) -> dict:
+        return self._task_action(backlog.update, **kwargs)
+
+    def handoff_task(self, **kwargs) -> dict:
+        return self._task_action(backlog.handoff, **kwargs)
+
+    def archive_task(self, **kwargs) -> dict:
+        return self._task_action(backlog.archive, **kwargs)
+
+    @staticmethod
+    def _task_action(action, **kwargs) -> dict:
+        try:
+            return action(**kwargs)
+        except backlog.BacklogError as exc:
+            raise TaskActionError(str(exc)) from exc
 
     def stop_all(self, roles: list[str]) -> list[int]:
         return stop.stop_all(roles)

@@ -13,7 +13,6 @@ Three modules, split by what they are allowed to touch:
               `kiln.launcher.infrastructure.stop` rather than reimplementing any of them.
 * `server`  — the only module that owns a socket. Binds 127.0.0.1 and nothing else.
 
-There is no second board filesystem and no parallel task store: every number on the page
-comes from `.kiln/messages.db`, `.kiln/status/<role>.json` and `.kiln/sessions`, which is
-what makes the cockpit and the terminal dashboard incapable of disagreeing.
+There is no second board database: backlog tasks and immutable handoff messages share
+`.kiln/messages.db`; live role state still comes from `.kiln/status` and `.kiln/sessions`.
 """

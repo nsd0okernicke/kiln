@@ -1,27 +1,4 @@
-"""
-The cockpit's write half — everything a button does.
-
-Not one line of queue, retry or teardown logic lives here. `scheduler.send.send`,
-`scheduler.retry.resume` and `kiln.launcher.infrastructure.stop.stop_all` already own those
-decisions and are
-already the paths `kiln send` / `kiln retry` / `kiln --stop` take, so the cockpit calls them
-and does nothing else. A second implementation of "queue a handoff" is how the browser and
-the CLI would come to disagree about what a handoff is.
-
-**Where a new task goes.** Issue #22 describes New Task as `kiln send` to
-`human-in-the-loop`. Taken literally that starts nothing: the human role is an interactive
-session (or, with the `inbox` pane, a display), so a message parked in its queue waits for a
-person to forward it by hand — and Phase 1's stated goal is to start a task from the browser
-and watch the card move. So the two intake paths are split by what they are for:
-
-* `new_task` sends **from** the human role **to** the intake role, which is what the routing
-  table says the human hands off to (`specifier` in the shipped `full` profile). Identical
-  to `kiln send --to specifier --from human-in-the-loop`, which is how a human starts work
-  today. This is the one that moves cards.
-* `chat` sends **to** the human role's own queue — the "chat to the master agent" rail from
-  the issue's Purpose section. The inbox pane surfaces it and the human's session answers it.
-  It deliberately does not start a cycle.
-"""
+"""Cockpit write use cases over the shared task, queue, retry, and teardown gateways."""
 
 from __future__ import annotations
 
@@ -31,7 +8,7 @@ from pathlib import Path
 
 from kiln.scheduler.domain.status_contract import PENDING_HANDOFF, is_valid_work_item_name
 
-from .ports import ActionGateway
+from .ports import ActionGateway, TaskActionError
 
 log = logging.getLogger(__name__)
 
@@ -62,7 +39,7 @@ def send_to(ctx: ActionContext, *, target: str, summary: str, work_item: str = "
     """
     Queue one handoff for a role the operator chose.
 
-    The general form of what `new_task` and `chat` do, and the only one that can express
+    The direct-intervention form used by `chat`, and the only one that can express
     "specifier, restart with CAT-3" — the move an operator wants when a spec turns out wrong
     or a role finished on a stale brief. Identical to `kiln send --to <role>`, which has
     always been able to do this from a shell.
@@ -107,27 +84,59 @@ def send_to(ctx: ActionContext, *, target: str, summary: str, work_item: str = "
     return {"message_id": message_id, "target": target, "sender": sender}
 
 
-def new_task(ctx: ActionContext, *, summary: str, name: str = "") -> dict:
-    """
-    Start a piece of work: one handoff from the human to the intake role.
-
-    A preset over `send_to`, kept as its own entry point because the *browser* should not
-    have to know which role is the intake role — that is resolved from the profile's routing
-    at launch and lives here.
-
-    `name` is optional. Leaving it as `pending` lets the specifier invent the identity, which
-    is right for a loosely described request; supplying one is right when the name already
-    exists (a story id from the README), because `resolve_work_item` then carries it through
-    unchanged instead of renaming it.
-    """
-    if not ctx.intake_role:
-        raise ActionError(
-            "this cockpit was started without an intake role, so it does not know which "
-            "role a new task goes to. Relaunch through `kiln`, or pass --intake-role."
+def create_task(ctx: ActionContext, *, work_item: str, title: str, body: str) -> dict:
+    """Create one mutable task in the human backlog without queueing work."""
+    try:
+        return ctx.gateway.create_task(
+            db_path=ctx.db_path,
+            branch=ctx.branch,
+            work_item=work_item,
+            title=title,
+            body=body,
         )
-    if not summary.strip():
-        raise ActionError("a task needs a description")
-    return send_to(ctx, target=ctx.intake_role, summary=summary, work_item=name)
+    except TaskActionError as exc:
+        raise ActionError(str(exc)) from exc
+
+
+def update_task(
+    ctx: ActionContext, *, identifier: str, title: str | None, body: str | None
+) -> dict:
+    """Refine an editable backlog task."""
+    try:
+        return ctx.gateway.update_task(
+            db_path=ctx.db_path,
+            branch=ctx.branch,
+            identifier=identifier,
+            title=title,
+            body=body,
+        )
+    except TaskActionError as exc:
+        raise ActionError(str(exc)) from exc
+
+
+def handoff_task(ctx: ActionContext, *, identifier: str, target: str = "") -> dict:
+    """Atomically dispatch one backlog task to an addressable role."""
+    target = _resolve_target(ctx, target or ctx.intake_role)
+    try:
+        return ctx.gateway.handoff_task(
+            db_path=ctx.db_path,
+            branch=ctx.branch,
+            identifier=identifier,
+            sender=ctx.human_role,
+            target=target,
+        )
+    except TaskActionError as exc:
+        raise ActionError(str(exc)) from exc
+
+
+def archive_task(ctx: ActionContext, *, identifier: str) -> dict:
+    """Hide one backlog task while retaining its record."""
+    try:
+        return ctx.gateway.archive_task(
+            db_path=ctx.db_path, branch=ctx.branch, identifier=identifier
+        )
+    except TaskActionError as exc:
+        raise ActionError(str(exc)) from exc
 
 
 def chat(ctx: ActionContext, *, summary: str, work_item: str = "") -> dict:
