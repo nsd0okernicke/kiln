@@ -487,9 +487,10 @@ def _card(
 ) -> dict:
     work_item = named_work_item(row)
     summary = extract_summary(row["content"], CARD_SUMMARY_CHARS)
+    task_title = task_titles.get(work_item, "") if work_item is not None else ""
     return {
         "work_item": work_item,
-        "title": task_titles.get(work_item, "") or summary or work_item or UNNAMED_TITLE,
+        "title": task_title or summary or work_item or UNNAMED_TITLE,
         "unnamed": work_item is None,
         "lane": lane_for(row),
         "message_id": row["id"],
