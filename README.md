@@ -445,49 +445,13 @@ config in a Java project differs only in paths:
 }
 ```
 
-Two things about that pytest command are easy to get wrong: `--cov-report=xml:` writes nothing
-unless `--cov=` also names a source, and branch coverage is only measured when `--cov-branch`
-is passed. Write the reports somewhere durable — **not** under `.kiln/`, which is scratch state
-and is wiped whenever the swarm is reset.
+The nominated `verificationRole` runs `command` before handoff; the Cockpit only reads the
+resulting reports. Relative report paths resolve from the project root and may name a file or
+directory. Results older than `maxAgeMinutes` are shown as stale, while missing or malformed
+reports are reported without affecting the rest of the Cockpit.
 
-- Relative paths resolve from the project root. Any path may be a single file or a directory;
-  a directory is summed in filename order — which is how Maven and Gradle write one file per
-  test class, and how a Java build can point PMD and SpotBugs at one folder. Directory scans
-  look for `*.xml` for results and coverage, `*.sarif` or `*.json` for lint; an explicitly
-  named file is read whatever it is called.
-- The coverage report supplies more than one number. Line coverage is shown as **coverage**;
-  branch coverage is shown beside it *only when the project measured it* (coverage.py needs
-  `--cov-branch`, and a tool that wrote `branches-valid="0"` is reporting a setting nobody
-  switched on, not a disaster). **Statements** is the coverage tool's own count of executable
-  lines — a size Kiln can state in any language precisely because it never counts them itself.
-  Only the first coverage document is read: coverage is a ratio over a body of code, and
-  summing two of them produces a number that is not the coverage of anything.
-- Lint counts are grouped by SARIF severity, resolved the way the spec requires: the result's
-  own `level`, then its rule's `defaultConfiguration.level`, then `warning`. Results marked
-  `kind` other than `fail` — CodeQL's `pass` rows, for instance — are not counted as findings.
-  The analyser names itself in the document, so the panel says "(ruff)" or "(PMD)" without
-  either name appearing anywhere in Kiln.
-- `command` is recorded for other workflows and is **never run by the cockpit**. The panel
-  reads reports on the existing poll; producing them belongs to CI, a scheduler `verify` step,
-  or you. A monitoring surface that shelled out to a build tool every two seconds would be a
-  fault, not a feature.
-- A report older than `maxAgeMinutes` (default 30) reads as **stale** rather than passed,
-  because a green run from an hour ago describes code that has since moved on. Staleness is
-  judged on the *oldest* configured report, so a coverage file rewritten a minute ago cannot
-  disguise a JUnit report from yesterday; the displayed age is the most recent refresh.
-- Missing, unreadable or malformed reports show an explanation in the panel. They are served
-  by their own `GET /api/test-metrics`, so a broken report can never take `/api/state` — or
-  the swarm — down with it.
-- Metrics that are not configured stay unknown rather than being shown as zero: "no coverage
-  configured" and "nothing is covered" must not look alike.
-
-Without the file the panel names the path and says to create one. Two consequences of living
-in `.kiln/` are worth knowing up front: the directory is gitignored — and the launcher re-adds
-that rule on every start — so this file cannot be committed or shared through a clone, and a
-teardown that clears `.kiln/` takes it with them. It is written by hand, and rewritten by hand
-after a reset. Nothing creates it for you: `kiln init` cannot know your package name, test
-layout or ecosystem, and a guessed config would replace a clear "not configured" with a
-confusing "no report found at &lt;wrong path&gt;".
+`.kiln/test-metrics.json` is local runtime configuration. Add it manually for custom projects;
+supported examples may provide it during initialization.
 
 ## Traffic capture
 
