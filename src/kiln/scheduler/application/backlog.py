@@ -57,12 +57,8 @@ def update(
     body: str | None = None,
 ) -> dict:
     current = show(db_path, branch=branch, identifier=identifier)
-    new_title = current["title"] if title is None else title.strip()
-    new_body = current["body"] if body is None else body.strip()
-    if not new_title:
-        raise BacklogError("a task needs a title")
-    if not new_body:
-        raise BacklogError("a task needs a body")
+    new_title = _required_update_value(current["title"], title, "title")
+    new_body = _required_update_value(current["body"], body, "body")
     try:
         return task_store.update_task(
             db_path,
@@ -73,6 +69,13 @@ def update(
         )
     except task_store.TaskConflictError as exc:
         raise BacklogError(str(exc)) from exc
+
+
+def _required_update_value(current: str, replacement: str | None, field: str) -> str:
+    value = current if replacement is None else replacement.strip()
+    if not value:
+        raise BacklogError(f"a task needs a {field}")
+    return value
 
 
 def archive(db_path: str | Path, *, branch: str, identifier: str) -> dict:

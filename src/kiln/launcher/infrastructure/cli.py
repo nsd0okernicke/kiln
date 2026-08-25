@@ -222,21 +222,7 @@ def prepare(profile: Profile, paths: KilnPaths) -> str:
     workspace.prepare_state_dirs(paths)
     workspace.copy_framework_tools(paths)
 
-    # The message queue's schema is owned by the scheduler package, so there is exactly one
-    # definition of it rather than the launcher carrying a second copy.
-    sys.path.insert(0, str(paths.python_package_root))
-    from kiln.scheduler.infrastructure.persistence import task_store
-    from kiln.scheduler.infrastructure.persistence.db import ensure_schema
-
-    ensure_schema(paths.db_path)
-    human = profile.current_dir_role
-    human_role = human.role if human and not human.is_passive else "human-in-the-loop"
-    task_store.configure_context(
-        paths.db_path,
-        branch=branch,
-        human_role=human_role,
-        intake_role=profile.routing.resolve(human_role) or "",
-    )
+    _prepare_queue(profile, paths, branch)
 
     current = profile.current_dir_role
     artifacts.write_mcp_config(
@@ -263,6 +249,23 @@ def prepare(profile: Profile, paths: KilnPaths) -> str:
 
     workspace.write_sessions_file(profile, paths, branch)
     return branch
+
+
+def _prepare_queue(profile: Profile, paths: KilnPaths, branch: str) -> None:
+    """Create queue storage and record the profile's human intake boundary."""
+    sys.path.insert(0, str(paths.python_package_root))
+    from kiln.scheduler.infrastructure.persistence import task_store
+    from kiln.scheduler.infrastructure.persistence.db import ensure_schema
+
+    ensure_schema(paths.db_path)
+    human = profile.current_dir_role
+    human_role = human.role if human and not human.is_passive else "human-in-the-loop"
+    task_store.configure_context(
+        paths.db_path,
+        branch=branch,
+        human_role=human_role,
+        intake_role=profile.routing.resolve(human_role) or "",
+    )
 
 
 def _copy_root_settings(paths: KilnPaths) -> None:
@@ -531,30 +534,55 @@ def run_launch(args: argparse.Namespace) -> int:
 
 def _apply_test_metrics_verification(profile: Profile, project_root: Path) -> Profile:
     """Attach a project's report-producing command to its nominated scheduler role."""
+    config = _load_test_metrics_config(project_root)
+    if config is None:
+        return profile
+    selected = _verification_role(profile, config.verification_role)
+    if selected is None:
+        return profile
+    return _replace_verification(profile, selected.role, config.command)
+
+
+def _load_test_metrics_config(project_root: Path):
     try:
         config = test_reports.load_config(test_reports.config_path(project_root))
     except test_reports.ReportError as error:
         log.warning("test metrics verification disabled: %s", error)
-        return profile
-    if not config or not config.command or not config.verification_role:
-        return profile
-    selected = profile.role(config.verification_role)
+        return None
+    if not _complete_test_metrics_config(config):
+        return None
+    return config
+
+
+def _complete_test_metrics_config(config) -> bool:
+    if config is None:
+        return False
+    if not config.command:
+        return False
+    return bool(config.verification_role)
+
+
+def _verification_role(profile: Profile, role_name: str):
+    selected = profile.role(role_name)
     if selected is None:
         log.warning(
             "test metrics verification role %r is not in profile %r; command disabled",
-            config.verification_role,
+            role_name,
             profile.name,
         )
-        return profile
+        return None
     if not selected.uses_scheduler:
         log.warning(
             "test metrics verification role %r is not scheduler-driven; command disabled",
-            config.verification_role,
+            role_name,
         )
-        return profile
+        return None
+    return selected
+
+
+def _replace_verification(profile: Profile, role_name: str, command: str) -> Profile:
     roles = tuple(
-        replace(role, verify=config.command) if role.role == config.verification_role else role
-        for role in profile.roles
+        replace(role, verify=command) if role.role == role_name else role for role in profile.roles
     )
     return replace(profile, roles=roles)
 
@@ -762,14 +790,7 @@ def resolve_queue_context(argv: list[str], *, include_working_dir: bool = False)
     if "--db-path" in argv:
         return argv
 
-    remaining = list(argv)
-    working_dir = "."
-    for flag in ("--working-dir", "-WorkingDir"):
-        if flag in remaining:
-            index = remaining.index(flag)
-            working_dir = remaining[index + 1]
-            del remaining[index : index + 2]
-            break
+    remaining, working_dir = _extract_working_dir(argv)
 
     paths = KilnPaths.create(Path(working_dir).expanduser().resolve(), resolve_framework_root())
     if not paths.db_path.is_file():
@@ -777,20 +798,36 @@ def resolve_queue_context(argv: list[str], *, include_working_dir: bool = False)
             f"no message queue at {paths.db_path}. Launch the swarm in this project first."
         )
 
+    resolved = _queue_arguments(remaining, paths, include_working_dir)
+    if "--branch" not in resolved:
+        branch_args = ["--branch", workspace.current_branch(paths)]
+        resolved = [*branch_args, *resolved] if include_working_dir else [*resolved, *branch_args]
+    return resolved
+
+
+def _extract_working_dir(argv: list[str]) -> tuple[list[str], str]:
+    remaining = list(argv)
+    for flag in ("--working-dir", "-WorkingDir"):
+        if flag in remaining:
+            index = remaining.index(flag)
+            working_dir = remaining[index + 1]
+            del remaining[index : index + 2]
+            return remaining, working_dir
+    return remaining, "."
+
+
+def _queue_arguments(
+    remaining: list[str], paths: KilnPaths, include_working_dir: bool
+) -> list[str]:
     if include_working_dir:
-        resolved = [
+        return [
             "--db-path",
             str(paths.db_path),
             "--working-dir",
             str(paths.project_root),
             *remaining,
         ]
-    else:
-        resolved = [*remaining, "--db-path", str(paths.db_path)]
-    if "--branch" not in resolved:
-        branch_args = ["--branch", workspace.current_branch(paths)]
-        resolved = [*branch_args, *resolved] if include_working_dir else [*resolved, *branch_args]
-    return resolved
+    return [*remaining, "--db-path", str(paths.db_path)]
 
 
 def run_subcommand(name: str, argv: list[str]) -> int:

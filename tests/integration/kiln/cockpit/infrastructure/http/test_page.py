@@ -281,7 +281,7 @@ class TestComposer:
         board = page.partition("function renderBoard")[2].partition("function renderQueue")[0]
 
         assert 'text("div", card.work_item, "work-item-id")' in board
-        assert 'if (card.work_item)' in board
+        assert "if (card.work_item)" in board
         assert ".card .work-item-id" in page
 
     def test_role_send_reveals_the_composer_with_the_role_preset(self, page):

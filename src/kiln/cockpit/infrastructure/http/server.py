@@ -273,24 +273,29 @@ class CockpitHandler(BaseHTTPRequestHandler):
             "/api/teardown": self._teardown,
         }
         handler = routes.get(path)
-        if handler is None and path.startswith("/api/retry/"):
-            message_id = path.rsplit("/", 1)[-1]
-            handler = lambda body: self._retry(message_id, body)  # noqa: E731
-        if handler is None and path.startswith("/api/ack/"):
-            message_id = path.rsplit("/", 1)[-1]
-            handler = lambda body: self._ack(message_id)  # noqa: E731
-        if handler is None and path.startswith("/api/tasks/"):
-            parts = path.split("/")
-            if len(parts) == 4:
-                identifier = unquote(parts[3])
-                handler = lambda body: self._update_task(identifier, body)  # noqa: E731
-            elif len(parts) == 5 and parts[4] == "handoff":
-                identifier = unquote(parts[3])
-                handler = lambda body: self._handoff_task(identifier, body)  # noqa: E731
-            elif len(parts) == 5 and parts[4] == "archive":
-                identifier = unquote(parts[3])
-                handler = lambda body: self._archive_task(identifier)  # noqa: E731
-        return handler
+        if handler is not None:
+            return handler
+        dynamic = (
+            ("/api/retry/", lambda identifier: lambda body: self._retry(identifier, body)),
+            ("/api/ack/", lambda identifier: lambda _body: self._ack(identifier)),
+        )
+        for prefix, factory in dynamic:
+            if path.startswith(prefix):
+                return factory(unquote(path.rsplit("/", 1)[-1]))
+        return self._task_post_handler(path)
+
+    def _task_post_handler(self, path: str) -> Callable[[dict], dict] | None:
+        parts = path.split("/")
+        if len(parts) < 4 or parts[:3] != ["", "api", "tasks"]:
+            return None
+        identifier = unquote(parts[3])
+        if len(parts) == 4:
+            return lambda body: self._update_task(identifier, body)
+        actions = {
+            "handoff": lambda body: self._handoff_task(identifier, body),
+            "archive": lambda _body: self._archive_task(identifier),
+        }
+        return actions.get(parts[4]) if len(parts) == 5 else None
 
     # --- handlers ------------------------------------------------------------------
 

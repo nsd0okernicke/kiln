@@ -6,7 +6,7 @@ import argparse
 import json
 import os
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from ...application import backlog
@@ -74,32 +74,63 @@ def _default_target(db_path: Path, branch: str, working_dir: str, human_role: st
 
 
 def _execute(args: argparse.Namespace) -> dict | list[dict]:
-    common = {"db_path": Path(args.db_path), "branch": args.branch}
-    if args.command == "create":
-        _check_actor(**common)
-        return backlog.create(**common, work_item=args.work_item, title=args.title, body=args.body)
-    if args.command == "list":
-        return backlog.list_all(**common, status=None if args.all else args.status)
-    if args.command == "show":
-        return backlog.show(**common, identifier=args.task)
-    if args.command == "update":
-        _check_actor(**common)
-        if args.title is None and args.body is None:
-            raise backlog.BacklogError("update needs --title, --body, or both")
-        return backlog.update(**common, identifier=args.task, title=args.title, body=args.body)
-    if args.command == "handoff":
-        human_role = _check_actor(**common)
-        return backlog.handoff(
-            **common,
-            identifier=args.task,
-            sender=human_role,
-            target=args.target
-            or _default_target(common["db_path"], args.branch, args.working_dir, human_role),
-        )
-    if args.command == "archive":
-        _check_actor(**common)
-        return backlog.archive(**common, identifier=args.task)
-    raise AssertionError(args.command)
+    handler = _COMMAND_HANDLERS[args.command]
+    return handler(args, Path(args.db_path), args.branch)
+
+
+def _create(args: argparse.Namespace, db_path: Path, branch: str) -> dict:
+    _check_actor(db_path, branch)
+    return backlog.create(
+        db_path, branch=branch, work_item=args.work_item, title=args.title, body=args.body
+    )
+
+
+def _list(args: argparse.Namespace, db_path: Path, branch: str) -> list[dict]:
+    return backlog.list_all(db_path, branch=branch, status=None if args.all else args.status)
+
+
+def _show(args: argparse.Namespace, db_path: Path, branch: str) -> dict:
+    return backlog.show(db_path, branch=branch, identifier=args.task)
+
+
+def _update(args: argparse.Namespace, db_path: Path, branch: str) -> dict:
+    _check_actor(db_path, branch)
+    if args.title is None and args.body is None:
+        raise backlog.BacklogError("update needs --title, --body, or both")
+    return backlog.update(
+        db_path,
+        branch=branch,
+        identifier=args.task,
+        title=args.title,
+        body=args.body,
+    )
+
+
+def _handoff(args: argparse.Namespace, db_path: Path, branch: str) -> dict:
+    human_role = _check_actor(db_path, branch)
+    target = args.target or _default_target(db_path, branch, args.working_dir, human_role)
+    return backlog.handoff(
+        db_path,
+        branch=branch,
+        identifier=args.task,
+        sender=human_role,
+        target=target,
+    )
+
+
+def _archive(args: argparse.Namespace, db_path: Path, branch: str) -> dict:
+    _check_actor(db_path, branch)
+    return backlog.archive(db_path, branch=branch, identifier=args.task)
+
+
+_COMMAND_HANDLERS: dict[str, Callable[[argparse.Namespace, Path, str], dict | list[dict]]] = {
+    "create": _create,
+    "list": _list,
+    "show": _show,
+    "update": _update,
+    "handoff": _handoff,
+    "archive": _archive,
+}
 
 
 def main(argv: Sequence[str] | None = None) -> int:

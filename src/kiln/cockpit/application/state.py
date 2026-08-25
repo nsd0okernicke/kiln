@@ -290,23 +290,33 @@ def build_board(
     later processed escalation because retry reactivates the original row without changing
     its creation time.
     """
-    backlog = [task for task in tasks if task["status"] == "backlog"]
     task_titles = {task["work_item"]: task["title"] for task in tasks}
-    cards = [_backlog_card(task, now_local, human_role) for task in backlog]
+    cards = [
+        _backlog_card(task, now_local, human_role) for task in tasks if task["status"] == "backlog"
+    ]
     cards += [
         _card(row, cycles, now_local, task_titles) for row in _latest_per_work_item(work_items)
     ]
+    order = _board_lane_order(lanes, cards, human_role)
+    grouped = _cards_by_lane(cards, order)
+    return {"lanes": list(grouped), "cards": grouped}
+
+
+def _board_lane_order(lanes: tuple[str, ...], cards: list[dict], human_role: str) -> list[str]:
     order = list(lanes) or _observed_lanes(cards)
     if human_role not in order:
         order.insert(0, human_role)
     if LANE_DONE not in order:
         order.append(LANE_DONE)
+    return order
 
+
+def _cards_by_lane(cards: list[dict], order: list[str]) -> dict[str, list[dict]]:
     grouped: dict[str, list[dict]] = {lane: [] for lane in order}
     for card in cards:
         # Preserve work for roles removed from the current profile.
         grouped.setdefault(card["lane"], []).append(card)
-    return {"lanes": list(grouped), "cards": grouped}
+    return grouped
 
 
 def build_attention(
@@ -454,8 +464,7 @@ def build_state(
         "roles": role_rows(snapshot, work_items),
         "work_items": list(
             dict.fromkeys(
-                [task["work_item"] for task in tasks if task["status"] != "archived"]
-                + list(cycles)
+                [task["work_item"] for task in tasks if task["status"] != "archived"] + list(cycles)
             )
         ),
         "totals": build_totals(snapshot),
@@ -543,18 +552,12 @@ def _latest_per_work_item(rows: list[dict]) -> list[dict]:
     A `failed` one is kept: a request that stopped before it was ever named is precisely the
     thing a human has to see.
     """
-    active_by_item = {
-        named_work_item(row)
-        for row in rows
-        if named_work_item(row) is not None and row["status"] != MessageStatus.PROCESSED
-    }
+    active_by_item = _active_work_items(rows)
     seen: set[str] = set()
     latest = []
     for row in rows:
         work_item = named_work_item(row)
-        if work_item in active_by_item and row["status"] == MessageStatus.PROCESSED:
-            continue
-        if work_item is None and row["status"] == MessageStatus.PROCESSED:
+        if _superseded_board_row(row, work_item, active_by_item):
             continue
         key = work_item or f"id:{row['id']}"
         if key in seen:
@@ -562,6 +565,23 @@ def _latest_per_work_item(rows: list[dict]) -> list[dict]:
         seen.add(key)
         latest.append(row)
     return latest
+
+
+def _active_work_items(rows: list[dict]) -> set[str]:
+    active = set()
+    for row in rows:
+        work_item = named_work_item(row)
+        if work_item is not None and row["status"] != MessageStatus.PROCESSED:
+            active.add(work_item)
+    return active
+
+
+def _superseded_board_row(row: dict, work_item: str | None, active: set[str]) -> bool:
+    if row["status"] != MessageStatus.PROCESSED:
+        return False
+    if work_item is None:
+        return True
+    return work_item in active
 
 
 def _observed_lanes(cards: list[dict]) -> list[str]:
