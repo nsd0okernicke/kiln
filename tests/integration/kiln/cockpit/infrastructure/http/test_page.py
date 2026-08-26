@@ -323,6 +323,13 @@ class TestOperationalQueue:
 
         assert 'card.cycles + " msgs"' not in board
 
+    def test_finished_cards_show_cycle_duration(self, page):
+        board = page.partition("function renderBoard")[2].partition("function renderQueue")[0]
+
+        assert '" · cycle " + card.duration' in board
+        assert "card.running" not in board
+        assert "card.duration" in board
+
     def test_role_details_open_in_a_dialog_instead_of_displacing_queue_rows(self, page):
         queue = page.partition("function renderQueue")[2].partition("async function pollLog")[0]
 

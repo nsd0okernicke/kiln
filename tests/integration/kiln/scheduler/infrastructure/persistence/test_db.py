@@ -41,10 +41,25 @@ class TestSchema:
             conn.commit()
             row = conn.execute("SELECT * FROM messages").fetchone()
         assert row["id"]
-        assert row["created_at"]
+        assert row["created_at"].endswith("Z")
         assert row["status"] == db.STATUS_QUEUED
         assert row["priority"] == db.DEFAULT_PRIORITY
         assert row["branch"] == "main"
+
+    def test_adds_run_timing_columns_to_an_existing_database(self, tmp_path):
+        path = tmp_path / "legacy.db"
+        with closing(sqlite3.connect(path)) as conn:
+            conn.execute(
+                "CREATE TABLE messages (id TEXT PRIMARY KEY, sender TEXT, target TEXT, "
+                "status TEXT, content TEXT, created_at TEXT, branch TEXT, work_item TEXT)"
+            )
+            conn.commit()
+
+        db.ensure_schema(path)
+
+        with closing(db.connect(path)) as conn:
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(messages)")}
+        assert {"started_at", "finished_at"} <= columns
 
 
 class TestFetchAndDeliver:
@@ -173,10 +188,28 @@ class TestWorkItemMessages:
 
 
 class TestStatusTransitions:
+    def test_names_the_initial_inbound_after_the_specifier_names_work(
+        self, db_path, add_message, read_message
+    ):
+        message_id = add_message(work_item=None)
+
+        assert db.name_work_item(db_path, message_id, "CAT-3") is True
+        assert read_message(message_id)["work_item"] == "CAT-3"
+
+    def test_does_not_replace_an_existing_work_item_name(
+        self, db_path, add_message, read_message
+    ):
+        message_id = add_message(work_item="CAT-2")
+
+        assert db.name_work_item(db_path, message_id, "CAT-3") is False
+        assert read_message(message_id)["work_item"] == "CAT-2"
+
     def test_mark_processing(self, db_path, add_message, read_message):
         message_id = add_message()
         assert db.mark_processing(db_path, message_id) is True
-        assert read_message(message_id)["status"] == db.STATUS_PROCESSING
+        stored = read_message(message_id)
+        assert stored["status"] == db.STATUS_PROCESSING
+        assert stored["started_at"].endswith("Z")
 
     def test_mark_processing_leaves_processed_at_unset(self, db_path, add_message, read_message):
         message_id = add_message()
@@ -189,6 +222,7 @@ class TestStatusTransitions:
         stored = read_message(message_id)
         assert stored["status"] == db.STATUS_PROCESSED
         assert stored["processed_at"]
+        assert stored["finished_at"].endswith("Z")
 
     @pytest.mark.parametrize("operation", [db.mark_processing, db.mark_processed])
     def test_unknown_id_reports_failure(self, db_path, operation):
@@ -332,6 +366,7 @@ class TestFailedAndResume:
         stored = read_message(message_id)
         assert stored["status"] == db.STATUS_FAILED
         assert stored["error"] == "worker blocked: missing fixtures"
+        assert stored["finished_at"].endswith("Z")
 
     def test_failing_an_unknown_message_reports_failure(self, db_path):
         assert db.mark_failed(db_path, "does-not-exist", "nope") is False
@@ -367,6 +402,8 @@ class TestFailedAndResume:
         assert stored["status"] == db.STATUS_QUEUED
         assert stored["content"] == "new content"
         assert stored["work_item"] == "add-login", "the work item identity must survive"
+        assert stored["started_at"] is None
+        assert stored["finished_at"] is None
 
     def test_resuming_stamps_the_acknowledgement(self, db_path, add_message, read_message):
         message_id = add_message(target="coder")

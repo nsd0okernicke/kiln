@@ -40,6 +40,10 @@ from ..vcs import GitWorktree
 
 log = logging.getLogger(__name__)
 
+# Bound once so tests can replace the scheduler's delay without mutating Python's shared
+# `time` module (which also changes subprocess polling sleeps on POSIX).
+_sleep = time.sleep
+
 # Compatibility exports for callers that historically imported application outcomes here.
 IDLE = scheduler_application.IDLE
 HANDED_OFF = scheduler_application.HANDED_OFF
@@ -629,7 +633,7 @@ def _try_cycle(
             log.error(f"{ICON_HALT} too many consecutive failures; exiting")
             ctx.set_status("halted")
             return None, consecutive_errors, 1
-        time.sleep(min(args.poll_interval * consecutive_errors, 30))
+        _sleep(min(args.poll_interval * consecutive_errors, 30))
         return None, consecutive_errors, None
 
 
@@ -653,7 +657,7 @@ def _park_halted(
 
 def _poll_was_interrupted(interval: float) -> bool:
     try:
-        time.sleep(interval)
+        _sleep(interval)
         return False
     except KeyboardInterrupt:
         # The poll sleep is where an idle scheduler spends nearly all its time.

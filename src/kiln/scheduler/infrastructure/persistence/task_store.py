@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import closing
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
@@ -51,8 +51,10 @@ def create_task(db_path: str | Path, *, branch: str, work_item: str, title: str,
         try:
             row = conn.execute(
                 """
-                INSERT INTO tasks (branch, work_item, title, body)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO tasks (branch, work_item, title, body, created_at, updated_at)
+                VALUES (?, ?, ?, ?,
+                        strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+                        strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
                 RETURNING *
                 """,
                 (branch, work_item, title, body),
@@ -91,7 +93,7 @@ def update_task(
     with closing(connect(db_path)) as conn:
         row = conn.execute(
             """
-            UPDATE tasks SET title=?, body=?, updated_at=datetime('now', 'localtime')
+            UPDATE tasks SET title=?, body=?, updated_at=strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
             WHERE branch=? AND (id=? OR work_item=?) AND status=?
             RETURNING *
             """,
@@ -109,7 +111,7 @@ def archive_task(db_path: str | Path, *, branch: str, identifier: str) -> dict:
     with closing(connect(db_path)) as conn:
         row = conn.execute(
             """
-            UPDATE tasks SET status=?, updated_at=datetime('now', 'localtime')
+            UPDATE tasks SET status=?, updated_at=strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
             WHERE branch=? AND (id=? OR work_item=?) AND status=?
             RETURNING *
             """,
@@ -151,14 +153,14 @@ def handoff_task(
             commit="",
             summary=f"{task['title']}\n\n{task['body']}",
             next_role=target,
-            timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            timestamp=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         )
         message_id = str(
             conn.execute(
                 """
                 INSERT INTO messages
                   (sender, target, priority, status, content, created_at, branch, work_item)
-                VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'), ?, ?)
+                VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), ?, ?)
                 RETURNING id
                 """,
                 (
@@ -175,8 +177,9 @@ def handoff_task(
         activated = conn.execute(
             """
             UPDATE tasks
-            SET status=?, message_id=?, dispatched_at=datetime('now', 'localtime'),
-                updated_at=datetime('now', 'localtime')
+            SET status=?, message_id=?,
+                dispatched_at=strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+                updated_at=strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
             WHERE id=? AND status=?
             RETURNING *
             """,

@@ -784,13 +784,14 @@ class TestNamingTheWorkItem:
     """
 
     def test_the_specifier_can_name_a_pending_work_item(self, make_ctx, inbound, db_path):
-        inbound(target="specifier", sender="human-in-the-loop", name="pending")
+        inbound_id, _ = inbound(target="specifier", sender="human-in-the-loop", name="pending")
         fake = FakeWorker(worker(summary="wrote the spec", handoff_name="cat-3-search-by-author"))
 
         role_scheduler.run_once(make_ctx(fake, role="specifier"), SchedulerState())
 
         row = queued_for(db_path, "coder")[0]
         assert row["work_item"] == "cat-3-search-by-author"
+        assert db.get_message(db_path, inbound_id)["work_item"] == "cat-3-search-by-author"
 
     def test_the_message_header_carries_the_same_name_as_the_column(
         self, make_ctx, inbound, db_path

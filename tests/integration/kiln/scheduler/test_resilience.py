@@ -88,7 +88,7 @@ class TestLoopSurvivesFailures:
             raise KeyboardInterrupt  # end the test loop on the recovered cycle
 
         monkeypatch.setattr(role_scheduler, "run_once", flaky)
-        monkeypatch.setattr(role_scheduler.time, "sleep", lambda _s: None)
+        monkeypatch.setattr(role_scheduler, "_sleep", lambda _s: None)
 
         role_scheduler.main(_args(tmp_path))
 
@@ -102,7 +102,7 @@ class TestLoopSurvivesFailures:
             raise RuntimeError("disk on fire")
 
         monkeypatch.setattr(role_scheduler, "run_once", always_fails)
-        monkeypatch.setattr(role_scheduler.time, "sleep", lambda _s: None)
+        monkeypatch.setattr(role_scheduler, "_sleep", lambda _s: None)
 
         assert role_scheduler.main(_args(tmp_path)) == 1
         assert calls["n"] == role_scheduler.MAX_CONSECUTIVE_ERRORS
@@ -122,7 +122,7 @@ class TestLoopSurvivesFailures:
             return item
 
         monkeypatch.setattr(role_scheduler, "run_once", mixed)
-        monkeypatch.setattr(role_scheduler.time, "sleep", lambda _s: None)
+        monkeypatch.setattr(role_scheduler, "_sleep", lambda _s: None)
 
         role_scheduler.main(_args(tmp_path))
 
@@ -134,7 +134,7 @@ class TestLoopSurvivesFailures:
             raise RuntimeError("the actual reason")
 
         monkeypatch.setattr(role_scheduler, "run_once", boom)
-        monkeypatch.setattr(role_scheduler.time, "sleep", lambda _s: None)
+        monkeypatch.setattr(role_scheduler, "_sleep", lambda _s: None)
 
         log_file = tmp_path / "logs" / "scheduler-coder.log"
         role_scheduler.main(_args(tmp_path, **{"log-file": log_file}))
@@ -165,7 +165,7 @@ class TestHaltedLoopParks:
             return CycleResult(role_scheduler.HALTED)
 
         monkeypatch.setattr(role_scheduler, "run_once", halted_then_stop)
-        monkeypatch.setattr(role_scheduler.time, "sleep", lambda _s: None)
+        monkeypatch.setattr(role_scheduler, "_sleep", lambda _s: None)
 
         assert role_scheduler.main(_args(tmp_path)) == 130
         assert polls["n"] == 3, "the loop must have kept polling while halted"
@@ -183,7 +183,7 @@ class TestHaltedLoopParks:
             return CycleResult(role_scheduler.HALTED)
 
         monkeypatch.setattr(role_scheduler, "run_once", halted)
-        monkeypatch.setattr(role_scheduler.time, "sleep", lambda _s: None)
+        monkeypatch.setattr(role_scheduler, "_sleep", lambda _s: None)
 
         log_file = tmp_path / "logs" / "scheduler-coder.log"
         role_scheduler.main(_args(tmp_path, **{"log-file": log_file}))
@@ -200,7 +200,7 @@ class TestHaltedLoopParks:
             return CycleResult(role_scheduler.HALTED)
 
         monkeypatch.setattr(role_scheduler, "run_once", halted)
-        monkeypatch.setattr(role_scheduler.time, "sleep", lambda _s: None)
+        monkeypatch.setattr(role_scheduler, "_sleep", lambda _s: None)
 
         assert role_scheduler.main([*_args(tmp_path), "--once"]) == 1
 

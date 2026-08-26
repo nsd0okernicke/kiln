@@ -145,8 +145,9 @@ def parse_status_since(value: str) -> datetime:
 
 
 def parse_local_timestamp(value: str) -> datetime:
-    """`messages.db`'s `created_at` is naive local time (the schema's own default)."""
-    return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+    """Parse current UTC ISO timestamps and legacy naive-local database values."""
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return parsed.astimezone().replace(tzinfo=None) if parsed.tzinfo else parsed
 
 
 def format_age(dt: datetime, now: datetime) -> str:
@@ -293,10 +294,8 @@ def queue_wait(oldest_queued: dict[str, str] | None, role: str, now_local: datet
     """
     How long this role's oldest queued message has waited, or `-` when nothing is waiting.
 
-    Read with the *local* parser: `created_at` is naive localtime by the schema's own default,
-    unlike the UTC `since` in the status files. `dashboard` already carries both parsers for
-    exactly this reason, and using the wrong one here would show every fresh message as hours
-    old on any machine not on UTC.
+    Current values are UTC ISO timestamps; the parser also accepts naive-local values left
+    by databases created before queue timestamps were normalized.
     """
     stamp = (oldest_queued or {}).get(role)
     if not stamp or now_local is None:
@@ -584,9 +583,8 @@ class SwarmSnapshot:
     the cockpit builds its JSON from this; the ASCII render is unchanged and
     still the only consumer inside this module.
 
-    Both clocks travel with the data deliberately: `created_at` in the queue is naive
-    localtime and `since` in the status files is UTC, so a consumer that kept only one of
-    them would necessarily read one of the two wrong -- the exact bug `queue_wait` documents.
+    Both clocks travel with the data deliberately: current queue and status timestamps are
+    UTC, while legacy databases can still contain naive-local queue timestamps.
     """
 
     sessions: list[RoleSession]

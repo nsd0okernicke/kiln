@@ -28,6 +28,9 @@ class SQLiteMessageQueue:
     def mark_failed(self, message_id: str, error: str) -> bool:
         return queue_commands.mark_failed(self.path, message_id, error)
 
+    def name_work_item(self, message_id: str, work_item: str) -> bool:
+        return queue_commands.name_work_item(self.path, message_id, work_item)
+
     def count_arrivals(self, work_item: str, branch: str, target: str) -> int:
         return count_work_item_arrivals(self.path, work_item, branch, target)
 

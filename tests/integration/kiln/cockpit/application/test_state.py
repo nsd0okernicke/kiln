@@ -54,6 +54,8 @@ def _row(
     escalation=False,
     error=None,
     acked_at=None,
+    started_at=None,
+    finished_at=None,
 ):
     return {
         "id": message_id,
@@ -64,6 +66,8 @@ def _row(
         "created_at": created_at,
         "error": error,
         "acked_at": acked_at,
+        "started_at": started_at,
+        "finished_at": finished_at,
         "content": handoff.format_handoff(
             sender=sender,
             handoff=work_item,
@@ -113,6 +117,57 @@ class TestLaneFor:
 
 
 class TestBuildBoard:
+    def test_a_completed_card_sums_every_role_run_in_the_cycle(self):
+        rows = [
+            _row(
+                work_item="ALPHA",
+                target="architect",
+                status=db.STATUS_PROCESSED,
+                created_at="2026-08-09T14:59:00Z",
+                message_id="d" * 32,
+                started_at="2026-08-09T14:56:00Z",
+                finished_at="2026-08-09T14:59:00Z",
+            ),
+            _row(
+                work_item="ALPHA",
+                target="refactorer",
+                status=db.STATUS_PROCESSED,
+                created_at="2026-08-09T14:54:00Z",
+                message_id="c" * 32,
+                started_at="2026-08-09T14:54:00Z",
+                finished_at="2026-08-09T14:56:00Z",
+            ),
+            _row(
+                work_item="ALPHA",
+                target="coder",
+                status=db.STATUS_PROCESSED,
+                created_at="2026-08-09T14:50:00Z",
+                message_id="b" * 32,
+                started_at="2026-08-09T14:51:00Z",
+                finished_at="2026-08-09T14:54:00Z",
+            ),
+        ]
+
+        board = cockpit_state.build_board(
+            rows, {}, NOW_LOCAL, ("coder", "refactorer", "architect")
+        )
+
+        assert board["cards"]["done"][0]["duration"] == "8m"
+
+    def test_a_running_card_does_not_duplicate_its_age_as_duration(self):
+        rows = [_row(status=db.STATUS_PROCESSING, started_at="2026-08-09T14:55:00Z")]
+
+        card = cockpit_state.build_board(rows, {}, NOW_LOCAL, ("coder",))["cards"]["coder"][0]
+
+        assert card["duration"] is None
+
+    def test_a_historical_card_without_timing_does_not_invent_a_duration(self):
+        card = cockpit_state.build_board(
+            [_row(status=db.STATUS_PROCESSED)], {}, NOW_LOCAL, ("coder",)
+        )["cards"]["done"][0]
+
+        assert card["duration"] is None
+
     def test_only_the_latest_message_per_work_item_becomes_a_card(self):
         rows = [
             _row(work_item="ALPHA", target="refactorer", created_at="2026-08-09 16:59:00"),

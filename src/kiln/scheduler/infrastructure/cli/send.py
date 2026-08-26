@@ -22,7 +22,7 @@ import argparse
 import logging
 import sys
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ...domain import handoff
@@ -53,7 +53,7 @@ def build_message(
         commit=commit,
         summary=summary,
         next_role=target,
-        timestamp=timestamp or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        timestamp=timestamp or datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         escalation=escalation,
     )
 

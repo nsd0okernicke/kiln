@@ -76,7 +76,8 @@ def parse_status_since(value: str) -> datetime:
 
 
 def parse_local_timestamp(value: str) -> datetime:
-    return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return parsed.astimezone().replace(tzinfo=None) if parsed.tzinfo else parsed
 
 
 def format_age(value: datetime, now: datetime) -> str:
@@ -88,6 +89,16 @@ def format_age(value: datetime, now: datetime) -> str:
     if seconds < 86400:
         return f"{seconds // 3600}h ago"
     return f"{seconds // 86400}d ago"
+
+
+def format_duration(seconds: int) -> str:
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m"
+    if seconds < 86400:
+        return f"{seconds // 3600}h {seconds % 3600 // 60}m"
+    return f"{seconds // 86400}d {seconds % 86400 // 3600}h"
 
 
 def is_stalled(status: dict | None, now_utc: datetime) -> bool:
@@ -291,11 +302,13 @@ def build_board(
     its creation time.
     """
     task_titles = {task["work_item"]: task["title"] for task in tasks}
+    cycle_durations = _cycle_durations(work_items)
     cards = [
         _backlog_card(task, now_local, human_role) for task in tasks if task["status"] == "backlog"
     ]
     cards += [
-        _card(row, cycles, now_local, task_titles) for row in _latest_per_work_item(work_items)
+        _card(row, cycles, now_local, task_titles, cycle_durations)
+        for row in _latest_per_work_item(work_items)
     ]
     order = _board_lane_order(lanes, cards, human_role)
     grouped = _cards_by_lane(cards, order)
@@ -492,16 +505,21 @@ def build_state(
 
 
 def _card(
-    row: dict, cycles: dict[str, int], now_local: datetime, task_titles: dict[str, str]
+    row: dict,
+    cycles: dict[str, int],
+    now_local: datetime,
+    task_titles: dict[str, str],
+    cycle_durations: dict[str, str],
 ) -> dict:
     work_item = named_work_item(row)
     summary = extract_summary(row["content"], CARD_SUMMARY_CHARS)
     task_title = task_titles.get(work_item, "") if work_item is not None else ""
+    lane = lane_for(row)
     return {
         "work_item": work_item,
         "title": task_title or summary or work_item or UNNAMED_TITLE,
         "unnamed": work_item is None,
-        "lane": lane_for(row),
+        "lane": lane,
         "message_id": row["id"],
         "sender": row["sender"],
         "target": row["target"],
@@ -509,6 +527,7 @@ def _card(
         "summary": summary,
         "created_at": row["created_at"],
         "age": _age(row["created_at"], now_local),
+        "duration": cycle_durations.get(work_item or "") if lane == LANE_DONE else None,
         "cycles": cycles.get(work_item, 0) if work_item else 1,
         "failed": row["status"] == MessageStatus.FAILED,
         "error": row.get("error"),
@@ -637,9 +656,8 @@ def _queue_wait(snapshot: SwarmSnapshot, role: str) -> str | None:
     """
     How long this role's oldest queued message has waited.
 
-    Uses the **local** parser: `created_at` is naive localtime by the schema's own default,
-    unlike the UTC `since` in the status files. Reading it with the wrong one would show
-    every fresh message as hours old on any machine not running on UTC.
+    Current values are UTC ISO timestamps. `parse_local_timestamp` also accepts legacy
+    naive-local database values and normalizes both to the local display clock.
     """
     return _age(snapshot.oldest_queued.get(role), snapshot.now_local)
 
@@ -651,3 +669,20 @@ def _age(created_at: str | None, now_local: datetime) -> str | None:
         return format_age(parse_local_timestamp(created_at), now_local)
     except ValueError:
         return None
+
+
+def _cycle_durations(rows: list[dict]) -> dict[str, str]:
+    seconds_by_item: dict[str, int] = {}
+    for row in rows:
+        work_item = named_work_item(row)
+        started_at, finished_at = row.get("started_at"), row.get("finished_at")
+        if not work_item or not started_at or not finished_at:
+            continue
+        try:
+            elapsed = parse_local_timestamp(finished_at) - parse_local_timestamp(started_at)
+        except ValueError:
+            continue
+        seconds_by_item[work_item] = seconds_by_item.get(work_item, 0) + max(
+            0, int(elapsed.total_seconds())
+        )
+    return {work_item: format_duration(seconds) for work_item, seconds in seconds_by_item.items()}

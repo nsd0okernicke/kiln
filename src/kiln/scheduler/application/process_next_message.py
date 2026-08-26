@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ..domain import handoff, policies, status_contract
@@ -64,7 +64,7 @@ class SchedulerContext:
     worktree_port: Worktree
     debug_sink: WorkerDebugSink
     queue_label: str = ""
-    clock: Callable[[], datetime] = datetime.now
+    clock: Callable[[], datetime] = lambda: datetime.now(UTC)
     set_status: Callable[..., None] = lambda _state, **_kwargs: None
     max_attempts: int = 2
     escalation_limit: int = 3
@@ -73,7 +73,10 @@ class SchedulerContext:
     run_verify: Callable[[], VerificationResult] | None = None
 
     def timestamp(self) -> str:
-        return self.clock().strftime("%Y-%m-%d %H:%M:%S")
+        value = self.clock()
+        if value.tzinfo is None:
+            return value.strftime("%Y-%m-%d %H:%M:%S")
+        return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
 @dataclass
@@ -409,6 +412,7 @@ def _hand_off(
     work_item = resolve_work_item(inbound.handoff, attempts.last.result.handoff_name)
     if work_item != inbound.handoff:
         log.info(f"{ICON_HANDOFF} work item named: %s", work_item)
+        _queue(ctx).name_work_item(message_id, work_item)
 
     if not _produced_work(ctx, anchor):
         return _no_op(ctx, message_id, inbound, summary, attempts)

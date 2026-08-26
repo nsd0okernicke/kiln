@@ -616,7 +616,7 @@ class TestCliLoop:
 
         monkeypatch.setattr(role_scheduler, "run_once", always_fails)
         monkeypatch.setattr(role_scheduler, "build_context", lambda args: ctx)
-        monkeypatch.setattr(role_scheduler.time, "sleep", lambda _seconds: None)
+        monkeypatch.setattr(role_scheduler, "_sleep", lambda _seconds: None)
 
         assert role_scheduler.main(self._args(tmp_path)) == 1
         assert seen.count("blocked") == role_scheduler.MAX_CONSECUTIVE_ERRORS
@@ -635,7 +635,7 @@ class TestCliLoop:
 
         monkeypatch.setattr(role_scheduler, "run_once", cycles)
         monkeypatch.setattr(role_scheduler, "build_context", lambda args: _dummy_ctx(tmp_path))
-        monkeypatch.setattr(role_scheduler.time, "sleep", sleeps.append)
+        monkeypatch.setattr(role_scheduler, "_sleep", sleeps.append)
 
         role_scheduler.main(self._args(tmp_path, **{"poll-interval": 0.01}))
         assert sleeps == [0.01], "must not sleep after a productive cycle"

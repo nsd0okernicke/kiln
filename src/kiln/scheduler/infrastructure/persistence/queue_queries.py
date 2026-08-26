@@ -50,10 +50,8 @@ def oldest_queued_by_role(db_path: str | Path, branch: str) -> dict[str, str]:
     unserved for an hour says something is dead downstream, while five that arrived a minute
     ago say the swarm is busy. Depth alone cannot tell those apart.
 
-    The value is naive **localtime**, matching the schema's own `created_at` default -- read
-    it with `dashboard.parse_local_timestamp`, not the UTC parser used for status files.
-    Mixing the two would produce an age off by the machine's UTC offset, which on this
-    codebase's own timezone would read as a two-hour stall on a message that just arrived.
+    Current values are UTC ISO timestamps. The dashboard parser remains compatible with
+    naive-local values stored by older databases.
     """
     with closing(connect(db_path)) as conn:
         cur = conn.cursor()
@@ -156,7 +154,8 @@ def work_item_messages(
     with closing(connect(db_path)) as conn:
         cur = conn.cursor()
         cur.execute(
-            "SELECT id, sender, target, status, content, created_at, work_item, error "
+            "SELECT id, sender, target, status, content, created_at, work_item, error, "
+            "started_at, finished_at "
             "FROM messages WHERE branch=? "
             "ORDER BY created_at DESC, rowid DESC LIMIT ?",
             (branch, limit),

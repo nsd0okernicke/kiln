@@ -826,7 +826,8 @@ function renderBoard(state) {
       el.append(text(
         "div",
         card.kind === "backlog" ? "HITL backlog · updated " + (card.age || "")
-          : card.sender + " → " + card.target + " · " + (card.age || ""),
+          : card.sender + " → " + card.target + " · " + (card.age || "")
+            + (card.duration ? " · cycle " + card.duration : ""),
         "meta",
       ));
       // An unnamed card borrows its title from the summary, so printing both would say the

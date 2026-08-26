@@ -51,6 +51,9 @@ from .queue_commands import (
     message_exists as message_exists,
 )
 from .queue_commands import (
+    name_work_item as name_work_item,
+)
+from .queue_commands import (
     recover_stale_processing as recover_stale_processing,
 )
 from .queue_commands import (
@@ -108,10 +111,12 @@ CREATE TABLE IF NOT EXISTS messages (
   priority INTEGER DEFAULT 50,
   status TEXT DEFAULT 'queued',
   content TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime')),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
   delivered_at TEXT,
   acked_at TEXT,
   processed_at TEXT,
+  started_at TEXT,
+  finished_at TEXT,
   error TEXT,
   branch TEXT NOT NULL DEFAULT 'main',
   work_item TEXT
@@ -136,8 +141,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   title TEXT NOT NULL,
   body TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'backlog' CHECK (status IN ('backlog', 'active', 'archived')),
-  created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
   dispatched_at TEXT,
   message_id TEXT REFERENCES messages(id),
   UNIQUE (branch, work_item)
@@ -174,6 +179,10 @@ def ensure_schema(db_path: str | Path) -> None:
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     with closing(connect(db_path)) as conn:
         conn.execute(SCHEMA_SQL)
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(messages)")}
+        for column in ("started_at", "finished_at"):
+            if column not in columns:
+                conn.execute(f"ALTER TABLE messages ADD COLUMN {column} TEXT")
         conn.execute(INDEX_SQL)
         conn.execute(WORK_ITEM_INDEX_SQL)
         conn.execute(TASK_SCHEMA_SQL)
