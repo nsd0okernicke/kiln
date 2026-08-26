@@ -51,7 +51,7 @@ python -m pip install -r src/kiln/mcp_server/requirements.txt
 Kiln warns at launch when the interpreter used by the agent CLI cannot import the required MCP
 package.
 
-## Quick start
+## Getting started
 
 Clone Kiln and run it in place:
 
@@ -60,45 +60,114 @@ git clone https://github.com/nsd0okernicke/kiln.git
 cd kiln
 ```
 
-### Windows
+### 1. Initialize your project
 
-Create a project:
+For a new, empty project on Windows:
 
 ```powershell
 .\bin\kiln.ps1 -Init -WorkingDir C:\path\to\my-project
 ```
 
-Launch the default swarm:
-
-```powershell
-.\bin\kiln.ps1 -WorkingDir C:\path\to\my-project
-```
-
-### Linux and macOS
-
-Create a project:
+On Linux or macOS:
 
 ```bash
 ./bin/kiln.sh init /path/to/my-project
 ```
 
-Launch the default swarm:
+To start from a bundled example, add `-Example library-hub` on Windows or
+`--example library-hub` on Linux and macOS.
+
+For an existing project, first commit or stash its current changes, then run the same init
+command with the repository root as the working directory. Kiln keeps the application source
+in place and adds its project instructions, skills, runtime configuration, Git ignore rules,
+and message database. Review the resulting `git diff` before committing it.
+
+Initialization creates generic constitution files. Do not start real work with them yet—the
+next step adapts them to the project.
+
+### 2. Commit the scaffold
+
+Kiln creates role worktrees from committed files. Review the initialization and commit the
+scaffold before the first launch, otherwise those worktrees cannot receive the constitution,
+roles, or skills:
+
+```bash
+git status
+git diff
+git add kiln .gitignore .gitattributes
+git commit -m "Initialize Kiln project"
+```
+
+Include any other initialization files shown by `git status` that you intentionally want to
+version. Do not commit `.kiln/`, `.worktrees/`, generated agent instructions, or credentials.
+
+### 3. Start Kiln and configure the constitution
+
+Launch Kiln on Windows:
+
+```powershell
+.\bin\kiln.ps1 -WorkingDir C:\path\to\my-project
+```
+
+Or on Linux and macOS:
 
 ```bash
 ./bin/kiln.sh /path/to/my-project
 ```
 
-Scaffolding initializes Git when necessary and creates the project constitution, roles, skills,
-and runtime tools. Launching creates role worktrees, generated agent instructions, the message
-queue, and terminal panes.
+In the interactive HITL pane, enter:
 
-Before starting a real run, inspect the resolved topology without launching anything:
+```text
+Use kiln-constitution-setup to configure this project. Inspect the repository first, ask me
+only for decisions you cannot establish from evidence, and show me both complete constitution
+files for approval before writing them.
+```
+
+For an existing codebase, the skill examines its manifests, source layout, tests, CI, and
+documentation before asking questions. For a new project, it guides you through a short
+interview about the product, architecture, toolchain, quality gates, and constraints.
+
+Review the proposed contents carefully, resolve any contradictions the skill reports, and
+approve the two files only when they describe the intended project:
+
+```text
+kiln/project/constitution/project.md
+kiln/project/constitution/engineering.md
+```
+
+The setup skill changes only these constitution files. It does not alter roles, profiles,
+routing, or the workflow.
+
+### 4. Review, commit, and restart
+
+After approving the constitution, inspect and commit the two adapted files:
+
+```bash
+git diff
+git add kiln/project/constitution/project.md kiln/project/constitution/engineering.md
+git commit -m "Configure Kiln project"
+```
+
+Stop the initial session so it can be regenerated from the approved constitution:
+
+```powershell
+.\bin\kiln.ps1 -WorkingDir C:\path\to\my-project -Stop
+```
+
+On Linux and macOS, use `./bin/kiln.sh /path/to/my-project --stop`.
+
+### 5. Check the resolved workflow
+
+You can inspect the selected profile, roles, routes, worktrees, and scheduler commands without
+launching terminal panes:
 
 ```bash
 ./bin/kiln.sh /path/to/my-project --dry-run
 ```
 
-Use `.\bin\kiln.ps1` instead of `./bin/kiln.sh` in the remaining examples on Windows.
+Use `.\bin\kiln.ps1` instead of `./bin/kiln.sh` in the remaining examples on Windows. Once the
+dry run matches your expectations, launch Kiln normally. Every role and worker definition will
+now use the approved constitution. Create work through the HITL backlog or the Cockpit.
 
 ## The default workflow
 
