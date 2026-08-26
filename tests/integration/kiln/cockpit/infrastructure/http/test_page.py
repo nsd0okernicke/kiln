@@ -341,6 +341,17 @@ class TestOperationalQueue:
     def test_a_role_without_a_log_gets_an_explanation(self, page):
         assert '"No " + stream + " log for this role."' in page
 
+    def test_role_and_card_details_can_copy_their_complete_output(self, page):
+        role_details = page.partition("function renderRoleDetails")[2].partition(
+            "async function pollLog"
+        )[0]
+
+        assert 'copy.onclick = () => copyAll("live-log")' in role_details
+        assert 'id="doc-copy"' in page
+        assert '$("doc-copy").onclick = () => copyAll("doc-body")' in page
+        assert "navigator.clipboard.writeText(content)" in page
+        assert 'document.execCommand("copy")' in page
+
     def test_unknown_cache_share_cannot_abort_opening_the_dialog(self, page):
         assert "function ratioPercent(value)" in page
         assert 'value === null || value === undefined ? "—"' in page

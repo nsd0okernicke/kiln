@@ -276,9 +276,10 @@
   #queue tr.role-row { cursor: pointer; }
   #queue tr.role-row:hover { background: var(--surface); }
   .log-cell { padding: 10px; background: var(--code-bg); }
-  .log-toolbar { display: flex; gap: 6px; margin-bottom: 6px; }
+  .log-toolbar, .detail-toolbar { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
   .log-toolbar button { padding: 2px 8px; font-size: 12px; }
   .log-toolbar button.active { color: var(--accent); border-color: var(--accent); }
+  .copy-all { padding: 2px 8px; font-size: 12px; }
   .live-log { margin: 0; max-height: 320px; white-space: pre-wrap; }
   #role-dialog { width: min(960px, 94vw); }
   #role-dialog .live-log { min-height: 180px; max-height: 55vh; }
@@ -440,6 +441,7 @@
 <dialog id="doc-dialog">
   <h2 id="doc-title">Handoff</h2>
   <div class="body">
+    <div class="detail-toolbar"><span class="spacer"></span><button id="doc-copy" class="copy-all" type="button">Copy all</button></div>
     <pre id="doc-body"></pre>
     <div class="row">
       <button id="doc-close">Close</button>
@@ -547,6 +549,30 @@ function toast(message, bad) {
   el.style.display = "block";
   clearTimeout(toast._timer);
   toast._timer = setTimeout(() => { el.style.display = "none"; }, 5000);
+}
+
+async function copyAll(sourceId) {
+  const source = $(sourceId);
+  const content = source ? source.textContent : "";
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(content);
+    } else {
+      const fallback = document.createElement("textarea");
+      fallback.value = content;
+      fallback.setAttribute("readonly", "");
+      fallback.style.position = "fixed";
+      fallback.style.opacity = "0";
+      document.body.append(fallback);
+      fallback.select();
+      const copied = document.execCommand("copy");
+      fallback.remove();
+      if (!copied) throw new Error("clipboard unavailable");
+    }
+    toast("copied all content");
+  } catch (error) {
+    toast("could not copy content", true);
+  }
 }
 
 async function post(path, body) {
@@ -936,6 +962,11 @@ function renderRoleDetails(role, state, wasPinned, oldScrollTop) {
     button.onclick = () => { logStream = stream; renderRoleDetails(role, state, true, 0); pollLog(); };
     toolbar.append(button);
   }
+  toolbar.append(text("span", null, "spacer"));
+  const copy = text("button", "Copy all", "copy-all");
+  copy.type = "button";
+  copy.onclick = () => copyAll("live-log");
+  toolbar.append(copy);
   const output = $("live-log");
   output.textContent = logText[logStream] || "No " + logStream + " log for this role.";
   output.scrollTop = wasPinned ? output.scrollHeight : oldScrollTop;
@@ -1175,6 +1206,7 @@ $("teardown").onclick = async () => {
 };
 
 $("doc-close").onclick = () => $("doc-dialog").close();
+$("doc-copy").onclick = () => copyAll("doc-body");
 $("role-close").onclick = () => $("role-dialog").close();
 $("role-dialog").onclose = () => { expandedRole = null; };
 
