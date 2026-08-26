@@ -18,7 +18,7 @@ steps to be observable and repeatable rather than managed in one long agent conv
 - Agents can execute commands and modify files without interactive approval.
 - Autonomous roles use separate Git worktrees and exchange structured handoffs.
 - Profiles define the roles, routing, models, timeouts, and terminal layout.
-- Claude, Codex, Copilot, and Grok are supported as role backends.
+- Claude, Codex, Copilot, Grok, and Pi are supported as role backends.
 - The default profile is human-guided at intake and autonomous afterward.
 - Failures are retried, then escalated to the human. Repeated escalation parks the role until
   you explicitly retry it.
@@ -36,6 +36,7 @@ CLI you intend to use.
   - OpenAI Codex CLI
   - GitHub Copilot CLI
   - Grok CLI
+  - Pi coding agent
 - A terminal backend:
   - WezTerm is recommended on every platform
   - Windows Terminal is supported on Windows
@@ -139,6 +140,10 @@ Launch a profile:
 ./bin/kiln.sh /path/to/project --profile fix
 ```
 
+The shipped workflow profiles use Pi by default: HITL runs `igate/brain`, while automated
+roles run `igate/coder`. Configure those models in Pi before launching, or select another
+backend with an override.
+
 Run every agent-bearing role on another backend:
 
 ```bash
@@ -152,6 +157,26 @@ you explicitly provide one:
 ./bin/kiln.sh /path/to/project \
   --agent-override codex \
   --model-override gpt-5-codex
+```
+
+Pi uses custom OpenAI-compatible providers configured in Pi's user-owned `models.json` and
+`settings.json`. Kiln references only provider-qualified model names:
+
+```bash
+./bin/kiln.sh /path/to/project --agent-override pi --model-override igate/coder
+```
+
+Keep provider URLs, API keys, tokens, and corporate certificate configuration in Pi's user
+configuration or environment. Kiln does not copy them into profiles, worktrees, generated
+worker definitions, commands, or logs. Scheduler workers run Pi with `--mode json`, an
+ephemeral session, project-local configuration disabled, and an explicit built-in tool list.
+
+On corporate Windows networks, Pi may report `Connection error` when Node does not trust the
+company certificate authority. Keep the provider URL on HTTPS and make Node use the Windows
+certificate store, then reopen the terminal before launching Kiln:
+
+```powershell
+[Environment]::SetEnvironmentVariable("NODE_OPTIONS", "--use-system-ca", "User")
 ```
 
 ## Daily commands
@@ -326,14 +351,15 @@ Minimal example:
     "fix": {
       "description": "Coder followed by architecture review",
       "defaults": {
-        "agent": "claude",
-        "model": "claude-sonnet-5"
+        "agent": "pi",
+        "model": "igate/coder"
       },
       "terminals": [
         {
           "role": "human-in-the-loop",
           "worktree": "@current",
-          "mode": "manual"
+          "mode": "manual",
+          "model": "igate/brain"
         },
         {
           "role": "coder",
@@ -368,7 +394,7 @@ targets, and unsupported backend names fail at launch instead of being silently 
 | Field | Meaning |
 |---|---|
 | `role` | Stable role name used for routing, worktrees, status, and logs |
-| `agent` | `claude`, `codex`, `copilot`, or `grok` |
+| `agent` | `claude`, `codex`, `copilot`, `grok`, or `pi` |
 | `title` | Optional display title |
 | `model` | Model for the wrapper or one-shot worker |
 | `workerModel` | Optional model specifically for delegated worker execution |
@@ -435,6 +461,8 @@ live. Create `.kiln/test-metrics.json`:
 `verificationRole` makes that scheduler role run `command` after its worker succeeds and
 before handoff. Use `{reports}` in the command when reports must be written to the shared
 project rather than the role's worktree; Kiln creates and expands that directory portably.
+The command itself runs in the verification role's worktree, so project-relative tools should
+use `.` rather than `{project}`. Kiln keeps the generated `reports/` directory out of Git.
 
 Three **formats** are read, never three tools — which is what keeps the panel working in any
 ecosystem:
@@ -499,6 +527,8 @@ Kiln is designed for autonomous execution and launches agents with broad permiss
 - Codex workers bypass approvals and the sandbox.
 - Copilot workers allow tool execution and file access.
 - Grok scheduler workers auto-approve tools.
+- Pi scheduler workers use an ephemeral JSON-mode session and ignore project-local Pi
+  configuration; Pi's user-owned provider credentials remain in effect.
 
 Agents can run arbitrary commands available to your user account. Git worktrees separate role
 branches, but they are not a security sandbox and do not prevent access outside the repository.
@@ -591,6 +621,9 @@ integration tests alone.
   upstream CLI issue. Avoid Copilot for long scheduler-mode work until that behavior is fixed.
 - Traffic capture supports Claude and Codex only.
 - Grok wrapper mode is less extensively validated than its scheduler adapter.
+- Pi integration is covered with a fake CLI. A real private provider should pass the issue 32
+  compatibility checks for tools, streaming, usage, termination, certificates, and proxies
+  before production use.
 - Linux/macOS share the Python core with Windows, but authenticated live-agent coverage varies
   by backend and environment.
 - Windows symlink creation may require Developer Mode or elevation. Kiln falls back to copies,

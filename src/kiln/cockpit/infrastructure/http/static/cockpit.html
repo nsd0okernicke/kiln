@@ -28,7 +28,7 @@
     /* One hue per backend, so a mixed-backend swarm is readable at a glance without a
        logo. Every one of these clears 4.5:1 against its theme's --panel. */
     --agent-claude: #e8925e; --agent-codex: #6fd3a3;
-    --agent-copilot: #b48ef0; --agent-grok: #9fb3d1;
+    --agent-copilot: #b48ef0; --agent-grok: #9fb3d1; --agent-pi: #d7a84b;
   }
 
   /* Accent and bad are a shade deeper than they look like they need to be, because the
@@ -43,7 +43,7 @@
     --chip-bad: #fde9e9; --code-bg: #f4f7fb; --on-accent: #ffffff; --danger-line: #eec4c4;
     --backdrop: rgba(18, 24, 34, .35);
     --agent-claude: #a4551d; --agent-codex: #12734d;
-    --agent-copilot: #6b39b8; --agent-grok: #445876;
+    --agent-copilot: #6b39b8; --agent-grok: #445876; --agent-pi: #936900;
   }
 
   :root[data-theme="neon"] {
@@ -60,7 +60,7 @@
     --logo-glow: drop-shadow(0 0 6px rgba(0, 229, 255, .55));
     --glow-active: 0 0 18px -4px var(--hot);
     --agent-claude: #ff9f4d; --agent-codex: #39ff88;
-    --agent-copilot: #c77dff; --agent-grok: #8fe8ff;
+    --agent-copilot: #c77dff; --agent-grok: #8fe8ff; --agent-pi: #ffd166;
   }
   * { box-sizing: border-box; }
   body {
@@ -235,6 +235,7 @@
   .agent-codex { color: var(--agent-codex); }
   .agent-copilot { color: var(--agent-copilot); }
   .agent-grok { color: var(--agent-grok); }
+  .agent-pi { color: var(--agent-pi); }
   .model { color: var(--dim); font-size: 12px; margin-left: 6px; }
   .heat { display: inline-block; width: 34px; height: 6px; border-radius: 3px; background: var(--chip); }
   .heat.warm { background: var(--warn); }
@@ -861,7 +862,7 @@ function renderQueue(state) {
     const agentCell = text("td", null, "agent-cell");
     agentCell.append(text("span", role.agent || "—", "agent agent-" + (role.agent || "unknown")));
     // `—` until the role reports for the first time; "(CLI default)" is a real, meaningful
-    // answer for copilot/codex/grok and is passed through as the scheduler wrote it.
+    // answer for copilot/codex/grok/pi and is passed through as the scheduler wrote it.
     agentCell.append(text("span", role.model || "—", "model"));
     row.append(agentCell);
 

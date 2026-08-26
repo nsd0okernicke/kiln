@@ -6,9 +6,8 @@ without spawning anything) and a thin `run_worker(...)` that shells out. That bo
 where constitution/engineering.md's "environmentally unsuitable" line falls: everything
 above it is tested directly, and only the subprocess call itself needs a live backend.
 
-`WorkerInvocation` lives here rather than inside any one adapter module: `claude_adapter.py`,
-`copilot_adapter.py` and `codex_adapter.py` all return it, so it belongs to the package, not
-to whichever adapter happened to be written first.
+`WorkerInvocation` lives here rather than inside any one adapter module: every backend adapter
+returns it, so it belongs to the package, not whichever adapter happened to be written first.
 """
 
 from __future__ import annotations

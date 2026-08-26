@@ -104,10 +104,9 @@ class TestScaffold:
         root = Path(__file__).resolve().parents[5]
         config = json.loads((root / "examples" / "library-hub" / "test-metrics.json").read_text())
 
-        assert config["command"].startswith(
-            "uv run --project {project} --extra dev python -m pytest"
-        )
-        assert "--cov=catalog --cov=loans" in config["command"]
+        assert config["command"].startswith("uv run --project . --extra dev python -m pytest")
+        assert "--cov=catalog" in config["command"]
+        assert "--cov=loans" not in config["command"]
         assert "--cov=." not in config["command"]
 
     def test_copies_the_constitution_and_roles(self, tmp_path, framework):

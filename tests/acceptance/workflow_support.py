@@ -19,7 +19,13 @@ def git(runner: CommandRunner, project: Path, *args: str):
     return runner.run("git", *args, cwd=project)
 
 
-def prepare(project: Path, runner: CommandRunner, *, profile: str = "spike") -> None:
+def prepare(
+    project: Path,
+    runner: CommandRunner,
+    *,
+    profile: str = "spike",
+    agent_override: str | None = "claude",
+) -> None:
     (project / "verify_system.py").write_text(
         "import os\n"
         "from pathlib import Path\n"
@@ -30,7 +36,7 @@ def prepare(project: Path, runner: CommandRunner, *, profile: str = "spike") -> 
     )
     git(runner, project, "add", "-A")
     git(runner, project, "commit", "-m", "Initial system-test project")
-    runner.run(
+    command = [
         console_script("kiln"),
         "--working-dir",
         project,
@@ -39,8 +45,10 @@ def prepare(project: Path, runner: CommandRunner, *, profile: str = "spike") -> 
         "--terminal",
         "none",
         "--dry-run",
-        cwd=REPO_ROOT,
-    )
+    ]
+    if agent_override:
+        command += ["--agent-override", agent_override]
+    runner.run(*command, cwd=REPO_ROOT)
 
 
 def send(
@@ -77,6 +85,7 @@ def scheduler_command(
     max_attempts: int = 1,
     escalation_limit: int = 3,
     once: bool = True,
+    agent: str = "claude",
 ) -> list[str | Path]:
     command: list[str | Path] = [
         console_script("kiln-scheduler"),
@@ -91,9 +100,9 @@ def scheduler_command(
         "--workflow",
         project / "kiln" / "project" / "constitution" / "workflow.md",
         "--worker-agent",
-        project / ".claude" / "agents" / f"{role}-worker.md",
+        project / f".{agent}" / "agents" / f"{role}-worker.md",
         "--agent",
-        "claude",
+        agent,
         "--route",
         f"{role}={target}",
         "--max-attempts",
@@ -123,10 +132,11 @@ def fake_environment(
     fake_file: str = "system-worker.txt",
     verification_status: str = "pass",
     sequence_file: Path | None = None,
+    executable: str = "claude",
 ) -> dict[str, str]:
     path = str(fake_claude) + os.pathsep + runner.environment.get("PATH", "")
-    resolved = shutil.which("claude", path=path)
-    expected = fake_claude / ("claude.exe" if os.name == "nt" else "claude")
+    resolved = shutil.which(executable, path=path)
+    expected = fake_claude / (f"{executable}.exe" if os.name == "nt" else executable)
     assert resolved and Path(resolved).resolve() == expected.resolve(), (
         f"refusing to run scheduler: fake Claude did not win PATH resolution ({resolved})"
     )
@@ -155,9 +165,17 @@ def scheduler(
     target: str = "human-in-the-loop",
     fake_file: str = "system-worker.txt",
     verification_status: str = "pass",
+    agent: str = "claude",
 ):
     return runner.run(
-        *scheduler_command(project, role=role, target=target, max_attempts=max_attempts, once=True),
+        *scheduler_command(
+            project,
+            role=role,
+            target=target,
+            max_attempts=max_attempts,
+            once=True,
+            agent=agent,
+        ),
         cwd=REPO_ROOT,
         env=fake_environment(
             runner,
@@ -165,6 +183,7 @@ def scheduler(
             status=status,
             fake_file=fake_file,
             verification_status=verification_status,
+            executable=agent,
         ),
     )
 

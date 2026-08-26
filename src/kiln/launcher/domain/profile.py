@@ -29,18 +29,17 @@ SYSTEM_PROFILES_PATH = (
 
 #: Every accepted backend now runs in both modes: a one-shot scheduler adapter
 #: (`scheduler/adapters/`) and an interactive wrapper session (`commands.build_agent_command`
-#: plus a full template set, which `test_docs_consistency` pins). `grok` was the last to
-#: carry only the former.
-VALID_AGENTS = ("claude", "copilot", "codex", "grok")
+#: plus a full template set, which `test_docs_consistency` pins).
+VALID_AGENTS = ("claude", "copilot", "codex", "grok", "pi")
 VALID_MODES = ("auto", "manual")
 
 #: Agents with a one-shot adapter in `scheduler/adapters/` -- the deterministic scheduler can
 #: only drive a backend it knows how to invoke non-interactively. Every currently-accepted
 #: agent has one; a future agent added to VALID_AGENTS without an adapter yet would stay out
 #: of this set until it has one too.
-SCHEDULER_CAPABLE_AGENTS = ("claude", "copilot", "codex", "grok")
+SCHEDULER_CAPABLE_AGENTS = ("claude", "copilot", "codex", "grok", "pi")
 
-#: Backends whose CLI reports a real dollar figure (`total_cost_usd`). Copilot and Codex do
+#: Backends whose CLI reports a real dollar figure (`total_cost_usd`). Copilot, Codex, and Pi do
 #: not -- their adapters leave `cost_usd` at the dataclass default of 0.0, and Codex's output
 #: contains no dollar amount at all, only token usage. A cost cap on those roles could never
 #: fire, which is the worst kind of guard: one that appears to be enforcing. So configuring

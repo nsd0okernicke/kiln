@@ -394,10 +394,14 @@ class TestGeneratedScaffoldingBlockingAMerge:
 
         assert git_ops.merge_commit(conflicting, git_repo).ok is False
 
-    def test_the_squash_can_no_longer_sweep_scaffolding_in(self, git_repo):
+    @pytest.mark.parametrize(
+        "relative", [".claude/settings.json", ".pi/agents/specifier-worker.md"]
+    )
+    def test_the_squash_can_no_longer_sweep_scaffolding_in(self, git_repo, relative):
         # The fix that matters: prevention, so no repo reaches the state above.
-        (git_repo / ".claude").mkdir()
-        (git_repo / ".claude" / "settings.json").write_text("{}", encoding="utf-8")
+        target = git_repo / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("{}", encoding="utf-8")
 
         git_ops.ensure_generated_ignored(git_repo)
 
@@ -406,7 +410,16 @@ class TestGeneratedScaffoldingBlockingAMerge:
 
 class TestGeneratedPathClassification:
     @pytest.mark.parametrize(
-        "path", [".claude/settings.json", "tmp/", "tmp/handoff-in.md", "CLAUDE.md", ".mcp.json"]
+        "path",
+        [
+            ".claude/settings.json",
+            ".pi/agents/specifier-worker.md",
+            "reports/junit.xml",
+            "tmp/",
+            "tmp/handoff-in.md",
+            "CLAUDE.md",
+            ".mcp.json",
+        ],
     )
     def test_launcher_artefacts_are_recognised(self, path):
         assert git_ops.is_generated_path(path) is True

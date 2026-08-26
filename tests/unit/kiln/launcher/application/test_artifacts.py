@@ -46,6 +46,10 @@ TEMPLATES = {
     "loop-manual-grok-with-inbox.md": "# Grok Manual Loop With Inbox\n",
     "runtime-grok.md": "# Grok Runtime\n",
     "wrapper-prompt-auto-grok.md": "# Grok Wrapper\n",
+    "loop-auto-pi.md": "# Pi Loop\n",
+    "loop-manual-pi.md": "# Pi Manual Loop\n",
+    "loop-manual-pi-with-inbox.md": "# Pi Manual Loop With Inbox\n",
+    "runtime-pi.md": "# Pi Runtime\n",
 }
 
 
@@ -153,6 +157,7 @@ class TestInstructionFiles:
             # AGENTS.md is the cross-vendor name and the one it lists first. Sharing the name
             # with Codex is safe because a worktree belongs to exactly one role.
             ("grok", "AGENTS.md"),
+            ("pi", "AGENTS.md"),
         ],
     )
     def test_each_backend_gets_its_own_filename(self, paths, agent, expected):
@@ -331,6 +336,13 @@ class TestWorkerFiles:
     def test_grok_worker_model_is_optional(self, paths):
         rendered = artifacts.render_worker_file(role(agent="grok"), paths)
         assert "model:" not in rendered.content
+
+    def test_pi_worker_is_kiln_owned_markdown_without_credentials(self, paths):
+        rendered = artifacts.render_worker_file(role(agent="pi", model="igate/coder"), paths)
+        assert rendered.path == paths.project_root / ".pi" / "agents" / "coder-worker.md"
+        assert "model: igate/coder" in rendered.content
+        assert "apiKey" not in rendered.content
+        assert "tools:" not in rendered.content
 
     def test_description_contains_no_bare_colon(self, paths):
         # An unquoted ':' breaks Copilot's YAML frontmatter parsing.

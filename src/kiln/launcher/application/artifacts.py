@@ -81,7 +81,7 @@ def instruction_file_for(role: RoleConfig, worktree: Path) -> Path:
     """
     if role.agent == "copilot":
         return worktree / ".github" / "copilot-instructions.md"
-    if role.agent in ("codex", "grok"):
+    if role.agent in ("codex", "grok", "pi"):
         return worktree / "AGENTS.md"
     return worktree / "CLAUDE.md"
 
@@ -277,7 +277,7 @@ def _worker_frontmatter(role: RoleConfig, description: str, model: str) -> list[
     if role.agent == "copilot":
         # A strict allowlist with no MCP server name, mirroring the Claude worker's isolation.
         frontmatter += ["tools:", "  - read", "  - write", "  - shell"]
-    elif role.agent == "grok":
+    elif role.agent in ("grok", "pi"):
         # No `tools:` line: those are Claude's own built-in tool names (below), and would be
         # actively wrong content in a grok file -- grok's scheduler adapter feeds this file's
         # description+prompt through an inline --agents payload and never reads `.tools`.

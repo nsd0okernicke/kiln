@@ -1,20 +1,21 @@
 {
   "version": "1.0",
-  "description": "Kiln framework default profiles. Profiles are named for the KIND OF WORK they do (full, fix, spike, harden, dry-run); which backend runs them is a launch flag (--agent-override), not a profile. mixed-backends is marked \"fixture\": true because it mixes backends per role, which no single override can express.",
+  "description": "Kiln framework default profiles. Profiles are named for the KIND OF WORK they do (full, fix, spike, harden, dry-run). They default to Pi and can be moved to another backend with --agent-override. mixed-backends is marked \"fixture\": true because it mixes backends per role, which no single override can express.",
   "default": "full",
   "profiles": {
     "full": {
       "description": "New feature, spec-first. Human-guided intake feeding the full autonomous cycle: specifier -> coder -> refactorer -> architect, on the deterministic scheduler, plus a dashboard tab and the local web kiln.cockpit.",
       "defaults": {
-        "agent": "claude",
-        "model": "claude-sonnet-5"
+        "agent": "pi",
+        "model": "igate/coder"
       },
       "terminals": [
         {
           "role": "human-in-the-loop",
           "worktree": "@current",
           "title": "Kiln Human-in-the-Loop",
-          "mode": "manual"
+          "mode": "manual",
+          "model": "igate/brain"
         },
         {
           "role": "inbox",
@@ -54,7 +55,8 @@
           "title": "Kiln Architect",
           "mode": "auto",
           "scheduler": "python",
-          "workerTimeout": 2400
+          "workerTimeout": 2400,
+          "workerIdleTimeout": 900
         },
         {
           "role": "dashboard",
@@ -137,15 +139,16 @@
     "fix": {
       "description": "Bugs and small changes. No specifier and no Gherkin ceremony -- the human states the problem and the coder works it directly -- but the architect still reviews before it comes back, so the shortcut is in the ceremony, not the verification.",
       "defaults": {
-        "agent": "claude",
-        "model": "claude-sonnet-5"
+        "agent": "pi",
+        "model": "igate/coder"
       },
       "terminals": [
         {
           "role": "human-in-the-loop",
           "worktree": "@current",
           "title": "Kiln Human-in-the-Loop",
-          "mode": "manual"
+          "mode": "manual",
+          "model": "igate/brain"
         },
         {
           "role": "inbox",
@@ -169,7 +172,8 @@
           "title": "Kiln Architect",
           "mode": "auto",
           "scheduler": "python",
-          "workerTimeout": 2400
+          "workerTimeout": 2400,
+          "workerIdleTimeout": 900
         },
         {
           "role": "dashboard",
@@ -224,15 +228,16 @@
     "spike": {
       "description": "Throwaway exploration. One coder, no gates, no review -- the answer is knowledge, not code you intend to keep. Use `harden` afterwards if a spike turns out to be worth keeping.",
       "defaults": {
-        "agent": "claude",
-        "model": "claude-sonnet-5"
+        "agent": "pi",
+        "model": "igate/coder"
       },
       "terminals": [
         {
           "role": "human-in-the-loop",
           "worktree": "@current",
           "title": "Kiln Human-in-the-Loop",
-          "mode": "manual"
+          "mode": "manual",
+          "model": "igate/brain"
         },
         {
           "role": "inbox",
@@ -299,15 +304,16 @@
     "harden": {
       "description": "Point it at code that already exists. Coverage, CRAP, mutation and boundary review, with no new behaviour and no specifier. The only profile that offers anything on a codebase Kiln did not write.",
       "defaults": {
-        "agent": "claude",
-        "model": "claude-sonnet-5"
+        "agent": "pi",
+        "model": "igate/coder"
       },
       "terminals": [
         {
           "role": "human-in-the-loop",
           "worktree": "@current",
           "title": "Kiln Human-in-the-Loop",
-          "mode": "manual"
+          "mode": "manual",
+          "model": "igate/brain"
         },
         {
           "role": "inbox",
@@ -331,7 +337,8 @@
           "title": "Kiln Architect",
           "mode": "auto",
           "scheduler": "python",
-          "workerTimeout": 2400
+          "workerTimeout": 2400,
+          "workerIdleTimeout": 900
         },
         {
           "role": "dashboard",
@@ -386,15 +393,16 @@
     "dry-run": {
       "description": "Every role manual, so a human approves each hop. For learning or demonstrating the flow: same shape as `full`, but nothing advances without you. Wrapper mode throughout, so the kiln-db and kiln-channel MCP servers must be installed.",
       "defaults": {
-        "agent": "claude",
-        "model": "claude-sonnet-5"
+        "agent": "pi",
+        "model": "igate/coder"
       },
       "terminals": [
         {
           "role": "human-in-the-loop",
           "worktree": "@current",
           "title": "Kiln Human-in-the-Loop",
-          "mode": "manual"
+          "mode": "manual",
+          "model": "igate/brain"
         },
         {
           "role": "inbox",
@@ -550,7 +558,8 @@
           "model": "claude-sonnet-5",
           "scheduler": "python",
           "workerDebug": true,
-          "workerTimeout": 2400
+          "workerTimeout": 2400,
+          "workerIdleTimeout": 900
         },
         {
           "role": "dashboard",

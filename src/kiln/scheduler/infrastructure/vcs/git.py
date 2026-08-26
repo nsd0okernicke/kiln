@@ -26,7 +26,9 @@ DEFAULT_TIMEOUT_SEC = 120
 #: Generated files excluded before `git add -A`; duplicated to keep scheduler independent.
 GENERATED_WORKTREE_PATHS = (
     "tmp/",
+    "reports/",
     ".claude/settings.json",
+    ".pi/agents/",
     ".mcp.json",
     "CLAUDE.md",
     "AGENTS.md",

@@ -492,7 +492,7 @@ def _token_notes(statuses: dict[str, dict], partial_cost: bool) -> list[str]:
     if breakdown:
         lines.append(f"  tokens by kind: {breakdown}")
     if partial_cost:
-        lines.append("  + partial: codex/copilot roles report tokens but no cost")
+        lines.append("  + partial: codex/copilot/pi roles report tokens but no cost")
     return lines
 
 

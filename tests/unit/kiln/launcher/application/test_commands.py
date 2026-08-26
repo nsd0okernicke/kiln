@@ -332,9 +332,23 @@ class TestGrok:
         assert "grok-debug-coder.log" in argv[argv.index("--debug-file") + 1]
 
 
+class TestPi:
+    def test_launches_an_interactive_session_with_the_start_prompt(self, paths):
+        argv = build(paths, agent="pi", mode="manual").argv
+        assert argv == ["pi", START_PROMPT]
+
+    def test_passes_a_provider_qualified_model(self, paths):
+        argv = build(paths, agent="pi", mode="manual", model="igate/brain").argv
+        assert argv[argv.index("--model") + 1] == "igate/brain"
+
+    def test_does_not_put_credentials_on_the_command_line(self, paths):
+        argv = build(paths, agent="pi", mode="manual", model="igate/brain").argv
+        assert not any("key" in value.lower() or "token" in value.lower() for value in argv)
+
+
 class TestUnsupportedAgent:
     def test_reports_in_the_pane_instead_of_failing_the_launch(self, paths):
-        # Unreachable for anything in VALID_AGENTS -- all four now have a launch path. This
+        # Unreachable for anything in VALID_AGENTS -- every accepted backend has a launch path. This
         # pins the behaviour for the next backend added there before it has one: one pane
         # says so, rather than the whole swarm failing to start.
         argv = build(paths, agent="some-future-agent").argv

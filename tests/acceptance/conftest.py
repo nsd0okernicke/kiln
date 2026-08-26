@@ -117,26 +117,36 @@ def command_runner(request, tmp_path, monkeypatch):
 
 @pytest.fixture
 def fake_claude(tmp_path) -> Path:
+    return _fake_agent(tmp_path, "claude", "fake_claude.py")
+
+
+@pytest.fixture
+def fake_pi(tmp_path) -> Path:
+    return _fake_agent(tmp_path, "pi", "fake_pi.py")
+
+
+def _fake_agent(tmp_path: Path, name: str, fixture: str) -> Path:
     binary_dir = tmp_path / "fake-bin"
     binary_dir.mkdir()
-    worker = Path(__file__).parent / "fixtures" / "fake_claude.py"
+    worker = Path(__file__).parent / "fixtures" / fixture
     python = sys.executable
 
     if os.name == "nt":
         from pip._vendor.distlib.scripts import ScriptMaker
 
-        shutil.copyfile(worker, binary_dir / "kiln_system_fake_claude.py")
+        module = f"kiln_system_fake_{name}"
+        shutil.copyfile(worker, binary_dir / f"{module}.py")
         maker = ScriptMaker(None, str(binary_dir))
         maker.clobber = True
         maker.variants = {""}
-        maker.make("claude = kiln_system_fake_claude:main")
+        maker.make(f"{name} = {module}:main")
 
-    posix = binary_dir / "claude"
+    posix = binary_dir / name
     posix.write_text(f'#!/bin/sh\nexec "{python}" "{worker}" "$@"\n', encoding="utf-8")
     posix.chmod(0o755)
     # Kept as a convenience for an interactive diagnosis. Scheduler tests resolve the real
     # generated .exe above on Windows, because CreateProcess does not reliably choose .cmd.
-    (binary_dir / "claude.cmd").write_text(
+    (binary_dir / f"{name}.cmd").write_text(
         f'@echo off\r\n"{python}" "{worker}"\r\n', encoding="utf-8"
     )
     return binary_dir

@@ -111,7 +111,7 @@ class TestSchedulerOptIn:
         config = {"profiles": {"p": {"terminals": [{"role": "coder", "scheduler": "python"}]}}}
         assert parse_profile(config, "p").roles[0].uses_scheduler is True
 
-    @pytest.mark.parametrize("agent", ["copilot", "codex", "grok"])
+    @pytest.mark.parametrize("agent", ["copilot", "codex", "grok", "pi"])
     def test_scheduler_accepted_for_backends_with_an_adapter(self, agent):
         config = {
             "profiles": {
@@ -211,6 +211,10 @@ class TestParsing:
         # Existing profiles reference it; config validation is not the place to break them.
         config = {"profiles": {"p": {"terminals": [{"role": "coder", "agent": "grok"}]}}}
         assert parse_profile(config, "p").roles[0].agent == "grok"
+
+    def test_pi_is_accepted(self):
+        config = {"profiles": {"p": {"terminals": [{"role": "coder", "agent": "pi"}]}}}
+        assert parse_profile(config, "p").roles[0].agent == "pi"
 
     def test_unsupported_mode_is_rejected(self):
         config = {"profiles": {"p": {"terminals": [{"role": "coder", "mode": "semi"}]}}}
@@ -808,6 +812,17 @@ class TestWorkflowShapedProfiles:
 
     def test_the_default_is_the_full_workflow(self, shipped):
         assert shipped["default"] == "full"
+
+    @pytest.mark.parametrize("name", ["full", "fix", "spike", "harden", "dry-run"])
+    def test_workflow_profiles_use_pi_with_role_specific_models(self, shipped, name):
+        profile = parse_profile(shipped, name)
+        active_roles = [role for role in profile.roles if not role.is_passive]
+
+        assert {role.agent for role in active_roles} == {"pi"}
+        assert profile.role("human-in-the-loop").model == "igate/brain"
+        assert {
+            role.model for role in active_roles if role.role != "human-in-the-loop"
+        } == {"igate/coder"}
 
     def test_every_profile_has_a_human_entry_point(self, shipped):
         for name in shipped["profiles"]:

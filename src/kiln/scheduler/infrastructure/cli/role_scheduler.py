@@ -184,7 +184,7 @@ def resolve_model(args: argparse.Namespace, definition: WorkerDefinition) -> str
 def display_model(args: argparse.Namespace, definition: WorkerDefinition) -> str:
     """
     `resolve_model()`'s value, but never the empty string -- an unset model for
-    copilot/codex/grok means "the CLI picks its own default", and printing that blank in a
+    copilot/codex/grok/pi means "the CLI picks its own default", and printing that blank in a
     banner or log line reads as broken configuration rather than a deliberate choice.
     """
     return resolve_model(args, definition) or "(CLI default)"
@@ -282,6 +282,7 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
         codex_adapter,
         copilot_adapter,
         grok_adapter,
+        pi_adapter,
     )
 
     adapters = {
@@ -289,6 +290,7 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
         "copilot": copilot_adapter,
         "codex": codex_adapter,
         "grok": grok_adapter,
+        "pi": pi_adapter,
     }
     adapter = adapters[args.agent]
 
@@ -365,7 +367,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--worktree", required=True)
     parser.add_argument("--workflow", required=True, help="path to constitution/workflow.md")
     parser.add_argument("--worker-agent", required=True, help="generated worker agent file")
-    parser.add_argument("--agent", default="claude", choices=["claude", "copilot", "codex", "grok"])
+    parser.add_argument(
+        "--agent", default="claude", choices=["claude", "copilot", "codex", "grok", "pi"]
+    )
     parser.add_argument(
         "--route",
         action="append",

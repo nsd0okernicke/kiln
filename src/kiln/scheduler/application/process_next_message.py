@@ -574,7 +574,7 @@ def _budget_breach(
     Checked before delegating, like the cycle limit, so the run that would breach the cap
     never starts. Escalates rather than hard-stopping, for the same reason.
 
-    **This is only as good as the backend's cost reporting.** Copilot and Codex always report
+    **This is only as good as the backend's cost reporting.** Copilot, Codex, and Pi report
     $0.00, so the tally never moves and the cap never fires -- which is why `parse_role`
     refuses `maxBudgetUsd` on those agents outright rather than leaving a guard that appears
     to be enforcing.

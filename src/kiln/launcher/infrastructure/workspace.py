@@ -42,10 +42,12 @@ REQUIRED_GITIGNORE_ENTRIES = (
     ".claude/agents/*-worker.md",
     ".codex/agents/*-worker.toml",
     ".grok/agents/*-worker.md",
+    ".pi/agents/*-worker.md",
     "CLAUDE.md",
     "AGENTS.md",
     ".mcp.json",
     "tmp/",
+    "reports/",
 )
 
 BASE_GITIGNORE = (
@@ -433,6 +435,7 @@ def _copy_worker_definitions(paths: KilnPaths, worktree: Path) -> None:
         (Path(".github") / "agents", "*-worker.agent.md"),
         (Path(".codex") / "agents", "*-worker.toml"),
         (Path(".grok") / "agents", "*-worker.md"),
+        (Path(".pi") / "agents", "*-worker.md"),
     ):
         source = paths.project_root / relative
         destination = worktree / relative
@@ -481,7 +484,7 @@ def _skill_targets(profile: Profile, paths: KilnPaths) -> list[tuple[Path, bool]
             role.uses_scheduler,
         )
         for role in profile.roles
-        if role.agent in ("claude", "copilot", "codex", "grok")
+        if role.agent in ("claude", "copilot", "codex", "grok", "pi")
     ]
     if targets:
         targets.append((paths.project_root, False))

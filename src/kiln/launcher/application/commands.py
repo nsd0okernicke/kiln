@@ -107,6 +107,15 @@ def _copilot_command(role: RoleConfig) -> AgentCommand:
     return AgentCommand(argv=argv, banner=role.display_name)
 
 
+def _pi_command(role: RoleConfig) -> AgentCommand:
+    """Interactive Pi session; provider credentials remain owned by Pi's user config."""
+    argv = ["pi"]
+    if role.model:
+        argv += ["--model", role.model]
+    argv.append(START_PROMPT)
+    return AgentCommand(argv=argv, banner=role.display_name)
+
+
 def _grok_command(role: RoleConfig, paths: KilnPaths) -> AgentCommand:
     """
     An interactive grok wrapper session.
@@ -530,6 +539,8 @@ def _direct_agent_command(
         return _codex_command(role, paths, proxy_url).with_env(**proxy_env(role, proxy_url))
     if role.agent == "grok":
         return _grok_command(role, paths)
+    if role.agent == "pi":
+        return _pi_command(role)
 
     # Every agent `config.VALID_AGENTS` accepts is handled above, so this is only reachable
     # for one added there without a launch path yet. Say so in the pane rather than failing

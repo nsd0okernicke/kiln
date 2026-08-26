@@ -210,7 +210,7 @@ class TestAgentColours:
     """
 
     #: Every backend `kiln.launcher.domain.profile.VALID_AGENTS` accepts.
-    AGENTS = ("claude", "codex", "copilot", "grok")
+    AGENTS = ("claude", "codex", "copilot", "grok", "pi")
 
     def test_every_accepted_backend_has_its_own_colour(self, page):
         from kiln.launcher.domain.profile import VALID_AGENTS
