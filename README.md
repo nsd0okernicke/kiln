@@ -336,6 +336,16 @@ Generated runtime state includes:
 
 Customize files under `kiln/project/`; Kiln copies them into role worktrees at launch.
 
+### Adapt the project constitution
+
+Initialization provides safe generic constitution files. Before using Kiln on a new codebase,
+ask the interactive HITL agent to use `kiln-constitution-setup`. The skill inspects existing
+manifests, source layout, tests, CI, and documentation first, then asks only about decisions it
+cannot establish. For a new project it uses a guided interview instead.
+
+The skill proposes complete replacements for `engineering.md` and `project.md` and waits for
+review before overwriting either file. It does not change workflow, roles, profiles, or routing.
+
 ## Profile configuration
 
 Create `kiln.profiles.json` in the project root to replace the bundled profile set. Profile

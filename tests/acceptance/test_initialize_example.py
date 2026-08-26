@@ -23,6 +23,9 @@ def test_initializes_an_example_as_a_launchable_project(tmp_path, command_runner
     assert "LibraryHub" in (project / "README.md").read_text(encoding="utf-8")
     assert (project / ".kiln" / "test-metrics.json").is_file()
     assert (project / "kiln" / "project" / "constitution" / "project.md").is_file()
+    assert (
+        project / "kiln" / "project" / "skills" / "kiln-constitution-setup" / "SKILL.md"
+    ).is_file()
     assert git(command_runner, project, "branch", "--show-current").stdout.strip() == "main"
     assert ".kiln" in (project / ".gitignore").read_text(encoding="utf-8").splitlines()
     with closing(sqlite3.connect(project / ".kiln" / "messages.db")) as connection:
