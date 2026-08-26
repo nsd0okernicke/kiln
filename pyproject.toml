@@ -17,7 +17,7 @@ version = "0.1.0"
 description = "A local, role-based agent orchestration framework"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["pypdf>=5.0"]
 
 [project.optional-dependencies]
 dev = [
@@ -53,6 +53,7 @@ kiln = [
     "resources/tools/*.py",
     "resources/claude/*.json",
     "resources/project/*.md",
+    "resources/project/*.json",
     "resources/project/constitution/*.md",
     "resources/project/roles/*.md",
     "resources/project/skills/*/*.md",
@@ -101,6 +102,7 @@ show_contexts = true
 pythonVersion = "3.11"
 typeCheckingMode = "basic"
 include = [
+    "src/kiln/knowledge",
     "src/kiln/scheduler/domain",
     "src/kiln/scheduler/application",
     "src/kiln/scheduler/infrastructure/persistence",

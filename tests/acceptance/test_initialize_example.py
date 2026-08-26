@@ -1,5 +1,6 @@
 """Acceptance scenario: initialize an example project."""
 
+import json
 import sqlite3
 from contextlib import closing
 
@@ -23,6 +24,9 @@ def test_initializes_an_example_as_a_launchable_project(tmp_path, command_runner
     assert "LibraryHub" in (project / "README.md").read_text(encoding="utf-8")
     assert (project / ".kiln" / "test-metrics.json").is_file()
     assert (project / "kiln" / "project" / "constitution" / "project.md").is_file()
+    assert json.loads(
+        (project / "kiln" / "project" / "knowledge.json").read_text(encoding="utf-8")
+    ) == {"version": 1, "sources": []}
     assert (
         project / "kiln" / "project" / "skills" / "kiln-constitution-setup" / "SKILL.md"
     ).is_file()

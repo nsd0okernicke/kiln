@@ -759,3 +759,29 @@ class TestBuildState:
         )
 
         assert activity[0]["status"] == db.STATUS_PROCESSING
+
+
+class TestFormatDuration:
+    """
+    Each unit boundary, because only the first two were reached incidentally through callers.
+
+    A four-branch function covered halfway sat at CRAP exactly 6.00 -- passing, but one
+    uncovered line from failing the gate for a reason unrelated to any change made to it.
+    """
+
+    @pytest.mark.parametrize(
+        "seconds,expected",
+        [
+            (0, "0s"),
+            (59, "59s"),
+            (60, "1m"),
+            (3599, "59m"),
+            (3600, "1h 0m"),
+            (7860, "2h 11m"),
+            (86399, "23h 59m"),
+            (86400, "1d 0h"),
+            (200_000, "2d 7h"),
+        ],
+    )
+    def test_reports_the_largest_useful_unit(self, seconds, expected):
+        assert cockpit_state.format_duration(seconds) == expected

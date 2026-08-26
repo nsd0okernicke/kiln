@@ -138,6 +138,11 @@ kiln/project/constitution/engineering.md
 The setup skill changes only these constitution files. It does not alter roles, profiles,
 routing, or the workflow.
 
+If the project has domain documentation, ADRs, product policies, runbooks, or local PDF
+manuals, also ask HITL to use `kiln-knowledge-setup`. Review its proposed sources before
+approval. Kiln stores the approved catalog in `kiln/project/knowledge.json` and builds the
+disposable search index under `.kiln/`.
+
 ### 4. Review, commit, and restart
 
 After approving the constitution, inspect and commit the two adapted files:
@@ -313,6 +318,51 @@ Retry an item with additional guidance:
 
 Retrying preserves the original work item, history, failure reason, and accumulated metrics.
 
+### Search project knowledge
+
+HITL can discover candidate local documentation and curate the approved catalog:
+
+```bash
+./bin/kiln.sh knowledge setup --json
+./bin/kiln.sh knowledge add docs/domain.md --id domain --title "Domain model"
+./bin/kiln.sh knowledge add docs/manuals --id manuals --title "Product manuals"
+./bin/kiln.sh knowledge add https://docs.example.com/api/rate-limits --id rate-limits
+./bin/kiln.sh knowledge sync
+./bin/kiln.sh knowledge sources
+```
+
+Every role may retrieve indexed knowledge without loading the entire library into its prompt:
+
+```bash
+./bin/kiln.sh knowledge search "subscription cancellation"
+./bin/kiln.sh knowledge show DOCUMENT_ID
+```
+
+Supported sources are project-local Markdown, UTF-8 text, PDFs, directories containing those
+files, and `http(s)` URLs serving HTML, Markdown or plain text. Launch refreshes changed sources
+incrementally. The committed `kiln/project/knowledge.json` catalog and original documents are
+authoritative; `.kiln/knowledge.db` is generated and can be deleted and rebuilt safely.
+Knowledge supports decisions but never overrides the constitution.
+
+URLs are fetched, so they behave differently from files in four ways worth knowing:
+
+- They are only ever added by a human — `knowledge setup` discovers files and never proposes a
+  URL. Only `http`/`https` are accepted, credentials in a URL are refused, and a redirect to
+  another scheme is refused too, so a source cannot be bounced to `file://` and turned into a
+  local read that skips the project-containment rule.
+- HTML is reduced to prose with headings preserved as sections; script, style and navigation
+  are dropped. A citation names the URL and heading, the way a file citation names path and
+  heading.
+- A fetch that fails or times out fails **that source only**, leaving the rest of the sync and
+  the launch to continue. Requests time out after 15s and are capped at 8&nbsp;MB.
+- `knowledge sync --offline` skips URL sources without touching them: their indexed pages stay
+  searchable and the command lists them as `not refreshed`. It is not an error, so the exit
+  code stays 0 — a failed source drops its documents, and being offline is not a broken source.
+
+Remote PDFs are not indexed yet; download the file and catalog it instead. Prefer a versioned
+documentation page over an editable wiki, and copy the document into the repository when the
+decision it supports has to stay reproducible.
+
 ### Stop
 
 ```bash
@@ -387,6 +437,7 @@ my-project/
     └── project/
         ├── constitution.md            # instruction loading order
         ├── constitution/              # project and engineering rules
+        ├── knowledge.json             # approved searchable documentation sources
         ├── roles/                     # role responsibilities
         └── skills/                    # reusable agent workflows
 ```
@@ -395,13 +446,25 @@ Generated runtime state includes:
 
 ```text
 .kiln/
+├── .gitignore                         # written by Kiln; keeps this whole directory untracked
 ├── messages.db                        # task backlog, handoff queue, and history
-├── status/                            # current role state
-├── logs/                              # scheduler and optional agent diagnostics
-├── sessions                           # launched role inventory
+├── knowledge.db                       # disposable documentation search index (after a sync)
 ├── traffic.db                         # present when proxy capture is used
-└── cockpit.url                        # current local cockpit URL
+├── status/                            # current role state, one JSON file per role
+├── logs/                              # scheduler and optional agent diagnostics
+├── tools/                             # framework helper scripts, refreshed on every launch
+├── codex-home/                        # isolated CODEX_HOME; present when a codex role runs
+├── sessions                           # launched role inventory
+├── cockpit-url                        # current local cockpit URL
+├── kiln.cockpit.pid                   # cockpit process id
+├── pane-ids.tsv                       # terminal pane ids; written by the WezTerm backend
+└── test-metrics.json                  # you write this one — see Test health below
 ```
+
+Everything here except `test-metrics.json` is generated and disposable: deleting `.kiln/`
+costs you the search index, the captured traffic and the message history, and Kiln rebuilds
+the rest on the next launch. `test-metrics.json` is hand-written and is **not** restored, so
+keep a copy if you reset often.
 
 Customize files under `kiln/project/`; Kiln copies them into role worktrees at launch.
 
@@ -420,6 +483,16 @@ review before overwriting either file. It does not change workflow, roles, profi
 Create `kiln.profiles.json` in the project root to replace the bundled profile set. Profile
 files are JSON and are not merged with framework defaults, so copy
 `src/kiln/resources/profiles.json` when you want to modify an existing profile.
+
+Kiln takes the first of these it finds and stops, so only one is ever in effect:
+
+```text
+<project>/kiln.profiles.json     ← recommended; committed alongside the project
+<project>/kiln/profiles.json     ← also committed, inside the scaffold directory
+<project>/.kiln/profiles.json    ← avoid: .kiln/ is wiped by a teardown, and a profile that
+                                   disappears silently falls back to the framework defaults
+~/.kiln/profiles.json            ← per-user default for every project on the machine
+```
 
 Minimal example:
 
@@ -514,7 +587,7 @@ The cockpit exposes the same state as a local web interface and adds actions for
 human-owned backlog in the HITL lane, sending work, retrying, stopping roles, and tearing down
 the swarm. Backlog tasks can be created, edited, handed off, or archived there. The cockpit
 binds only to `127.0.0.1` and probes upward from its preferred port when necessary. The active
-URL is written to `.kiln/cockpit.url`.
+URL is written to `.kiln/cockpit-url`.
 
 ![Kiln Cockpit showing the role board, active work, queue controls, usage, and recent activity](docs/images/cockpit.png)
 
@@ -598,6 +671,12 @@ as sensitive. Credential, cookie, and stable account/session identifier values a
 before storage. Capture currently routes Claude and Codex roles; other backends continue
 normally but do not appear in traffic statistics.
 
+The proxy listens on port 8787 by default and probes upward when that port is busy, so two
+projects can capture at once without any flag. `--proxy-port 9000` pins it instead; an
+explicitly requested port that is occupied fails rather than drifting silently. The proxy is a
+detached background process, so closing the terminal window leaves it running — `--stop`
+reclaims it, and the next launch in the same project reclaims it too.
+
 ## Safety
 
 Kiln is designed for autonomous execution and launches agents with broad permissions:
@@ -663,7 +742,7 @@ manual worktree surgery.
 
 ### Status or cockpit data looks stale
 
-Check `.kiln/status/`, `.kiln/sessions`, and `.kiln/cockpit.url`. Restarting Kiln repairs
+Check `.kiln/status/`, `.kiln/sessions`, and `.kiln/cockpit-url`. Restarting Kiln repairs
 generated configuration and recovers messages left in `processing` by an interrupted cycle.
 
 ## Development

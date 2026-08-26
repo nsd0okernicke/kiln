@@ -69,6 +69,10 @@ class KilnPaths:
         return self.state_dir / "messages.db"
 
     @property
+    def knowledge_db_path(self) -> Path:
+        return self.state_dir / "knowledge.db"
+
+    @property
     def logs_dir(self) -> Path:
         return self.state_dir / "logs"
 
@@ -147,6 +151,10 @@ class KilnPaths:
     @property
     def skills_dir(self) -> Path:
         return self.kiln_project_dir / "skills"
+
+    @property
+    def knowledge_manifest(self) -> Path:
+        return self.kiln_project_dir / "knowledge.json"
 
     # --- framework-owned ----------------------------------------------------------
     @property

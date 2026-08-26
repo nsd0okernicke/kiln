@@ -221,6 +221,7 @@ def prepare(profile: Profile, paths: KilnPaths) -> str:
 
     workspace.prepare_state_dirs(paths)
     workspace.copy_framework_tools(paths)
+    _sync_knowledge(paths)
 
     _prepare_queue(profile, paths, branch)
 
@@ -249,6 +250,21 @@ def prepare(profile: Profile, paths: KilnPaths) -> str:
 
     workspace.write_sessions_file(profile, paths, branch)
     return branch
+
+
+def _sync_knowledge(paths: KilnPaths) -> None:
+    if not paths.knowledge_manifest.is_file():
+        return
+    try:
+        from kiln.knowledge.domain.models import KnowledgeError
+        from kiln.knowledge.infrastructure.factory import knowledge_service
+
+        with knowledge_service(paths.project_root) as service:
+            result = service.sync()
+        for failure in result.failures:
+            log.warning("knowledge source could not be indexed: %s", failure)
+    except (KnowledgeError, OSError) as exc:
+        log.warning("knowledge index could not be refreshed: %s", exc)
 
 
 def _prepare_queue(profile: Profile, paths: KilnPaths, branch: str) -> None:
@@ -690,8 +706,8 @@ def build_parser() -> argparse.ArgumentParser:
         "command",
         nargs="?",
         default="",
-        help="'init' to scaffold a new project; 'send', 'inbox' or "
-        "'retry' for the human entry points; omit to launch",
+        help="'init' to scaffold a project; 'send', 'inbox', 'retry', 'task', or "
+        "'knowledge' for project operations; omit to launch",
     )
     # `kiln init <dir>` is the form both the README and kiln.sh's own usage block document,
     # but only `command` existed, so argparse rejected the directory as an unrecognised
@@ -769,7 +785,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 #: Human entry points, delegated to the scheduler package rather than parsed here.
-SUBCOMMANDS = ("send", "inbox", "retry", "task")
+SUBCOMMANDS = ("send", "inbox", "retry", "task", "knowledge")
 CLI_ERRORS = (
     LaunchError,
     ProfileError,
@@ -838,6 +854,11 @@ def run_subcommand(name: str, argv: list[str]) -> int:
     top-level parser exists to accept the PowerShell flag spellings the shims forward
     unchanged, and bolting subparsers onto it changes how those are matched.
     """
+    if name == "knowledge":
+        from kiln.knowledge.infrastructure import cli as knowledge
+
+        return knowledge.main(argv)
+
     from kiln.scheduler.infrastructure.cli import inbox, retry, send, task
 
     handlers = {"send": send.main, "inbox": inbox.main, "retry": retry.main, "task": task.main}

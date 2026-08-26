@@ -78,6 +78,76 @@ def test_application_layout_uses_semantic_modules_and_intentional_ports():
     assert not (cockpit / "application" / "ports").exists()
 
 
+def test_knowledge_is_layered_like_every_other_feature_package():
+    """
+    The knowledge feature shipped flat -- models, manifest, extractors, service, store and cli
+    side by side -- while every other feature package carries its layers. All three concerns
+    are real here, so all three folders exist.
+    """
+    knowledge = ROOT / "knowledge"
+    for layer in ("domain", "application", "infrastructure"):
+        assert (knowledge / layer).is_dir(), layer
+    # The flat modules are gone rather than left behind as a second way in.
+    for stale in ("models.py", "manifest.py", "extractors.py", "service.py", "store.py", "cli.py"):
+        assert not (knowledge / stale).exists(), stale
+
+
+def test_knowledge_domain_does_not_touch_storage_transport_or_the_filesystem():
+    """
+    Catalog rules and text chunking are decidable from a payload and a string. Keeping the
+    filesystem out is what lets a symlink escape or an oversized section be tested without
+    writing one.
+    """
+    for path in (ROOT / "knowledge" / "domain").glob("*.py"):
+        assert not imports(path) & {"argparse", "http", "pypdf", "sqlite3", "subprocess"}, path.name
+        assert not called_attributes(path) & {
+            "read_bytes",
+            "read_text",
+            "rglob",
+            "write_text",
+        }, path.name
+
+
+def test_knowledge_application_does_not_import_any_concrete_infrastructure():
+    for path in (ROOT / "knowledge" / "application").glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        concrete = {
+            node.module
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom) and node.module and "infrastructure" in node.module
+        }
+        assert not concrete, f"{path.name} imports {concrete}"
+        assert not imports(path) & {"argparse", "json", "sqlite3"}, path.name
+
+
+def test_knowledge_ports_do_not_import_concrete_adapters():
+    ports = ROOT / "knowledge" / "application" / "ports.py"
+    assert not imports(ports) & {"sqlite3", "argparse", "pypdf"}
+    assert ports.is_file(), "the knowledge use cases declare their outbound needs as ports"
+
+
+def test_only_knowledge_infrastructure_knows_the_database_the_cli_and_the_network():
+    """
+    One module owns SQLite, one owns argparse, one owns the socket.
+
+    The network rule is the newest and the easiest to lose: url support is only testable
+    without a server for as long as `urllib` stays behind the `WebFetcher` port.
+    """
+    infrastructure = ROOT / "knowledge" / "infrastructure"
+    modules = list(infrastructure.glob("*.py"))
+    assert {path.name for path in modules if "sqlite3" in imports(path)} == {"sqlite_index.py"}
+    assert {path.name for path in modules if "argparse" in imports(path)} == {"cli.py"}
+    assert {path.name for path in modules if "urllib" in imports(path)} == {"http_fetcher.py"}
+
+
+def test_knowledge_domain_url_rules_do_not_reach_the_network():
+    """`urlparse` and an HTML reducer are string work; fetching is not."""
+    web = ROOT / "knowledge" / "domain" / "web.py"
+    assert "urllib.parse" in web.read_text(encoding="utf-8"), "url rules live here"
+    assert not imports(web) & {"urllib.request", "socket", "http"}
+    assert "urlopen" not in called_attributes(web)
+
+
 def test_scheduler_models_do_not_import_adapters_or_infrastructure():
     assert not imports(SCHEDULER / "domain" / "models.py") & {
         "adapters",

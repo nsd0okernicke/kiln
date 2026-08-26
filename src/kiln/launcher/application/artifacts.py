@@ -56,6 +56,16 @@ DELEGATING_AGENTS = ("claude", "copilot", "codex", "grok")
 
 DEFAULT_HANDOFF_TARGET = "specifier"
 
+KNOWLEDGE_INSTRUCTION = """## Project Knowledge
+
+When domain, product, architectural, operational, or external constraints matter, search the
+approved project knowledge with `kiln knowledge search "<query>"`. Use
+`kiln knowledge show <document-id>` for the complete indexed document. Cite the returned path,
+heading, or PDF page in decisions and handoffs. Knowledge is supporting evidence; if it
+conflicts with the constitution, surface the conflict instead of overriding the constitution.
+Autonomous roles must not add or remove knowledge sources.
+"""
+
 COMMIT_FORMATS = {
     "specifier": "[Specifier] <feature name> - <what was specified>",
     "coder": "[Coder] <feature name> - TDD implementation of <what>",
@@ -171,6 +181,7 @@ def render_instructions(
             read_constitution_header(paths),
             read_constitution(paths, "project"),
             read_constitution(paths, "engineering"),
+            KNOWLEDGE_INSTRUCTION,
             workflow,
         ]
 
@@ -235,6 +246,7 @@ def render_worker_body(role: RoleConfig, paths: KilnPaths) -> str:
         read_role(paths, role.role),
         read_constitution(paths, "project"),
         read_constitution(paths, "engineering"),
+        KNOWLEDGE_INSTRUCTION,
     ]
     body = join_blocks(blocks, {"{{ROLE}}": role.role, "{{ROLE_UPPER}}": role.role.upper()})
     # Single source of truth with the parser that reads the worker's output.

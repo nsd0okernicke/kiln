@@ -115,6 +115,13 @@ def copy_skills(paths: KilnPaths, result: ScaffoldResult) -> None:
     result.note(f"copied {count} skill(s)")
 
 
+def copy_knowledge_catalog(paths: KilnPaths, result: ScaffoldResult) -> None:
+    source = paths.scaffold_resources_dir / "knowledge.json"
+    if source.is_file() and not paths.knowledge_manifest.exists():
+        workspace.copy_template_file(source, paths.knowledge_manifest)
+        result.note("created knowledge source catalog")
+
+
 def write_initial_mcp_json(paths: KilnPaths, result: ScaffoldResult) -> None:
     """
     kiln-db only at scaffold time.
@@ -243,6 +250,7 @@ def scaffold(
     copy_constitution(paths, result)
     copy_roles(paths, result)
     copy_skills(paths, result)
+    copy_knowledge_catalog(paths, result)
     write_initial_mcp_json(paths, result)
     write_claude_settings(paths, result)
     copy_example(paths, example, result)

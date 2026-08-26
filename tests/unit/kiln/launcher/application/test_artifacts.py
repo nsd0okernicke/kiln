@@ -208,6 +208,7 @@ class TestInstructionFiles:
         assert "Write specs" in content
         assert "# Engineering Rules" in content
         assert "Preamble" in content
+        assert 'kiln knowledge search "<query>"' in content
 
     def test_placeholders_are_substituted(self, paths):
         content = artifacts.render_instructions(role(), paths, "main", paths.project_root)
@@ -295,6 +296,8 @@ class TestWorkerFiles:
         assert "Implement via TDD" in body
         assert "# Engineering Rules" in body
         assert "# Project Rules" in body
+        assert 'kiln knowledge search "<query>"' in body
+        assert "must not add or remove knowledge sources" in body
 
     def test_excludes_the_handoff_protocol(self, paths):
         # Messaging is the dispatcher's job; a worker that sends its own handoff would
