@@ -117,9 +117,7 @@ def run_with(monkeypatch):
     def install(stdout: str, *, stderr: str = "", returncode: int = 0):
         process = FakeProcess(stdout, stderr, returncode)
         monkeypatch.setattr(pi_adapter.shutil, "which", lambda _name: None)
-        monkeypatch.setattr(
-            pi_adapter, "_start_process", lambda _command, _cwd, _prompt: process
-        )
+        monkeypatch.setattr(pi_adapter, "_start_process", lambda _command, _cwd, _prompt: process)
         return process
 
     return install

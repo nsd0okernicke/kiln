@@ -303,24 +303,14 @@ def _set_status(
     extra_stamp_column: str | None = None,
 ) -> bool:
     target = MessageStatus(status)
-    assignments = "status=?"
-    if stamp_column:
-        # stamp_column is a module-controlled literal, never caller input.
-        assignments += f", {stamp_column}={_UTC_NOW}"
-    if extra_stamp_column:
-        assignments += f", {extra_stamp_column}={_UTC_NOW}"
+    assignments = _status_assignments(stamp_column, extra_stamp_column)
 
     with closing(connect(db_path)) as conn:
         cur = conn.cursor()
         cur.execute("SELECT status FROM messages WHERE id=?", (message_id,))
         row = cur.fetchone()
-        if row is None:
-            log.warning("no message found with id=%s", message_id)
-            return False
-        try:
-            current = MessageStatus(row["status"])
-        except ValueError:
-            log.warning("message id=%s has unknown status %r", message_id, row["status"])
+        current = _stored_status(row, message_id)
+        if current is None:
             return False
         if not can_transition(current, target):
             log.warning(
@@ -337,6 +327,23 @@ def _set_status(
     if changed:
         log.info("marked id=%s as %s", message_id, status)
     return changed
+
+
+def _status_assignments(stamp_column: str | None, extra_stamp_column: str | None) -> str:
+    # Column names are module-controlled literals, never caller input.
+    stamps = [column for column in (stamp_column, extra_stamp_column) if column]
+    return "status=?" + "".join(f", {column}={_UTC_NOW}" for column in stamps)
+
+
+def _stored_status(row, message_id: str) -> MessageStatus | None:
+    if row is None:
+        log.warning("no message found with id=%s", message_id)
+        return None
+    try:
+        return MessageStatus(row["status"])
+    except ValueError:
+        log.warning("message id=%s has unknown status %r", message_id, row["status"])
+        return None
 
 
 def insert_handoff(

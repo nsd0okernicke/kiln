@@ -494,20 +494,31 @@ def _skill_targets(profile: Profile, paths: KilnPaths) -> list[tuple[Path, bool]
 def _prepare_skill_directory(skills_dir: Path, skills: list[Path], uses_scheduler: bool) -> int:
     # Always recreate so removed skills -- and stale ones from an earlier agent -- do not
     # linger after a profile change.
+    _reset_skill_directory(skills_dir)
+    return sum(
+        _install_skill(skills_dir, skill) for skill in _applicable_skills(skills, uses_scheduler)
+    )
+
+
+def _reset_skill_directory(skills_dir: Path) -> None:
     if skills_dir.exists():
         shutil.rmtree(skills_dir, ignore_errors=True)
     skills_dir.mkdir(parents=True, exist_ok=True)
 
-    linked = 0
-    for skill in skills:
-        if uses_scheduler and skill.name in WRAPPER_ONLY_SKILLS:
-            continue
-        try:
-            (skills_dir / skill.name).symlink_to(skill, target_is_directory=True)
-        except (OSError, NotImplementedError):
-            copy_template_tree(skill, skills_dir / skill.name)
-        linked += 1
-    return linked
+
+def _applicable_skills(skills: list[Path], uses_scheduler: bool):
+    return (
+        skill for skill in skills if not uses_scheduler or skill.name not in WRAPPER_ONLY_SKILLS
+    )
+
+
+def _install_skill(skills_dir: Path, skill: Path) -> int:
+    target = skills_dir / skill.name
+    try:
+        target.symlink_to(skill, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        copy_template_tree(skill, target)
+    return 1
 
 
 def _copilot_worktrees(profile: Profile, paths: KilnPaths) -> set[str]:

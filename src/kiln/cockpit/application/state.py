@@ -513,11 +513,10 @@ def _card(
 ) -> dict:
     work_item = named_work_item(row)
     summary = extract_summary(row["content"], CARD_SUMMARY_CHARS)
-    task_title = task_titles.get(work_item, "") if work_item is not None else ""
     lane = lane_for(row)
     return {
         "work_item": work_item,
-        "title": task_title or summary or work_item or UNNAMED_TITLE,
+        "title": _card_title(work_item, summary, task_titles),
         "unnamed": work_item is None,
         "lane": lane,
         "message_id": row["id"],
@@ -527,12 +526,26 @@ def _card(
         "summary": summary,
         "created_at": row["created_at"],
         "age": _age(row["created_at"], now_local),
-        "duration": cycle_durations.get(work_item or "") if lane == LANE_DONE else None,
-        "cycles": cycles.get(work_item, 0) if work_item else 1,
+        "duration": _finished_duration(lane, work_item, cycle_durations),
+        "cycles": _cycle_count(work_item, cycles),
         "failed": row["status"] == MessageStatus.FAILED,
         "error": row.get("error"),
         "kind": "handoff",
     }
+
+
+def _card_title(work_item: str | None, summary: str, task_titles: dict[str, str]) -> str:
+    return task_titles.get(work_item or "", "") or summary or work_item or UNNAMED_TITLE
+
+
+def _finished_duration(
+    lane: str, work_item: str | None, cycle_durations: dict[str, str]
+) -> str | None:
+    return cycle_durations.get(work_item or "") if lane == LANE_DONE else None
+
+
+def _cycle_count(work_item: str | None, cycles: dict[str, int]) -> int:
+    return cycles.get(work_item, 0) if work_item else 1
 
 
 def _backlog_card(task: dict, now_local: datetime, human_role: str) -> dict:
@@ -675,14 +688,19 @@ def _cycle_durations(rows: list[dict]) -> dict[str, str]:
     seconds_by_item: dict[str, int] = {}
     for row in rows:
         work_item = named_work_item(row)
-        started_at, finished_at = row.get("started_at"), row.get("finished_at")
-        if not work_item or not started_at or not finished_at:
+        elapsed = _elapsed_seconds(row)
+        if not work_item or elapsed is None:
             continue
-        try:
-            elapsed = parse_local_timestamp(finished_at) - parse_local_timestamp(started_at)
-        except ValueError:
-            continue
-        seconds_by_item[work_item] = seconds_by_item.get(work_item, 0) + max(
-            0, int(elapsed.total_seconds())
-        )
+        seconds_by_item[work_item] = seconds_by_item.get(work_item, 0) + elapsed
     return {work_item: format_duration(seconds) for work_item, seconds in seconds_by_item.items()}
+
+
+def _elapsed_seconds(row: dict) -> int | None:
+    started_at, finished_at = row.get("started_at"), row.get("finished_at")
+    if not started_at or not finished_at:
+        return None
+    try:
+        elapsed = parse_local_timestamp(finished_at) - parse_local_timestamp(started_at)
+    except ValueError:
+        return None
+    return max(0, int(elapsed.total_seconds()))

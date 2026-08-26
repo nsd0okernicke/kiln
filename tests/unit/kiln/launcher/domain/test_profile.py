@@ -820,9 +820,9 @@ class TestWorkflowShapedProfiles:
 
         assert {role.agent for role in active_roles} == {"pi"}
         assert profile.role("human-in-the-loop").model == "igate/brain"
-        assert {
-            role.model for role in active_roles if role.role != "human-in-the-loop"
-        } == {"igate/coder"}
+        assert {role.model for role in active_roles if role.role != "human-in-the-loop"} == {
+            "igate/coder"
+        }
 
     def test_every_profile_has_a_human_entry_point(self, shipped):
         for name in shipped["profiles"]:

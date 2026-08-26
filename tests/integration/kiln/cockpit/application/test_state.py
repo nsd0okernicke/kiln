@@ -148,9 +148,7 @@ class TestBuildBoard:
             ),
         ]
 
-        board = cockpit_state.build_board(
-            rows, {}, NOW_LOCAL, ("coder", "refactorer", "architect")
-        )
+        board = cockpit_state.build_board(rows, {}, NOW_LOCAL, ("coder", "refactorer", "architect"))
 
         assert board["cards"]["done"][0]["duration"] == "8m"
 

@@ -196,9 +196,7 @@ class TestStatusTransitions:
         assert db.name_work_item(db_path, message_id, "CAT-3") is True
         assert read_message(message_id)["work_item"] == "CAT-3"
 
-    def test_does_not_replace_an_existing_work_item_name(
-        self, db_path, add_message, read_message
-    ):
+    def test_does_not_replace_an_existing_work_item_name(self, db_path, add_message, read_message):
         message_id = add_message(work_item="CAT-2")
 
         assert db.name_work_item(db_path, message_id, "CAT-3") is False
