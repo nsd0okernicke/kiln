@@ -346,8 +346,10 @@ class TestOperationalQueue:
             "async function pollLog"
         )[0]
 
-        assert 'copy.onclick = () => copyAll("live-log")' in role_details
+        assert 'toolbar.append(copyButton("live-log"))' in role_details
         assert 'id="doc-copy"' in page
+        assert 'aria-label="Copy all"' in page
+        assert 'href="#i-copy"' in page
         assert '$("doc-copy").onclick = () => copyAll("doc-body")' in page
         assert "navigator.clipboard.writeText(content)" in page
         assert 'document.execCommand("copy")' in page
