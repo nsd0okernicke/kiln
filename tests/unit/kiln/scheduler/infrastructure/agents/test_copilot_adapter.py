@@ -40,10 +40,11 @@ class TestBuildCommand:
         args.update(overrides)
         return copilot_adapter.build_command(**args)
 
-    def test_is_a_one_shot_prompt_invocation(self):
+    def test_keeps_the_prompt_out_of_argv(self):
         command = self._cmd()
         assert command[0] == "copilot"
-        assert command[command.index("-p") + 1] == "do the thing"
+        assert "-p" not in command
+        assert "do the thing" not in command
 
     def test_uses_json_output(self):
         command = self._cmd()
@@ -176,6 +177,7 @@ class FakePopen:
         self._lines = stdout.splitlines(keepends=True)
         self.stdout = self if not hang else _NeverEnds()
         self.stderr = io.StringIO(stderr)
+        self.stdin = _RecordingStdin()
         self.returncode = returncode
         self.killed = False
         #: `terminate_tree` needs a pid for the platform kill and a liveness check before it.
@@ -205,6 +207,18 @@ class _NeverEnds:
     def __next__(self):
         time.sleep(10)
         raise StopIteration
+
+
+class _RecordingStdin:
+    def __init__(self):
+        self.content = ""
+        self.closed = False
+
+    def write(self, value):
+        self.content += value
+
+    def close(self):
+        self.closed = True
 
 
 class TestRunWorker:
@@ -297,18 +311,20 @@ class TestRunWorker:
         command = calls["command"]
         assert command[command.index("--log-dir") + 1] == str(debug_base)
 
-    def test_redirects_stdin_and_separates_streams(self, fake_run, tmp_path):
+    def test_pipes_prompt_to_stdin_and_separates_streams(self, fake_run, tmp_path):
         calls = fake_run(stdout=_stream(_message_event("KILN-STATUS: done x")))
         copilot_adapter.run_worker(
             definition=DEFINITION,
-            prompt="p",
+            prompt="a large worker prompt",
             cwd=tmp_path,
             model="",
             on_output=lambda _l: None,
         )
-        assert calls["kwargs"]["stdin"] is subprocess.DEVNULL
+        assert calls["kwargs"]["stdin"] is subprocess.PIPE
         assert calls["kwargs"]["stdout"] is subprocess.PIPE
         assert calls["kwargs"]["stderr"] is subprocess.PIPE
+        assert calls["process"].stdin.content == "a large worker prompt\n"
+        assert calls["process"].stdin.closed is True
 
     def test_blocked_worker_is_reported_not_raised(self, fake_run, tmp_path):
         fake_run(stdout=_stream(_message_event("KILN-STATUS: blocked missing fixtures")))

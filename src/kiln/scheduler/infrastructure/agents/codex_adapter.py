@@ -61,10 +61,10 @@ def proxy_config_args(base_url: str | None) -> list[str]:
     """
     The `-c` overrides that point one Codex call at the capture proxy, or nothing.
 
-    Verified live: the ChatGPT OAuth token is attached even when the base URL is a local
-    host, so a subscription user needs no API key for this to work. `wire_api = "responses"`
-    matters -- Codex speaks the Responses API, and letting it default to the chat shape
-    produces a stream neither side can parse.
+    A custom provider defaults to unauthenticated. `requires_openai_auth = true` tells Codex
+    to attach the ChatGPT login token from the role's isolated CODEX_HOME even though the
+    base URL is local. `wire_api = "responses"` matters -- Codex speaks the Responses API,
+    and letting it default to the chat shape produces a stream neither side can parse.
 
     Defined as `-c` rather than in a config file because the one-shot worker call passes
     `--ignore-user-config`, so anything written to `config.toml` would be skipped.
@@ -81,6 +81,8 @@ def proxy_config_args(base_url: str | None) -> list[str]:
         f'{provider}.base_url="{base_url.rstrip("/")}"',
         "-c",
         f'{provider}.wire_api="responses"',
+        "-c",
+        f"{provider}.requires_openai_auth=true",
     ]
 
 

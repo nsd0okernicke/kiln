@@ -379,14 +379,14 @@ def build_payload(
 
     `freshness` carries one timestamp per configured report -- the newest file *within* that
     report, since a per-class JUnit directory is one report in many files. The displayed age
-    is the newest of them ("when did anything last refresh"), but staleness is judged on the
-    *oldest*, so a coverage file rewritten a minute ago cannot disguise a JUnit report from
-    yesterday.
+    and staleness both use the oldest contributing report. Otherwise a failed test run that
+    did not reach a later lint command could simultaneously say "updated 57s ago" and
+    "older than 30 minutes" because its retained lint report was from yesterday.
     """
     stale = any(
         is_stale(stamp, now=now, max_age_minutes=config.max_age_minutes) for stamp in freshness
     )
-    updated_at = max(freshness) if freshness else None
+    updated_at = min(freshness) if freshness else None
     payload = {
         "status": _status(junit, stale=stale),
         "configured": config.configured,

@@ -56,10 +56,13 @@ def build_command(
     live that the flag combination itself parses and runs cleanly; matches the three tool
     categories the generated `.github/agents/<role>-worker.agent.md` already declares.
     """
+    # The prompt is deliberately not part of argv. On Windows the npm `.cmd` launcher is
+    # subject to cmd.exe's short command-line limit; a realistic worker prompt can consume
+    # that limit and silently discard every option following `-p`, including JSON output and
+    # permission grants. Copilot also accepts its one-shot prompt on stdin.
+    del prompt
     command = [
         "copilot",
-        "-p",
-        prompt,
         "--agent",
         agent_name,
         "--allow-all",
@@ -312,7 +315,7 @@ def run_worker(
     emit = on_output or _default_emit
 
     try:
-        process = _start_process(command, cwd)
+        process = _start_process(command, cwd, prompt)
     except OSError as exc:
         log.error("could not launch worker %s: %s", definition.name, exc)
         return _blocked(f"could not launch copilot: {exc}", "", is_error=True)
@@ -329,8 +332,8 @@ def run_worker(
     return _invocation_after_capture(definition, process, capture)
 
 
-def _start_process(command: list[str], cwd: str | Path) -> subprocess.Popen:
-    return subprocess.Popen(
+def _start_process(command: list[str], cwd: str | Path, prompt: str) -> subprocess.Popen:
+    process = subprocess.Popen(
         command,
         cwd=str(cwd),
         stdout=subprocess.PIPE,
@@ -338,12 +341,18 @@ def _start_process(command: list[str], cwd: str | Path) -> subprocess.Popen:
         text=True,
         encoding="utf-8",
         errors="replace",
-        stdin=subprocess.DEVNULL,
+        stdin=subprocess.PIPE,
         bufsize=1,  # line buffered, so the pane updates as the worker works
         # A new session so the whole group can be signalled on timeout without
         # touching the scheduler's own (POSIX); accepted and ignored on Windows.
         start_new_session=True,
     )
+    if process.stdin is not None:
+        process.stdin.write(prompt)
+        if not prompt.endswith("\n"):
+            process.stdin.write("\n")
+        process.stdin.close()
+    return process
 
 
 def _invocation_after_capture(definition, process, capture) -> WorkerInvocation:

@@ -284,8 +284,8 @@ class TestFreshness:
 
         assert payload["status"] == test_metrics.STATUS_STALE
 
-    def test_the_displayed_age_is_the_most_recent_refresh(self, tmp_path):
-        """Stale is judged on the oldest, but "updated" still means the last thing to land."""
+    def test_the_displayed_age_is_the_oldest_contributing_report(self, tmp_path):
+        """The age and stale verdict describe the same combined report set."""
         write_suite(tmp_path / "junit.xml")
         (tmp_path / "cov.xml").write_text(COBERTURA, encoding="utf-8")
         old = time.time() - 7200
@@ -294,7 +294,7 @@ class TestFreshness:
 
         updated = datetime.fromisoformat(test_reports.collect(config, root=tmp_path)["updated_at"])
 
-        assert datetime.now() - updated < timedelta(minutes=5)
+        assert datetime.now() - updated > timedelta(hours=1)
 
 
 class TestReportAge:

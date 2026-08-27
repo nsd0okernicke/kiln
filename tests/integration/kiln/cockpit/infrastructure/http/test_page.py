@@ -439,6 +439,10 @@ class TestTestHealthPanel:
         assert "if (metrics.coverage)" in body
         assert "metrics.passed !== null" in body
 
+    def test_framework_has_a_copyable_separator(self, page):
+        body = page.partition("function renderTestMetrics")[2].partition("\n}")[0]
+        assert '"· " + metrics.source' in body
+
     def test_branch_coverage_is_omitted_when_it_was_not_measured(self, page):
         # Most tools leave branch coverage off by default and write a zero rate beside a zero
         # denominator. Rendering that would turn an unset flag into an apparent disaster.

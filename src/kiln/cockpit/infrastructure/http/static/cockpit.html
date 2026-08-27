@@ -778,7 +778,9 @@ function renderTestMetrics(metrics) {
   if (metrics.lint) facts.push(lintFact(metrics.lint));
   if (metrics.updated_at) facts.push("updated " + healthAge(metrics.updated_at));
   row.append(text("span", facts.join(" · "), "facts"));
-  if (metrics.source) row.append(text("span", metrics.source, "source"));
+  // Keep a literal separator in the text, not only a CSS flex gap. Browser copy/paste does
+  // not preserve layout gaps and previously produced "updated 57s agopytest".
+  if (metrics.source) row.append(text("span", "· " + metrics.source, "source"));
   host.append(row);
 
   if (metrics.stale) {

@@ -74,9 +74,8 @@ class TestBuildCommand:
 
 class TestProxyConfigArgs:
     """
-    Codex has no base-URL environment variable, so routing it needs `-c` overrides. Verified
-    live: the ChatGPT OAuth token is still attached when the base URL is a local host, so a
-    subscription user needs no API key for this.
+    Codex has no base-URL environment variable, so routing it needs `-c` overrides. The
+    synthetic provider must explicitly opt into the role's copied ChatGPT authentication.
     """
 
     def test_nothing_without_a_url(self):
@@ -95,6 +94,10 @@ class TestProxyConfigArgs:
         # Letting Codex default to the chat shape produces a stream neither side can parse.
         args = codex_adapter.proxy_config_args("http://127.0.0.1:8787/kiln/coder")
         assert any('wire_api="responses"' in arg for arg in args)
+
+    def test_uses_the_copied_openai_login(self):
+        args = codex_adapter.proxy_config_args("http://127.0.0.1:8787/kiln/coder")
+        assert "model_providers.kiln.requires_openai_auth=true" in args
 
     def test_a_trailing_slash_does_not_double_up(self):
         args = codex_adapter.proxy_config_args("http://127.0.0.1:8787/kiln/coder/")

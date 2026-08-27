@@ -188,6 +188,8 @@ def _codex_proxy_config_args(base_url: str | None) -> list[str]:
         f'{provider}.base_url="{base_url.rstrip("/")}"',
         "-c",
         f'{provider}.wire_api="responses"',
+        "-c",
+        f"{provider}.requires_openai_auth=true",
     ]
 
 

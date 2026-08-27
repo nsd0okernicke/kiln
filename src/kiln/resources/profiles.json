@@ -624,6 +624,144 @@
         ]
       },
       "fixture": true
+    },
+    "temp-backend-test": {
+      "description": "Temporary Codex-only profile for manual backend validation. All auto roles have workerDebug enabled. Remove after testing.",
+      "terminals": [
+        {
+          "role": "human-in-the-loop",
+          "agent": "codex",
+          "worktree": "@current",
+          "title": "HITL (Codex)",
+          "mode": "manual"
+        },
+        {
+          "role": "inbox",
+          "worktree": "@current",
+          "title": "Kiln Inbox",
+          "mode": "manual",
+          "scheduler": "inbox",
+          "watches": "human-in-the-loop"
+        },
+        {
+          "role": "specifier",
+          "agent": "codex",
+          "worktree": "specifier",
+          "title": "Specifier (Codex)",
+          "mode": "auto",
+          "scheduler": "python",
+          "workerDebug": true,
+          "workerTimeout": 1800
+        },
+        {
+          "role": "coder",
+          "agent": "codex",
+          "worktree": "coder",
+          "title": "Coder (Codex)",
+          "mode": "auto",
+          "scheduler": "python",
+          "workerDebug": true,
+          "workerTimeout": 1800
+        },
+        {
+          "role": "refactorer",
+          "agent": "codex",
+          "worktree": "refactorer",
+          "title": "Refactorer (Codex)",
+          "mode": "auto",
+          "scheduler": "python",
+          "workerDebug": true,
+          "workerTimeout": 1800
+        },
+        {
+          "role": "architect",
+          "agent": "codex",
+          "worktree": "architect",
+          "title": "Architect (Codex)",
+          "mode": "auto",
+          "scheduler": "python",
+          "workerDebug": true,
+          "workerTimeout": 2400,
+          "workerIdleTimeout": 900
+        },
+        {
+          "role": "dashboard",
+          "worktree": "@current",
+          "title": "Kiln Dashboard",
+          "mode": "manual",
+          "scheduler": "dashboard"
+        },
+        {
+          "role": "cockpit",
+          "worktree": "@current",
+          "title": "Kiln Cockpit",
+          "mode": "manual",
+          "scheduler": "cockpit"
+        }
+      ],
+      "routing": {
+        "human-in-the-loop": "specifier",
+        "specifier": {
+          "default": "coder",
+          "architect": "human-in-the-loop"
+        },
+        "coder": "refactorer",
+        "refactorer": "architect",
+        "architect": "specifier"
+      },
+      "layout": {
+        "tabs": [
+          {
+            "title": "HITL",
+            "panes": [
+              {
+                "role": "human-in-the-loop"
+              },
+              {
+                "role": "inbox",
+                "direction": "Bottom",
+                "size": 0.22
+              }
+            ]
+          },
+          {
+            "title": "Backend Test Cycle",
+            "gridRows": 2,
+            "gridCols": 2,
+            "panes": [
+              {
+                "role": "specifier"
+              },
+              {
+                "role": "coder"
+              },
+              {
+                "role": "refactorer"
+              },
+              {
+                "role": "architect"
+              }
+            ]
+          },
+          {
+            "title": "Dashboard",
+            "panes": [
+              {
+                "role": "dashboard"
+              }
+            ]
+          },
+          {
+            "title": "Cockpit",
+            "panes": [
+              {
+                "role": "cockpit"
+              }
+            ]
+          }
+        ]
+      },
+      "fixture": true
     }
   }
 }

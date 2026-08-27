@@ -366,6 +366,19 @@ class TestBuildPayload:
         assert payload["status"] == test_metrics.STATUS_STALE
         assert payload["tests"] == 2018
 
+    def test_displayed_age_is_the_oldest_contributing_report(self):
+        old_lint = NOW - timedelta(hours=2)
+        payload = test_metrics.build_payload(
+            config=self._config(),
+            junit=test_metrics.parse_junit(PYTEST_JUNIT),
+            coverage=None,
+            lint=None,
+            freshness=[NOW, old_lint],
+            now=NOW,
+        )
+        assert payload["status"] == test_metrics.STATUS_STALE
+        assert payload["updated_at"] == old_lint.isoformat(timespec="seconds")
+
     def test_coverage_without_junit_gives_no_verdict(self):
         """There is a number to show but no pass/fail to claim."""
         payload = test_metrics.build_payload(

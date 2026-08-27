@@ -293,6 +293,10 @@ class TestCodex:
     def test_bypasses_approvals(self, paths):
         assert "--dangerously-bypass-approvals-and-sandbox" in build(paths, agent="codex").argv
 
+    def test_proxy_provider_uses_the_copied_openai_login(self, paths):
+        argv = build(paths, agent="codex", proxy_url="http://127.0.0.1:8787").argv
+        assert "model_providers.kiln.requires_openai_auth=true" in argv
+
 
 class TestGrok:
     def test_launches_grok_with_the_start_prompt(self, paths):
