@@ -39,7 +39,9 @@ class InboundMessage(TypedDict):
     """The fields guaranteed by queue delivery operations."""
 
     id: str
+    sender: str
     content: str
+    priority: int
 
 
 @dataclass(frozen=True)

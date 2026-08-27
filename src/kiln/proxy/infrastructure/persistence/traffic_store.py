@@ -160,7 +160,7 @@ class TrafficStore:
         size = "length(coalesce(request_body,'')) + length(coalesce(response_body,''))"
         degraded = 0
         with closing(sqlite3.connect(self.db_path)) as conn:
-            total = conn.execute(f"SELECT COALESCE(SUM({size}), 0) FROM traffic").fetchone()[0]
+            total = conn.execute(f"SELECT COALESCE(SUM({size}), 0) FROM traffic").fetchone()[0]  # nosec B608
             if total <= self.body_budget:
                 return 0
             # Oldest first, accumulating until enough has been freed. Done row by row rather
@@ -168,7 +168,7 @@ class TrafficStore:
             excess = total - self.body_budget
             freed = 0
             rows = conn.execute(
-                f"SELECT id, {size} FROM traffic "
+                f"SELECT id, {size} FROM traffic "  # nosec B608
                 "WHERE request_body IS NOT NULL OR response_body IS NOT NULL ORDER BY id"
             ).fetchall()
             for row_id, row_size in rows:
@@ -255,7 +255,7 @@ def _request_stats_rows(conn, available: set[str], since: str | None):
     }
     window = "AND ts >= ?" if since else ""
     return conn.execute(
-        f"""
+        f"""  # nosec B608
         SELECT role, COUNT(*), AVG(request_bytes), MAX(request_bytes), SUM(request_bytes),
                {optional["tools_bytes"]}, {optional["system_bytes"]},
                {optional["messages_bytes"]}

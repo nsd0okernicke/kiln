@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET  # nosec B405 — parses project-generated XML only
 from datetime import datetime
 from pathlib import Path
 

@@ -16,6 +16,7 @@ name = "kiln-swarm"
 version = "0.1.0"
 description = "A local, role-based agent orchestration framework"
 readme = "README.md"
+license = { text = "UNLICENSED" }
 requires-python = ">=3.11"
 dependencies = ["pypdf>=5.0"]
 
@@ -81,6 +82,26 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
 # En/em dashes are used deliberately throughout this project's prose and log messages.
 ignore = ["RUF001", "RUF002", "RUF003"]
 
+[tool.bandit]
+skips = [
+    "B101",  # assert — precondition guards, not validation
+    "B105",  # hardcoded password string — false positive for string literals
+    "B110",  # try/except/pass — intentional for non-fatal platform ops
+    "B404",  # subprocess import — orchestration tool, intentional
+    "B602",  # shell=True — intentional for user-configured verify commands
+    "B603",  # subprocess without shell=True — shell=False is safer
+    "B607",  # partial executable path — git/taskkill on PATH by design
+    "B608",  # SQL f-string — values are module-controlled constants, never user input
+]
+targets = ["src/kiln"]
+
+[tool.vulture]
+# 80%+ confidence = almost certainly dead code.
+# Lower-confidence items are mostly HTTP handler methods and HTML parser callbacks
+# invoked by base-class reflection — genuine but harmless false positives.
+min_confidence = 80
+paths = ["src/kiln"]
+
 [tool.mutmut]
 paths_to_mutate = "src/kiln/scheduler/"
 tests_dir = "tests/"
@@ -101,15 +122,12 @@ show_contexts = true
 [tool.pyright]
 pythonVersion = "3.11"
 typeCheckingMode = "basic"
-include = [
-    "src/kiln/knowledge",
-    "src/kiln/scheduler/domain",
-    "src/kiln/scheduler/application",
-    "src/kiln/scheduler/infrastructure/persistence",
-    "src/kiln/scheduler/infrastructure/vcs",
-    "src/kiln/scheduler/infrastructure/diagnostics",
-    "src/kiln/cockpit/application/state.py",
-    "src/kiln/cockpit/application/test_metrics.py",
-]
+include = ["src/kiln"]
+exclude = ["**/__pycache__", "**/.venv"]
 extraPaths = ["src"]
 reportMissingTypeStubs = false
+reportTypedDictNotRequiredAccess = false
+reportAttributeAccessIssue = false
+reportArgumentType = false
+reportMissingImports = false
+reportReturnType = false

@@ -18,7 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 REPORTS = ROOT / "reports"
 PRODUCTION = ROOT / "src"
-TOOLS = ("pytest", "pytest-cov", "coverage", "ruff", "radon", "pyright", "cosmic-ray")
+TOOLS = ("pytest", "pytest-cov", "coverage", "ruff", "radon", "pyright", "cosmic-ray", "bandit")
 
 
 def _write(path: Path, content: str) -> None:
@@ -200,15 +200,19 @@ def main(argv: list[str] | None = None) -> int:
         ],
         "ruff": [py, "-m", "ruff", "check", "src", "tests", "tools"],
         "ruff_json": [py, "-m", "ruff", "check", "--output-format=json", "src", "tests", "tools"],
+        "bandit": [py, "-m", "bandit", "-r", "src/kiln", "-c", "pyproject.toml"],
+        "vulture": [py, "-m", "vulture", "src/kiln", "--min-confidence", "80"],
         "format": [py, "-m", "ruff", "format", "--check", "src", "tests", "tools"],
         "radon_cc_json": [py, "-m", "radon", "cc", "-j", "src"],
         "radon_cc_text": [py, "-m", "radon", "cc", "-s", "-a", "src"],
         "radon_mi": [py, "-m", "radon", "mi", "-j", "src"],
         "radon_raw": [py, "-m", "radon", "raw", "-j", "src"],
-        "types": [py, "-m", "pyright", "--outputjson"],
+        "types": [py, "-m", "pyright", "--outputjson", "src/kiln"],
     }
     outputs = {
         "tests": REPORTS / "tests" / "slowest.txt",
+        "bandit": REPORTS / "lint" / "bandit.txt",
+        "vulture": REPORTS / "lint" / "vulture.txt",
         "ruff": REPORTS / "lint" / "ruff.txt",
         "ruff_json": REPORTS / "lint" / "ruff.json",
         "format": REPORTS / "lint" / "format.txt",
@@ -218,7 +222,9 @@ def main(argv: list[str] | None = None) -> int:
         "radon_raw": REPORTS / "complexity" / "radon-raw.json",
         "types": REPORTS / "types" / "typecheck.json",
     }
-    selected = ["ruff", "format", "types"] if args.tier == "fast" else list(commands)
+    selected = (
+        ["bandit", "vulture", "ruff", "format", "types"] if args.tier == "fast" else list(commands)
+    )
     results = {name: run(name, commands[name], outputs[name]) for name in selected}
     coverage_json = REPORTS / "coverage" / "coverage.json"
     if (
@@ -252,7 +258,11 @@ def main(argv: list[str] | None = None) -> int:
         if all(path.is_file() for path in required):
             summary()
     metadata({name: command for name, command in commands.items() if name in selected}, results)
-    hard = {"tests", "ruff"} if args.tier == "deterministic" else {"ruff"}
+    hard = (
+        {"tests", "ruff", "bandit", "vulture"}
+        if args.tier == "deterministic"
+        else {"bandit", "vulture", "ruff"}
+    )
     failed = [name for name in hard if results.get(name, 0) != 0]
     return 0 if args.observe or not failed else 1
 

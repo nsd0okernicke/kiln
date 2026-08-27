@@ -197,7 +197,7 @@ def _parse_pkg_info_version(text: str) -> str | None:
     """Extract the Version: field from PKG-INFO content."""
     for line in text.splitlines():
         if line.startswith("Version:"):
-            raw = line[len("Version:"):].strip()
+            raw = line[len("Version:") :].strip()
             if raw:
                 return f"v{raw}" if not raw.startswith("v") else raw
     return None

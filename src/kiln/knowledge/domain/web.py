@@ -103,7 +103,7 @@ class _HtmlText(HTMLParser):
         self._in_heading = False
         self._heading_parts: list[str] = []
 
-    def handle_starttag(self, tag: str, attrs: list) -> None:
+    def handle_starttag(self, tag: str, _: list) -> None:
         if tag in IGNORED_ELEMENTS:
             self._ignoring += 1
         elif tag in HEADING_ELEMENTS:

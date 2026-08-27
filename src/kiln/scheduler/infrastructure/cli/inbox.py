@@ -50,7 +50,9 @@ class InboxContext:
     worktree: Path | None = None
     merge: bool = True
     bell: bool = True
-    emit: object = None  # Callable[[str], None]; defaults to print
+    from collections.abc import Callable
+
+    emit: Callable[[str], None] | None = None
 
     def write(self, line: str) -> None:
         (self.emit or _default_emit)(line)

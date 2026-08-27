@@ -15,7 +15,7 @@ a suite that never ran, a clock skewed into the future) be tested without writin
 from __future__ import annotations
 
 import json
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET  # nosec B405 — parses project-generated JUnit/Cobertura XML only
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -117,7 +117,7 @@ def parse_junit(text: str) -> dict:
     `passed` is derived rather than read -- JUnit has no passed attribute, only a total and
     the three ways a case can not pass.
     """
-    root = ET.fromstring(text)
+    root = ET.fromstring(text)  # nosec B314
     suites = list(root.iter("testsuite"))
     totals = {
         key: sum(_attr_int(suite, key) for suite in suites)
@@ -196,7 +196,7 @@ def parse_cobertura(text: str) -> dict | None:
     Returns None when `line-rate` is absent, so an unrecognised dialect reads as *unknown
     coverage* rather than as zero coverage.
     """
-    root = ET.fromstring(text)
+    root = ET.fromstring(text)  # nosec B314
     if root.get("line-rate") is None:
         return None
     return {
