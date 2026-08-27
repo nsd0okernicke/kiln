@@ -2,6 +2,11 @@
   <img src="docs/images/logo.png" alt="Kiln logo" width="120" />
 </p>
 
+<p align="center">
+  <a href="https://github.com/nsd0okernicke/kiln/tags"><img src="https://img.shields.io/github/v/tag/nsd0okernicke/kiln?label=version&sort=semver" alt="Latest version tag" /></a>
+  <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11 or newer" />
+</p>
+
 # Kiln
 
 Kiln runs local, role-based AI development swarms. Each autonomous role works in its own Git
@@ -16,6 +21,7 @@ steps to be observable and repeatable rather than managed in one long agent conv
 
 **Overview**
 
+- [Why Kiln](#why-kiln)
 - [What users should know](#what-users-should-know)
 - [The default workflow](#the-default-workflow)
 
@@ -34,9 +40,13 @@ steps to be observable and repeatable rather than managed in one long agent conv
 
 - [Working with the swarm](#working-with-the-swarm)
   - [The WezTerm window](#the-wezterm-window)
-  - [Talking to HITL](#talking-to-hitl)
+  - [Talking to human-in-the-loop (HITL)](#talking-to-human-in-the-loop-hitl)
   - [The Cockpit](#the-cockpit)
 - [Dashboard and cockpit](#dashboard-and-cockpit)
+  - [Cockpit panels](#cockpit-panels)
+  - [Handing off a task](#handing-off-a-task)
+  - [Reading a scheduler or worker log](#reading-a-scheduler-or-worker-log)
+  - [Retrying and sending work](#retrying-and-sending-work)
   - [Test health](#test-health)
 - [Choosing a profile](#choosing-a-profile)
 - [Daily commands](#daily-commands)
@@ -73,9 +83,36 @@ steps to be observable and repeatable rather than managed in one long agent conv
 **Project**
 
 - [Development](#development)
+- [Version](#version)
 - [License and status](#license-and-status)
 
 ---
+
+## Why Kiln
+
+Long agent conversations degrade. Context accumulates, earlier decisions get summarized away,
+and by the tenth turn the agent is working from a blurred copy of the original intent. Kiln's
+answer is to never let a context grow long: each role starts from written instructions, does one
+job, commits, and hands on.
+
+- **No context drift.** A one-shot worker is invoked per handoff with the constitution, its own
+  role instructions, and one structured message — not a conversation it has been inside for an
+  hour.
+- **Fewer laps.** Specification, implementation, hardening, and review are separate roles with
+  separate standards, so a defect is caught by the role that owns that standard instead of
+  surfacing three turns later.
+- **Reliability you can inspect.** A deterministic Python scheduler owns retries, timeouts, cost
+  caps, and escalation — not an LLM deciding whether to try again.
+- **Quality that is enforced, not requested.** A role's `verify` command must pass before it may
+  hand off, and the Cockpit reads the resulting test, coverage, and lint reports.
+- **Gates set high on purpose.** Coverage, CRAP, DRY, property tests, and mutation testing run
+  inside the cycle rather than after it — the refactorer splits any file that grows past 100
+  mutation sites, and the architect runs the mutation suite itself. Every lap is slower for it.
+
+That last one is the deliberate trade. Heavy gates cost time per lap and buy back more than they
+cost: the work stays on target, there is no cycling discussion with an agent about whether
+something is good enough, and the swarm can run unattended — every role must pass the gates, and
+cannot argue its way around them.
 
 ## What users should know
 
@@ -83,7 +120,8 @@ steps to be observable and repeatable rather than managed in one long agent conv
 - Agents can execute commands and modify files without interactive approval.
 - Autonomous roles use separate Git worktrees and exchange structured handoffs.
 - Profiles define the roles, routing, models, timeouts, and terminal layout.
-- Claude, Codex, Copilot, Grok, and Pi are supported as role backends.
+- Pi, Claude, Codex, Copilot, and Grok are supported as role backends; the shipped profiles use
+  Pi by default.
 - The default profile is human-guided at intake and autonomous afterward.
 - Failures are retried, then escalated to the human. Repeated escalation parks the role until
   you explicitly retry it.
@@ -115,11 +153,11 @@ cockpit provide a swarm-wide view.
 - Python 3.11 or newer
 - Git
 - At least one supported agent CLI on `PATH`:
+  - Pi coding agent — used by the shipped profiles by default
   - Claude Code
   - OpenAI Codex CLI
   - GitHub Copilot CLI
   - Grok CLI
-  - Pi coding agent
 - A terminal backend:
   - WezTerm is recommended on every platform
   - Windows Terminal is supported on Windows
@@ -198,7 +236,7 @@ Or on Linux and macOS:
 ./bin/kiln.sh /path/to/my-project
 ```
 
-In the interactive HITL pane, enter:
+In the interactive human-in-the-loop (HITL) pane, enter:
 
 ```text
 Use kiln-constitution-setup to configure this project. Inspect the repository first, ask me
@@ -320,7 +358,7 @@ out for you. Launching the `full` profile gives you a single window with four ta
 | Tab | Contains | You |
 |---|---|---|
 | **1: Human-in-the-Loop** | The HITL agent session, with the Inbox pane below it | type here |
-| **2: Autonomous Cycle** | Specifier, coder, refactorer, architect in a 2×2 grid | watch |
+| **2: Autonomous Swarm** | Specifier, coder, refactorer, architect in a 2×2 grid | watch |
 | **3: Dashboard** | The terminal dashboard | watch |
 | **4: Cockpit** | Serves the web interface and prints its local URL | watch |
 
@@ -333,12 +371,12 @@ Tab 1 is the only one that expects input. The four role panes on tab 2 are runni
 reading them is how you find out *why* something stalled, but work is never handed to a role by
 typing into its pane.
 
-![The Autonomous Cycle tab: specifier, coder, refactorer and architect, each showing its scheduler and worker output](docs/images/kiln3.png)
+![The Autonomous Swarm tab: specifier, coder, refactorer and architect, each showing its scheduler and worker output](docs/images/kiln3.png)
 
 Each pane carries a status line of its own — role, state, cycle, cost, tokens, and the handoff
 it produced — so a glance across the grid tells you where the work currently is.
 
-### Talking to HITL
+### Talking to human-in-the-loop (HITL)
 
 The HITL pane on tab 1 is an ordinary agent conversation. Describe what you want in prose; it
 asks until the request is unambiguous, then hands it to the first autonomous role:
@@ -352,17 +390,34 @@ request is ready to hand off. For a more structured interview on a half-formed i
 `/kickoff` or `/grill-me`. HITL also owns the knowledge catalog — see
 [Build the knowledge base](#4-build-the-knowledge-base).
 
+Not everything has to start immediately. Ask HITL to park a request as a **task** and it goes
+into the human backlog instead of the queue:
+
+```text
+Add author search to the catalog, but keep it in the backlog — I want to refine the scope
+before anyone works on it.
+```
+
+A backlog task is named at creation, stays editable, and consumes no agent time until you run
+`kiln task handoff <work-item>`. One request may become several independently named tasks.
+This is the one part of Kiln with no terminal view — the Dashboard tab does not show the
+backlog, so the Cockpit's HITL lane is where you actually see it, edit an entry, and hand it
+off when it is ready. `kiln task list` and `kiln task show` cover the same ground from a shell;
+see [Send work](#send-work) for the full command set.
+
 Escalations come back to the Inbox pane. When a role has failed and parked, HITL is where you
 give it the missing context and release it again.
 
 ### The Cockpit
 
 The Cockpit is the same state as a web page, plus the actions that are awkward to type: manage
-the backlog, hand a task off, retry a failure, stop a role, tear the swarm down. It is the
-better surface for anything involving a queue you want to see rather than describe.
+the backlog, hand a task off, read a role's log, retry a failure, stop a role, tear the swarm
+down. It is the better surface for anything involving a queue you want to see rather than
+describe, and the only one that shows the backlog at all.
 
 Its URL is printed in the Cockpit pane and written to `.kiln/cockpit-url`. Set `openBrowser` on
-the cockpit role to have it open at launch.
+the cockpit role to have it open at launch. [Cockpit panels](#cockpit-panels) below covers what
+each part of it does.
 
 ## Dashboard and cockpit
 
@@ -377,13 +432,67 @@ The terminal dashboard shows:
 
 ![The terminal dashboard: per-role state and queue depth, run totals, prompt weight by role, recent activity, and escalations](docs/images/kiln4.png)
 
-The cockpit exposes the same state as a local web interface and adds actions for managing the
-human-owned backlog in the HITL lane, sending work, retrying, stopping roles, and tearing down
-the swarm. Backlog tasks can be created, edited, handed off, or archived there. The cockpit
-binds only to `127.0.0.1` and probes upward from its preferred port when necessary. The active
-URL is written to `.kiln/cockpit-url`.
+The cockpit exposes the same state as a local web interface and adds the actions that are
+awkward to type. It binds only to `127.0.0.1` and probes upward from its preferred port when
+necessary. The active URL is written to `.kiln/cockpit-url`.
 
 ![Kiln Cockpit showing the role board, active work, queue controls, usage, and recent activity](docs/images/cockpit.png)
+
+### Cockpit panels
+
+The header carries the project directory, the branch the messages are scoped to, a live
+indicator, run totals, a theme switcher, and the two buttons that act on the whole swarm —
+**New task** and **Stop swarm**. Below it, five panels, each collapsible by its heading:
+
+| Panel | What it shows |
+|---|---|
+| **Attention** | The only panel that is about *you*: failed work, escalations, and results awaiting human review. Empty reads "Nothing waiting on you." |
+| **Test health** | Test, coverage, and lint results. Present only when the project ships `.kiln/test-metrics.json` — see below |
+| **Board** | One lane per role, its worktree in the lane heading, and a card per work item showing name, title, and state |
+| **Work queue** | A composer for sending a message to any role, above the live queue table |
+| **Recent activity** | Recent handoffs in order, escalations marked `⚠` |
+
+### Handing off a task
+
+**New task** opens an editor for a work item name, a title, and a body — the user story,
+context, and acceptance criteria. **Create** stores it in the backlog; nothing runs yet, and no
+agent time is spent.
+
+Click the card again to reopen it. The editor now shows three more controls: a target role
+selector, **Hand off**, and **Archive**. Choosing a target and pressing **Hand off** is what
+puts the task into that role's queue and starts the work. The default target is the profile's
+intake role, so accepting it sends the task down the normal path.
+
+The work item name is fixed once the task exists — the title and body stay editable, but the
+name is what every later handoff, commit, and log line refers to.
+
+### Reading a scheduler or worker log
+
+Click any role on the Board to open its detail dialog. The top half is that role's numbers —
+worktree, cycles, tokens, input/output, cache read and cache share, and the configured worker
+timeout. The bottom half is a live log tail with two buttons:
+
+- **scheduler** — the deterministic loop: what it claimed, what it merged, which worker it
+  delegated to, verification results, handoffs, and escalations.
+- **worker** — the agent's own output for the current attempt.
+
+The view follows the log while you stay scrolled to the bottom, and holds position when you
+scroll up to read something. A copy button takes the visible buffer. `scheduler` is the stream
+that answers "why did nothing happen"; `worker` answers "what did the agent actually do".
+Both are also on disk under `.kiln/logs/`.
+
+### Retrying and sending work
+
+In **Attention**, **Open** shows the full handoff document for an item, with the failure reason
+at the top when there is one. From there you can type guidance and press **Retry**, which
+re-queues the original work item with your note attached — the same operation as
+`kiln retry <id> --guidance`. **Retry** directly on the row does it without a note.
+
+The **Work queue** composer sends a message to any role: pick the target, pick or name a work
+item, type the message. This bypasses the backlog, so it is the way to interrupt or redirect a
+role that is already working — the web equivalent of `kiln send`.
+
+**Stop swarm** in the header tears the whole thing down and asks for confirmation first.
 
 ### Test health
 
@@ -660,15 +769,13 @@ Workers cannot access the handoff queue directly.
 ### Wrapper mode
 
 Manual roles use a persistent interactive agent session. The wrapper reads generated project
-instructions and uses Kiln skills and MCP tools to receive and send work. Wrapper mode is most
-appropriate for the human-facing role, where a continuing conversation is useful.
+instructions and uses Kiln skills and MCP tools to receive and send work. It exists for the
+human-facing role, where a continuing conversation is the point — you talk to it, and it keeps
+the thread.
 
-<details>
-<summary>See the wrapper and delegated-worker cycle</summary>
-
-![A persistent wrapper receiving work and delegating it to a disposable worker](docs/images/diagram-coder-internal-cycle.svg)
-
-</details>
+Wrapper mode is therefore always manual. Autonomous work runs on the scheduler, so a role that
+sets `"mode": "auto"` must also set `"scheduler": "python"`; the combination without one is
+refused at launch rather than quietly opening an interactive session.
 
 ## Git and project isolation
 
@@ -688,7 +795,7 @@ After initialization, the important user-owned files are:
 
 ```text
 my-project/
-├── README.md                         # project brief
+├── README.md                         # your own; only the examples ship one
 ├── kiln.profiles.json                # optional project-specific profiles
 └── kiln/
     └── project/
@@ -852,13 +959,13 @@ Two details worth knowing when authoring a role file:
 | Field | Meaning |
 |---|---|
 | `role` | Stable role name used for routing, worktrees, status, and logs |
-| `agent` | `claude`, `codex`, `copilot`, `grok`, or `pi` |
+| `agent` | `pi` (default), `claude`, `codex`, `copilot`, or `grok` |
 | `title` | Optional display title |
 | `model` | Model for the wrapper or one-shot worker |
 | `workerModel` | Optional model specifically for delegated worker execution |
 | `worktree` | `@current` or a name below `.worktrees/` |
 | `mode` | `manual` or `auto` |
-| `scheduler` | `python`, `inbox`, `dashboard`, or `cockpit`; omit for wrapper mode |
+| `scheduler` | `python`, `inbox`, `dashboard`, or `cockpit`; omit only for a `manual` wrapper role |
 | `watches` | Role queue monitored by an inbox pane |
 | `workerDebug` | Retain additional worker diagnostics |
 | `verify` | Shell command that must pass before handoff |
@@ -912,12 +1019,12 @@ reclaims it, and the next launch in the same project reclaims it too.
 
 Kiln is designed for autonomous execution and launches agents with broad permissions:
 
+- Pi scheduler workers use an ephemeral JSON-mode session and ignore project-local Pi
+  configuration; Pi's user-owned provider credentials remain in effect.
 - Claude workers use bypassed permission prompts.
 - Codex workers bypass approvals and the sandbox.
 - Copilot workers allow tool execution and file access.
 - Grok scheduler workers auto-approve tools.
-- Pi scheduler workers use an ephemeral JSON-mode session and ignore project-local Pi
-  configuration; Pi's user-owned provider credentials remain in effect.
 
 Agents can run arbitrary commands available to your user account. Git worktrees separate role
 branches, but they are not a security sandbox and do not prevent access outside the repository.
@@ -994,17 +1101,52 @@ python -m pytest tests/acceptance
 ruff format --check src tests tools
 ruff check src tests tools
 pyright
-python tools/quality_metrics.py --tier deterministic
+python -m tools.quality_metrics --tier deterministic
 ```
 
 The implementation lives under `src/kiln/` and follows domain/application/infrastructure
 boundaries. Tests are split into unit, property, integration, acceptance, and opt-in live tiers.
-The acceptance suite is separate from the default run and uses local fake workers; it needs no
-agent credentials. Add a system scenario for a public workflow or regression that crosses
-process, Git, database, filesystem, or HTTP boundaries and cannot be protected by one adapter's
-integration tests alone.
+The acceptance suite is separate from the default run: it drives the installed entry points
+against fake workers and local Git, SQLite, filesystem, and loopback HTTP, so it needs no agent
+credentials and no terminal emulator. Write an acceptance scenario when a user-facing workflow
+could stay broken while every adapter it touches still passes its own tests — a full scheduler
+cycle crosses process, Git, database, filesystem, and HTTP boundaries at once, and no single
+adapter's integration test sees the seam where it breaks. Adapter edge cases stay in the faster
+unit and integration suites.
+
+Kiln tracks its own quality against a reviewed baseline in `quality-baseline.json`: test counts,
+statement and branch coverage, complexity and CRAP, typing, duplication, and mutation scores per
+tier, together with the commit and environment that produced them. `python -m tools.quality_metrics`
+regenerates the underlying reports into the ignored `reports/` directory. Pytest, Ruff, and a CRAP
+ceiling of 6 are hard gates; coverage and behavioral mutation scores are expected to ratchet up
+from the baseline rather than regress without an explicit review. Mutation runs stay on demand
+(`python -m tools.run_mutation pure`, `python -m tools.run_mutation db`). See
+[docs/quality-metrics.md](docs/quality-metrics.md) for the tiers, runners, and policy.
+
+## Version
+
+Kiln is versioned by annotated `vMAJOR.MINOR.PATCH` Git tags on the framework checkout. Ask the
+checkout what it is:
+
+```bash
+./bin/kiln.sh --version
+```
+
+The same value is shown in the Cockpit and in the WezTerm tab title, so a running swarm always
+identifies the framework version that produced it. Between releases the string carries the
+commit distance and hash — `v0.4.0-12-gabc1234` — with a `-dirty` suffix when the checkout has
+uncommitted changes, which is what tells you whether a swarm ran on a clean release or on local
+edits.
+
+If the framework is installed rather than cloned, the version falls back to the packaging
+metadata recorded at install time, and to `unknown` when neither is available.
 
 ## License and status
+
+Kiln is proprietary. Copyright (c) 2025 nsd0okernicke, all rights reserved: the source is
+UNLICENSED, provided for internal use inside the authorized organization only, and is not
+licensed for distribution, modification, or use by third parties. See [LICENSE](LICENSE) for the
+governing text.
 
 Kiln is under active development. Treat profile formats and backend integrations as evolving
 interfaces, pin a known working revision for important projects, and review release changes

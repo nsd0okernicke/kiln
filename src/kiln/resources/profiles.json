@@ -4,7 +4,7 @@
   "default": "full",
   "profiles": {
     "full": {
-      "description": "New feature, spec-first. Human-guided intake feeding the full autonomous cycle: specifier -> coder -> refactorer -> architect, on the deterministic scheduler, plus a dashboard tab and the local web kiln.cockpit.",
+      "description": "New feature, spec-first. Human-guided intake feeding the full autonomous swarm: specifier -> coder -> refactorer -> architect, on the deterministic scheduler, plus a dashboard tab and the local web kiln.cockpit.",
       "defaults": {
         "agent": "pi",
         "model": "igate/coder"
@@ -99,7 +99,7 @@
             ]
           },
           {
-            "title": "Autonomous Cycle",
+            "title": "Autonomous Swarm",
             "gridRows": 2,
             "gridCols": 2,
             "panes": [
@@ -204,7 +204,7 @@
             ]
           },
           {
-            "title": "Fix Cycle",
+            "title": "Autonomous Swarm",
             "panes": [
               {
                 "role": "coder"
@@ -283,7 +283,7 @@
             ]
           },
           {
-            "title": "Spike",
+            "title": "Autonomous Swarm",
             "panes": [
               {
                 "role": "coder"
@@ -369,7 +369,7 @@
             ]
           },
           {
-            "title": "Harden Cycle",
+            "title": "Autonomous Swarm",
             "panes": [
               {
                 "role": "refactorer"
@@ -470,7 +470,7 @@
             ]
           },
           {
-            "title": "Manual Cycle",
+            "title": "Manual Swarm",
             "gridRows": 2,
             "gridCols": 2,
             "panes": [
@@ -595,7 +595,7 @@
             ]
           },
           {
-            "title": "Autonomous Cycle",
+            "title": "Autonomous Swarm",
             "gridRows": 2,
             "gridCols": 2,
             "panes": [
