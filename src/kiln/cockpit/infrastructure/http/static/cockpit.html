@@ -92,6 +92,7 @@
   }
   .chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #branch-chip { color: var(--accent); }
+  #version-header { color: var(--dim); font-size: 12px; font-weight: 500; margin-left: 6px; }
   .icon { width: 13px; height: 13px; flex: none; }
   .totals { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
   .totals b { color: var(--ink); font-weight: 600; }
@@ -363,6 +364,12 @@
       <path d="M7 7.7v8.6M17 11.7c0 3-2.4 4.3-5 4.6"/>
     </g>
   </symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+      <path d="M3 3v7.5l9 9L20.5 16l-9-9H3Z"/>
+      <circle cx="6.5" cy="6.5" r="1.2"/>
+    </g>
+  </symbol>
   <symbol id="i-copy" viewBox="0 0 24 24">
     <g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
       <rect x="8" y="8" width="11" height="11" rx="1.5"/>
@@ -374,7 +381,7 @@
 <header>
   <a class="brand" href="/" title="Reload the cockpit">
     <svg class="logo" aria-hidden="true"><use href="#i-kiln"/></svg>
-    <span class="wordmark">Kiln<span class="wordmark-dim">Cockpit</span></span>
+    <span class="wordmark">Kiln<span class="wordmark-dim">Cockpit</span> <span id="version-header"></span></span>
   </a>
   <!-- Two facts an operator checks constantly and could previously only tell apart by
        reading: which project, and which branch. An icon each makes them scannable. -->
@@ -623,6 +630,7 @@ function renderHeader(state) {
   // at the right swarm" -- and they used to be one run-on string alongside the totals.
   $("project").textContent = state.project || "(unnamed project)";
   $("branch").textContent = state.branch;
+  $("version-header").textContent = state.version || "";
   $("project-chip").title = "Project: " + (state.project || "unknown");
   $("branch-chip").title = "Branch: " + state.branch + " — messages are scoped to it";
 

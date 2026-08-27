@@ -47,6 +47,7 @@ from kiln.scheduler.infrastructure.runtime import configure_logging
 
 from ...application import state as state_builder
 from ...application import test_metrics as test_metrics_builder
+from kiln.launcher.application import version as kiln_version
 from ...application.actions import (
     ActionContext,
     ActionError,
@@ -615,11 +616,19 @@ def _test_metrics_path(args: argparse.Namespace, project_root: Path) -> Path:
     return Path(args.test_metrics) if args.test_metrics else test_reports.config_path(project_root)
 
 
+def _cockpit_version() -> str:
+    """Resolve the Kiln framework version for the cockpit display."""
+    # Five directories up from this module to the framework root.
+    framework_root = Path(__file__).resolve().parent.parent.parent.parent.parent
+    return kiln_version.resolve_version(framework_root)
+
+
 def config_from_args(args: argparse.Namespace) -> CockpitConfig:
     """Assemble the three contexts from parsed flags. No I/O beyond path building."""
     db_path = Path(args.db_path)
     sessions_file = Path(args.sessions_file)
     project_root = _project_root(args)
+    version = _cockpit_version()
     return CockpitConfig(
         project_root=project_root,
         test_metrics_path=_test_metrics_path(args, project_root),
@@ -634,6 +643,7 @@ def config_from_args(args: argparse.Namespace) -> CockpitConfig:
         ),
         cockpit=state_builder.CockpitContext(
             project_name=args.project_name or Path.cwd().name,
+            version=version,
             branch=args.branch,
             lanes=tuple(name.strip() for name in args.lanes.split(",") if name.strip()),
             human_role=args.human_role,

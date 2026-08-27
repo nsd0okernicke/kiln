@@ -178,6 +178,8 @@ class CockpitContext:
 
     project_name: str
     branch: str
+    #: Resolved Kiln framework version (e.g. ``"v0.4.0"``, ``"v0.4.0-12-gabc1234"``).
+    version: str = "unknown"
     #: Board lanes in display order; empty infers lanes from traffic.
     lanes: tuple[str, ...] = ()
     #: The role a human's queue belongs to. Messages waiting here are completed cycles
@@ -470,6 +472,7 @@ def build_state(
     """The whole `/api/state` document. Pure: every input is already gathered."""
     return {
         "project": ctx.project_name,
+        "version": ctx.version,
         "branch": ctx.branch,
         "human_role": ctx.human_role,
         "intake_role": ctx.intake_role,

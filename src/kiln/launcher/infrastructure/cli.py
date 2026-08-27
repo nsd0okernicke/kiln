@@ -25,6 +25,7 @@ from pathlib import Path
 from kiln.cockpit.infrastructure import test_reports
 
 from ..application import artifacts
+from ..application import version as kiln_version
 from ..application.artifacts import CHANNEL_IMPORT_PROBE, MCP_PYTHON
 from ..application.commands import (
     PROXY_CAPABLE_AGENTS,
@@ -779,6 +780,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="metadata",
         help="proxy capture depth: 'metadata' records sizes/model/usage, "
         "'full' also stores request and response bodies",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"kiln {kiln_version.resolve_version()}",
+        help="show the framework version and exit",
     )
     parser.add_argument("--verbose", "-Debug", dest="verbose", action="store_true")
     return parser

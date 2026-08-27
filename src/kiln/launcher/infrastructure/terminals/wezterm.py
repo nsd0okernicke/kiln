@@ -21,9 +21,14 @@ import subprocess
 import time
 from pathlib import Path
 
+from kiln.launcher.application import version as kiln_version
+
 from . import PaneSpec
 
 log = logging.getLogger(__name__)
+
+#: Resolved Kiln framework version, set once at import time for the window title.
+_KILN_VERSION: str = kiln_version.resolve_version()
 
 ENV_ROLES = "KILN_ROLES_JSON"
 ENV_LAYOUT = "KILN_LAYOUT_JSON"
@@ -101,12 +106,14 @@ local state_colors_json = os.getenv('KILN_STATE_COLORS_JSON') or '{}'
 local STATE_COLORS = wezterm.json_parse(state_colors_json) or {}
 local STATE_COLOR_DEFAULT = '#8a8a88'
 
+local KILN_VERSION = os.getenv('KILN_VERSION') or ''
+
 wezterm.on('format-window-title', function(tab, pane, tabs, panes, config)
   local title = tab.tab_title
   if title and #title > 0 then
-    return 'Kiln - ' .. title
+    return 'Kiln ' .. KILN_VERSION .. ' - ' .. title
   end
-  return 'Kiln'
+  return 'Kiln ' .. KILN_VERSION
 end)
 
 -- Reads .kiln/status/<role>.json rather than the pane's OSC-0 title: the agent running in
@@ -362,11 +369,14 @@ def build_environment(panes: list[PaneSpec], layout: dict, project_dir: Path) ->
     # cli.py), and this module must stay importable before that has happened.
     from kiln.scheduler.infrastructure.terminal.pane_status import STATE_COLORS_HEX
 
+    version = _KILN_VERSION
+
     env = {
         ENV_ROLES: build_roles_json(panes),
         # Lua does `project_dir .. '/.kiln/...'`, so forward slashes keep the path valid.
         ENV_PROJECT_DIR: project_dir.as_posix(),
         ENV_STATE_COLORS: json.dumps(STATE_COLORS_HEX, separators=(",", ":")),
+        "KILN_VERSION": version,
     }
     if layout:
         env[ENV_LAYOUT] = json.dumps(layout, separators=(",", ":"))
