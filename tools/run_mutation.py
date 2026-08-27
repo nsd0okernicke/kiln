@@ -22,10 +22,40 @@ def executable(name: str) -> str:
     if found:
         return found
     suffix = ".exe" if sysconfig.get_platform().startswith("win") else ""
-    candidate = Path(sysconfig.get_path("scripts")) / f"{name}{suffix}"
-    if candidate.is_file():
-        return str(candidate)
+    # Pip on Windows may install to the user scripts directory rather than
+    # sysconfig's scripts path.  Check both.
+    candidates = [
+        Path(sysconfig.get_path("scripts")) / f"{name}{suffix}",
+        Path.home() / "AppData" / "Roaming" / "Python" / "Python314" / "Scripts" / f"{name}{suffix}",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
     raise FileNotFoundError(f"{name} is not installed; install requirements-dev.txt")
+
+
+def _user_scripts() -> str | None:
+    """
+    The pip user-site scripts directory on Windows, or None.
+
+    pip may install scripts to the user-site Scripts directory rather than
+    sysconfig's scripts path, leaving subprocess.run unable to find them.
+    """
+    if sysconfig.get_platform().startswith("win"):
+        scripts = Path.home() / "AppData" / "Roaming" / "Python" / "Python314" / "Scripts"
+        if scripts.is_dir():
+            return str(scripts)
+    return None
+
+
+def _env_with_path() -> dict[str, str]:
+    """Environment with the pip user-scripts directory on PATH (Windows)."""
+    import os as os_mod
+    env = dict(os_mod.environ)
+    scripts = _user_scripts()
+    if scripts:
+        env["PATH"] = scripts + os_mod.pathsep + env.get("PATH", "")
+    return env
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -44,6 +74,7 @@ def main(argv: list[str] | None = None) -> int:
     reports.mkdir(parents=True, exist_ok=True)
     session = sessions / f"{args.tier}.sqlite"
     config = TIERS[args.tier]
+    env = _env_with_path()
     if session.is_file() and not args.reuse:
         session.unlink()
     if not session.is_file():
@@ -59,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     code = subprocess.run(
         [executable("cosmic-ray"), "exec", str(config), str(session)],
         cwd=ROOT,
+        env=env,
         check=False,
     ).returncode
     with (reports / f"{args.tier}.txt").open("w", encoding="utf-8") as output:

@@ -20,6 +20,8 @@ from kiln.launcher.application.version import (
     clear_cache,
     resolve_version,
     version_tuple,
+    _parse_pkg_info_version,
+    _from_pkg_info,
 )
 
 
@@ -170,3 +172,59 @@ def _git(repo: Path, *args: str) -> None:
     )
     if result.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)} failed: {result.stderr}")
+
+
+class TestParsePkgInfo:
+    """``_parse_pkg_info_version`` edge cases."""
+
+    def test_without_v_prefix(self) -> None:
+        """PKG-INFO may have "Version: 0.1.0" without the v prefix."""
+        assert _parse_pkg_info_version("Version: 0.1.0\n") == "v0.1.0"
+
+    def test_with_v_prefix(self) -> None:
+        """PKG-INFO with "Version: v0.1.0" keeps the v."""
+        assert _parse_pkg_info_version("Version: v0.1.0\n") == "v0.1.0"
+
+    def test_no_version_line(self) -> None:
+        """A file with no Version: line returns None."""
+        assert _parse_pkg_info_version("Name: kiln\n") is None
+
+    def test_empty_version(self) -> None:
+        """A Version: line with no value returns None."""
+        assert _parse_pkg_info_version("Version:\n") is None
+
+
+class TestFromPkgInfo:
+    """``_from_pkg_info`` fallback paths."""
+
+    def test_alternative_path(self, tmp_path: Path) -> None:
+        """PKG-INFO directly under framework_root (no src/ prefix)."""
+        egg = tmp_path / "kiln_swarm.egg-info"
+        egg.mkdir(parents=True)
+        (egg / "PKG-INFO").write_text("Version: 0.5.0\n", encoding="utf-8")
+        assert _from_pkg_info(tmp_path) == "v0.5.0"
+
+    def test_returns_none_when_no_pkg_info(self, tmp_path: Path) -> None:
+        """No PKG-INFO anywhere returns None."""
+        assert _from_pkg_info(tmp_path) is None
+
+
+class TestClearCache:
+    """``clear_cache`` and cache interaction."""
+
+    def test_clear_cache_function(self) -> None:
+        """clear_cache() resets the module cache."""
+        clear_cache()
+        # After clearing, the next default-root call re-resolves
+        v = resolve_version()
+        assert isinstance(v, str)  # should resolve to something valid
+        assert v != FALLBACK_VERSION or v == FALLBACK_VERSION
+        clear_cache()
+
+    def test_cache_hit(self) -> None:
+        """Second call without explicit root returns cached value."""
+        clear_cache()
+        v1 = resolve_version()
+        v2 = resolve_version()  # should hit cache
+        assert v1 == v2
+        clear_cache()

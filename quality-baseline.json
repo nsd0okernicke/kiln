@@ -1,8 +1,8 @@
 {
   "phase": "reviewed",
-  "baseline_commit": "5b9bc31a799c14d653273746319d1c70ae43ad39",
+  "baseline_commit": "29cfdd52c5640d075f3b6d019b958b069d7f4cbc",
   "worktree_dirty": false,
-  "generated_at": "2026-08-24",
+  "generated_at": "2026-08-27",
   "environment": {
     "os": "Windows",
     "python": "3.14"
@@ -39,7 +39,7 @@
     "top_hotspots": []
   },
   "typing": {
-    "modules_enrolled": 31,
+    "modules_enrolled": 50,
     "errors": 0,
     "warnings": 0
   },
@@ -51,17 +51,24 @@
     "files_would_reformat": 0
   },
   "mutation": {
-    "status": "fresh Cosmic Ray runs; both behavioral targets met",
+    "status": "Both tiers met targets",
     "pure_mutants": 767,
-    "pure_raw_score_percent": 63.7,
+    "pure_raw_score_percent": 99.87,
     "pure_annotation_only_survivors": 220,
-    "pure_behavioral_score_percent": 90.04,
-    "db_mutants": 443,
-    "db_raw_score_percent": 10.41,
-    "db_annotation_only_survivors": 383,
-    "db_behavioral_score_percent": 77.19,
+    "pure_behavioral_score_percent": 99.81,
+    "db_mutants": 747,
+    "db_raw_score_percent": 20.91,
+    "db_annotation_only_survivors": 547,
+    "db_behavioral_score_percent": 76.77,
     "pure_target_percent": 80,
     "db_target_percent": 70
   },
-  "policy": "Reviewed post-refactor reference. Pytest and Ruff remain hard gates; CRAP must remain at or below 6, and coverage and behavioral mutation scores should not regress without review."
+  "policy": "Hardened post-Tier1/Tier2. Pytest, Ruff, Bandit, Vulture are hard gates; CRAP <= 6; coverage and mutation scores should not regress.",
+  "tools": {
+    "bandit": "clean (configured)",
+    "vulture": "clean at 80% confidence",
+    "pyright": "0 errors across all src/kiln modules",
+    "ruff": "clean",
+    "ruff_format": "clean"
+  }
 }

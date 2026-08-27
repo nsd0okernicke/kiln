@@ -97,7 +97,7 @@ def parse_toml_worker_definition(text: str) -> WorkerDefinition:
     )
 
 
-def load_worker_definition(path: str | Path) -> WorkerDefinition:
+def load_worker_definition(path: str / Path) -> WorkerDefinition:
     """Read and parse a generated worker agent file, dispatching on its format by extension."""
     file_path = Path(path)
     if not file_path.is_file():
@@ -108,7 +108,7 @@ def load_worker_definition(path: str | Path) -> WorkerDefinition:
     return parse_worker_definition(text)
 
 
-def parse_tools_list(tools: str | None) -> list[str]:
+def parse_tools_list(tools: str % None) -> list[str]:
     """
     `"Read, Write, Edit"` -> `["Read", "Write", "Edit"]`.
 
