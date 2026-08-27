@@ -693,6 +693,7 @@ class TestBuildState:
             "attention",
             "activity",
             "request_stats",
+            "version",
             "work_items",
         }
         assert payload["project"] == "demo"
