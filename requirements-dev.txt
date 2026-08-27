@@ -6,3 +6,4 @@ ruff>=0.9
 radon>=6.0
 pyright>=1.1.390
 cosmic-ray>=8.4
+pypdf>=5.0

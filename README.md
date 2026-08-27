@@ -771,21 +771,6 @@ agent credentials. Add a system scenario for a public workflow or regression tha
 process, Git, database, filesystem, or HTTP boundaries and cannot be protected by one adapter's
 integration tests alone.
 
-## Current limitations
-
-- Kiln has been exercised primarily with small swarms; behavior at substantially larger role
-  counts is not established.
-- Copilot non-interactive workers can lose tool approval during long sessions due to an
-  upstream CLI issue. Avoid Copilot for long scheduler-mode work until that behavior is fixed.
-- Traffic capture supports Claude and Codex only.
-- Grok wrapper mode is less extensively validated than its scheduler adapter.
-- Pi integration is covered with a fake CLI. A real private provider should pass the issue 32
-  compatibility checks for tools, streaming, usage, termination, certificates, and proxies
-  before production use.
-- Linux/macOS share the Python core with Windows, but authenticated live-agent coverage varies
-  by backend and environment.
-- Windows symlink creation may require Developer Mode or elevation. Kiln falls back to copies,
-  which reduces sharing between worktrees.
 
 ## License and status
 
