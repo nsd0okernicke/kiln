@@ -162,7 +162,7 @@ def dirty_repo(tmp_path: Path) -> tuple[Path, str]:
 
 def _git(repo: Path, *args: str) -> None:
     result = subprocess.run(
-        ["git"] + list(args),
+        ["git", *list(args)],
         cwd=str(repo),
         capture_output=True,
         text=True,

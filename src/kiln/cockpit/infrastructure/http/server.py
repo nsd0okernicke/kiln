@@ -39,6 +39,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
+from kiln.launcher.application import version as kiln_version
 from kiln.launcher.infrastructure import networking
 from kiln.scheduler.infrastructure.cli import dashboard
 from kiln.scheduler.infrastructure.cli.dashboard import DashboardContext
@@ -47,7 +48,6 @@ from kiln.scheduler.infrastructure.runtime import configure_logging
 
 from ...application import state as state_builder
 from ...application import test_metrics as test_metrics_builder
-from kiln.launcher.application import version as kiln_version
 from ...application.actions import (
     ActionContext,
     ActionError,
