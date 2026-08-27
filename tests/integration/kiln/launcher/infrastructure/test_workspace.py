@@ -26,7 +26,11 @@ PROFILE = parse_profile(
             "p": {
                 "terminals": [
                     {"role": "specifier", "worktree": "@current", "mode": "manual"},
-                    {"role": "coder", "worktree": "coder", "mode": "auto"},
+                    # A wrapper role: these tests assert wrapper artifacts (instruction file,
+                    # role-scoped channel, session model). Wrapper now means `manual` -- it
+                    # used to be spelled `auto` with no scheduler, which is the auto-wrapper
+                    # the loader rejects.
+                    {"role": "coder", "worktree": "coder", "mode": "manual"},
                 ]
             }
         }
@@ -401,7 +405,7 @@ GROK_PROFILE = parse_profile(
                         "role": "coder",
                         "agent": "grok",
                         "worktree": "coder",
-                        "mode": "auto",
+                        "mode": "manual",
                     },
                 ]
             }

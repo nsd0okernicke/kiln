@@ -30,23 +30,18 @@ ROLES = {
 }
 
 TEMPLATES = {
-    "loop-auto-claude.md": "# Loop\n\nRole is {{ROLE}}, target {{HANDOFF_TARGET}}.\n",
-    "loop-manual-claude.md": "# Manual Loop\n\nRole {{ROLE}}.\n",
+    "loop-manual-claude.md": "# Manual Loop\n\nRole is {{ROLE}}, target {{HANDOFF_TARGET}}.\n",
     "loop-manual-claude-with-inbox.md": "# Manual Loop With Inbox\n\nRole {{ROLE}}.\n",
     "runtime-claude.md": "# Runtime\n\nBranch {{BRANCH}}, db {{DB_PATH}}.\n",
-    "wrapper-prompt-auto-claude.md": "# Wrapper\n\nDelegate to {{ROLE}}-worker.\n",
-    "loop-auto-copilot.md": "# Copilot Loop\n",
+    "loop-manual-copilot.md": "# Copilot Manual Loop\n",
+    "loop-manual-copilot-with-inbox.md": "# Copilot Manual Loop With Inbox\n",
     "runtime-copilot.md": "# Copilot Runtime\n",
-    "wrapper-prompt-auto-copilot.md": "# Copilot Wrapper\n",
-    "loop-auto-codex.md": "# Codex Loop\n",
+    "loop-manual-codex.md": "# Codex Manual Loop\n",
+    "loop-manual-codex-with-inbox.md": "# Codex Manual Loop With Inbox\n",
     "runtime-codex.md": "# Codex Runtime\n",
-    "wrapper-prompt-auto-codex.md": "# Codex Wrapper\n",
-    "loop-auto-grok.md": "# Grok Loop\n",
     "loop-manual-grok.md": "# Grok Manual Loop\n",
     "loop-manual-grok-with-inbox.md": "# Grok Manual Loop With Inbox\n",
     "runtime-grok.md": "# Grok Runtime\n",
-    "wrapper-prompt-auto-grok.md": "# Grok Wrapper\n",
-    "loop-auto-pi.md": "# Pi Loop\n",
     "loop-manual-pi.md": "# Pi Manual Loop\n",
     "loop-manual-pi-with-inbox.md": "# Pi Manual Loop With Inbox\n",
     "runtime-pi.md": "# Pi Runtime\n",
@@ -81,6 +76,9 @@ def paths(tmp_path):
 
 def role(**kwargs):
     kwargs.setdefault("role", "coder")
+    # Wrapper roles are manual. `RoleConfig`'s own default is still "auto" for the scheduler
+    # path, so instruction-file tests have to say so explicitly.
+    kwargs.setdefault("mode", "manual")
     return RoleConfig(**kwargs)
 
 
@@ -164,16 +162,6 @@ class TestInstructionFiles:
         written = artifacts.write_instructions(role(agent=agent), paths, "main", paths.project_root)
         assert written.name == expected
 
-    def test_a_grok_auto_role_delegates_rather_than_carrying_its_own_work_rules(self, paths):
-        # Grok discovers `.grok/agents/<role>-worker.md` as a project agent and has
-        # `spawn_subagent` (both verified live), so it is a real delegating wrapper like the
-        # other three -- not the odd one out that has to do the work in-session.
-        content = artifacts.render_instructions(
-            role(agent="grok"), paths, "main", paths.project_root
-        )
-        assert "# Grok Wrapper" in content
-        assert "Implement via TDD" not in content
-
     def test_a_grok_manual_role_still_gets_its_role_rules(self, paths):
         content = artifacts.render_instructions(
             role(agent="grok", mode="manual"), paths, "main", paths.project_root
@@ -195,11 +183,12 @@ class TestInstructionFiles:
         )
         assert not (paths.project_root / "AGENTS.md").exists()
 
-    def test_auto_role_gets_the_wrapper_prompt_not_its_own_role_rules(self, paths):
-        # The wrapper delegates; the role's work rules belong to the worker.
+    def test_every_wrapper_role_carries_its_own_role_rules(self, paths):
+        # The auto wrapper used to delegate and leave its work rules to the worker. It is
+        # gone, so there is only one shape left: a wrapper reads its own role file.
         content = artifacts.render_instructions(role(), paths, "main", paths.project_root)
-        assert "# Wrapper" in content
-        assert "Implement via TDD" not in content
+        assert "Implement via TDD" in content
+        assert "# Manual Loop" in content
 
     def test_manual_role_gets_its_role_rules_and_full_constitution(self, paths):
         content = artifacts.render_instructions(

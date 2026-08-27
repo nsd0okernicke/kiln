@@ -6,9 +6,10 @@ Ports Write-GeneratedCLAUDEmd, Write-GeneratedWorkerAgent, Write-ClaudeConfig an
 
 Two behaviours matter most here:
 
-* **Scheduler roles get no instruction file.** There is no wrapper LLM session to read it,
+* **Scheduler roles get no instruction file.** There is no interactive session to read it,
   and the Claude spike proved a stray CLAUDE.md *does* reach a one-shot worker, so writing
-  one would actively leak wrapper-loop instructions into worker context.
+  one would actively leak loop instructions into worker context. Autonomous work always runs
+  on the scheduler, so instruction files belong to manual roles alone.
 * **Worker definitions carry the KILN-STATUS contract**, taken from `status_contract.py` so
   the instruction the worker sees and the parser the scheduler runs cannot drift apart.
 """
@@ -50,9 +51,6 @@ CHANNEL_IMPORT_PROBE = (
 
 #: Backends verified to tolerate a blocking `wait_for_message()` MCP call.
 BLOCKING_CHANNEL_AGENTS = frozenset({"claude"})
-
-#: Backends with in-session worker delegation.
-DELEGATING_AGENTS = ("claude", "copilot", "codex", "grok")
 
 DEFAULT_HANDOFF_TARGET = "specifier"
 
@@ -148,17 +146,16 @@ def render_instructions(
     """
     Assemble a wrapper role's instruction file.
 
-    Auto-mode delegating roles get the wrapper prompt + loop + runtime + workflow only: the
-    role's own work rules and the engineering/project constitution live in the worker
-    definition instead, because the wrapper never does implementation work itself.
+    Only manual roles reach this: autonomous work runs on the deterministic scheduler, and the
+    loader rejects `mode: auto` without one. The loop template is therefore always the manual
+    variant.
 
     `profile` is optional (defaults to "no inbox") only so callers that do not care about
     inbox-aware loops -- most tests -- do not have to construct one; the real launcher
     always passes it.
     """
-    delegates = role.agent in DELEGATING_AGENTS
     has_inbox = bool(profile and profile.inbox_watches(role.role))
-    loop_name = f"loop-{role.mode}-{role.agent}"
+    loop_name = f"loop-manual-{role.agent}"
     if has_inbox:
         # The companion inbox owns receiving; this variant only resets the wrapper to waiting.
         loop_name += "-with-inbox"
@@ -166,24 +163,16 @@ def render_instructions(
     runtime = read_template(paths, f"runtime-{role.agent}")
     workflow = read_constitution(paths, "workflow", required=True)
 
-    if role.mode == "auto" and delegates:
-        blocks = [
-            read_template(paths, f"wrapper-prompt-auto-{role.agent}"),
-            loop,
-            runtime,
-            workflow,
-        ]
-    else:
-        blocks = [
-            read_role(paths, role.role),
-            loop,
-            runtime,
-            read_constitution_header(paths),
-            read_constitution(paths, "project"),
-            read_constitution(paths, "engineering"),
-            KNOWLEDGE_INSTRUCTION,
-            workflow,
-        ]
+    blocks = [
+        read_role(paths, role.role),
+        loop,
+        runtime,
+        read_constitution_header(paths),
+        read_constitution(paths, "project"),
+        read_constitution(paths, "engineering"),
+        KNOWLEDGE_INSTRUCTION,
+        workflow,
+    ]
 
     substitutions = build_substitutions(role, paths, branch, worktree, profile)
     return generated_header(_now()) + join_blocks(blocks, substitutions)

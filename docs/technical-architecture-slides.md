@@ -14,6 +14,12 @@ paginate: true
 
 Technical overview — topology, wrapper/worker delegation, and the handoff loop
 
+> **Out of date.** This deck describes the pre-scheduler design, where an `auto`-mode role ran
+> an LLM wrapper that drove its own handoff loop. That wrapper was removed once every backend
+> had a one-shot adapter: autonomous roles now run on the deterministic Python scheduler, and
+> wrapper mode is manual-only. The topology and worker-isolation slides still hold; the
+> handoff-loop and delegation slides describe a mechanism that no longer exists.
+
 ---
 
 ## What Kiln Does
@@ -111,7 +117,7 @@ Same wrapper/worker shape, different dispatch mechanism per backend:
 - **Claude** — worker is a generated `.claude/agents/<role>-worker.md`, dispatched deterministically via the `Agent` tool
 - **Copilot** — worker is a generated `.github/agents/<role>-worker.agent.md`; delegation is prose-instructed, not tool-enforced
 - **Codex** — worker is a generated `.codex/agents/<role>-worker.toml`, dispatched via Codex's own `spawn_agent`/`assign_agent_task` tools
-- **Grok** — scheduler adapter only, live-verified: `--always-approve`, `--no-subagents`, and inline `--agents` definitions. No wrapper mode yet, so a grok role must run `auto` + scheduled
+- **Grok** — scheduler adapter, live-verified: `--always-approve`, `--no-subagents`, and inline `--agents` definitions
 
 Every worker is isolated — no `Agent` tool, no MCP messaging tools, only file access in its own worktree.
 

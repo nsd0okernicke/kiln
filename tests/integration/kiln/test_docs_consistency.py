@@ -276,26 +276,20 @@ class TestWrapperTemplateSets:
     """
     A backend accepted by the loader but missing a template does not degrade -- it takes the
     launch down. `read_template` raises `TemplateError` for a missing file, and
-    `render_instructions` reaches for all of these by name derived from `role.agent`/
-    `role.mode`, so the first user to configure the gap gets a crash rather than a fallback.
+    `render_instructions` reaches for all of these by name derived from `role.agent`, so the
+    first user to configure the gap gets a crash rather than a fallback.
 
     This is the shape `grok` was in for its whole scheduler-only life: a legal `agent` value
-    with no `loop-auto-grok.md` behind it.
+    with no loop template behind it.
     """
 
     def _expected(self, agent: str) -> set[str]:
         """Every template `artifacts.render_instructions` can ask for, for one agent."""
-        from kiln.launcher.application.artifacts import DELEGATING_AGENTS
-
-        names = {
-            f"loop-auto-{agent}.md",
+        return {
             f"loop-manual-{agent}.md",
             f"loop-manual-{agent}-with-inbox.md",
             f"runtime-{agent}.md",
         }
-        if agent in DELEGATING_AGENTS:
-            names.add(f"wrapper-prompt-auto-{agent}.md")
-        return names
 
     def test_every_accepted_agent_has_a_complete_template_set(self):
         from kiln.launcher.domain.profile import VALID_AGENTS
@@ -309,6 +303,18 @@ class TestWrapperTemplateSets:
             f"agents the loader accepts whose wrapper templates do not ship: {incomplete} -- "
             "configuring one fails the launch with TemplateError"
         )
+
+    def test_no_auto_wrapper_templates_remain(self):
+        """
+        The auto wrapper -- an LLM driving its own handoff loop -- was replaced by the
+        deterministic scheduler and removed. A stray template would be dead weight that the
+        set test above cannot catch, because it only checks for absence.
+        """
+        templates = REPO / "src" / "kiln" / "resources" / "templates"
+        gone = ("loop-auto-", "wrapper-prompt-auto-")
+        stale = sorted(p.name for p in templates.glob("*.md") if p.name.startswith(gone))
+
+        assert not stale, f"auto-wrapper templates still shipping: {stale}"
 
 
 class TestDocumentedTerminalKeys:

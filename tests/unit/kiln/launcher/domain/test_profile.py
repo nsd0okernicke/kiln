@@ -38,7 +38,13 @@ CONFIG = {
                     "mode": "manual",
                     "model": "claude-sonnet-5",
                 },
-                {"role": "coder", "agent": "copilot", "worktree": "coder", "mode": "auto"},
+                {
+                    "role": "coder",
+                    "agent": "copilot",
+                    "worktree": "coder",
+                    "mode": "auto",
+                    "scheduler": "python",
+                },
             ],
             "layout": {"tabs": [{"title": "All Roles"}]},
         },
@@ -185,9 +191,26 @@ class TestParsing:
         assert parse_profile(CONFIG, "compact").layout["tabs"][0]["title"] == "All Roles"
 
     def test_applies_defaults_to_a_minimal_entry(self):
+        # `mode` is derived from `scheduler`, not fixed: an entry with neither is an
+        # interactive wrapper, and wrappers are manual. A fixed "auto" default would make
+        # this shorthand illegal, because auto now requires a scheduler.
         role = parse_profile(CONFIG, "solo").roles[0]
-        assert (role.agent, role.mode, role.worktree) == ("claude", "auto", "@current")
+        assert (role.agent, role.mode, role.worktree) == ("claude", "manual", "@current")
         assert role.worker_debug is False
+
+    def test_a_scheduled_entry_defaults_to_auto(self):
+        config = {"profiles": {"p": {"terminals": [{"role": "coder", "scheduler": "python"}]}}}
+        role = parse_profile(config, "p").roles[0]
+        assert role.mode == "auto"
+        assert role.uses_scheduler
+
+    def test_auto_without_a_scheduler_is_refused(self):
+        # It used to select the auto wrapper -- an LLM driving its own handoff loop. That is
+        # gone, and the combination used to fall through to an interactive session instead of
+        # the scheduler the author asked for, so it must fail loudly.
+        config = {"profiles": {"p": {"terminals": [{"role": "coder", "mode": "auto"}]}}}
+        with pytest.raises(ProfileError, match="without a scheduler"):
+            parse_profile(config, "p")
 
     def test_worker_debug_opts_in(self):
         config = {"profiles": {"p": {"terminals": [{"role": "coder", "workerDebug": True}]}}}

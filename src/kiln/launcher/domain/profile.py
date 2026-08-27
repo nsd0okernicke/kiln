@@ -332,8 +332,13 @@ def _parse_role(entry: dict) -> RoleConfig:
     _reject_unknown_keys(entry, TERMINAL_KEYS, f"role {role!r}")
 
     agent = _choice(entry, "agent", "claude", VALID_AGENTS, role)
-    mode = _choice(entry, "mode", "auto", VALID_MODES, role)
     scheduler = _scheduler(entry, role, agent)
+    # Derived, not fixed: a role on the python scheduler is autonomous, and a role without one
+    # is an interactive wrapper, which is always manual. A fixed "auto" default would make the
+    # commonest shorthand -- a terminal entry with no `mode` at all -- illegal under the check
+    # below, for no benefit.
+    mode = _choice(entry, "mode", _default_mode(scheduler), VALID_MODES, role)
+    _validate_auto_has_scheduler(mode, scheduler, role)
     budget = _budget(entry, role, agent)
     limits = _role_limits(entry, role)
 
@@ -397,6 +402,30 @@ def _validate_scheduler_agent(scheduler: str, role: str, agent: str) -> None:
             f"role {role!r} requests the python scheduler with agent {agent!r}, but it "
             "has no one-shot adapter yet; expected one of "
             + ", ".join(repr(name) for name in SCHEDULER_CAPABLE_AGENTS)
+        )
+
+
+def _default_mode(scheduler: str | None) -> str:
+    """`auto` for a role the python scheduler drives, `manual` for an interactive wrapper."""
+    return "auto" if scheduler == SCHEDULER_PYTHON else "manual"
+
+
+def _validate_auto_has_scheduler(mode: str, scheduler: str | None, role: str) -> None:
+    """
+    Reject `mode: auto` with no scheduler.
+
+    It used to mean "auto wrapper": an LLM session driving its own handoff loop, kept as a
+    fallback for backends without a one-shot adapter. Every accepted backend has one now, so
+    the fallback was removed -- but the combination still parsed, and fell through
+    `_special_role_command` into an interactive session nobody asked for. A typo silently
+    bought you an LLM running its own loop instead of the deterministic scheduler, which is
+    why this is a hard error rather than a warning.
+    """
+    if mode == "auto" and scheduler is None:
+        raise ProfileError(
+            f"role {role!r} sets mode 'auto' without a scheduler. Autonomous roles run on the "
+            'deterministic scheduler -- add \'"scheduler": "python"\'. The auto-wrapper '
+            "fallback it used to select no longer exists."
         )
 
 
