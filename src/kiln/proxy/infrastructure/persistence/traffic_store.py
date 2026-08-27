@@ -255,13 +255,13 @@ def _request_stats_rows(conn, available: set[str], since: str | None):
     }
     window = "AND ts >= ?" if since else ""
     return conn.execute(
-        f"""  # nosec B608
+        f"""
         SELECT role, COUNT(*), AVG(request_bytes), MAX(request_bytes), SUM(request_bytes),
                {optional["tools_bytes"]}, {optional["system_bytes"]},
                {optional["messages_bytes"]}
         FROM traffic WHERE role IS NOT NULL {window}
         GROUP BY role ORDER BY role
-        """,
+        """,  # nosec B608
         (since,) if since else (),
     ).fetchall()
 
