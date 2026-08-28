@@ -299,7 +299,7 @@ def _usage_from_copilot(usage: dict) -> TokenUsage:
     """
 
     def _copilot_count(name: str, *aliases: str) -> int:
-        for key in (name,) + aliases:
+        for key in (name, *aliases):
             value = usage.get(key)
             if isinstance(value, int) and not isinstance(value, bool):
                 return value
@@ -436,7 +436,11 @@ class StreamingUsageTracker:
     def _consume_copilot_result(self, event: dict) -> None:
         usage = event.get("usage") if isinstance(event, dict) else None
         if not isinstance(usage, dict):
-            usage = (event.get("data") or {}).get("usage") if isinstance(event.get("data"), dict) else None
+            usage = (
+                (event.get("data") or {}).get("usage")
+                if isinstance(event.get("data"), dict)
+                else None
+            )
         if isinstance(usage, dict):
             self._copilot_usage = _usage_from_copilot(usage)
 

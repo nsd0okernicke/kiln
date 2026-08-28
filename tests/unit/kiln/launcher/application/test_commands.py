@@ -71,7 +71,7 @@ class TestProxyEnv:
         env = proxy_env(RoleConfig(role="coder", agent=agent), PROXY)
         assert len(env) == expected
         if expected:
-            url = list(env.values())[0]
+            url = next(iter(env.values()))
             assert url == f"{PROXY}/kiln/coder"
 
     def test_codex_gets_kilns_own_variable(self):
