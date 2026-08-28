@@ -14,9 +14,9 @@
 >   a routing row is not the one-line fix it looks like. That is the real design question to
 >   settle before this role ships.
 > - **Its thresholds contradict the constitution.** CRAP ≤ 4.0 here against ≤ 6 in
->   `refactorer.md` and `skill-orchestration.md`.
-> - **It claims mutation-testing ownership** that `skill-orchestration.md` assigns to the
->   architect.
+>   `refactorer.md`.
+> - **It claims mutation-testing ownership** that `refactorer.md` and `architect.md` assign to
+>   the architect.
 >
 > To review code today, use `refactorer` (coverage, CRAP, mutation scan) and `architect` (full
 > mutation, final verification) — the two roles that already own these gates and are routed.

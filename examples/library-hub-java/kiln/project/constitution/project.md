@@ -161,6 +161,6 @@ testing (PIT) and CRAP are the architect's/refactorer's responsibility, not the 
 
 - Mutation score ≥ 80% on `domain/` and `application/`: `./mvnw org.pitest:pitest-maven:mutationCoverage`
 - Coverage ≥ 90%: `./mvnw jacoco:report jacoco:check`
-- CRAP ≤ 30 per method (PIT's CRAP metric — differs from the Python example's radon threshold of ≤6, see `skill-orchestration.md`)
+- CRAP ≤ 30 per method (PIT's CRAP metric — differs from the Python example's radon threshold of ≤6, see the `crap-analyzer` skill's "Threshold Note")
 - Style: `./mvnw checkstyle:check spotless:check`
 - Layering: ArchUnit layer-dependency test passes as part of `./mvnw test`

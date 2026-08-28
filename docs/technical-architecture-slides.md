@@ -23,7 +23,7 @@ Technical overview — topology, scheduler/worker delegation, and the handoff cy
 - Launches a **config-driven swarm** — each role's AI backend, worktree, and mode come from a JSON profile, not hardcoded scripts
 - Gives each role its **own terminal** (tab/pane) and its **own git worktree** — agents never collide on files or branches
 - Wires **inter-agent messaging** through SQLite (`.kiln/messages.db`) — the Python scheduler reads and writes directly, no MCP overhead
-- Injects a layered **constitution** (`workflow.md`, `engineering.md`, `project.md`, `skill-orchestration.md`) + a **role file** into every agent at startup
+- Injects a layered **constitution** + a **role file** at startup — wrapper roles get `project.md`, `engineering.md` and `workflow.md`; one-shot workers get `project.md` and `engineering.md` only (handoff protocol stays with the scheduler)
 - Cross-platform: one Python implementation, thin PowerShell/POSIX shims; WezTerm on either platform, Windows Terminal or tmux as the fallback
 
 ---

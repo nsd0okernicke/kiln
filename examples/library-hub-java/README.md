@@ -241,7 +241,7 @@ Infrastructure section for bootstrap requirements.
 - **Testing**: JUnit 5, AssertJ, Mockito
 - **BDD / Acceptance Tests**: Cucumber-JVM — feature files in `src/test/resources/features/`, step definitions in `src/test/java/.../acceptance/steps/`
 - **Acceptance Fixtures**: Testcontainers (`postgresql`, `rabbitmq` modules) — use real PostgreSQL and RabbitMQ; do NOT use an embedded/in-memory database for acceptance tests. Requires a running container engine; probe with `docker info` and skip the suite (reporting the gap) when there is none
-- **Quality Tools**: PIT/`pitest` (mutation testing), JaCoCo (coverage), PIT's CRAP metric (complexity/CRAP, threshold 30 — see `skill-orchestration.md`'s Java/Kotlin tool mapping and "Threshold Note"), Checkstyle or Spotless (formatting/lint), ArchUnit (layering rule enforcement), jqwik (property-based testing)
+- **Quality Tools**: PIT/`pitest` (mutation testing), JaCoCo (coverage), PIT's CRAP metric (complexity/CRAP, threshold 30 — see the `crap-analyzer` skill's "Threshold Note"), Checkstyle or Spotless (formatting/lint), ArchUnit (layering rule enforcement), jqwik (property-based testing)
 - **Package Manager**: Maven's own dependency management (no separate package manager)
 
 All services use the same tech stack. No divergence.
@@ -257,7 +257,7 @@ gate you own fails.
 
 - **Mutation Testing**: `domain/` and `application/` must achieve mutation score ≥ 80% — `./mvnw org.pitest:pitest-maven:mutationCoverage`
 - **Test Coverage**: All code must achieve > 90% — `./mvnw jacoco:report jacoco:check`
-- **CRAP**: functions must stay at or below PIT's CRAP threshold of 30 (differs from the Python example's radon threshold of ≤6 — see `skill-orchestration.md`)
+- **CRAP**: functions must stay at or below PIT's CRAP threshold of 30 (differs from the Python example's radon threshold of ≤6 — see the `crap-analyzer` skill's "Threshold Note")
 - **Code Style**: Must pass Checkstyle/Spotless — `./mvnw checkstyle:check spotless:check`
 - **Layering**: ArchUnit layer-dependency test must pass — `./mvnw test -Dtest=*ArchitectureTest`
 

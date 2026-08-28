@@ -25,15 +25,20 @@ log = logging.getLogger(__name__)
 
 #: Every bundled constitution file that a scaffolded project gets. This is a
 #: literal list rather than a directory walk so a stray file cannot become constitution by
-#: accident -- but it must stay complete: `skill-orchestration.md` was missing from it, so no
-#: scaffolded project had the document that defines which role owns which quality gate.
-#: The integration docs-consistency test pins the list against the bundled directory.
+#: accident -- but it must stay complete, or a scaffolded project silently lacks a rule
+#: source. The integration docs-consistency test pins the list against the bundled directory.
 CONSTITUTION_FILES = (
     "engineering.md",
     "workflow.md",
     "project.md",
-    "skill-orchestration.md",
 )
+
+#: Project-level documents copied beside constitution.md rather than into constitution/.
+#: `skill-orchestration.md` lives here because nothing loads it: a worker's prompt is its role
+#: file plus project.md and engineering.md, so a "constitution" document defining gate
+#: ownership reached none of the roles that run gates. The binding copy of that ownership is
+#: in roles/*.md; this is the human-facing overview and is honest about being one.
+REFERENCE_FILES = ("skill-orchestration.md",)
 
 
 class ScaffoldError(Exception):
@@ -83,6 +88,18 @@ def copy_constitution(paths: KilnPaths, result: ScaffoldResult) -> None:
         copied += 1
 
     result.note(f"copied {copied} constitution file(s)")
+
+
+def copy_reference_docs(paths: KilnPaths, result: ScaffoldResult) -> None:
+    """Copy the non-binding project references that sit beside constitution.md."""
+    copied = 0
+    for name in REFERENCE_FILES:
+        source = paths.scaffold_resources_dir / name
+        if source.is_file():
+            workspace.copy_template_file(source, paths.kiln_project_dir / name)
+            copied += 1
+    if copied:
+        result.note(f"copied {copied} reference document(s)")
 
 
 def copy_roles(paths: KilnPaths, result: ScaffoldResult) -> None:
@@ -248,6 +265,7 @@ def scaffold(
 
     create_directories(paths, result)
     copy_constitution(paths, result)
+    copy_reference_docs(paths, result)
     copy_roles(paths, result)
     copy_skills(paths, result)
     copy_knowledge_catalog(paths, result)

@@ -662,10 +662,25 @@ class TestProxyRoutes:
         routes = cli.proxy_routes(self._profile("claude", "codex", "claude"))
         assert routes == ["--route=r1=chatgpt.com/backend-api/codex"]
 
-    def test_unroutable_backends_are_skipped(self):
-        # copilot and grok have no verified override, so they run unproxied rather than
-        # being pointed somewhere that would break their auth.
-        assert cli.proxy_routes(self._profile("copilot", "grok")) == []
+    def test_grok_and_copilot_are_routed_despite_unverified_overrides(self):
+        # Both have a known upstream but no confirmed CLI base-URL override -- PROXY_BASE_URL_VARS
+        # still marks XAI_BASE_URL and COPILOT_API_URL TODO. The route is emitted anyway: if the
+        # override does not take, the traffic simply never reaches the proxy, so the cost of the
+        # route is nothing and its presence is what makes verifying the override a one-flag
+        # experiment rather than a code change.
+        assert cli.proxy_routes(self._profile("copilot", "grok")) == [
+            "--route=r0=api.githubcopilot.com",
+            "--route=r1=api.x.ai",
+        ]
+
+    def test_a_backend_without_an_upstream_is_skipped(self):
+        # Pi is in PROXY_CAPABLE_AGENTS but reads its provider URL from settings.json, so there
+        # is no single upstream to name -- routing it would mean guessing a host. It runs
+        # unproxied instead, and `proxy_env` returns nothing for it for the same reason.
+        assert cli.proxy_routes(self._profile("pi")) == []
+        assert cli.proxy_routes(self._profile("claude", "pi", "codex")) == [
+            "--route=r2=chatgpt.com/backend-api/codex"
+        ]
 
 
 class TestCliParsing:

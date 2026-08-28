@@ -31,16 +31,17 @@ def _shipped_docs() -> list[Path]:
 
 class TestConstitutionLoadOrder:
     """
-    `skill-orchestration.md` is the authoritative statement of who owns which quality gate --
-    and for a long time nothing told an agent to read it, because constitution.md's load order
-    listed only three of the four files beside it. A document that defines ownership and is
-    never loaded is worse than no document: roles disagree and nothing arbitrates.
+    A constitution document nothing loads is worse than no document: roles disagree and
+    nothing arbitrates. `skill-orchestration.md` was exactly that -- listed as authoritative
+    for gate ownership, scaffolded into every project, and injected into no agent's prompt.
+    It now sits outside `constitution/` as a stated reference. These tests keep the
+    distinction mechanical: everything left in `constitution/` must be scaffolded, named in
+    the load order, *and* actually read by the launcher.
     """
 
     def test_every_constitution_file_is_scaffolded(self):
-        # Worse than unreachable: skill-orchestration.md was absent from CONSTITUTION_FILES,
-        # so no scaffolded project ever received it. Listing it in the load order without
-        # copying it would have pointed every project at a file that is not there.
+        # Listing a file in the load order without copying it would point every project at a
+        # file that is not there.
         from kiln.launcher.infrastructure.scaffold import CONSTITUTION_FILES
 
         present = {p.name for p in (SCAFFOLD / "constitution").glob("*.md")}
@@ -59,6 +60,31 @@ class TestConstitutionLoadOrder:
             f"{missing} ship in constitution/ but constitution.md never tells an agent to "
             "read them, so their rules reach no one"
         )
+
+    def test_every_constitution_file_is_actually_injected(self):
+        # The load order naming a file only reaches wrapper roles, which get constitution.md
+        # inlined. Workers get neither it nor any pointer to it, so the only thing that puts a
+        # constitution file in front of a worker is an explicit `read_constitution` call.
+        artifacts = (REPO / "src" / "kiln" / "launcher" / "application" / "artifacts.py").read_text(
+            encoding="utf-8"
+        )
+        present = sorted(p.stem for p in (SCAFFOLD / "constitution").glob("*.md"))
+
+        unread = [name for name in present if f'read_constitution(paths, "{name}"' not in artifacts]
+
+        assert not unread, (
+            f"{unread} are constitution but no generated prompt loads them; either inject "
+            "them in artifacts.py or move them beside constitution.md as reference documents"
+        )
+
+    def test_reference_documents_ship_and_are_not_constitution(self):
+        from kiln.launcher.infrastructure.scaffold import CONSTITUTION_FILES, REFERENCE_FILES
+
+        for name in REFERENCE_FILES:
+            assert (SCAFFOLD / name).is_file(), f"{name} is scaffolded but does not ship"
+            assert name not in CONSTITUTION_FILES, (
+                f"{name} is a reference document and must not also be copied as constitution"
+            )
 
 
 class TestProfileReferences:

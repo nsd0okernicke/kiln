@@ -1,11 +1,16 @@
-<!-- Copied into <project>/kiln/project/constitution/skill-orchestration.md during project init (kiln.ps1 -Init / kiln.sh init). Framework default skill dependency chain — customize only if your project adds/removes quality-gate skills. -->
+<!-- Copied into <project>/kiln/project/skill-orchestration.md during project init (kiln.ps1 -Init / kiln.sh init). Reference, not constitution — see the status note below. Customize only if your project adds/removes quality-gate skills. -->
 
 # Skill Orchestration
 
-This document is the single reference for which skill runs when, in what order, and who owns each
-quality gate. Individual role files (`roles/*.md`) state ownership; this document exists so the
-end-to-end chain and the reasoning behind the order is visible in one place instead of scattered
-across four role files and a dozen `SKILL.md`s.
+**Reference, not constitution.** The binding statements of who owns which gate, and in what order
+they run, live in the role files (`roles/*.md`) — because those are what actually reach a running
+agent. The scheduler assembles each one-shot worker's prompt from its role file plus
+`constitution/project.md` and `constitution/engineering.md`, and nothing else; this file is never
+injected into any agent.
+
+What it is for: the end-to-end chain and the reasoning behind the ordering, in one place instead of
+scattered across four role files and a dozen `SKILL.md`s. Read it when adding, removing, or
+reordering a gate — then make the change in the role files, or no worker will ever see it.
 
 ## Pipeline Order
 
@@ -63,19 +68,6 @@ The rule of thumb: the refactorer's mutation-testing usage is always *diagnostic
 site counting) — never a pass/fail mutation run. The architect is the only role that runs mutation
 tests to completion and treats survivors as a handoff blocker.
 
-## Tool Mapping (by language)
-
-Individual skills (`coverage-check`, `crap-analyzer`, `mutation-testing`, `run-mutation`) each
-document per-language commands inline. This table consolidates them; `constitution/engineering.md`
-should carry the authoritative version-pinned copy for your project's actual language(s) — most
-projects only need one row.
-
-| Language | Coverage | Complexity/CRAP | DRY | Mutation | Gherkin mutation |
-|---|---|---|---|---|---|
-| Python | `coverage.py` | `radon` | `radon mi` | `cosmic-ray` | `gherkin-mutator` |
-| Java/Kotlin | JaCoCo (`./gradlew jacocoTestReport`) | JaCoCo + PIT CRAP (threshold 30, differs from Python's ≤6 — see `crap-analyzer` "Threshold Note") | detekt / SonarQube | PIT (`./gradlew pitest`) | `gherkin-mutator` |
-| Go | `go test -cover` | custom/`go build` complexity tooling | custom or grep-based | `stryker` (or equivalent) | `gherkin-mutator` |
-
 ## Skills Outside the Pipeline
 
 These skills are **not** part of the specifier → coder → refactorer → architect chain above. They
@@ -91,10 +83,3 @@ workflow rules:
 - `documentation-updater`, `architectural-reviewer`, `code-review-tdd`, `review` — manual review
   aids, invoked ad hoc by a human, not by role loop rules.
 - `aps-setup`, `crap-run` — one-off toolchain setup/language-specific variants, invoked as needed.
-
-## Removed Skills
-
-- **`acceptance-test-writer`** — removed (2026-07-29). Superseded by `gherkin-spec-workflow` for
-  Kiln's specifier role (mutation-aware parameter pruning, four-phase approval gate); nothing in
-  `roles/`, `templates/`, or `profiles.json` referenced it. `gherkin-spec-workflow` is the only
-  acceptance-test skill the specifier role invokes.

@@ -2,7 +2,7 @@
 The optional per-role verification command — turning a prose quality gate into a real one.
 
 CRAP <= 6, <= 100 mutation sites and the >= 80% Gherkin kill rate live in role files and
-`constitution/skill-orchestration.md`. In scheduler mode the only thing actually checked
+`kiln/project/skill-orchestration.md`. In scheduler mode the only thing actually checked
 before a handoff is that the worker's last line matched `KILN-STATUS: done`
 (`status_contract.py`). Nothing ran tests, coverage, mutation or lint. A worker that skipped
 every gate and claimed `done` was believed — in precisely the mode designed to run unattended.

@@ -4,7 +4,7 @@
 
 - On startup, acquire the tools for the project language and get them ready to run.
 - Language tool table:
-  - Java: build/dependency management via the committed Maven wrapper (`./mvnw`); mutation `pitest` (plugin `org.pitest:pitest-maven`); CRAP/complexity via PIT's built-in CRAP metric (threshold 30, not radon — see `skill-orchestration.md` "Threshold Note"); linting/formatting `maven-checkstyle-plugin` or `spotless-maven-plugin`; coverage `jacoco-maven-plugin`; acceptance/BDD `cucumber-java` + `cucumber-junit-platform-engine`; property testing `jqwik`; layering enforcement `archunit`.
+  - Java: build/dependency management via the committed Maven wrapper (`./mvnw`); mutation `pitest` (plugin `org.pitest:pitest-maven`); CRAP/complexity via PIT's built-in CRAP metric (threshold 30, not radon — see the `crap-analyzer` skill's "Threshold Note"); linting/formatting `maven-checkstyle-plugin` or `spotless-maven-plugin`; coverage `jacoco-maven-plugin`; acceptance/BDD `cucumber-java` + `cucumber-junit-platform-engine`; property testing `jqwik`; layering enforcement `archunit`.
 - Work in small, reviewable increments.
 - Prefer the simplest design that supports the current behavior and leaves clear options for the next step.
 - Keep tests close to the behavior being changed.
