@@ -32,8 +32,8 @@
 <rect class="cluster" x="26" y="430" width="238" height="140" rx="16"/>
 <text class="grp" x="145" y="450" text-anchor="middle">Dashboard tab</text>
 
-<rect class="cluster" x="340" y="100" width="670" height="470" rx="16"/>
-<text class="grp" x="675" y="122" text-anchor="middle">Autonomous Cycle tab — deterministic Python scheduler</text>
+<rect class="cluster" x="340" y="100" width="670" height="490" rx="16"/>
+<text class="grp" x="675" y="122" text-anchor="middle">Autonomous Cycle tab — each role runs a Python scheduler + LLM worker</text>
 
 <!-- ===== human-in-the-loop ===== -->
 <g>
@@ -65,65 +65,84 @@
 
 <!-- ===== cycle roles ===== -->
 <g>
-  <rect class="box" x="380" y="160" width="240" height="118" rx="8" fill="#e6f1fb" stroke="#185fa5"/>
+  <rect class="box" x="380" y="160" width="240" height="124" rx="8" fill="#e6f1fb" stroke="#185fa5"/>
   <text class="name" x="500" y="192" text-anchor="middle" fill="#0c447c">Specifier</text>
+  <rect class="box" x="564" y="168" width="38" height="18" rx="4" fill="#185fa5" stroke="none"/>
+  <text class="sub" x="583" y="181" text-anchor="middle" fill="#ffffff" font-weight="600" font-size="10px">PY</text>
+  <rect class="box" x="564" y="190" width="38" height="18" rx="4" fill="#993c1d" stroke="none"/>
+  <text class="sub" x="583" y="203" text-anchor="middle" fill="#ffffff" font-weight="600" font-size="10px">LLM</text>
   <text class="sub"  x="500" y="216" text-anchor="middle" fill="#185fa5">auto · own worktree</text>
-  <text class="sub"  x="500" y="242" text-anchor="middle" fill="#185fa5">writes Gherkin</text>
-  <text class="sub"  x="500" y="258" text-anchor="middle" fill="#185fa5">acceptance tests</text>
+  <text class="sub"  x="500" y="236" text-anchor="middle" fill="#185fa5">scheduler (Python) +</text>
+  <text class="sub"  x="500" y="252" text-anchor="middle" fill="#185fa5">worker (LLM) per cycle</text>
+  <text class="sub"  x="500" y="272" text-anchor="middle" fill="#185fa5">writes Gherkin acceptance</text>
 </g>
 
 <g>
-  <rect class="box" x="730" y="160" width="240" height="118" rx="8" fill="#faece7" stroke="#993c1d"/>
+  <rect class="box" x="730" y="160" width="240" height="124" rx="8" fill="#faece7" stroke="#993c1d"/>
   <text class="name" x="850" y="192" text-anchor="middle" fill="#712b13">Coder</text>
+  <rect class="box" x="914" y="168" width="38" height="18" rx="4" fill="#185fa5" stroke="none"/>
+  <text class="sub" x="933" y="181" text-anchor="middle" fill="#ffffff" font-weight="600" font-size="10px">PY</text>
+  <rect class="box" x="914" y="190" width="38" height="18" rx="4" fill="#993c1d" stroke="none"/>
+  <text class="sub" x="933" y="203" text-anchor="middle" fill="#ffffff" font-weight="600" font-size="10px">LLM</text>
   <text class="sub"  x="850" y="216" text-anchor="middle" fill="#993c1d">auto · own worktree</text>
-  <text class="sub"  x="850" y="242" text-anchor="middle" fill="#993c1d">TDD red → green →</text>
-  <text class="sub"  x="850" y="258" text-anchor="middle" fill="#993c1d">refactor, until green</text>
+  <text class="sub"  x="850" y="236" text-anchor="middle" fill="#993c1d">scheduler (Python) +</text>
+  <text class="sub"  x="850" y="252" text-anchor="middle" fill="#993c1d">worker (LLM) per cycle</text>
+  <text class="sub"  x="850" y="272" text-anchor="middle" fill="#993c1d">TDD red → green → refactor</text>
 </g>
 
 <g>
-  <rect class="box" x="730" y="390" width="240" height="118" rx="8" fill="#e1f5ee" stroke="#0f6e56"/>
+  <rect class="box" x="730" y="390" width="240" height="124" rx="8" fill="#e1f5ee" stroke="#0f6e56"/>
   <text class="name" x="850" y="422" text-anchor="middle" fill="#085041">Refactorer</text>
+  <rect class="box" x="914" y="398" width="38" height="18" rx="4" fill="#185fa5" stroke="none"/>
+  <text class="sub" x="933" y="411" text-anchor="middle" fill="#ffffff" font-weight="600" font-size="10px">PY</text>
+  <rect class="box" x="914" y="420" width="38" height="18" rx="4" fill="#993c1d" stroke="none"/>
+  <text class="sub" x="933" y="433" text-anchor="middle" fill="#ffffff" font-weight="600" font-size="10px">LLM</text>
   <text class="sub"  x="850" y="446" text-anchor="middle" fill="#0f6e56">auto · own worktree</text>
-  <text class="sub"  x="850" y="472" text-anchor="middle" fill="#0f6e56">coverage → CRAP → DRY</text>
-  <text class="sub"  x="850" y="488" text-anchor="middle" fill="#0f6e56">→ mutation site count</text>
+  <text class="sub"  x="850" y="466" text-anchor="middle" fill="#0f6e56">scheduler (Python) +</text>
+  <text class="sub"  x="850" y="482" text-anchor="middle" fill="#0f6e56">worker (LLM) per cycle</text>
+  <text class="sub"  x="850" y="502" text-anchor="middle" fill="#0f6e56">coverage → CRAP → DRY → mut.</text>
 </g>
 
 <g>
-  <rect class="box" x="380" y="390" width="240" height="118" rx="8" fill="#faeeda" stroke="#854f0b"/>
+  <rect class="box" x="380" y="390" width="240" height="124" rx="8" fill="#faeeda" stroke="#854f0b"/>
   <text class="name" x="500" y="422" text-anchor="middle" fill="#633806">Architect</text>
+  <rect class="box" x="564" y="398" width="38" height="18" rx="4" fill="#185fa5" stroke="none"/>
+  <text class="sub" x="583" y="411" text-anchor="middle" fill="#ffffff" font-weight="600" font-size="10px">PY</text>
+  <rect class="box" x="564" y="420" width="38" height="18" rx="4" fill="#993c1d" stroke="none"/>
+  <text class="sub" x="583" y="433" text-anchor="middle" fill="#ffffff" font-weight="600" font-size="10px">LLM</text>
   <text class="sub"  x="500" y="446" text-anchor="middle" fill="#854f0b">auto · own worktree</text>
-  <text class="sub"  x="500" y="472" text-anchor="middle" fill="#854f0b">module structure · mutation</text>
-  <text class="sub"  x="500" y="488" text-anchor="middle" fill="#854f0b">→ DRY → soft Gherkin</text>
+  <text class="sub"  x="500" y="466" text-anchor="middle" fill="#854f0b">scheduler (Python) +</text>
+  <text class="sub"  x="500" y="482" text-anchor="middle" fill="#854f0b">worker (LLM) per cycle</text>
+  <text class="sub"  x="500" y="502" text-anchor="middle" fill="#854f0b">module str. · mutation → DRY</text>
 </g>
 
 <!-- ===== cycle edges ===== -->
-<line class="conn" x1="622" y1="219" x2="728" y2="219" marker-end="url(#arrow)"/>
+<line class="conn" x1="622" y1="222" x2="728" y2="222" marker-end="url(#arrow)"/>
 <text class="edge" x="675" y="207" text-anchor="middle">handoff</text>
 
-<line class="conn" x1="850" y1="280" x2="850" y2="388" marker-end="url(#arrow)"/>
-<text class="edge" x="892" y="338" text-anchor="middle">handoff</text>
+<line class="conn" x1="850" y1="286" x2="850" y2="388" marker-end="url(#arrow)"/>
+<text class="edge" x="892" y="340" text-anchor="middle">handoff</text>
 
-<line class="conn" x1="728" y1="449" x2="622" y2="449" marker-end="url(#arrow)"/>
+<line class="conn" x1="728" y1="452" x2="622" y2="452" marker-end="url(#arrow)"/>
 <text class="edge" x="676" y="437" text-anchor="middle">handoff</text>
 
-<line class="conn" x1="500" y1="388" x2="500" y2="280" marker-end="url(#arrow)"/>
+<line class="conn" x1="500" y1="388" x2="500" y2="286" marker-end="url(#arrow)"/>
 <text class="edge" x="458" y="338" text-anchor="middle">handoff</text>
 
 <!-- ===== human edges ===== -->
 <line class="conn" x1="252" y1="200" x2="377" y2="200" marker-end="url(#arrow)"/>
 <text class="edge" x="314" y="188" text-anchor="middle">new request</text>
 
-<path class="conn" d="M378 248 C 330 250, 300 290, 254 311" marker-end="url(#arrow)"/>
+<path class="conn" d="M378 254 C 330 255, 300 295, 254 316" marker-end="url(#arrow)"/>
 <text class="edge" x="306" y="252" text-anchor="middle">completion</text>
 
-<path class="dash" d="M378 420 C 330 420, 290 390, 254 355" marker-end="url(#arrow)"/>
+<path class="dash" d="M378 425 C 330 425, 290 395, 254 360" marker-end="url(#arrow)"/>
 <text class="edge" x="300" y="432" text-anchor="middle">escalation</text>
 
 <!-- ===== footnotes ===== -->
-<text class="note" x="675" y="528" text-anchor="middle">every auto role = a persistent wrapper + a disposable worker per cycle</text>
-<text class="note" x="675" y="544" text-anchor="middle">scheduler guards: watchdog (duration + silence) · verify gate · maxCycles / maxBudgetUsd</text>
-<text class="note" x="675" y="560" text-anchor="middle">circuit breaker after 3 consecutive escalations · kiln retry to unpark a halted role</text>
+<text class="note" x="675" y="544" text-anchor="middle">each auto role = Python scheduler + one-shot LLM worker per cycle · see scheduler-worker-detail diagram</text>
+<text class="note" x="675" y="560" text-anchor="middle">scheduler guards: watchdog · verify gate · maxCycles / maxBudgetUsd · circuit breaker</text>
 
 <text class="note" x="520" y="596" text-anchor="middle">The specifier routes back to human-in-the-loop only when the sender was the architect; every other handoff continues the cycle.</text>
-<text class="note" x="520" y="612" text-anchor="middle">Messages live in .kiln/messages.db and move through one lifecycle: queued → delivered → processing → processed.</text>
+<text class="note" x="520" y="612" text-anchor="middle">Messages live in .kiln/messages.db: queued → delivered → processing → processed.</text>
 </svg>

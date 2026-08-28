@@ -365,13 +365,13 @@ out for you. Launching the `full` profile gives you a single window with four ta
 The status bar along the top right shows every role's state — `waiting`, `working` — from
 whichever tab you are on, so you can stay on tab 1 and still see the swarm move.
 
-![The Human-in-the-Loop tab: the agent session above, the Kiln Inbox pane below, and every role's state in the status bar](docs/images/kiln1.png)
+![The Human-in-the-Loop tab: the agent session above, the Kiln Inbox pane below, and every role's state in the status bar](docs/images/Human-In-the-Loop.png)
 
 Tab 1 is the only one that expects input. The four role panes on tab 2 are running schedulers:
 reading them is how you find out *why* something stalled, but work is never handed to a role by
 typing into its pane.
 
-![The Autonomous Swarm tab: specifier, coder, refactorer and architect, each showing its scheduler and worker output](docs/images/kiln3.png)
+![The Autonomous Swarm tab: specifier, coder, refactorer and architect, each showing its scheduler and worker output](docs/images/Autonomous_Swarm.png)
 
 Each pane carries a status line of its own — role, state, cycle, cost, tokens, and the handoff
 it produced — so a glance across the grid tells you where the work currently is.
@@ -430,13 +430,13 @@ The terminal dashboard shows:
 - recent handoffs and escalations;
 - optional traffic-capture statistics.
 
-![The terminal dashboard: per-role state and queue depth, run totals, prompt weight by role, recent activity, and escalations](docs/images/kiln4.png)
+![The terminal dashboard: per-role state and queue depth, run totals, prompt weight by role, recent activity, and escalations](docs/images/Dashboard.png)
 
 The cockpit exposes the same state as a local web interface and adds the actions that are
 awkward to type. It binds only to `127.0.0.1` and probes upward from its preferred port when
 necessary. The active URL is written to `.kiln/cockpit-url`.
 
-![Kiln Cockpit showing the role board, active work, queue controls, usage, and recent activity](docs/images/cockpit.png)
+![Kiln Cockpit showing the role board, active work, queue controls, usage, and recent activity](docs/images/Cockpit_Board.png)
 
 ### Cockpit panels
 
@@ -481,6 +481,8 @@ scroll up to read something. A copy button takes the visible buffer. `scheduler`
 that answers "why did nothing happen"; `worker` answers "what did the agent actually do".
 Both are also on disk under `.kiln/logs/`.
 
+![The role detail dialog showing scheduler and worker log tabs, plus per-role metrics](docs/images/Cockpit_Workqueue_Scheduler_Detail.png)
+
 ### Retrying and sending work
 
 In **Attention**, **Open** shows the full handoff document for an item, with the failure reason
@@ -491,6 +493,8 @@ re-queues the original work item with your note attached — the same operation 
 The **Work queue** composer sends a message to any role: pick the target, pick or name a work
 item, type the message. This bypasses the backlog, so it is the way to interrupt or redirect a
 role that is already working — the web equivalent of `kiln send`.
+
+![The work queue composer and live queue table in the cockpit](docs/images/Cockpit_Workqueue.png)
 
 **Stop swarm** in the header tears the whole thing down and asks for confirmation first.
 
@@ -759,12 +763,7 @@ Autonomous roles normally use the deterministic Python scheduler. For each messa
 The scheduler owns retries, timeouts, cost and cycle limits, status reporting, and escalation.
 Workers cannot access the handoff queue directly.
 
-<details>
-<summary>See one scheduler cycle</summary>
-
-![A scheduler cycle from polling through worker execution, verification, handoff, and escalation](docs/images/diagram-scheduler-cycle.svg)
-
-</details>
+![Scheduler and worker detail: the handoff cycle and worker context](docs/images/diagram-scheduler-worker-detail.svg)
 
 ### Wrapper mode
 

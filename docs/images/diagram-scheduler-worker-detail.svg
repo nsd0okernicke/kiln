@@ -1,0 +1,225 @@
+<svg width="100%" viewBox="0 0 1160 890" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>Scheduler and worker detail: the handoff cycle and worker context</title>
+<desc>The deterministic Python scheduler runs the handoff cycle for each autonomous role. The scheduler sequence runs top to bottom on the left. On the right, a detailed worker box shows that the worker can be any of five agent backends (Pi, Claude, Codex, Copilot, Grok) and receives its context from four sources: the role description, the project rules, the engineering rules, and the received message.</desc>
+
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="#898781" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <marker id="arrow-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="#a8422a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <marker id="arrow-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="#185fa5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>
+    text { font-family: "Anthropic Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .name { font-size: 14px; font-weight: 500; }
+    .sub  { font-size: 11.5px; font-weight: 400; }
+    .tiny { font-size: 10px; font-weight: 400; }
+    .edge { font-size: 12px; fill: #52514e; }
+    .grp  { font-size: 12.5px; font-weight: 500; fill: #52514e; }
+    .note { font-size: 10.5px; fill: #6b6a66; }
+    .tag { font-size: 10.5px; font-weight: 500; fill: #712b13; }
+    .box  { stroke-width: 0.5; }
+    .conn { fill: none; stroke: #898781; stroke-width: 1.5; }
+    .conn-blue { fill: none; stroke: #185fa5; stroke-width: 1.5; }
+    .dash { fill: none; stroke: #a8422a; stroke-width: 1.5; stroke-dasharray: 5 4; }
+    .cluster { fill: none; stroke: #898781; stroke-width: 0.5; stroke-dasharray: 4 4; opacity: 0.6; }
+  </style>
+</defs>
+
+<rect x="0" y="0" width="1160" height="890" fill="#fcfcfb"/>
+
+<!-- ================= SCHEDULER CLUSTER ================= -->
+<rect class="cluster" x="30" y="50" width="540" height="820" rx="16"/>
+<rect class="box" x="44" y="62" width="52" height="18" rx="4" fill="#185fa5" stroke="none"/>
+<text class="sub" x="70" y="75" text-anchor="middle" fill="#ffffff" font-weight="600" font-size="10px">PY</text>
+<text class="grp" x="300" y="76" text-anchor="middle">python scheduler — run_once() · one Git worktree per role</text>
+
+<!-- Step 1: Poll & claim -->
+<g>
+  <rect class="box" x="70" y="96" width="300" height="64" rx="8" fill="#e6f1fb" stroke="#185fa5"/>
+  <text class="name" x="220" y="120" text-anchor="middle" fill="#0c447c">Poll &amp; claim</text>
+  <text class="sub"  x="220" y="140" text-anchor="middle" fill="#185fa5">fetch_and_deliver() on .kiln/messages.db</text>
+  <text class="sub"  x="220" y="156" text-anchor="middle" fill="#185fa5">empty → sleep pollSeconds and retry</text>
+</g>
+<line class="conn" x1="220" y1="160" x2="220" y2="178" marker-end="url(#arrow)"/>
+
+<!-- Step 2: Receive & guards -->
+<g>
+  <rect class="box" x="70" y="180" width="300" height="76" rx="8" fill="#e6f1fb" stroke="#185fa5"/>
+  <text class="name" x="220" y="204" text-anchor="middle" fill="#0c447c">Receive &amp; guards</text>
+  <text class="sub"  x="220" y="224" text-anchor="middle" fill="#185fa5">mark_processing · persist tmp/handoff-in.md</text>
+  <text class="sub"  x="220" y="240" text-anchor="middle" fill="#185fa5">parse the handoff · check maxCycles</text>
+  <text class="sub"  x="220" y="254" text-anchor="middle" fill="#185fa5">check maxBudgetUsd</text>
+</g>
+<line class="conn" x1="220" y1="256" x2="220" y2="274" marker-end="url(#arrow)"/>
+
+<!-- Step 3: Merge into worktree -->
+<g>
+  <rect class="box" x="70" y="276" width="300" height="60" rx="8" fill="#e6f1fb" stroke="#185fa5"/>
+  <text class="name" x="220" y="300" text-anchor="middle" fill="#0c447c">Merge into worktree</text>
+  <text class="sub"  x="220" y="320" text-anchor="middle" fill="#185fa5">merge the sender's commit · squash anchor</text>
+  <text class="sub"  x="220" y="334" text-anchor="middle" fill="#185fa5">the worker writes files here</text>
+</g>
+
+<!-- Step 4: Delegate (red box) -->
+<g>
+  <rect class="box" x="70" y="350" width="300" height="56" rx="8" fill="#faece7" stroke="#993c1d"/>
+  <text class="name" x="220" y="374" text-anchor="middle" fill="#712b13">Delegate to worker</text>
+  <text class="sub"  x="220" y="394" text-anchor="middle" fill="#993c1d">worker runs in the same worktree</text>
+</g>
+
+<line class="conn" x1="220" y1="336" x2="220" y2="348" marker-end="url(#arrow)"/>
+
+<!-- ================= WORKER CLUSTER (inside scheduler) ================= -->
+<rect class="cluster" x="416" y="96" width="130" height="714" rx="8" opacity="1" stroke="#993c1d" stroke-dasharray="4 4"/>
+<!-- no label, just a visual boundary -->
+
+<line class="conn" x1="372" y1="378" x2="416" y2="378" marker-end="url(#arrow)"/>
+<text class="edge" x="392" y="368" text-anchor="middle" fill="#993c1d">delegate</text>
+
+<!-- Worker outer box -->
+<rect class="cluster" x="430" y="96" width="530" height="530" rx="16"/>
+<rect class="box" x="444" y="104" width="38" height="18" rx="4" fill="#993c1d" stroke="none"/>
+<text class="sub" x="463" y="117" text-anchor="middle" fill="#ffffff" font-weight="600" font-size="10px">LLM</text>
+<text class="grp" x="695" y="118" text-anchor="middle">one-shot worker — fresh CLI process, same worktree</text>
+
+<!-- Worker: agent dispatch -->
+<g>
+  <rect class="box" x="456" y="134" width="478" height="52" rx="8" fill="#faece7" stroke="#993c1d"/>
+  <text class="sub"  x="695" y="156" text-anchor="middle" fill="#712b13">dispatched via the configured agent CLI — no MCP servers, no queue access</text>
+  <text class="sub"  x="695" y="172" text-anchor="middle" fill="#993c1d">the scheduler picks the agent and model from the profile</text>
+</g>
+
+<!-- Worker: 5 agent backends row -->
+<text class="name" x="695" y="218" text-anchor="middle" fill="#712b13">Any agent backend</text>
+
+<g>
+  <rect class="box" x="460" y="232" width="86" height="32" rx="6" fill="#faece7" stroke="#993c1d"/>
+  <text class="sub" x="503" y="253" text-anchor="middle" fill="#712b13">Pi</text>
+</g>
+<g>
+  <rect class="box" x="558" y="232" width="86" height="32" rx="6" fill="#faece7" stroke="#993c1d"/>
+  <text class="sub" x="601" y="253" text-anchor="middle" fill="#712b13">Claude</text>
+</g>
+<g>
+  <rect class="box" x="656" y="232" width="86" height="32" rx="6" fill="#faece7" stroke="#993c1d"/>
+  <text class="sub" x="699" y="253" text-anchor="middle" fill="#712b13">Codex</text>
+</g>
+<g>
+  <rect class="box" x="754" y="232" width="86" height="32" rx="6" fill="#faece7" stroke="#993c1d"/>
+  <text class="sub" x="797" y="253" text-anchor="middle" fill="#712b13">Copilot</text>
+</g>
+<g>
+  <rect class="box" x="852" y="232" width="86" height="32" rx="6" fill="#faece7" stroke="#993c1d"/>
+  <text class="sub" x="895" y="253" text-anchor="middle" fill="#712b13">Grok</text>
+</g>
+
+<!-- Worker: context section -->
+<rect class="cluster" x="456" y="286" width="500" height="184" rx="12"/>
+<text class="grp" x="695" y="306" text-anchor="middle">worker context — assembled from four sources</text>
+
+<line class="conn" x1="695" y1="314" x2="695" y2="330" marker-end="url(#arrow)"/>
+
+<!-- Context source 1 -->
+<g>
+  <rect class="box" x="476" y="334" width="458" height="34" rx="6" fill="#faece7" stroke="#993c1d"/>
+  <text class="sub" x="490" y="356" text-anchor="start" fill="#712b13">1. Role description — kiln/project/roles/&lt;role&gt;.md</text>
+  <text class="tag" x="948" y="356" text-anchor="end">per role</text>
+</g>
+<line class="conn" x1="695" y1="368" x2="695" y2="378" marker-end="url(#arrow)"/>
+
+<!-- Context source 2 -->
+<g>
+  <rect class="box" x="476" y="380" width="458" height="34" rx="6" fill="#faece7" stroke="#993c1d"/>
+  <text class="sub" x="490" y="402" text-anchor="start" fill="#712b13">2. Project rules — kiln/project/constitution/project.md</text>
+  <text class="tag" x="948" y="402" text-anchor="end">shared</text>
+</g>
+<line class="conn" x1="695" y1="414" x2="695" y2="424" marker-end="url(#arrow)"/>
+
+<!-- Context source 3 -->
+<g>
+  <rect class="box" x="476" y="426" width="458" height="34" rx="6" fill="#faece7" stroke="#993c1d"/>
+  <text class="sub" x="490" y="448" text-anchor="start" fill="#712b13">3. Engineering rules — kiln/project/constitution/engineering.md</text>
+  <text class="tag" x="948" y="448" text-anchor="end">shared</text>
+</g>
+<line class="conn" x1="695" y1="460" x2="695" y2="470" marker-end="url(#arrow)"/>
+
+<!-- Context source 4 -->
+<g>
+  <rect class="box" x="476" y="472" width="458" height="34" rx="6" fill="#faece7" stroke="#993c1d"/>
+  <text class="sub" x="490" y="494" text-anchor="start" fill="#712b13">4. Received message — the structured handoff from the previous role</text>
+  <text class="tag" x="948" y="494" text-anchor="end">per item</text>
+</g>
+
+<!-- Worker: what it produces -->
+<g>
+  <rect class="box" x="456" y="530" width="478" height="76" rx="8" fill="#faece7" stroke="#993c1d"/>
+  <text class="name" x="695" y="554" text-anchor="middle" fill="#712b13">Worker result</text>
+  <text class="sub" x="695" y="574" text-anchor="middle" fill="#712b13">produces implementation / report · prints KILN-STATUS: done</text>
+  <text class="sub" x="695" y="592" text-anchor="middle" fill="#993c1d">reports cost and tokens · process exits · nothing persists</text>
+</g>
+
+<!-- Arrow back from worker to scheduler -->
+<path class="conn" d="M458 568 C 420 568, 420 412, 374 412" marker-end="url(#arrow)"/>
+<text class="edge" x="410" y="540" text-anchor="middle" fill="#185fa5">result</text>
+
+<!-- Step 5: Verify gate -->
+<g>
+  <rect class="box" x="70" y="420" width="300" height="60" rx="8" fill="#e6f1fb" stroke="#185fa5"/>
+  <text class="name" x="220" y="444" text-anchor="middle" fill="#0c447c">Verify gate</text>
+  <text class="sub"  x="220" y="464" text-anchor="middle" fill="#185fa5">run the configured verify command</text>
+  <text class="sub"  x="220" y="478" text-anchor="middle" fill="#185fa5">tests · lint · coverage · type checks</text>
+</g>
+
+<line class="conn" x1="220" y1="406" x2="220" y2="418" marker-end="url(#arrow)"/>
+
+<!-- Arrow to diamond -->
+<line class="conn" x1="220" y1="480" x2="220" y2="502" marker-end="url(#arrow)"/>
+
+<!-- Diamond: passed? -->
+<g>
+  <path d="M220 504 L335 544 L220 584 L105 544 Z" fill="#fcfcfb" stroke="#52514e" stroke-width="1.5"/>
+  <text class="sub" x="220" y="548" text-anchor="middle" fill="#2b2a28">passed?</text>
+</g>
+
+<!-- no → retry path back to delegate -->
+<path class="dash" d="M105 544 H48 V300 H68" marker-end="url(#arrow-red)"/>
+<text class="edge" x="66" y="400" text-anchor="middle" transform="rotate(-90 66 400)" fill="#a8422a">failed — retry</text>
+
+<!-- yes → hand off -->
+<line class="conn" x1="220" y1="584" x2="220" y2="610" marker-end="url(#arrow)"/>
+<text class="edge" x="240" y="602" text-anchor="middle">yes</text>
+
+<!-- Step 6: Hand off -->
+<g>
+  <rect class="box" x="70" y="612" width="300" height="76" rx="8" fill="#e6f1fb" stroke="#185fa5"/>
+  <text class="name" x="220" y="636" text-anchor="middle" fill="#0c447c">Hand off</text>
+  <text class="sub"  x="220" y="656" text-anchor="middle" fill="#185fa5">squash role commits in worktree · INSERT message</text>
+  <text class="sub"  x="220" y="672" text-anchor="middle" fill="#185fa5">mark_processed · re-arm circuit breaker</text>
+</g>
+
+<!-- loop back arrow -->
+<path class="conn" d="M220 688 V728 H26 V128 H68" marker-end="url(#arrow)"/>
+<text class="edge" x="14" y="440" text-anchor="middle" transform="rotate(-90 14 440)">loop</text>
+
+<!-- Escalate path (outside main flow) -->
+<g>
+  <rect class="box" x="70" y="760" width="300" height="56" rx="8" fill="#fce8e8" stroke="#a82a2a"/>
+  <text class="name" x="220" y="782" text-anchor="middle" fill="#7a1a1a">Escalate to human-in-the-loop</text>
+  <text class="sub"  x="220" y="802" text-anchor="middle" fill="#a82a2a">circuit breaker parks role after 3 consecutive escalations</text>
+</g>
+
+<!-- Escalate path from the "no" branch of the diamond -->
+<path class="dash" d="M335 544 H410 V788 H372" marker-end="url(#arrow-red)"/>
+<text class="edge" x="450" y="670" text-anchor="middle" fill="#a8422a">blocked,</text>
+<text class="edge" x="450" y="684" text-anchor="middle" fill="#a8422a">attempts</text>
+<text class="edge" x="450" y="698" text-anchor="middle" fill="#a8422a">exhausted</text>
+
+
+
+<!-- ================= Bottom note ================= -->
+<text class="note" x="580" y="860" text-anchor="middle">The scheduler never delegates to itself. Every control-flow decision lives in Python; the LLM only does the assigned work.</text>
+</svg>
