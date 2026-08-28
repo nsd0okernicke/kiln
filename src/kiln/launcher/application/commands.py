@@ -32,19 +32,32 @@ START_PROMPT = "Start your role session."
 DEFAULT_CLAUDE_MODEL = "sonnet"
 
 #: Backends verified to support routing through the local proxy.
-PROXY_CAPABLE_AGENTS = frozenset({"claude", "codex"})
+#: Claude and Codex have confirmed env-var/flag support. Grok, Copilot, and Pi have
+#: upstream routing defined but their CLI-level base-URL overrides are unverified.
+PROXY_CAPABLE_AGENTS = frozenset({"claude", "codex", "grok", "copilot", "pi"})
 
 #: Carries a Codex proxy URL to adapters that translate it into CLI flags.
 CODEX_PROXY_BASE_URL_ENV = "KILN_PROXY_BASE_URL"
 
 #: Environment variable carrying each backend's API base URL.
+#: Entries marked TODO are speculative — the CLI may not support base-URL overrides.
 PROXY_BASE_URL_VARS = {
     "claude": "ANTHROPIC_BASE_URL",
     "codex": CODEX_PROXY_BASE_URL_ENV,
+    "grok": "XAI_BASE_URL",  # TODO: unverified — grok --help shows no base-URL env var
+    "copilot": "COPILOT_API_URL",  # TODO: unverified — copilot --help shows no base-URL env var
+    # Pi has no single base-URL env var; it reads the provider URL from its settings.json.
+    # To proxy Pi, inject the proxy URL into Pi's provider config or use HTTPS_PROXY.
 }
 
 #: Non-default proxy upstreams as `host[/base-path]`.
-PROXY_UPSTREAMS = {"codex": "chatgpt.com/backend-api/codex"}
+#: Backends not listed here use --upstream (default: api.anthropic.com).
+PROXY_UPSTREAMS = {
+    "codex": "chatgpt.com/backend-api/codex",
+    "grok": "api.x.ai",  # unconfirmed upstream — no base-URL override verified
+    "copilot": "api.githubcopilot.com",  # unconfirmed upstream — no base-URL override verified
+    # Pi upstream is provider-specific and cannot have a single default
+}
 
 
 def proxy_env(role: RoleConfig, proxy_url: str | None) -> dict[str, str]:
@@ -61,7 +74,9 @@ def proxy_env(role: RoleConfig, proxy_url: str | None) -> dict[str, str]:
     """
     if not proxy_url or role.agent not in PROXY_CAPABLE_AGENTS:
         return {}
-    variable = PROXY_BASE_URL_VARS[role.agent]
+    variable = PROXY_BASE_URL_VARS.get(role.agent)
+    if not variable:
+        return {}
     return {variable: f"{proxy_url.rstrip('/')}/kiln/{role.role}"}
 
 
@@ -536,13 +551,13 @@ def _direct_agent_command(
     if role.agent == "claude":
         return _claude_command(role, paths).with_env(**proxy_env(role, proxy_url))
     if role.agent == "copilot":
-        return _copilot_command(role)
+        return _copilot_command(role).with_env(**proxy_env(role, proxy_url))
     if role.agent == "codex":
         return _codex_command(role, paths, proxy_url).with_env(**proxy_env(role, proxy_url))
     if role.agent == "grok":
-        return _grok_command(role, paths)
+        return _grok_command(role, paths).with_env(**proxy_env(role, proxy_url))
     if role.agent == "pi":
-        return _pi_command(role)
+        return _pi_command(role).with_env(**proxy_env(role, proxy_url))
 
     # Every agent `config.VALID_AGENTS` accepts is handled above, so this is only reachable
     # for one added there without a launch path yet. Say so in the pane rather than failing

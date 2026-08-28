@@ -163,7 +163,7 @@ Keys inside the object are **sender** names; `default` is the fallback. Routing 
 
 ## Proxy &amp; Traffic Capture
 
-An opt-in MITM proxy for worker API traffic, off by default. Currently implemented for Claude and Codex:
+An opt-in MITM proxy for worker API traffic, off by default. Upstream routing defined for all five backends:
 
 ```bash
 ./bin/kiln.sh /path/to/project --proxy
@@ -174,7 +174,7 @@ An opt-in MITM proxy for worker API traffic, off by default. Currently implement
 - **Full capture** — also retains request and response bodies (may contain source code and prompts; treat `.kiln/traffic.db` as sensitive)
 - **Port** — listens on 8787 by default, probes upward when busy; `--proxy-port 9000` pins it
 - **Redaction** — credentials, cookies, and stable identifiers are stripped before storage
-- **Scope** — currently routes only Claude (Anthropic API) and Codex (OpenAI Responses API). Pi, Grok, and Copilot backends are not yet proxied
+- **Backends** — Claude (Anthropic API, verified), Codex (OpenAI Responses API, verified), Grok (api.x.ai), Copilot (api.githubcopilot.com), Pi (provider-specific). Grok's response format is already compatible (Anthropic Messages API). Copilot JSONL parsing added. Env-var overrides for Grok/Copilot/Pi are unverified — these CLIs may not support base-URL overrides natively
 
 The proxy runs as a detached background process. `--stop` reclaims it, and the next launch in the same project reclaims it too.
 

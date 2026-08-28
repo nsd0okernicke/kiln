@@ -288,6 +288,40 @@ def extract_usage(response_body: str | None) -> TokenUsage | None:
     return _usage_from_sse(response_body)
 
 
+def _usage_from_copilot(usage: dict) -> TokenUsage:
+    """
+    GitHub Copilot's usage object -> TokenUsage.
+
+    Copilot uses camelCase field names: `inputTokens`, `outputTokens`, `cachedTokens`.
+    The usage lands on the final `result` event in a JSONL stream (not SSE).
+
+    Also accepts snake_case aliases reported by `copilot_adapter._USAGE_ALIASES`.
+    """
+
+    def _copilot_count(name: str, *aliases: str) -> int:
+        for key in (name,) + aliases:
+            value = usage.get(key)
+            if isinstance(value, int) and not isinstance(value, bool):
+                return value
+        return 0
+
+    return TokenUsage(
+        input_tokens=_copilot_count("inputTokens", "input_tokens", "promptTokens", "prompt_tokens"),
+        output_tokens=_copilot_count(
+            "outputTokens", "output_tokens", "completionTokens", "completion_tokens"
+        ),
+        cache_read_tokens=_copilot_count("cachedTokens", "cached_tokens", "cacheReadTokens"),
+    )
+
+
+#: Copilot-specific camelCase usage keys that do not appear in Anthropic usage.
+#: Distinguished from Anthropic's snake_case keys to avoid false dispatch.
+_COPILOT_CAMEL_KEYS = frozenset({
+    "inputTokens", "outputTokens", "promptTokens", "completionTokens",
+    "cachedTokens", "cacheReadTokens",
+})
+
+
 def _usage_from_any(usage: dict) -> TokenUsage:
     """
     Dispatch a usage object to the right vendor reader.
@@ -296,9 +330,18 @@ def _usage_from_any(usage: dict) -> TokenUsage:
     only there does `input_tokens` include the cached portion. A Responses reply with no
     cached tokens may omit the key entirely -- which is harmless, because with nothing to
     subtract both readers produce the same answer.
+
+    Copilot camelCase keys are checked last: if none of the other venders' patterns match
+    and any Copilot camelCase field is present, dispatch to the Copilot reader.
+
+    The dispatch uses camelCase-only keys (`inputTokens`, `cachedTokens`) rather than
+    the full alias set, because `input_tokens` and `output_tokens` are also Anthropic key
+    names and would cause Anthropic usage to be misread as Copilot.
     """
     if "input_tokens_details" in usage or "output_tokens_details" in usage:
         return _usage_from_responses(usage)
+    if any(key in usage for key in _COPILOT_CAMEL_KEYS):
+        return _usage_from_copilot(usage)
     return _usage_from(usage)
 
 
@@ -332,8 +375,9 @@ class StreamingUsageTracker:
 
     Two wire formats arrive here. Anthropic splits usage across `message_start` (input and
     cache counts) and a running `message_delta` (cumulative output). The Responses API used
-    by Codex sends it once, complete, on `response.completed`. Both are recognised by event
-    name, so nothing has to know which backend a role runs before reading its stream.
+    by Codex sends it once, complete, on `response.completed`. Copilot's JSONL stream
+    carries usage on a terminal `result` event. All three are recognised by event name, so
+    nothing has to know which backend a role runs before reading its stream.
     """
 
     def __init__(self) -> None:
@@ -343,6 +387,8 @@ class StreamingUsageTracker:
         #: Set by a terminal Responses event, which reports everything at once and is
         #: therefore authoritative on its own rather than merged with anything.
         self._complete: TokenUsage | None = None
+        #: Set by a Copilot `result` event, which carries its own usage object.
+        self._copilot_usage: TokenUsage | None = None
 
     def feed(self, chunk: bytes) -> None:
         """Consume one chunk. Partial trailing lines are held until completed."""
@@ -352,7 +398,10 @@ class StreamingUsageTracker:
             self._consume_line(line)
 
     def _consume_line(self, line: str) -> None:
+        # Try SSE first (Anthropic/Claude), then plain JSONL (Copilot).
         event = _sse_event(line)
+        if event is None:
+            event = _jsonl_event(line)
         if event is None:
             return
 
@@ -363,6 +412,8 @@ class StreamingUsageTracker:
             self._consume_message_delta(event)
         elif isinstance(kind, str) and kind.startswith("response."):
             self._consume_response(event)
+        elif kind == "result":
+            self._consume_copilot_result(event)
 
     def _consume_message_start(self, event: dict) -> None:
         message = event.get("message")
@@ -382,11 +433,20 @@ class StreamingUsageTracker:
         if isinstance(usage, dict):
             self._complete = _usage_from_responses(usage)
 
+    def _consume_copilot_result(self, event: dict) -> None:
+        usage = event.get("usage") if isinstance(event, dict) else None
+        if not isinstance(usage, dict):
+            usage = (event.get("data") or {}).get("usage") if isinstance(event.get("data"), dict) else None
+        if isinstance(usage, dict):
+            self._copilot_usage = _usage_from_copilot(usage)
+
     @property
     def usage(self) -> TokenUsage | None:
         """Usage so far, or None when the stream reported none."""
         if self._complete is not None:
             return self._complete
+        if self._copilot_usage is not None:
+            return self._copilot_usage
         if self._started is None and not self._output_tokens:
             return None
         base = self._started or TokenUsage()
@@ -406,6 +466,23 @@ def _sse_event(line: str) -> dict | None:
         return None
     try:
         event = json.loads(payload)
+    except ValueError:
+        return None
+    return event if isinstance(event, dict) else None
+
+
+def _jsonl_event(line: str) -> dict | None:
+    """
+    Parse a plain JSON line (Copilot JSONL format, no SSE `data:` prefix).
+
+    Copilot's `--output-format json` emits one JSON object per line (NDJSON), not SSE.
+    The `result` event carries usage in camelCase fields.
+    """
+    stripped = line.strip()
+    if not stripped.startswith("{"):
+        return None
+    try:
+        event = json.loads(stripped)
     except ValueError:
         return None
     return event if isinstance(event, dict) else None

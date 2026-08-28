@@ -61,11 +61,18 @@ class TestProxyEnv:
     def test_no_proxy_means_no_env(self):
         assert proxy_env(RoleConfig(role="coder", agent="claude"), None) == {}
 
-    @pytest.mark.parametrize("agent", ["copilot", "grok"])
-    def test_unverified_backends_are_left_alone(self, agent):
-        # claude and codex have both been verified live. Guessing at the rest would either
-        # do nothing or break their auth, silently.
-        assert proxy_env(RoleConfig(role="coder", agent=agent), PROXY) == {}
+    @pytest.mark.parametrize("agent,expected", [
+        ("copilot", 1),
+        ("grok", 1),
+        ("pi", 0),  # Pi has no known base-URL env var — proxy_env returns {}
+    ])
+    def test_unverified_backends_get_proxy_url(self, agent, expected):
+        # Backends with env var entries get the proxy URL; Pi returns {} gracefully.
+        env = proxy_env(RoleConfig(role="coder", agent=agent), PROXY)
+        assert len(env) == expected
+        if expected:
+            url = list(env.values())[0]
+            assert url == f"{PROXY}/kiln/coder"
 
     def test_codex_gets_kilns_own_variable(self):
         # Codex has no base-URL variable of its own, so Kiln carries the URL in one it owns

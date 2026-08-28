@@ -504,10 +504,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         metavar="ROLE=HOST[/BASE-PATH]",
         help=(
-            "send one role's traffic to a different upstream, e.g. "
-            "--route architect=chatgpt.com/backend-api/codex. Repeatable. Roles not named "
-            "here use --upstream, so a mixed-backend swarm needs one --route per non-Claude "
-            "role rather than a second kiln.proxy."
+            "send one role's traffic to a different upstream. Repeatable — roles not named "
+            "here use --upstream. Examples:\n"
+            "  --route architect=chatgpt.com/backend-api/codex\n"
+            "  --route coder=api.x.ai\n"
+            "  --route specifier=api.githubcopilot.com\n"
+            "Backends: claude (default), codex (chatgpt.com/backend-api/codex), "
+            "grok (api.x.ai), copilot (api.githubcopilot.com), pi (provider-specific)."
         ),
     )
     parser.add_argument(
