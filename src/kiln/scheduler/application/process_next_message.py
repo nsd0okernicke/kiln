@@ -629,22 +629,21 @@ def _no_op(
     count nor a productive cycle to re-arm on.
     """
     log.info(
-        f"{ICON_HALT} nothing to hand off -- %s produced no changes; chain ends here", ctx.role
+        f"{ICON_HALT} nothing to hand off -- %s produced no changes; forwarding to routed target", ctx.role
     )
+    # Use the normal routing target when one exists; only fall back to escalation when routing
+    # cannot resolve. A pure review role is expected to produce no changes on a clean pass.
+    routed_target = ctx.routing.resolve(ctx.role, inbound.sender) or ESCALATION_TARGET
     _insert_verified(
         ctx,
-        ESCALATION_TARGET,
+        routed_target,
         handoff.format_handoff(
             sender=ctx.role,
             handoff=inbound.handoff,
             branch=ctx.branch,
             commit=_worktree(ctx).head_commit() or inbound.commit,
-            summary=(
-                f"{ctx.role.capitalize()} reviewed the inbound handoff and produced no "
-                f"additional changes. The chain ended without creating another role "
-                f"handoff. Worker reported: {summary}"
-            ),
-            next_role=ESCALATION_TARGET,
+            summary=summary,
+            next_role=routed_target,
             timestamp=ctx.timestamp(),
         ),
         work_item=work_item_of(inbound.handoff),

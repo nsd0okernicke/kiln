@@ -109,6 +109,12 @@ trace tests around ticks 0, 19, 20, 21, landing, freeze ticks 1–4, and expiry 
   seeded outcomes without updating and explaining trace fixtures.
 - For probability code, test direct mapping of all low-bit values as well as longer seeded traces.
 
+## Coverage Measurement
+
+- Use `cargo tarpaulin` or `cargo llvm-cov` for line and branch coverage.
+- Game logic modules (under `src/sim/` and `src/lib.rs`) should aim for high coverage.
+- Rendering, platform, and asset-loading code is excluded from coverage targets.
+
 ## Testing
 
 ### Unit tests
@@ -161,12 +167,12 @@ jump.
 
 | Role | Required gate before handoff |
 |---|---|
-| Specifier | Feature files are coherent with README and `cargo test --test acceptance` executes once step definitions exist |
-| Implementor | `cargo build`, `cargo test --all-targets`, and `cargo clippy --all-targets -- -D warnings` |
-| Hardener | Full tests, property tests, `cargo mutants`, and lint; mutation target at least 80% |
-| Reviewer | Release build, all tests, lint, format, audit, golden-image review, and playtest record |
-| Architect | `cargo check --all-targets`, lint, boundary search, and dependency-direction review |
+| game-coder | `cargo build`, `cargo test --all-targets`, and `cargo clippy --all-targets -- -D warnings` |
+| game-refactorer | Full tests, property tests, `cargo clippy -- -D warnings`, coverage check |
+| game-reviewer | Release build, all tests, lint, format, `cargo audit`, code quality scan |
+| game-architect | `cargo check --all-targets`, lint, boundary search, dependency-direction review |
 
+Mutation testing (`cargo mutants`) is on-demand, not a per-cycle gate.
 A failing mandatory gate blocks handoff. Include the relevant failure output in the handoff rather
 than paraphrasing it.
 

@@ -696,7 +696,10 @@ class TestDashboardIsNotAnAgent:
 class TestPowerShellRendering:
     def test_renders_a_runnable_command(self, paths):
         rendered = render_powershell(build(paths, model="sonnet"))
-        assert rendered.startswith("$env:KILN_ROLE = 'coder'; & 'claude'")
+        assert "$env:KILN_ROLE = 'coder'" in rendered
+        assert "$env:KILN_BIN" in rendered
+        assert "$env:PATH" in rendered
+        assert "& 'claude'" in rendered
         assert "'--model' 'sonnet'" in rendered
 
     def test_sets_environment_variables_first(self, paths):
@@ -731,9 +734,11 @@ class TestPowerShellRendering:
 
 class TestPosixRendering:
     def test_renders_a_runnable_command(self, paths):
-        assert render_posix(build(paths, model="sonnet")).startswith(
-            "export KILN_ROLE=coder; claude --model sonnet"
-        )
+        rendered = render_posix(build(paths, model="sonnet"))
+        assert "export KILN_ROLE=coder" in rendered
+        assert "export KILN_BIN=" in rendered
+        assert "export PATH=" in rendered
+        assert "claude --model sonnet" in rendered
 
     def test_exports_environment_variables_first(self, paths):
         rendered = render_posix(build(paths, agent="codex"))

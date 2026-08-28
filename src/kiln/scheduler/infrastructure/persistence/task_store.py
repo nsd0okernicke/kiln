@@ -73,7 +73,7 @@ def list_tasks(db_path: str | Path, *, branch: str, status: str | None = None) -
     if status:
         sql += " AND status=?"
         params.append(status)
-    sql += " ORDER BY created_at, id"
+    sql += " ORDER BY created_at, rowid"
     with closing(connect(db_path)) as conn:
         return [_task(row) for row in conn.execute(sql, params).fetchall()]
 

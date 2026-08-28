@@ -178,7 +178,7 @@ def pending_for_role(db_path: str | Path, branch: str, role: str) -> list[QueueM
             "SELECT id, sender, target, status, content, created_at, work_item "
             "FROM messages WHERE branch=? AND target=? AND acked_at IS NULL "
             "AND status IN (?, ?, ?) "
-            "ORDER BY created_at DESC",
+            "ORDER BY created_at DESC, rowid DESC",
             (branch, role, STATUS_QUEUED, STATUS_DELIVERED, STATUS_PROCESSED),
         )
         return [_message(row) for row in cur.fetchall()]

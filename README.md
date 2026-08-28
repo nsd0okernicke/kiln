@@ -566,6 +566,7 @@ Profiles describe the kind of work, independently of the AI backend.
 | `fix` | Bugs and smaller changes; coder followed by architect review |
 | `spike` | Short-lived exploration where the output is knowledge rather than production code |
 | `harden` | Existing code that needs stronger tests, coverage, mutation resistance, or boundaries |
+| `game-dev` | From-scratch game development with Rust quality gates. Linear pipeline: coder → refactorer → reviewer → architect, no specifier |
 | `dry-run` | Learning the workflow with manual roles and human approval at each step |
 
 List profiles:

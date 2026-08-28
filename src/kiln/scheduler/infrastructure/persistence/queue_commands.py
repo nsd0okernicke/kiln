@@ -74,7 +74,7 @@ def _fetch_and_deliver(
             FROM messages
             WHERE target = ? AND branch = ? AND status IN (?, ?)
             {"AND acked_at IS NOT NULL" if resumed_only else ""}
-            ORDER BY priority ASC, created_at ASC
+            ORDER BY priority ASC, created_at ASC, rowid ASC
             LIMIT 1
             """,
             (role, branch, STATUS_QUEUED, STATUS_DELIVERED),
@@ -243,7 +243,7 @@ def failed_messages(db_path: str | Path, branch: str) -> list[QueueMessage]:
         cur = conn.cursor()
         cur.execute(
             "SELECT id, sender, target, work_item, error, created_at FROM messages "
-            "WHERE branch=? AND status=? ORDER BY created_at DESC",
+            "WHERE branch=? AND status=? ORDER BY created_at DESC, rowid DESC",
             (branch, STATUS_FAILED),
         )
         return [_message(row) for row in cur.fetchall()]

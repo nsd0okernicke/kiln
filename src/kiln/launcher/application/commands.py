@@ -13,6 +13,7 @@ rendered per host shell. Flags live in one place; quoting lives in the renderers
 from __future__ import annotations
 
 import shlex
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -519,10 +520,14 @@ def build_agent_command(
     to both scheduler and wrapper roles: a scheduler-mode worker is a subprocess of its pane
     and inherits the pane's environment, so setting it once on the pane covers both.
     """
+    kiln_bin = str(paths.framework_root / "bin")
+    current_path = os.environ.get("PATH", "")
+    path_env = f"{kiln_bin}{os.pathsep}{current_path}"
+    env = {"PATH": path_env, "KILN_BIN": kiln_bin, "KILN_ROLE": role.role}
     special = _special_role_command(role, paths, branch, profile, proxy_url)
     if special is not None:
-        return special.with_env(KILN_ROLE=role.role)
-    return _direct_agent_command(role, paths, proxy_url).with_env(KILN_ROLE=role.role)
+        return special.with_env(**env)
+    return _direct_agent_command(role, paths, proxy_url).with_env(**env)
 
 
 def _special_role_command(

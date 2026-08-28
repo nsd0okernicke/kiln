@@ -390,6 +390,144 @@
         ]
       }
     },
+    "game-dev": {
+      "description": "From-scratch game development. No specifier, no mutation per-cycle. Linear pipeline: game-coder -> game-refactorer -> game-reviewer -> game-architect, with Rust-specific verify gates and extended timeouts for compilation.",
+      "defaults": {
+        "agent": "pi",
+        "model": "igate/coder"
+      },
+      "terminals": [
+        {
+          "role": "human-in-the-loop",
+          "worktree": "@current",
+          "title": "Kiln Human-in-the-Loop",
+          "mode": "manual",
+          "model": "igate/brain"
+        },
+        {
+          "role": "inbox",
+          "worktree": "@current",
+          "title": "Kiln Inbox",
+          "mode": "manual",
+          "scheduler": "inbox",
+          "watches": "human-in-the-loop"
+        },
+        {
+          "role": "game-coder",
+          "worktree": "game-coder",
+          "title": "Kiln Game Coder",
+          "mode": "auto",
+          "scheduler": "python",
+          "workerTimeout": 1800,
+          "verify": "cargo build && cargo test --all-targets && cargo clippy --all-targets -- -D warnings",
+          "verifyTimeout": 900
+        },
+        {
+          "role": "game-refactorer",
+          "worktree": "game-refactorer",
+          "title": "Kiln Game Refactorer",
+          "mode": "auto",
+          "scheduler": "python",
+          "workerTimeout": 1800,
+          "verify": "cargo test --all-targets && cargo clippy --all-targets -- -D warnings",
+          "verifyTimeout": 900
+        },
+        {
+          "role": "game-reviewer",
+          "worktree": "game-reviewer",
+          "title": "Kiln Game Reviewer",
+          "mode": "auto",
+          "scheduler": "python",
+          "workerTimeout": 2400,
+          "verify": "cargo build --release && cargo test --all-targets && cargo clippy --all-targets -- -D warnings && cargo fmt --check && cargo audit",
+          "verifyTimeout": 1200
+        },
+        {
+          "role": "game-architect",
+          "worktree": "game-architect",
+          "title": "Kiln Game Architect",
+          "mode": "auto",
+          "scheduler": "python",
+          "workerTimeout": 1200,
+          "workerIdleTimeout": 600,
+          "verify": "cargo check --all-targets && cargo clippy --all-targets -- -D warnings",
+          "verifyTimeout": 600
+        },
+        {
+          "role": "dashboard",
+          "worktree": "@current",
+          "title": "Kiln Dashboard",
+          "mode": "manual",
+          "scheduler": "dashboard"
+        },
+        {
+          "role": "cockpit",
+          "worktree": "@current",
+          "title": "Kiln Cockpit",
+          "mode": "manual",
+          "scheduler": "cockpit"
+        }
+      ],
+      "routing": {
+        "human-in-the-loop": "game-coder",
+        "game-coder": "game-refactorer",
+        "game-refactorer": "game-reviewer",
+        "game-reviewer": "game-architect",
+        "game-architect": "human-in-the-loop"
+      },
+      "layout": {
+        "tabs": [
+          {
+            "title": "Human-in-the-Loop",
+            "panes": [
+              {
+                "role": "human-in-the-loop"
+              },
+              {
+                "role": "inbox",
+                "direction": "Bottom",
+                "size": 0.22
+              }
+            ]
+          },
+          {
+            "title": "Autonomous Swarm",
+            "gridRows": 2,
+            "gridCols": 2,
+            "panes": [
+              {
+                "role": "game-coder"
+              },
+              {
+                "role": "game-refactorer"
+              },
+              {
+                "role": "game-reviewer"
+              },
+              {
+                "role": "game-architect"
+              }
+            ]
+          },
+          {
+            "title": "Dashboard",
+            "panes": [
+              {
+                "role": "dashboard"
+              }
+            ]
+          },
+          {
+            "title": "Cockpit",
+            "panes": [
+              {
+                "role": "cockpit"
+              }
+            ]
+          }
+        ]
+      }
+    },
     "dry-run": {
       "description": "Every role manual, so a human approves each hop. For learning or demonstrating the flow: same shape as `full`, but nothing advances without you. Wrapper mode throughout, so the kiln-db and kiln-channel MCP servers must be installed.",
       "defaults": {
