@@ -1,0 +1,103 @@
+{
+  "version": "1.1",
+  "description": "Full-quality educational Rust game-development profile for the Donkey Kong reimplementation. Human intake is followed by five gated autonomous roles: specifier, implementor, hardener, reviewer, and architect.",
+  "default": "full-quality",
+  "profiles": {
+    "full-quality": {
+      "description": "Human intent becomes executable Cucumber scenarios, deterministic Rust simulation, hardened tests, a complete quality review, and a final architecture check. Mandatory gates must pass before handoff.",
+      "defaults": {
+        "agent": "pi",
+        "model": "igate/coder"
+      },
+      "terminals": [
+        {
+          "role": "human-in-the-loop",
+          "worktree": "@current",
+          "title": "Game Designer",
+          "mode": "manual",
+          "model": "igate/brain"
+        },
+        {
+          "role": "inbox",
+          "worktree": "@current",
+          "title": "Inbox",
+          "mode": "manual",
+          "scheduler": "inbox",
+          "watches": "human-in-the-loop"
+        },
+        {
+          "role": "specifier",
+          "worktree": "specifier",
+          "title": "Specification Author",
+          "mode": "auto",
+          "scheduler": "python",
+          "workerTimeout": 1800,
+          "verify": "cargo test --test acceptance"
+        },
+        {
+          "role": "implementor",
+          "worktree": "implementor",
+          "title": "Rust Implementor",
+          "mode": "auto",
+          "scheduler": "python",
+          "workerTimeout": 2400,
+          "verify": "cargo build && cargo test --all-targets && cargo clippy --all-targets -- -D warnings"
+        },
+        {
+          "role": "hardener",
+          "worktree": "hardener",
+          "title": "Test Hardener",
+          "mode": "auto",
+          "scheduler": "python",
+          "workerTimeout": 3600,
+          "workerIdleTimeout": 900,
+          "verify": "cargo test --all-targets && cargo mutants && cargo clippy --all-targets -- -D warnings"
+        },
+        {
+          "role": "reviewer",
+          "worktree": "reviewer",
+          "title": "Quality Gate",
+          "mode": "auto",
+          "scheduler": "python",
+          "workerTimeout": 3600,
+          "workerIdleTimeout": 900,
+          "verify": "cargo build --release && cargo test --all-targets && cargo clippy --all-targets -- -D warnings && cargo fmt --check && cargo audit"
+        },
+        {
+          "role": "architect",
+          "worktree": "architect",
+          "title": "Architecture Guardian",
+          "mode": "auto",
+          "scheduler": "python",
+          "workerTimeout": 1800,
+          "verify": "cargo check --all-targets && cargo clippy --all-targets -- -D warnings"
+        },
+        {
+          "role": "dashboard",
+          "worktree": "@current",
+          "title": "Dashboard",
+          "mode": "manual",
+          "scheduler": "dashboard"
+        },
+        {
+          "role": "cockpit",
+          "worktree": "@current",
+          "title": "Cockpit",
+          "mode": "manual",
+          "scheduler": "cockpit"
+        }
+      ],
+      "routing": {
+        "human-in-the-loop": {
+          "default": "specifier",
+          "architect": "human-in-the-loop"
+        },
+        "specifier": "implementor",
+        "implementor": "hardener",
+        "hardener": "reviewer",
+        "reviewer": "architect",
+        "architect": "human-in-the-loop"
+      }
+    }
+  }
+}
