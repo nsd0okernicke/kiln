@@ -64,21 +64,11 @@ def resolve_version(framework_root: Path | None = None) -> str:
     if framework_root is None and _VERSION_CACHE is not None:
         return _VERSION_CACHE
 
-    version = _from_git_describe(root)
-    if version is not None:
-        if framework_root is None:
-            _VERSION_CACHE = version
-        return version
-
-    version = _from_pkg_info(root)
-    if version is not None:
-        if framework_root is None:
-            _VERSION_CACHE = version
-        return version
-
-    if framework_root is None:
-        _VERSION_CACHE = FALLBACK_VERSION
-    return FALLBACK_VERSION
+    cache = framework_root is None
+    version = _resolve_unchecked(root)
+    if cache:
+        _VERSION_CACHE = version
+    return version
 
 
 def clear_cache() -> None:
@@ -111,32 +101,34 @@ def _default_framework_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent.parent.parent
 
 
+def _resolve_unchecked(root: Path) -> str:
+    """
+    Try each resolution strategy in order, returning the first success.
+    Always returns a string (FALLBACK_VERSION when all strategies fail).
+    """
+    version = _from_git_describe(root)
+    if version is not None:
+        return version
+    version = _from_pkg_info(root)
+    if version is not None:
+        return version
+    return FALLBACK_VERSION
+
+
 def _git_dir(root: Path) -> Path | None:
     """The ``.git`` path for *root*, or *None* when absent (or not a directory)."""
     candidate = root / ".git"
     return candidate if candidate.exists() else None
 
 
-def _from_git_describe(root: Path) -> str | None:
+def _run_git_describe(root: Path) -> str | None:
     """
-    Run ``git describe --tags --dirty --match 'v*'`` and parse the output.
-
-    Returns *None* when Git is not available, no matching tag exists, or
-    ``.git`` is absent.
+    Run ``git describe --tags --dirty --match 'v*'`` and return raw output.
+    Returns *None* on any failure (missing git, timeout, non-zero exit).
     """
-    if _git_dir(root) is None:
-        return None
-
     try:
         result = subprocess.run(
-            [
-                "git",
-                "describe",
-                "--tags",
-                "--dirty",
-                "--match",
-                "v*",
-            ],
+            ["git", "describe", "--tags", "--dirty", "--match", "v*"],
             capture_output=True,
             text=True,
             cwd=str(root),
@@ -148,8 +140,6 @@ def _from_git_describe(root: Path) -> str | None:
         log.debug("git describe failed: %s", exc)
         return None
 
-    if not hasattr(result, "returncode"):
-        return None
     if result.returncode != 0:
         log.debug("git describe exited with code %d: %s", result.returncode, result.stderr.strip())
         return None
@@ -157,7 +147,21 @@ def _from_git_describe(root: Path) -> str | None:
     output = result.stdout.strip()
     if not output:
         return None
+    return output
 
+
+def _from_git_describe(root: Path) -> str | None:
+    """
+    Resolve version via ``git describe`` when a ``.git`` directory exists.
+
+    Returns *None* when Git is not available, no matching tag exists, or
+    ``.git`` is absent.
+    """
+    if _git_dir(root) is None:
+        return None
+    output = _run_git_describe(root)
+    if output is None:
+        return None
     return _validate_describe(output)
 
 
