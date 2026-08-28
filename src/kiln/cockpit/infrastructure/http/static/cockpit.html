@@ -111,12 +111,34 @@
     border-radius: 6px; padding: 6px 12px; cursor: pointer;
   }
   button:hover { border-color: var(--accent); }
-  button.primary {
+  button.action, button.primary {
     background: var(--accent); color: var(--on-accent); border-color: var(--accent);
     font-weight: 600; box-shadow: var(--glow);
   }
   button.danger { border-color: var(--danger-line); color: var(--bad); }
   button.danger:hover { border-color: var(--bad); }
+  .toggle-switch {
+    display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+    user-select: none; vertical-align: middle; margin-left: 8px;
+  }
+  .toggle-switch input { display: none; }
+  .toggle-track {
+    position: relative; width: 30px; height: 16px; border-radius: 8px;
+    background: var(--dim); transition: background 0.2s; flex-shrink: 0;
+  }
+  .toggle-switch input:checked + .toggle-track { background: var(--accent); }
+  .toggle-knob {
+    position: absolute; top: 2px; left: 2px; width: 12px; height: 12px;
+    border-radius: 50%; background: var(--bg); transition: left 0.2s;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  }
+  .toggle-switch input:checked + .toggle-track .toggle-knob { left: 16px; }
+  .toggle-label { font-size: 11px; color: var(--dim); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+  .toggle-switch input:checked + .toggle-track + .toggle-label { color: var(--accent); }
+  button.action { border-color: var(--accent); color: var(--on-accent); }
+  button.action:hover { background: var(--accent); color: var(--on-accent); }
+  button.action.active { background: var(--accent); color: var(--on-accent); }
+  button.action.small { font-size: 11px; padding: 0 8px; height: 24px; border-radius: 5px; vertical-align: middle; }
 
   /* Theme switcher: one segmented control, current choice filled in. */
   .themes { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
@@ -400,6 +422,7 @@
     <button type="button" data-theme-choice="neon">Neon</button>
   </div>
   <button class="primary" id="new-task">New task</button>
+  
   <button class="danger" id="teardown">Stop swarm</button>
 </header>
 
@@ -415,7 +438,7 @@
   </section>
 
   <section data-section="board">
-    <h2><button class="section-toggle" type="button" aria-expanded="true" aria-controls="board-panel">Board</button></h2>
+    <h2><button class="section-toggle" type="button" aria-expanded="true" aria-controls="board-panel">Board</button> <label class="toggle-switch" id="sequential-toggle-wrap" title="Batch mode: tasks auto-chain when one completes"><input type="checkbox" id="sequential-toggle"><span class="toggle-track"><span class="toggle-knob"></span></span><span class="toggle-label" id="sequential-label">Seq</span></label></h2>
     <div class="section-panel lanes" id="board-panel"><div id="lanes" style="display:contents"></div></div>
   </section>
 
@@ -844,6 +867,11 @@ function healthAge(isoTimestamp) {
 }
 
 function renderBoard(state) {
+  // Batch mode indicator
+  const seqCb = $("sequential-toggle");
+  if (seqCb) {
+    seqCb.checked = !!state.sequential;
+  }
   const host = $("lanes");
   host.replaceChildren();
   for (const lane of state.board.lanes) {
@@ -1079,6 +1107,20 @@ async function poll() {
     renderQueue(latest);
     renderActivity(latest);
     renderSend(latest);
+    // Sequential toggle click handler
+    const seqCb = $("sequential-toggle");
+    seqCb.onchange = async () => {
+      const enabled = seqCb.checked;
+      try {
+        const result = await post("/api/sequential", { enabled });
+        latest.sequential = result.sequential;
+        seqCb.checked = result.sequential;
+        toast(result.sequential ? "Sequential: tasks auto-chain" : "Sequential: off");
+      } catch (err) {
+        seqCb.checked = !enabled;
+        toast("Toggle failed: " + err.message, true);
+      }
+    };
     pollTestMetrics();
     pollLog();
   } catch (error) {

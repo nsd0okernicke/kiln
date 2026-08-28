@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 from . import git
+from .git import GitResult
 
 log = logging.getLogger(__name__)
 
@@ -32,6 +33,12 @@ class GitWorktree:
 
     def head_commit(self) -> str:
         return git.head_commit(self.path)
+
+    def push_branch(self, branch: str) -> None:
+        git.push_branch(branch, self.path)
+
+    def reset_hard(self, target: str) -> GitResult:
+        return git.reset_hard(target, self.path)
 
     def ensure_generated_ignored(self) -> None:
         git.ensure_generated_ignored(self.path)

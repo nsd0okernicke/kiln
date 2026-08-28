@@ -155,7 +155,8 @@ TASK_CONTEXT_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS task_context (
   branch TEXT PRIMARY KEY,
   human_role TEXT NOT NULL,
-  intake_role TEXT NOT NULL
+  intake_role TEXT NOT NULL,
+  sequential INTEGER NOT NULL DEFAULT 0
 )
 """
 
@@ -188,5 +189,11 @@ def ensure_schema(db_path: str | Path) -> None:
         conn.execute(TASK_SCHEMA_SQL)
         conn.execute(TASK_STATUS_INDEX_SQL)
         conn.execute(TASK_CONTEXT_SCHEMA_SQL)
+        ctx_columns = {row[1] for row in conn.execute("PRAGMA table_info(task_context)")}
+        if "sequential" not in ctx_columns:
+            conn.execute(
+                "ALTER TABLE task_context ADD COLUMN sequential "
+                "INTEGER NOT NULL DEFAULT 0"
+            )
         conn.execute("PRAGMA journal_mode=WAL")
         conn.commit()

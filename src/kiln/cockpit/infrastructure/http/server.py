@@ -59,6 +59,7 @@ from ...application.actions import (
     retry_message,
     send_to,
     teardown,
+    toggle_sequential,
     update_task,
 )
 from .. import test_reports
@@ -153,6 +154,7 @@ def gather_state(config: CockpitConfig) -> dict:
         awaiting_human=db.pending_for_role(config.dashboard.db_path, ctx.branch, ctx.human_role),
         activity_limit=config.activity_limit,
         tasks=task_store.list_tasks(config.dashboard.db_path, branch=ctx.branch),
+        sequential=task_store.get_sequential(config.dashboard.db_path, branch=ctx.branch),
     )
 
 
@@ -268,7 +270,7 @@ class CockpitHandler(BaseHTTPRequestHandler):
 
     def _post_handler(self, path: str) -> Callable[[dict], dict] | None:
         routes: dict[str, Callable[[dict], dict]] = {
-            "/api/send": self._send,
+            "/api/sequential": self._sequential,
             "/api/tasks": self._task,
             "/api/chat": self._chat,
             "/api/teardown": self._teardown,
@@ -359,6 +361,12 @@ class CockpitHandler(BaseHTTPRequestHandler):
         if row is None:
             raise ActionError("that message is not awaiting acknowledgement")
         return {"acknowledged": True, "message_id": message_id}
+
+    def _sequential(self, body: dict) -> dict:
+        return toggle_sequential(
+            self.config.actions,
+            enabled=body.get("enabled") if "enabled" in body else None,
+        )
 
     def _teardown(self, body: dict) -> dict:
         """

@@ -45,5 +45,11 @@ class KilnActionGateway:
         except backlog.BacklogError as exc:
             raise TaskActionError(str(exc)) from exc
 
+    def sequential_enabled(self, *, db_path: Path, branch: str) -> bool:
+        return backlog.sequential_enabled(db_path, branch=branch)
+
+    def set_sequential(self, *, db_path: Path, branch: str, enabled: bool) -> None:
+        backlog.set_sequential(db_path, branch=branch, enabled=enabled)
+
     def stop_all(self, roles: list[str]) -> list[int]:
         return stop.stop_all(roles)

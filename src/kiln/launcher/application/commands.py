@@ -12,8 +12,8 @@ rendered per host shell. Flags live in one place; quoting lives in the renderers
 
 from __future__ import annotations
 
-import shlex
 import os
+import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
 

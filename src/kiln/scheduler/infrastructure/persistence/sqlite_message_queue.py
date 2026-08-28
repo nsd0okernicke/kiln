@@ -5,7 +5,7 @@ from pathlib import Path
 
 from ...application.ports import QueueAccessError
 from ...domain.models import DEFAULT_PRIORITY, InboundMessage, QueueMessage
-from . import queue_commands
+from . import queue_commands, task_store
 from .queue_queries import count_work_item_arrivals
 
 
@@ -55,3 +55,26 @@ class SQLiteMessageQueue:
             return queue_commands.recover_stale_processing(self.path, role, branch)
         except sqlite3.Error as exc:
             raise QueueAccessError(str(exc)) from exc
+
+    # --- Sequential-mode helpers ---
+
+    def sequential_enabled(self, branch: str) -> bool:
+        try:
+            return task_store.get_sequential(self.path, branch=branch)
+        except Exception:
+            return False
+
+    def next_backlog_task(self, branch: str) -> dict | None:
+        try:
+            return task_store.find_next_backlog_task(self.path, branch=branch)
+        except Exception:
+            return None
+
+    def dispatch_backlog_task(
+        self, identifier: str, branch: str, sender: str, target: str
+    ) -> str:
+        result = task_store.handoff_task(
+            self.path, branch=branch, identifier=identifier,
+            sender=sender, target=target,
+        )
+        return str(result["message_id"])

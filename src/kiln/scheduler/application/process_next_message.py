@@ -63,6 +63,7 @@ class SchedulerContext:
     queue: MessageQueue
     worktree_port: Worktree
     debug_sink: WorkerDebugSink
+    db_path: str | Path | None = None
     queue_label: str = ""
     clock: Callable[[], datetime] = lambda: datetime.now(UTC)
     set_status: Callable[..., None] = lambda _state, **_kwargs: None
@@ -306,15 +307,31 @@ def _merge_inbound(
     message_id: str,
     inbound: handoff.InboundHandoff,
 ) -> CycleResult | None:
-    # A no-op merge would not create the required squash anchor.
     merge_target = inbound.merge_target
-    if merge_target and not _worktree(ctx).already_contains(merge_target):
-        log.info(f"{ICON_MERGE} merging %s from %s", merge_target[:8], inbound.branch or "?")
+    if not merge_target:
+        return None
+    if _worktree(ctx).already_contains(merge_target):
+        log.info(
+            "%s %s already at %s",
+            ICON_MERGE, ctx.role, merge_target[:8],
+        )
+        return None
+    if inbound.commit:
+        # Role-to-role: reset worktree to shared branch first, then merge the commit.
+        # Resetting avoids stale-worktree conflicts (previous cycles). The reset is
+        # a no-op if already at that branch (git reset --hard is idempotent).
+        _worktree(ctx).reset_hard(inbound.branch)
+        log.info(f"{ICON_MERGE} merging %s", merge_target[:8])
         merged = _worktree(ctx).merge(merge_target, merge_commit_message(ctx.role, inbound))
         if not merged.ok:
-            detail = f"merge of {merge_target} failed: {merged.output}"
-            log.error(detail)
-            return _escalate(ctx, state, message_id, inbound, detail, MERGE_FAILED)
+            return _escalate(ctx, state, message_id, inbound,
+                             f"merge of {merge_target} failed: {merged.output}", MERGE_FAILED)
+        return None
+    # Fresh task from HITL (no commit): reset to branch tip instead of merging.
+    # Merge would try to join diverged histories; reset is correct because all
+    # prior work is already on the shared branch (pushed by push_branch).
+    log.info(f"{ICON_MERGE} resetting worktree to %s", merge_target[:8])
+    _worktree(ctx).reset_hard(merge_target)
     return None
 
 
@@ -448,6 +465,7 @@ def _hand_off(
     # are the same fact, and the whole point of the column is that it can be trusted to
     # match what a human reads in the message.
     _insert_verified(ctx, target, outbound, work_item=work_item_of(work_item))
+    _auto_dispatch_next(ctx, work_item, target)
     _queue(ctx).mark_processed(message_id)
 
     state.consecutive_escalations = 0  # a clean cycle re-arms the circuit breaker
@@ -629,7 +647,8 @@ def _no_op(
     count nor a productive cycle to re-arm on.
     """
     log.info(
-        f"{ICON_HALT} nothing to hand off -- %s produced no changes; forwarding to routed target", ctx.role
+        f"{ICON_HALT} nothing to hand off -- %s produced no changes; forwarding to routed target",
+        ctx.role,
     )
     # Use the normal routing target when one exists; only fall back to escalation when routing
     # cannot resolve. A pure review role is expected to produce no changes on a clean pass.
@@ -649,6 +668,7 @@ def _no_op(
         work_item=work_item_of(inbound.handoff),
         priority=INFORMATIONAL_PRIORITY,
     )
+    _auto_dispatch_next(ctx, inbound.handoff, routed_target)
     _queue(ctx).mark_processed(message_id)
     ctx.set_status("idle")
     return CycleResult(
@@ -760,6 +780,63 @@ def _escalate(
         attempts=attempts,
         tokens=tokens or TokenUsage(),
     )
+
+
+def _try_push_branch(ctx: SchedulerContext) -> None:
+    """Push worktree HEAD to shared branch. Failures are logged, not fatal."""
+    try:
+        _worktree(ctx).push_branch(ctx.branch)
+        log.info("%s sequential: pushed HEAD to %s", ICON_HANDOFF, ctx.branch)
+    except Exception:
+        log.debug("could not push branch for sequential mode", exc_info=True)
+
+
+def _try_dispatch_next_task(ctx: SchedulerContext, next_task: dict) -> None:
+    """Dispatch the next backlog task. Failures are logged, not fatal."""
+    intake_role = ctx.routing.resolve("human-in-the-loop")
+    if intake_role is None:
+        log.warning(
+            "sequential: no intake role to dispatch %s", next_task["work_item"]
+        )
+        return
+    try:
+        msg_id = ctx.queue.dispatch_backlog_task(
+            next_task["work_item"],
+            branch=ctx.branch,
+            sender="human-in-the-loop",
+            target=intake_role,
+        )
+        log.info(
+            "%s sequential: auto-dispatched %s -> %s (msg=%s)",
+            ICON_HANDOFF,
+            next_task["work_item"],
+            intake_role,
+            msg_id[:8],
+        )
+    except Exception as exc:
+        log.warning(
+            "sequential: failed to dispatch %s: %s", next_task["work_item"], exc
+        )
+
+
+def _auto_dispatch_next(
+    ctx: SchedulerContext, work_item: str | None, target: str | None = None
+) -> None:
+    """If sequential mode is on and this is the last role (target==human), dispatch next."""
+    # Only auto-dispatch when the cycle is complete (routed to the human).
+    # Intermediate handoffs (coder -> refactorer, etc.) must NOT advance the queue.
+    if target != ESCALATION_TARGET:
+        return
+    try:
+        if not ctx.queue.sequential_enabled(ctx.branch):
+            return
+        _try_push_branch(ctx)
+        next_task = ctx.queue.next_backlog_task(ctx.branch)
+    except Exception:
+        return
+
+    if next_task is not None:
+        _try_dispatch_next_task(ctx, next_task)
 
 
 def _insert_verified(

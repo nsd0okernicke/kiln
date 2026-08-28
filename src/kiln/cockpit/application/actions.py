@@ -139,6 +139,19 @@ def archive_task(ctx: ActionContext, *, identifier: str) -> dict:
         raise ActionError(str(exc)) from exc
 
 
+def toggle_sequential(ctx: ActionContext, *, enabled: bool | None = None) -> dict:
+    "Toggle sequential task execution mode on/off, or return current state."
+    if enabled is not None:
+        ctx.gateway.set_sequential(
+            db_path=ctx.db_path, branch=ctx.branch, enabled=enabled
+        )
+    return {
+        "sequential": ctx.gateway.sequential_enabled(
+            db_path=ctx.db_path, branch=ctx.branch
+        )
+    }
+
+
 def chat(ctx: ActionContext, *, summary: str, work_item: str = "") -> dict:
     """
     Put a note in the human role's own queue.

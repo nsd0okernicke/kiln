@@ -468,6 +468,7 @@ def build_state(
     awaiting_human: list[dict],
     activity_limit: int,
     tasks: Sequence[dict] = (),
+    sequential: bool = False,
 ) -> dict:
     """The whole `/api/state` document. Pure: every input is already gathered."""
     return {
@@ -478,6 +479,7 @@ def build_state(
         "intake_role": ctx.intake_role,
         "generated_at": snapshot.now_local.isoformat(timespec="seconds"),
         "roles": role_rows(snapshot, work_items),
+        "sequential": sequential,
         "work_items": list(
             dict.fromkeys(
                 [task["work_item"] for task in tasks if task["status"] != "archived"] + list(cycles)

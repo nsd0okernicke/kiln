@@ -448,6 +448,22 @@ def has_commits_since(anchor: str, cwd: str | Path) -> bool:
     return result.ok and result.stdout.isdigit() and int(result.stdout) > 0
 
 
+def reset_hard(target: str, cwd: str | Path) -> GitResult:
+    """Reset worktree HEAD to target (commit or branch), discarding local changes."""
+    return run_git(["reset", "--hard", target], cwd)
+
+
+def push_branch(branch: str, cwd: str | Path) -> None:
+    """
+    Force-push HEAD to a local branch so other worktrees can merge it.
+
+    Used by sequential mode: after one task completes, the current worktree
+    pushes its squashed commit to the shared branch so the next task's
+    first role picks up the changes when merging that branch.
+    """
+    run_git(["push", ".", f"HEAD:{branch}", "--force"], cwd)
+
+
 def has_pending_changes(cwd: str | Path) -> bool:
     """True when the worktree has uncommitted changes (staged or not)."""
     result = run_git(["status", "--porcelain"], cwd)

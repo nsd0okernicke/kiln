@@ -35,7 +35,7 @@
 <rect class="cluster" x="30" y="50" width="540" height="820" rx="16"/>
 <rect class="box" x="44" y="62" width="52" height="18" rx="4" fill="#185fa5" stroke="none"/>
 <text class="sub" x="70" y="75" text-anchor="middle" fill="#ffffff" font-weight="600" font-size="10px">PY</text>
-<text class="grp" x="300" y="76" text-anchor="middle">python scheduler — run_once() · one Git worktree per role</text>
+<text class="grp" x="300" y="76" text-anchor="middle">python scheduler — <tspan font-weight="700" fill="#3d3c3a">one role, one worktree</tspan>, one message per cycle</text>
 
 <!-- Step 1: Poll & claim -->
 <g>

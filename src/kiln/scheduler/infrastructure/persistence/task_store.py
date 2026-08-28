@@ -46,6 +46,45 @@ def _task(row: sqlite3.Row) -> dict:
     return cast(dict, dict(row))
 
 
+def set_sequential(
+    db_path: str | Path, *, branch: str, enabled: bool
+) -> None:
+    """Enable or disable sequential task execution mode."""
+    with closing(connect(db_path)) as conn:
+        conn.execute(
+            "UPDATE task_context SET sequential=? WHERE branch=?",
+            (1 if enabled else 0, branch),
+        )
+        conn.commit()
+
+
+def get_sequential(db_path: str | Path, *, branch: str) -> bool:
+    """Return whether sequential mode is enabled for this branch."""
+    with closing(connect(db_path)) as conn:
+        row = conn.execute(
+            "SELECT sequential FROM task_context WHERE branch=?", (branch,)
+        ).fetchone()
+    return bool(row and row[0])
+
+
+def find_next_backlog_task(
+    db_path: str | Path, *, branch: str
+) -> dict | None:
+    """
+    Return the first backlog task in creation order, or None.
+
+    Used by sequential mode to auto-dispatch the next task when the
+    current one completes.
+    """
+    with closing(connect(db_path)) as conn:
+        row = conn.execute(
+            "SELECT * FROM tasks WHERE branch=? AND status=? "
+            "ORDER BY created_at, rowid LIMIT 1",
+            (branch, TASK_BACKLOG),
+        ).fetchone()
+    return _task(row) if row else None
+
+
 def create_task(db_path: str | Path, *, branch: str, work_item: str, title: str, body: str) -> dict:
     with closing(connect(db_path)) as conn:
         try:

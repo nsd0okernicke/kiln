@@ -328,6 +328,7 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
     return SchedulerContext(
         role=args.role,
         branch=args.branch,
+        db_path=args.db_path,
         worktree=Path(args.worktree),
         routing=(
             parse_routing_arguments(args.route) if args.route else load_routing_table(args.workflow)

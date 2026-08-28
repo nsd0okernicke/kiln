@@ -1,6 +1,6 @@
 <svg width="100%" viewBox="0 0 1040 630" role="img" xmlns="http://www.w3.org/2000/svg">
 <title>Default profile topology, agentic coding cycle</title>
-<desc>The full profile. A Human-in-the-Loop tab holds a manual human-in-the-loop pane running in the main directory, with an inbox strip beneath it that waits for messages, merges the sender's commit and delivers to the pane above. The human-in-the-loop sends a new request to the Specifier. An Autonomous Cycle tab runs specifier, coder, refactorer and architect on the deterministic Python scheduler, each in its own worktree: Specifier hands off to Coder, Coder to Refactorer, Refactorer to Architect, and Architect back to Specifier. The Specifier returns a completion to the inbox, and any role can escalate to the inbox. A separate Dashboard tab gives a swarm-wide view of the run.</desc>
+<desc>The full profile. On the left, human intake and review: a manual human-in-the-loop pane running in the main directory, with an inbox strip beneath it that waits for messages, merges the sender's commit and delivers to the pane above. The human-in-the-loop sends a new request to the Specifier. On the right, the autonomous cycle runs specifier, coder, refactorer and architect on the deterministic Python scheduler, each in its own worktree. The specifier owns the acceptance criteria and hands off features files; the coder owns the implementation; the refactorer owns behavior-preserving cleanup; the architect owns boundaries and runs final verification. Specifier hands off to Coder, Coder to Refactorer, Refactorer to Architect, and Architect back to Specifier. The Specifier returns a completion to the inbox, and any role can escalate to the inbox. Below the intake group, monitoring and control: the Dashboard gives a swarm-wide view of the run and the Cockpit web UI also drives it.</desc>
 
 <defs>
   <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -27,13 +27,13 @@
 
 <!-- ===== groups ===== -->
 <rect class="cluster" x="26" y="118" width="238" height="280" rx="16"/>
-<text class="grp" x="145" y="138" text-anchor="middle">Human-in-the-Loop tab</text>
+<text class="grp" x="145" y="138" text-anchor="middle">Human intake &amp; review</text>
 
 <rect class="cluster" x="26" y="430" width="238" height="140" rx="16"/>
-<text class="grp" x="145" y="450" text-anchor="middle">Dashboard tab</text>
+<text class="grp" x="145" y="450" text-anchor="middle">Monitoring &amp; control</text>
 
 <rect class="cluster" x="340" y="100" width="670" height="490" rx="16"/>
-<text class="grp" x="675" y="122" text-anchor="middle">Autonomous Cycle tab — each role runs a Python scheduler + LLM worker</text>
+<text class="grp" x="675" y="122" text-anchor="middle">Autonomous cycle — each role runs a Python scheduler + LLM worker</text>
 
 <!-- ===== human-in-the-loop ===== -->
 <g>
@@ -58,9 +58,9 @@
 <!-- ===== dashboard ===== -->
 <g>
   <rect class="box" x="40" y="466" width="210" height="88" rx="8" fill="#f2f2f0" stroke="#898781"/>
-  <text class="name" x="145" y="494" text-anchor="middle" fill="#3c3b38">Dashboard</text>
-  <text class="sub"  x="145" y="516" text-anchor="middle" fill="#5a5854">swarm-wide view</text>
-  <text class="sub"  x="145" y="532" text-anchor="middle" fill="#5a5854">of the run</text>
+  <text class="name" x="145" y="494" text-anchor="middle" fill="#3c3b38">Dashboard &amp; Cockpit</text>
+  <text class="sub"  x="145" y="516" text-anchor="middle" fill="#5a5854">dashboard: swarm-wide view</text>
+  <text class="sub"  x="145" y="532" text-anchor="middle" fill="#5a5854">cockpit: web UI, drives the run</text>
 </g>
 
 <!-- ===== cycle roles ===== -->
@@ -72,9 +72,9 @@
   <rect class="box" x="564" y="190" width="38" height="18" rx="4" fill="#993c1d" stroke="none"/>
   <text class="sub" x="583" y="203" text-anchor="middle" fill="#ffffff" font-weight="600" font-size="10px">LLM</text>
   <text class="sub"  x="500" y="216" text-anchor="middle" fill="#185fa5">auto · own worktree</text>
-  <text class="sub"  x="500" y="236" text-anchor="middle" fill="#185fa5">scheduler (Python) +</text>
-  <text class="sub"  x="500" y="252" text-anchor="middle" fill="#185fa5">worker (LLM) per cycle</text>
-  <text class="sub"  x="500" y="272" text-anchor="middle" fill="#185fa5">writes Gherkin acceptance</text>
+  <text class="sub"  x="500" y="235" text-anchor="middle" fill="#185fa5">owns the acceptance criteria</text>
+  <text class="sub"  x="500" y="254" text-anchor="middle" fill="#185fa5">runs /gherkin-spec-workflow</text>
+  <text class="sub"  x="500" y="273" text-anchor="middle" fill="#185fa5">hands off features/*.feature</text>
 </g>
 
 <g>
@@ -85,9 +85,9 @@
   <rect class="box" x="914" y="190" width="38" height="18" rx="4" fill="#993c1d" stroke="none"/>
   <text class="sub" x="933" y="203" text-anchor="middle" fill="#ffffff" font-weight="600" font-size="10px">LLM</text>
   <text class="sub"  x="850" y="216" text-anchor="middle" fill="#993c1d">auto · own worktree</text>
-  <text class="sub"  x="850" y="236" text-anchor="middle" fill="#993c1d">scheduler (Python) +</text>
-  <text class="sub"  x="850" y="252" text-anchor="middle" fill="#993c1d">worker (LLM) per cycle</text>
-  <text class="sub"  x="850" y="272" text-anchor="middle" fill="#993c1d">TDD red → green → refactor</text>
+  <text class="sub"  x="850" y="235" text-anchor="middle" fill="#993c1d">owns the implementation</text>
+  <text class="sub"  x="850" y="254" text-anchor="middle" fill="#993c1d">runs TDD red → green → refactor</text>
+  <text class="sub"  x="850" y="273" text-anchor="middle" fill="#993c1d">hands off code + step definitions</text>
 </g>
 
 <g>
@@ -98,9 +98,9 @@
   <rect class="box" x="914" y="420" width="38" height="18" rx="4" fill="#993c1d" stroke="none"/>
   <text class="sub" x="933" y="433" text-anchor="middle" fill="#ffffff" font-weight="600" font-size="10px">LLM</text>
   <text class="sub"  x="850" y="446" text-anchor="middle" fill="#0f6e56">auto · own worktree</text>
-  <text class="sub"  x="850" y="466" text-anchor="middle" fill="#0f6e56">scheduler (Python) +</text>
-  <text class="sub"  x="850" y="482" text-anchor="middle" fill="#0f6e56">worker (LLM) per cycle</text>
-  <text class="sub"  x="850" y="502" text-anchor="middle" fill="#0f6e56">coverage → CRAP → DRY → mut.</text>
+  <text class="sub"  x="850" y="465" text-anchor="middle" fill="#0f6e56">owns structure-preserving cleanup</text>
+  <text class="sub"  x="850" y="484" text-anchor="middle" fill="#0f6e56">runs coverage → CRAP → DRY → sites</text>
+  <text class="sub"  x="850" y="503" text-anchor="middle" fill="#0f6e56">hands off cleaner code + properties</text>
 </g>
 
 <g>
@@ -111,9 +111,9 @@
   <rect class="box" x="564" y="420" width="38" height="18" rx="4" fill="#993c1d" stroke="none"/>
   <text class="sub" x="583" y="433" text-anchor="middle" fill="#ffffff" font-weight="600" font-size="10px">LLM</text>
   <text class="sub"  x="500" y="446" text-anchor="middle" fill="#854f0b">auto · own worktree</text>
-  <text class="sub"  x="500" y="466" text-anchor="middle" fill="#854f0b">scheduler (Python) +</text>
-  <text class="sub"  x="500" y="482" text-anchor="middle" fill="#854f0b">worker (LLM) per cycle</text>
-  <text class="sub"  x="500" y="502" text-anchor="middle" fill="#854f0b">module str. · mutation → DRY</text>
+  <text class="sub"  x="500" y="465" text-anchor="middle" fill="#854f0b">owns boundaries &amp; structure</text>
+  <text class="sub"  x="500" y="484" text-anchor="middle" fill="#854f0b">runs /final-verification (mutation)</text>
+  <text class="sub"  x="500" y="503" text-anchor="middle" fill="#854f0b">hands off the completed cycle</text>
 </g>
 
 <!-- ===== cycle edges ===== -->
@@ -140,9 +140,5 @@
 <text class="edge" x="300" y="432" text-anchor="middle">escalation</text>
 
 <!-- ===== footnotes ===== -->
-<text class="note" x="675" y="544" text-anchor="middle">each auto role = Python scheduler + one-shot LLM worker per cycle · see scheduler-worker-detail diagram</text>
-<text class="note" x="675" y="560" text-anchor="middle">scheduler guards: watchdog · verify gate · maxCycles / maxBudgetUsd · circuit breaker</text>
-
-<text class="note" x="520" y="596" text-anchor="middle">The specifier routes back to human-in-the-loop only when the sender was the architect; every other handoff continues the cycle.</text>
-<text class="note" x="520" y="612" text-anchor="middle">Messages live in .kiln/messages.db: queued → delivered → processing → processed.</text>
+<text class="note" x="675" y="550" text-anchor="middle">scheduler guards: watchdog · verify gate · maxCycles / maxBudgetUsd · circuit breaker</text>
 </svg>

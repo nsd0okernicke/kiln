@@ -85,6 +85,18 @@ def archive(db_path: str | Path, *, branch: str, identifier: str) -> dict:
         raise BacklogError(str(exc)) from exc
 
 
+def sequential_enabled(db_path: str | Path, *, branch: str) -> bool:
+    "Return whether sequential task execution is enabled for this branch."
+    return task_store.get_sequential(db_path, branch=branch)
+
+
+def set_sequential(
+    db_path: str | Path, *, branch: str, enabled: bool
+) -> None:
+    "Enable or disable sequential task execution mode."
+    task_store.set_sequential(db_path, branch=branch, enabled=enabled)
+
+
 def handoff(
     db_path: str | Path,
     *,
