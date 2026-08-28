@@ -1,6 +1,6 @@
 <svg width="100%" viewBox="0 0 1160 890" role="img" xmlns="http://www.w3.org/2000/svg">
 <title>Scheduler and worker detail: the handoff cycle and worker context</title>
-<desc>The deterministic Python scheduler runs the handoff cycle for each autonomous role. The scheduler sequence runs top to bottom on the left. On the right, a detailed worker box shows that the worker can be any of five agent backends (Pi, Claude, Codex, Copilot, Grok) and receives its context from four sources: the role description, the project rules, the engineering rules, and the received message.</desc>
+<desc>The deterministic Python scheduler runs the handoff cycle for each autonomous role. The scheduler sequence runs top to bottom on the left. Nested inside the scheduler, on the right, a detailed worker box shows that the worker can be any of five agent backends (Pi, Claude, Codex, Copilot, Grok) and receives its context from four sources: the role description, the project rules, the engineering rules, and the received message.</desc>
 
 <defs>
   <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -25,17 +25,17 @@
     .conn { fill: none; stroke: #898781; stroke-width: 1.5; }
     .conn-blue { fill: none; stroke: #185fa5; stroke-width: 1.5; }
     .dash { fill: none; stroke: #a8422a; stroke-width: 1.5; stroke-dasharray: 5 4; }
-    .cluster { fill: none; stroke: #898781; stroke-width: 0.5; stroke-dasharray: 4 4; opacity: 0.6; }
+    .cluster { fill: none; stroke: #7a7874; stroke-width: 1.25; stroke-dasharray: 6 4; opacity: 1; }
   </style>
 </defs>
 
 <rect x="0" y="0" width="1160" height="890" fill="#fcfcfb"/>
 
 <!-- ================= SCHEDULER CLUSTER ================= -->
-<rect class="cluster" x="30" y="50" width="540" height="820" rx="16"/>
+<rect class="cluster" x="14" y="50" width="960" height="820" rx="16"/>
 <rect class="box" x="44" y="62" width="52" height="18" rx="4" fill="#185fa5" stroke="none"/>
 <text class="sub" x="70" y="75" text-anchor="middle" fill="#ffffff" font-weight="600" font-size="10px">PY</text>
-<text class="grp" x="300" y="76" text-anchor="middle">python scheduler — <tspan font-weight="700" fill="#3d3c3a">one role, one worktree</tspan>, one message per cycle</text>
+<text class="grp" x="106" y="76" text-anchor="start">python scheduler — <tspan font-weight="700" fill="#3d3c3a">one role, one worktree</tspan>, one message per cycle</text>
 
 <!-- Step 1: Poll & claim -->
 <g>
@@ -74,11 +74,8 @@
 <line class="conn" x1="220" y1="336" x2="220" y2="348" marker-end="url(#arrow)"/>
 
 <!-- ================= WORKER CLUSTER (inside scheduler) ================= -->
-<rect class="cluster" x="416" y="96" width="130" height="714" rx="8" opacity="1" stroke="#993c1d" stroke-dasharray="4 4"/>
-<!-- no label, just a visual boundary -->
-
-<line class="conn" x1="372" y1="378" x2="416" y2="378" marker-end="url(#arrow)"/>
-<text class="edge" x="392" y="368" text-anchor="middle" fill="#993c1d">delegate</text>
+<line class="conn" x1="372" y1="378" x2="430" y2="378" marker-end="url(#arrow)"/>
+<text class="edge" x="401" y="368" text-anchor="middle" fill="#993c1d">delegate</text>
 
 <!-- Worker outer box -->
 <rect class="cluster" x="430" y="96" width="530" height="530" rx="16"/>
@@ -118,7 +115,7 @@
 </g>
 
 <!-- Worker: context section -->
-<rect class="cluster" x="456" y="286" width="500" height="184" rx="12"/>
+<rect class="cluster" x="456" y="286" width="500" height="230" rx="12"/>
 <text class="grp" x="695" y="306" text-anchor="middle">worker context — assembled from four sources</text>
 
 <line class="conn" x1="695" y1="314" x2="695" y2="330" marker-end="url(#arrow)"/>
@@ -203,7 +200,7 @@
 
 <!-- loop back arrow -->
 <path class="conn" d="M220 688 V728 H26 V128 H68" marker-end="url(#arrow)"/>
-<text class="edge" x="14" y="440" text-anchor="middle" transform="rotate(-90 14 440)">loop</text>
+<text class="edge" x="130" y="722" text-anchor="middle">loop</text>
 
 <!-- Escalate path (outside main flow) -->
 <g>
@@ -219,7 +216,4 @@
 <text class="edge" x="450" y="698" text-anchor="middle" fill="#a8422a">exhausted</text>
 
 
-
-<!-- ================= Bottom note ================= -->
-<text class="note" x="580" y="860" text-anchor="middle">The scheduler never delegates to itself. Every control-flow decision lives in Python; the LLM only does the assigned work.</text>
 </svg>
