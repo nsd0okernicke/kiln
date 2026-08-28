@@ -17,11 +17,11 @@ import pytest
 
 from kiln.launcher.application.version import (
     FALLBACK_VERSION,
+    _from_pkg_info,
+    _parse_pkg_info_version,
     clear_cache,
     resolve_version,
     version_tuple,
-    _parse_pkg_info_version,
-    _from_pkg_info,
 )
 
 

@@ -26,7 +26,13 @@ def executable(name: str) -> str:
     # sysconfig's scripts path.  Check both.
     candidates = [
         Path(sysconfig.get_path("scripts")) / f"{name}{suffix}",
-        Path.home() / "AppData" / "Roaming" / "Python" / "Python314" / "Scripts" / f"{name}{suffix}",
+        Path.home()
+        / "AppData"
+        / "Roaming"
+        / "Python"
+        / "Python314"
+        / "Scripts"
+        / f"{name}{suffix}",
     ]
     for candidate in candidates:
         if candidate.is_file():
