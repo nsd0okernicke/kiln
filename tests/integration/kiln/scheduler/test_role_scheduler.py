@@ -504,23 +504,23 @@ class TestNoOpCycle:
         result = self._no_op_cycle(make_ctx, inbound)
 
         assert result.outcome == role_scheduler.NO_OP
-        assert queued_for(db_path, "refactorer") == [], "the chain must stop, not continue"
+        # No-op routes to the normal routing target (refactorer), not to HITL.
+        messages = queued_for(db_path, "refactorer")
+        assert len(messages) == 1
 
-    def test_the_human_is_told_the_chain_ended(self, make_ctx, inbound, db_path):
-        # A swarm that simply goes quiet is indistinguishable from one that died.
+    def test_the_chain_is_forwarded_to_the_routed_target(self, make_ctx, inbound, db_path):
+        # No-op routes to the normal routing target, not to HITL.
         self._no_op_cycle(make_ctx, inbound)
 
-        messages = queued_for(db_path, "human-in-the-loop")
+        messages = queued_for(db_path, "refactorer")
         assert len(messages) == 1
-        assert "reviewed the inbound handoff" in messages[0]["content"]
-        assert "produced no additional changes" in messages[0]["content"]
 
     def test_that_message_is_informational_not_an_escalation(self, make_ctx, inbound, db_path):
         # The run concluded correctly; it just concluded. Flagging it as an escalation would
         # put a non-problem in front of a human at the same weight as a blocked worker.
         self._no_op_cycle(make_ctx, inbound)
 
-        message = queued_for(db_path, "human-in-the-loop")[0]
+        message = queued_for(db_path, "refactorer")[0]
         assert message["priority"] >= role_scheduler.INFORMATIONAL_PRIORITY
         assert handoff.is_escalation(message["content"]) is False
 

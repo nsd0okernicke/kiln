@@ -310,28 +310,30 @@ def _merge_inbound(
     merge_target = inbound.merge_target
     if not merge_target:
         return None
-    if _worktree(ctx).already_contains(merge_target):
-        log.info(
-            "%s %s already at %s",
-            ICON_MERGE, ctx.role, merge_target[:8],
-        )
-        return None
     if inbound.commit:
-        # Role-to-role: reset worktree to shared branch first, then merge the commit.
-        # Resetting avoids stale-worktree conflicts (previous cycles). The reset is
-        # a no-op if already at that branch (git reset --hard is idempotent).
-        _worktree(ctx).reset_hard(inbound.branch)
-        log.info(f"{ICON_MERGE} merging %s", merge_target[:8])
-        merged = _worktree(ctx).merge(merge_target, merge_commit_message(ctx.role, inbound))
-        if not merged.ok:
-            return _escalate(ctx, state, message_id, inbound,
-                             f"merge of {merge_target} failed: {merged.output}", MERGE_FAILED)
+        # Role-to-role handoff: reset worktree to shared branch first, then merge.
+        # Resetting avoids stale-worktree conflicts across task cycles. The
+        # already_contains guard is safe here because both sides share a history.
+        if not _worktree(ctx).already_contains(merge_target):
+            _worktree(ctx).reset_hard(inbound.branch)
+            log.info(f"{ICON_MERGE} merging %s", merge_target[:8])
+            merged = _worktree(ctx).merge(merge_target, merge_commit_message(ctx.role, inbound))
+            if not merged.ok:
+                return _escalate(ctx, state, message_id, inbound,
+                                 f"merge of {merge_target} failed: {merged.output}", MERGE_FAILED)
+        else:
+            log.info("%s %s already at %s", ICON_MERGE, ctx.role, merge_target[:8])
         return None
-    # Fresh task from HITL (no commit): reset to branch tip instead of merging.
-    # Merge would try to join diverged histories; reset is correct because all
-    # prior work is already on the shared branch (pushed by push_branch).
+    # Fresh task from HITL (no commit): always reset to branch tip.
+    # The already_contains guard is NOT safe here: run1 can move between dispatch
+    # and pickup (sequential mode dispatches while a previous cycle is still
+    # completing), leaving the worktree stale. Reset is idempotent anyway.
+    # Also reset ALL worktrees so every role starts this task from a clean
+    # shared-branch state — prevents stale-refactorer merge conflicts when the
+    # coder's commit meets a run1 that advanced during their work.
     log.info(f"{ICON_MERGE} resetting worktree to %s", merge_target[:8])
     _worktree(ctx).reset_hard(merge_target)
+    _worktree(ctx).reset_all_worktrees(ctx.branch)
     return None
 
 
@@ -465,7 +467,8 @@ def _hand_off(
     # are the same fact, and the whole point of the column is that it can be trusted to
     # match what a human reads in the message.
     _insert_verified(ctx, target, outbound, work_item=work_item_of(work_item))
-    _auto_dispatch_next(ctx, work_item, target)
+    if target == ESCALATION_TARGET:
+        _auto_dispatch_next(ctx)
     _queue(ctx).mark_processed(message_id)
 
     state.consecutive_escalations = 0  # a clean cycle re-arms the circuit breaker
@@ -668,7 +671,8 @@ def _no_op(
         work_item=work_item_of(inbound.handoff),
         priority=INFORMATIONAL_PRIORITY,
     )
-    _auto_dispatch_next(ctx, inbound.handoff, routed_target)
+    if routed_target == ESCALATION_TARGET:
+        _auto_dispatch_next(ctx)
     _queue(ctx).mark_processed(message_id)
     ctx.set_status("idle")
     return CycleResult(
@@ -783,12 +787,16 @@ def _escalate(
 
 
 def _try_push_branch(ctx: SchedulerContext) -> None:
-    """Push worktree HEAD to shared branch. Failures are logged, not fatal."""
+    """Push worktree HEAD to shared branch and reset all worktrees. Failures logged."""
     try:
         _worktree(ctx).push_branch(ctx.branch)
-        log.info("%s sequential: pushed HEAD to %s", ICON_HANDOFF, ctx.branch)
+        _worktree(ctx).reset_all_worktrees(ctx.branch)
+        log.info(
+            "%s sequential: pushed HEAD to %s, reset all worktrees",
+            ICON_HANDOFF, ctx.branch,
+        )
     except Exception:
-        log.debug("could not push branch for sequential mode", exc_info=True)
+        log.debug("could not push / reset worktrees for sequential mode", exc_info=True)
 
 
 def _try_dispatch_next_task(ctx: SchedulerContext, next_task: dict) -> None:
@@ -819,24 +827,25 @@ def _try_dispatch_next_task(ctx: SchedulerContext, next_task: dict) -> None:
         )
 
 
-def _auto_dispatch_next(
-    ctx: SchedulerContext, work_item: str | None, target: str | None = None
-) -> None:
-    """If sequential mode is on and this is the last role (target==human), dispatch next."""
-    # Only auto-dispatch when the cycle is complete (routed to the human).
-    # Intermediate handoffs (coder -> refactorer, etc.) must NOT advance the queue.
-    if target != ESCALATION_TARGET:
-        return
+def _is_already_completed(ctx: SchedulerContext, work_item: str) -> bool:
+    """True if this work item has reached the human (was fully cycled)."""
+    try:
+        return ctx.queue.count_arrivals(work_item, ctx.branch, ESCALATION_TARGET) > 0
+    except Exception:
+        return False
+
+
+def _auto_dispatch_next(ctx: SchedulerContext) -> None:
+    """If sequential mode is on, push branch and dispatch the next backlog task."""
     try:
         if not ctx.queue.sequential_enabled(ctx.branch):
             return
         _try_push_branch(ctx)
         next_task = ctx.queue.next_backlog_task(ctx.branch)
+        if next_task and not _is_already_completed(ctx, next_task["work_item"]):
+            _try_dispatch_next_task(ctx, next_task)
     except Exception:
         return
-
-    if next_task is not None:
-        _try_dispatch_next_task(ctx, next_task)
 
 
 def _insert_verified(

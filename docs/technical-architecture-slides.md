@@ -32,7 +32,7 @@ Technical overview — topology, scheduler/worker delegation, and the handoff cy
 
 A human-facing intake role feeds a fully autonomous four-role cycle:
 
-![w:820](images/agentic_coding_topology_human_left_v3.svg)
+![w:820](images/architecture-topology.svg)
 
 `human-in-the-loop` (manual, `@current`) gathers and confirms the request, then **specifier → coder → refactorer → architect** run unattended and report back.
 
@@ -93,7 +93,7 @@ Autonomous roles never use wrapper mode. They run on the deterministic Python sc
 
 ## Watching It Run — Intake
 
-![w:880](images/Human-In-the-Loop.png)
+![w:880](images/hitl-pane.png)
 
 Tab 1: the `manual` human-in-the-loop session, with the `inbox` pane pinned beneath it. The strip top-right badges every role at once.
 
@@ -101,7 +101,7 @@ Tab 1: the `manual` human-in-the-loop session, with the `inbox` pane pinned bene
 
 ## Watching It Run — the Autonomous Swarm
 
-![w:880](images/Autonomous_Swarm.png)
+![w:880](images/autonomous-swarm.png)
 
 Tab 2: four scheduler panes, each showing its role, state, cycle count, cost, tokens, and the handoff it most recently produced. No LLM session drives any of this — every pane runs the deterministic scheduler loop.
 
@@ -109,7 +109,7 @@ Tab 2: four scheduler panes, each showing its role, state, cycle count, cost, to
 
 ## Watching It Run — the Dashboard
 
-![w:880](images/Dashboard.png)
+![w:880](images/dashboard.png)
 
 Tab 3: every role's state, queue depth, cycles, cost, tokens and cache rate, plus totals, prompt weight per role, recent activity and escalations.
 
@@ -117,7 +117,7 @@ Tab 3: every role's state, queue depth, cycles, cost, tokens and cache rate, plu
 
 ## Watching It Run — the Cockpit
 
-![w:880](images/Cockpit_Board.png)
+![w:880](images/cockpit-board.png)
 
 The local web cockpit is the primary interface beyond Tab 1. The Board shows one lane per role, its worktree in the heading, and a card per work item. The Attention panel (not shown) lists failures, escalations, and results awaiting review. New tasks, handoffs, retries, log inspection, and swarm teardown are all available here.
 

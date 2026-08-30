@@ -134,7 +134,7 @@ CLI you intend to use.
 
 The `full` profile runs this cycle:
 
-![Kiln's default role topology, from human intake through the autonomous development cycle](docs/images/agentic_coding_topology_human_left_v3.svg)
+![Kiln's default role topology, from human intake through the autonomous development cycle](docs/images/architecture-topology.svg)
 
 The human-facing role gathers and confirms the request. The autonomous roles then:
 
@@ -365,13 +365,13 @@ out for you. Launching the `full` profile gives you a single window with four ta
 The status bar along the top right shows every role's state — `waiting`, `working` — from
 whichever tab you are on, so you can stay on tab 1 and still see the swarm move.
 
-![The Human-in-the-Loop tab: the agent session above, the Kiln Inbox pane below, and every role's state in the status bar](docs/images/Human-In-the-Loop.png)
+![The Human-in-the-Loop tab: the agent session above, the Kiln Inbox pane below, and every role's state in the status bar](docs/images/hitl-pane.png)
 
 Tab 1 is the only one that expects input. The four role panes on tab 2 are running schedulers:
 reading them is how you find out *why* something stalled, but work is never handed to a role by
 typing into its pane.
 
-![The Autonomous Swarm tab: specifier, coder, refactorer and architect, each showing its scheduler and worker output](docs/images/Autonomous_Swarm.png)
+![The Autonomous Swarm tab: specifier, coder, refactorer and architect, each showing its scheduler and worker output](docs/images/autonomous-swarm.png)
 
 Each pane carries a status line of its own — role, state, cycle, cost, tokens, and the handoff
 it produced — so a glance across the grid tells you where the work currently is.
@@ -430,13 +430,13 @@ The terminal dashboard shows:
 - recent handoffs and escalations;
 - optional traffic-capture statistics.
 
-![The terminal dashboard: per-role state and queue depth, run totals, prompt weight by role, recent activity, and escalations](docs/images/Dashboard.png)
+![The terminal dashboard: per-role state and queue depth, run totals, prompt weight by role, recent activity, and escalations](docs/images/dashboard.png)
 
 The cockpit exposes the same state as a local web interface and adds the actions that are
 awkward to type. It binds only to `127.0.0.1` and probes upward from its preferred port when
 necessary. The active URL is written to `.kiln/cockpit-url`.
 
-![Kiln Cockpit showing the role board, active work, queue controls, usage, and recent activity](docs/images/Cockpit_Board.png)
+![Kiln Cockpit showing the role board, active work, queue controls, usage, and recent activity](docs/images/cockpit-board.png)
 
 ### Cockpit panels
 
@@ -448,7 +448,7 @@ indicator, run totals, a theme switcher, and the two buttons that act on the who
 |---|---|
 | **Attention** | The only panel that is about *you*: failed work, escalations, and results awaiting human review. Empty reads "Nothing waiting on you." |
 | **Test health** | Test, coverage, and lint results. Present only when the project ships `.kiln/test-metrics.json` — see below |
-| **Board** | One lane per role, its worktree in the lane heading, and a card per work item showing name, title, and state |
+| **Board** | One lane per role, its worktree in the lane heading, and a card per work item showing name, title, and state. Above the lanes, a **Batch** toggle enables sequential mode — see below |
 | **Work queue** | A composer for sending a message to any role, above the live queue table |
 | **Recent activity** | Recent handoffs in order, escalations marked `⚠` |
 
@@ -481,7 +481,20 @@ scroll up to read something. A copy button takes the visible buffer. `scheduler`
 that answers "why did nothing happen"; `worker` answers "what did the agent actually do".
 Both are also on disk under `.kiln/logs/`.
 
-![The role detail dialog showing scheduler and worker log tabs, plus per-role metrics](docs/images/Cockpit_Workqueue_Scheduler_Detail.png)
+![The role detail dialog showing scheduler and worker log tabs, plus per-role metrics](docs/images/cockpit-role-detail.png)
+
+### Batch (sequential) mode
+
+Above the Board lanes, a **Batch** toggle enables sequential mode. When active, the scheduler
+automatically dispatches the next backlogged task as soon as the current one reaches the human
+(end of a full coder → refactorer → reviewer → architect cycle).
+
+After each completed task, every role worktree is reset to the shared branch. This prevents
+the stale-branch merge conflicts that can occur when a later task modifies files an earlier
+task also changed — each task starts from a clean, up-to-date state.
+
+Toggle **Batch** on when you want to run through a queue without manually handing off each
+task. Toggle it off (or leave it off) when you want to review and decide after every cycle.
 
 ### Retrying and sending work
 
@@ -494,7 +507,7 @@ The **Work queue** composer sends a message to any role: pick the target, pick o
 item, type the message. This bypasses the backlog, so it is the way to interrupt or redirect a
 role that is already working — the web equivalent of `kiln send`.
 
-![The work queue composer and live queue table in the cockpit](docs/images/Cockpit_Workqueue.png)
+![The work queue composer and live queue table in the cockpit](docs/images/cockpit-workqueue.png)
 
 **Stop swarm** in the header tears the whole thing down and asks for confirmation first.
 

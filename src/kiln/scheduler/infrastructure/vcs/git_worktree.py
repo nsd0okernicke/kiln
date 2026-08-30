@@ -37,6 +37,9 @@ class GitWorktree:
     def push_branch(self, branch: str) -> None:
         git.push_branch(branch, self.path)
 
+    def reset_all_worktrees(self, branch: str) -> None:
+        git.reset_all_worktrees(branch, self.path)
+
     def reset_hard(self, target: str) -> GitResult:
         return git.reset_hard(target, self.path)
 

@@ -453,6 +453,49 @@ def reset_hard(target: str, cwd: str | Path) -> GitResult:
     return run_git(["reset", "--hard", target], cwd)
 
 
+def _main_repo(cwd: str | Path) -> Path | None:
+    """Resolve the main repository path, or None if git-common-dir fails."""
+    main = run_git(["rev-parse", "--git-common-dir"], cwd)
+    if not main.ok or not main.stdout:
+        return None
+    return Path(main.stdout).resolve().parent
+
+
+def all_worktrees(cwd: str | Path) -> list[Path]:
+    """Return paths to all git worktrees, excluding the main repository."""
+    result = run_git(["worktree", "list", "--porcelain"], cwd)
+    if not result.ok:
+        return []
+    main = _main_repo(cwd)
+    paths: list[Path] = []
+    for line in result.stdout.splitlines():
+        if line.startswith("worktree "):
+            p = Path(line[9:].strip())
+            if main is not None and p.resolve() == main:
+                continue
+            paths.append(p)
+    return paths
+
+
+def reset_all_worktrees(branch: str, cwd: str | Path) -> None:
+    """
+    Reset every linked worktree to `branch`, discarding stale local state.
+
+    Called after push_branch in sequential mode so that every role worktree
+    starts the next task from a clean shared-branch state. This eliminates
+    the stale-branch merge conflicts that occurred when run1 advanced while
+    a worktree still pointed at an earlier commit.
+    """
+    for wt in all_worktrees(cwd):
+        try:
+            log.info("resetting worktree %s to %s", wt.name or str(wt), branch)
+            run_git(["reset", "--hard", branch], wt)
+        except Exception:
+            log.warning(
+                "could not reset worktree %s to %s", wt.name or str(wt), branch
+            )
+
+
 def push_branch(branch: str, cwd: str | Path) -> None:
     """
     Force-push HEAD to a local branch so other worktrees can merge it.

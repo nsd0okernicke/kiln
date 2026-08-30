@@ -438,7 +438,7 @@
   </section>
 
   <section data-section="board">
-    <h2><button class="section-toggle" type="button" aria-expanded="true" aria-controls="board-panel">Board</button> <label class="toggle-switch" id="sequential-toggle-wrap" title="Batch mode: tasks auto-chain when one completes"><input type="checkbox" id="sequential-toggle"><span class="toggle-track"><span class="toggle-knob"></span></span><span class="toggle-label" id="sequential-label">Seq</span></label></h2>
+    <h2><button class="section-toggle" type="button" aria-expanded="true" aria-controls="board-panel">Board</button> <label class="toggle-switch" id="sequential-toggle-wrap" title="Batch mode: when a task reaches the human (end of cycle), the next backlog task is automatically dispatched. Each role worktree is reset to the shared branch beforehand, so tasks never accumulate stale state or cause merge conflicts."><input type="checkbox" id="sequential-toggle"><span class="toggle-track"><span class="toggle-knob"></span></span><span class="toggle-label" id="sequential-label">Batch</span></label></h2>
     <div class="section-panel lanes" id="board-panel"><div id="lanes" style="display:contents"></div></div>
   </section>
 
@@ -1115,7 +1115,7 @@ async function poll() {
         const result = await post("/api/sequential", { enabled });
         latest.sequential = result.sequential;
         seqCb.checked = result.sequential;
-        toast(result.sequential ? "Sequential: tasks auto-chain" : "Sequential: off");
+        toast(result.sequential ? "Batch mode on: tasks auto-dispatch on cycle end" : "Batch mode off");
       } catch (err) {
         seqCb.checked = !enabled;
         toast("Toggle failed: " + err.message, true);

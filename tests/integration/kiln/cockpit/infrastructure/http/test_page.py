@@ -390,7 +390,7 @@ class TestTestHealthPanel:
     def test_it_rides_the_existing_poll_rather_than_its_own_timer(self, page):
         # A monitoring surface that added a second interval would read reports more often
         # than the swarm changes, for no extra information.
-        assert "pollTestMetrics()" in page.partition("async function poll()")[2][:900]
+        assert "pollTestMetrics()" in page.partition("async function poll()")[2][:1500]
         assert page.count("setInterval(") == 1
 
     def test_failing_names_are_rendered_as_text_not_markup(self, page):

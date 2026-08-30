@@ -695,6 +695,7 @@ class TestBuildState:
             "request_stats",
             "version",
             "work_items",
+            "sequential",
         }
         assert payload["project"] == "demo"
         assert payload["intake_role"] == "specifier"

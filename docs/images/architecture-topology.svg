@@ -1,6 +1,6 @@
 <svg width="100%" viewBox="0 0 1040 630" role="img" xmlns="http://www.w3.org/2000/svg">
 <title>Default profile topology, agentic coding cycle</title>
-<desc>The full profile. On the left, human intake and review: a manual human-in-the-loop pane running in the main directory, with an inbox strip beneath it that waits for messages, merges the sender's commit and delivers to the pane above. The human-in-the-loop sends a new request to the Specifier. On the right, the autonomous cycle runs specifier, coder, refactorer and architect on the deterministic Python scheduler, each in its own worktree. The specifier owns the acceptance criteria and hands off features files; the coder owns the implementation; the refactorer owns behavior-preserving cleanup; the architect owns boundaries and runs final verification. Specifier hands off to Coder, Coder to Refactorer, Refactorer to Architect, and Architect back to Specifier. The Specifier returns a completion to the inbox, and any role can escalate to the inbox. Below the intake group, monitoring and control: the Dashboard gives a swarm-wide view of the run and the Cockpit web UI also drives it.</desc>
+<desc>The full profile. On the left, human intake and review: a manual human-in-the-loop pane running in the main directory, with an inbox strip beneath it that waits for messages, merges the sender's commit and delivers to the pane above. The human-in-the-loop sends a new request to the Specifier. On the right, the autonomous cycle runs specifier, coder, refactorer and architect on the deterministic Python scheduler, each in its own worktree. The specifier owns the acceptance criteria and hands off features files; the coder owns the implementation; the refactorer owns behavior-preserving cleanup; the architect owns boundaries and runs final verification. Specifier hands off to Coder, Coder to Refactorer, Refactorer to Architect, and Architect back to Specifier. No role hands off directly: at the centre of the cycle sits the SQLite message database .kiln/messages.db, where every handoff is a row moving from queued to delivered to processing to processed. The Specifier returns a completion to the inbox, and any role can escalate to the inbox. Below the intake group, monitoring and control: the Dashboard gives a swarm-wide view of the run and the Cockpit web UI also drives it.</desc>
 
 <defs>
   <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -19,6 +19,7 @@
     .box  { stroke-width: 0.5; }
     .conn { fill: none; stroke: #898781; stroke-width: 1.5; }
     .dash { fill: none; stroke: #898781; stroke-width: 1.5; stroke-dasharray: 5 4; }
+    .spoke { fill: none; stroke: #898781; stroke-width: 1; stroke-dasharray: 3 4; opacity: 0.85; }
     .cluster { fill: none; stroke: #7a7874; stroke-width: 1.25; stroke-dasharray: 6 4; opacity: 1; }
   </style>
 </defs>
@@ -128,6 +129,24 @@
 
 <line class="conn" x1="500" y1="388" x2="500" y2="286" marker-end="url(#arrow)"/>
 <text class="edge" x="458" y="338" text-anchor="middle">handoff</text>
+
+<!-- ===== message bus (hub of the cycle) ===== -->
+<!-- Sits inside the ring the four handoff arrows make, because no role hands off to another
+     directly: every arrow above is an INSERT here and a poll by the receiver. Neutral grey,
+     like the Dashboard and Cockpit box, since this is infrastructure rather than a role. -->
+<g>
+  <rect class="box" x="540" y="300" width="270" height="74" rx="8" fill="#f2f2f0" stroke="#898781"/>
+  <text class="name" x="675" y="322" text-anchor="middle" fill="#3c3b38">.kiln/messages.db</text>
+  <text class="sub"  x="675" y="341" text-anchor="middle" fill="#5a5854">every handoff is a row here</text>
+  <text class="sub"  x="675" y="359" text-anchor="middle" fill="#5a5854">queued → delivered → processing → processed</text>
+</g>
+
+<!-- Spokes to each handoff arrow's midpoint. No arrowheads, because the traffic runs both
+     ways (sender inserts, receiver polls) and heads here would claim a single direction. -->
+<line class="spoke" x1="675" y1="300" x2="675" y2="226"/>
+<line class="spoke" x1="675" y1="374" x2="675" y2="448"/>
+<line class="spoke" x1="540" y1="337" x2="504" y2="337"/>
+<line class="spoke" x1="810" y1="337" x2="846" y2="337"/>
 
 <!-- ===== human edges ===== -->
 <line class="conn" x1="252" y1="200" x2="377" y2="200" marker-end="url(#arrow)"/>

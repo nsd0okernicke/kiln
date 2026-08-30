@@ -270,6 +270,7 @@ class CockpitHandler(BaseHTTPRequestHandler):
 
     def _post_handler(self, path: str) -> Callable[[dict], dict] | None:
         routes: dict[str, Callable[[dict], dict]] = {
+            "/api/send": self._send,
             "/api/sequential": self._sequential,
             "/api/tasks": self._task,
             "/api/chat": self._chat,
