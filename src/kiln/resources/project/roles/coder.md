@@ -38,10 +38,10 @@ You are the coder.
 
 ## Acceptance Tests
 
-- Acceptance tests that use Testcontainers (PostgreSQL, RabbitMQ) can take several minutes. The agent provider's bash tool has a hard timeout (typically 420 seconds).
-- Run acceptance tests **one scenario at a time** (e.g. `-k "test_name"`) rather than the full suite, to stay within tool timeouts.
-- Alternatively, verify acceptance scenarios run correctly by inspecting the step implementation and running a single quick scenario. Skip the full suite if individual scenarios time out.
-- Run unit tests after acceptance tests, but never pipe test output through `tail` or any buffering command.
+- Acceptance tests use Testcontainers or similar container-based fixtures, and the agent provider's bash tool has a hard timeout (typically 420 seconds). Container startup alone often exceeds this.
+- Write step definitions for all Gherkin scenarios. Validate correctness by **inspecting the step implementation** — check that each step references production code through port interfaces.
+- Skip running the full acceptance test suite if container startup exceeds the tool timeout. Note "acceptance tests skipped (container startup exceeds provider tool timeout)" in the handoff.
+- Run unit tests and coverage as primary verification. Never pipe test output through `tail` or any buffering command.
 
 ## Non-Ownership
 
