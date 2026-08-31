@@ -31,7 +31,8 @@
           "title": "Kiln Specifier",
           "mode": "auto",
           "scheduler": "python",
-          "workerTimeout": 1800
+          "workerTimeout": 3600,
+          "workerIdleTimeout": 1800
         },
         {
           "role": "coder",
@@ -39,7 +40,8 @@
           "title": "Kiln Coder",
           "mode": "auto",
           "scheduler": "python",
-          "workerTimeout": 1800
+          "workerTimeout": 3600,
+          "workerIdleTimeout": 1800
         },
         {
           "role": "refactorer",

@@ -36,6 +36,13 @@ You are the coder.
 - Keep implementation code understandable for handoff: clear names, straightforward control flow, no avoidable duplication in touched code.
 - Leave broad cleanup to the refactorer unless it blocks implementation.
 
+## Acceptance Tests
+
+- Acceptance tests that use Testcontainers (PostgreSQL, RabbitMQ) can take several minutes. The agent provider's bash tool has a hard timeout (typically 420 seconds).
+- Run acceptance tests **one scenario at a time** (e.g. `-k "test_name"`) rather than the full suite, to stay within tool timeouts.
+- Alternatively, verify acceptance scenarios run correctly by inspecting the step implementation and running a single quick scenario. Skip the full suite if individual scenarios time out.
+- Run unit tests after acceptance tests, but never pipe test output through `tail` or any buffering command.
+
 ## Non-Ownership
 
 - Do not run mutation, CRAP, or DRY checks (refactorer/architect own these).
