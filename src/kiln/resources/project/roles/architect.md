@@ -24,6 +24,6 @@ Use `/final-verification` skill before committing (three-step sequence):
 
 1. Mutation testing — Use `/mutation-testing` to run mutation tests
 2. DRY analysis — Use `/mutation-testing` skill's DRY guidance to reduce duplication
-3. Soft Gherkin acceptance mutation — Check acceptance tests against code changes
+3. Soft Gherkin acceptance mutation — **Skip this step if container startup exceeds the provider's tool timeout.** Acceptance tests use Testcontainers and can take longer than the bash tool's hard timeout (typically 420 seconds). Validate step definitions by inspection instead. Never pipe test output through `tail` or any buffering command.
 
 Fix any issues each step finds before running the next.
