@@ -30,13 +30,16 @@ scoring, lives, sound, an in-memory high score, game over, and a safe victory af
 
 **Display:**
 
-- Logical canvas: **224 × 256 pixels**, portrait orientation.
-- Default window: **672 × 768 pixels** (3× integer scale).
-- Use nearest-neighbour sampling and preserve aspect ratio.
-- Prefer integer scaling with letterboxing. A window too small for 1× may use a fractional scale
-  as a usability fallback, while simulation coordinates remain on the logical canvas.
-- Simulation runs at exactly **60 ticks per second**. This intentionally simplifies the original
-  hardware's approximately 60.6 Hz refresh.
+- Simulation canvas: **224 × 256 pixels**, portrait orientation.
+- Render output: **672 × 768 pixels** (3× the simulation canvas).
+- The board background is rendered procedurally at 224×256 and upscaled to 672×768 with
+  **linear filtering** for a smooth appearance.
+- Sprites are loaded from high-resolution PNG files (`spr_*.png`, `tile_*.png`, see
+  `ASSET_LIST.md`) and drawn at their native pixel size, mapped to 3× simulation coordinates.
+- Default window: **672 × 768 pixels** (1:1 with render output).
+- Support integer scaling with letterboxing. A window too small for 672×768 may use a
+  fractional scale as a usability fallback.
+- Simulation runs at exactly **60 ticks per second**.
 
 No ECS is required. Ordinary structs and explicit state machines are clearer at this scale.
 
@@ -88,6 +91,9 @@ events; they do not decide simulation outcomes. Gamepad input and two-player pla
   animation-only tick. Average horizontal speed is about 2/3 pixel per tick.
 - Walking off a supported span starts a natural fall with zero initial vertical impulse.
 - Mario respects board-specific horizontal limits. There is no global screen wrapping.
+- Mario stores a held horizontal direction (`-1` left, `0` neutral, `+1` right) that is updated
+  each tick from the input and exposed to the renderer via `Mario::direction()`. The initial
+  direction at spawn is `+1` (right).
 
 ### Climbing
 
@@ -121,6 +127,11 @@ subject to fixed-point truncation and the support surface.
 - A natural fall starts with zero impulse and landing/fatal evaluation armed immediately.
 - Falling **15 pixels or more** below take-off Y latches fatal fall. Mario dies when he next lands
   or leaves the board's valid play region.
+- **Exception — 100m rivet drops:** When Mario is standing on a rivet support span at the
+  moment it is erased (100m board), he drops to the nearest girder surface below immediately on
+  the same tick. This drop is not a natural fall and does not latch fatal fall, even when the
+  distance between flat-structure tiers (36 px) exceeds the 15 px threshold. If no surface exists
+  below (off the board), a natural fall with standard fatal-fall evaluation starts.
 - A successful landing begins a four-tick input freeze. Ignore input edges during the freeze.
 
 ### Hammer
@@ -130,6 +141,8 @@ subject to fixed-point truncation and the support surface.
 - Hammer duration is 512 simulation ticks.
 - While active, Mario may walk but cannot jump, climb, or voluntarily drop the hammer.
 - A strike destroys eligible barrels/fire enemies overlapping its active strike region.
+- The held hammer sprite is rendered above Mario's head, swinging side-to-side. It mirrors
+  horizontally when Mario faces left, following `Mario::direction()`.
 
 ## 6. Board Progression
 
@@ -194,7 +207,9 @@ constructed. This intentionally replaces the original overflow kill screen.
 - Crossing edge column X `0x4b` or `0xb3` arms the relevant rivet. Moving away resolves the slot
   from Mario's Y band and X side, clears it, erases its three-tile support span, awards 100, and
   decrements the remaining count.
-- A removed span is non-solid. Mario falls immediately if no support remains beneath him.
+- A removed span is non-solid. If Mario stands on the erased span when it is removed, he drops
+  to the nearest girder surface below immediately (see section 5, "Jumping and falling" — 100m
+  rivet-drop exception). The drop is not a fatal fall.
 - Firefoxes spawn opposite Mario; exact centre counts as the left side. Two hammers are available.
 - Clearing rivet eight triggers Kong's fall animation and board completion.
 
@@ -283,14 +298,55 @@ eight-tick pose holds (12 changes through four orientation pairs repeated three 
 
 ## 10. Rendering and Procedural Assets
 
-Generate visual assets from colour-index arrays or drawing commands in Rust. Include Mario,
-barrels, fire enemies, springs, pies, visible elevators, hammers, rivets, Pauline, Kong, board
-tiles, and a HUD font.
+Generate visual assets from colour-index arrays or drawing commands in Rust (`src/asset.rs`).
+Include Mario, barrels, fire enemies, springs, pies, visible elevators, hammers, rivets,
+Pauline, Kong, board tiles, and a HUD font.
 
 - Simulation coordinates never depend on render scale.
 - Draw to a logical render target with nearest filtering, then scale and letterbox.
 - Render interpolation is allowed but must not feed back into gameplay.
+- Sprites must be flipped horizontally according to the entity's facing direction. Mario's
+  sprites (idle, walk, jump, climb frames) and the held hammer sprite mirror when
+  `Mario::direction()` returns a negative value. All other entities (barrels, fire enemies,
+  Kong, Pauline) always face their movement direction.
 - Golden images verify layout/palette; state tests and focused playtests verify animation.
+
+### Visual Quality Standards
+
+Sprites are defined as character-grid pixel art resolved through a shared 19-colour palette.
+The palette mimics the arcade's limited colour set and keeps every sprite visually consistent.
+
+**Palette:** See `src/asset.rs` — mapping from characters to RGBA values, arcade-measured
+colours (girder pink-red `#ff2155`, ladder cyan `#00ffff`, Mario's red hat `#ff0000`,
+overalls blue `#0000ff`, skin `#ffb855`, brown shoes `#b80000`, etc.).
+
+**Reference board layouts** (PPM golden images, 224×256):
+
+| Board | File | Content |
+|---|---|---|
+| 25m | `tests/golden/board_25m.golden` | Six pink-red girder tiers, cyan ladders, oil drum at (39,224), Kong at (16,72), Pauline at (120,36), two hammers |
+| 50m | `tests/golden/board_50m.golden` | Three conveyor belt regions with yellow/orange chevrons, moving ladder assemblies, Pauline, two hammers |
+| 75m | `tests/golden/board_75m.golden` | Six girders with open elevator shafts, two elevator groups, springs on bottom tier, Kong, Pauline |
+| 100m | `tests/golden/board_100m.golden` | Blue girders (recoloured from red for this board), flat rivet structure with eight white rivet tiles, Kong, Pauline |
+
+**Sprite design notes (arcade reference-driven):**
+
+| Character | Frames | Details |
+|---|---|---|
+| Mario | 6 (idle, walk×2, jump, climb×2) | Red cap with brim, skin face, red shirt, blue overalls with suspenders, brown shoes. Walk cycle: two movement ticks + one animation-only tick. Climb: left/right arm alternating. Jump: arms spread. Mirror horizontally when `Mario::facing() < 0` |
+| Kong | 2 (idle_a/b) | Large brown head with tan muzzle, white eyes with round pupils, thick brown arms. One-pixel head shift between frames for subtle idle animation |
+| Pauline | 1 | Black hair, skin face, pink dress with magenta accent, brown shoes. Static on top-girder balcony |
+| Barrel | 2 (static, rolling) | Yellow-brown crate with dark outlines. Static has horizontal band pattern; rolling has offset bands for rotation illusion |
+| Fire enemies | 2 (walking, rolling) | Orange flame body with bright yellow core and dark centre. Walking is upright with flame tips; rolling compresses as it tumbles |
+| Spring | 2 (extended, compressed) | Light-gray coil with darker wire pattern. Extended: taller with visible coils; compressed: shorter/squashed |
+| Cement pie | 1 | Circular gray disc with lighter rim and darker centre pattern |
+| Elevator | 1 | Rectangular platform with gray body and yellow accent stripes at each rung |
+| Hammer | 1 | Long gray handle with brown mallet head ending in a white-and-black striking face. Swings above Mario's head |
+| Oil drum | 1 | Red barrel with dark-red bands and alternating red/dark stripe pattern |
+| Tile: girder | 16×16 tile | Pink-red body (`r`, #ff2155) with darker red edge (`D`, #970000); subtle brighter-red highlight accents every few columns. 100m remaps to blue (`L`, #0000ff / `l`, #0000aa) |
+| Tile: ladder | 16×8 tile | Cyan rails with full rung rows at fixed spacing; centre rungs appear every 4 px |
+| Tile: rivet | 8×8 tile | Small white stud/circle on transparent background; seated on girder surface |
+| Tile: pipe | 20×16 tile | Gray cylindrical pipe with darker rim at top and bottom; appears only on 25m board |
 
 ## 11. Audio
 

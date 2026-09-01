@@ -196,6 +196,20 @@ def copy_example(paths: KilnPaths, example: str, result: ScaffoldResult) -> None
         workspace.copy_template_file(metrics, paths.state_dir / "test-metrics.json")
         result.note(f"configured test metrics for {example}")
 
+    # Copy example asset files (zips, pngs, docs, etc.) to the project root.
+    # These are files at the example root that are NOT README.md (already handled
+    # above) and NOT under kiln/ (handled by constitution overrides).
+    extra_assets = [
+        p for p in example_dir.iterdir()
+        if p.is_file()
+        and p.name != "README.md"
+        and p.suffix in (".zip", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".md", ".txt", ".pdf")
+    ]
+    for asset in extra_assets:
+        workspace.copy_template_file(asset, paths.project_root / asset.name)
+    if extra_assets:
+        result.note(f"copied {len(extra_assets)} example asset file(s)")
+
 
 def _copy_constitution_overrides(source_dir: Path, target_dir: Path) -> int:
     if not source_dir.is_dir():
