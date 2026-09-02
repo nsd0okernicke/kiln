@@ -78,3 +78,10 @@ class SQLiteMessageQueue:
             sender=sender, target=target,
         )
         return str(result["message_id"])
+
+    def create_spec_defect_task(
+        self, branch: str, work_item: str, failure_detail: str
+    ) -> dict | None:
+        return task_store.create_spec_defect_task(
+            self.path, branch=branch, work_item=work_item, failure_detail=failure_detail
+        )

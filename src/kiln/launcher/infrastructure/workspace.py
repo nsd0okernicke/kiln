@@ -35,7 +35,8 @@ log = logging.getLogger(__name__)
 REQUIRED_GITIGNORE_ENTRIES = (
     ".kiln",
     ".worktrees/",
-    ".github/",
+    ".github/agents",
+    ".github/skills",
     ".claude/settings.json",
     ".claude/skills",
     ".agents/skills",
@@ -119,12 +120,15 @@ def ensure_gitignore(paths: KilnPaths) -> Path:
     path = paths.project_root / ".gitignore"
     initial = BASE_GITIGNORE + "\n".join(REQUIRED_GITIGNORE_ENTRIES) + "\n"
     _ensure_entries(path, list(REQUIRED_GITIGNORE_ENTRIES), initial=initial)
+    # CI workflow files must be tracked even though .github/agents and .github/skills are ignored.
+    _ensure_entries(path, ["!.github/workflows/"], initial="")
     return path
 
 
 def _ensure_entries(path: Path, required: list[str], *, initial: str) -> None:
     if not path.exists():
-        path.write_text(initial, encoding="utf-8")
+        if initial:
+            path.write_text(initial, encoding="utf-8")
         return
     existing = {line.strip() for line in path.read_text(encoding="utf-8").splitlines()}
     missing = [entry for entry in required if entry not in existing]

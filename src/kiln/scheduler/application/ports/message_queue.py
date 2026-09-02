@@ -31,3 +31,8 @@ class MessageQueue(Protocol):
     def dispatch_backlog_task(
         self, identifier: str, branch: str, sender: str, target: str
     ) -> str: ...
+
+    # Spec-defect tracking (issue #47, finding 9) -----------------------------------
+    def create_spec_defect_task(
+        self, branch: str, work_item: str, failure_detail: str
+    ) -> dict | None: ...

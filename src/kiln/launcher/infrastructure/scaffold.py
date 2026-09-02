@@ -40,6 +40,12 @@ CONSTITUTION_FILES = (
 #: in roles/*.md; this is the human-facing overview and is honest about being one.
 REFERENCE_FILES = ("skill-orchestration.md",)
 
+#: Path to the CI workflow template, relative to the scaffold resources directory.
+CI_WORKFLOW_SOURCE = "github/workflows/ci.yml"
+
+#: Target path for the CI workflow, relative to the project root.
+CI_WORKFLOW_TARGET = ".github/workflows/ci.yml"
+
 
 class ScaffoldError(Exception):
     """Scaffolding could not complete."""
@@ -130,6 +136,34 @@ def copy_skills(paths: KilnPaths, result: ScaffoldResult) -> None:
         workspace.copy_template_tree(source, destination)
         count += 1
     result.note(f"copied {count} skill(s)")
+
+
+def copy_ci_workflow(paths: KilnPaths, result: ScaffoldResult) -> None:
+    """
+    Copy the CI workflow template into the project's `.github/workflows/`.
+
+    The CI pipeline runs every quality gate from a clean checkout on every role
+    branch push. This is the durable record that gates actually ran, rather than
+    relying on self-reported pass/fail in commit messages (issue #47, finding 1).
+
+    `.github/workflows/ci.yml` is deliberately tracked (not gitignored) so a role
+    cannot change what CI runs — CI reads this file from the shared branch.
+    """
+    source = paths.scaffold_resources_dir / CI_WORKFLOW_SOURCE
+    if not source.is_file():
+        result.warn(f"CI workflow template not found at {source}")
+        return
+    target = paths.project_root / CI_WORKFLOW_TARGET
+    target.parent.mkdir(parents=True, exist_ok=True)
+    workspace.copy_template_file(source, target)
+    result.note("created .github/workflows/ci.yml")
+
+
+#: Extension `.githubignore` entries for tracked CI workflows.
+_CI_WORKFLOW_GITIGNORE = (
+    "# CI workflow files must be tracked (not gitignored) so CI runs from committed code",
+    "!.github/workflows/",
+)
 
 
 def copy_knowledge_catalog(paths: KilnPaths, result: ScaffoldResult) -> None:
@@ -283,6 +317,7 @@ def scaffold(
     copy_roles(paths, result)
     copy_skills(paths, result)
     copy_knowledge_catalog(paths, result)
+    copy_ci_workflow(paths, result)
     write_initial_mcp_json(paths, result)
     write_claude_settings(paths, result)
     copy_example(paths, example, result)

@@ -564,6 +564,25 @@ def _apply_verification(ctx: SchedulerContext, attempts: _Attempts) -> None:
         ),
     )
 
+    # Auto-create a spec-defect backlog task when the specifier's gate fails.
+    if ctx.role == "specifier":
+        _auto_create_spec_defect(ctx, result.output)
+
+
+def _auto_create_spec_defect(ctx: SchedulerContext, failure_output: str) -> None:
+    spec_patterns = ["gherkin", "spec", "scenario", "feature"]
+    if not any(p in failure_output.lower() for p in spec_patterns):
+        return
+    try:
+        defect_wi = f"spec-defect-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}"
+        task = _queue(ctx).create_spec_defect_task(
+            branch=ctx.branch, work_item=defect_wi, failure_detail=failure_output[:2000]
+        )
+        if task:
+            log.info(f"{ICON_DONE} auto-created spec-defect backlog task %s", defect_wi)
+    except Exception as exc:
+        log.warning("could not auto-create spec-defect task: %s", exc)
+
 
 def _cycle_limit_breach(ctx: SchedulerContext, inbound: handoff.InboundHandoff) -> str:
     """

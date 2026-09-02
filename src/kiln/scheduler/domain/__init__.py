@@ -1,1 +1,1 @@
-"""Pure scheduler models, policies, and business rules."""
+"""Scheduler domain: pure logic with no I/O dependencies."""

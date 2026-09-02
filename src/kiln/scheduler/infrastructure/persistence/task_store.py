@@ -162,6 +162,50 @@ def archive_task(db_path: str | Path, *, branch: str, identifier: str) -> dict:
     return _task(row)
 
 
+def create_spec_defect_task(
+    db_path: str | Path,
+    *,
+    branch: str,
+    work_item: str,
+    failure_detail: str,
+) -> dict | None:
+    """
+    Auto-create a backlog task for a spec-classified acceptance failure.
+
+    When the architect or a verification gate classifies a failure as a spec defect
+    (issue #47, finding 9), this creates a backlog task tracking the fix so it cannot
+    be silently inherited across cycles. Returns None when a task for this work item
+    already exists.
+    """
+    with closing(connect(db_path)) as conn:
+        existing = conn.execute(
+            "SELECT 1 FROM tasks WHERE branch=? AND work_item=? AND status != ? LIMIT 1",
+            (branch, work_item, TASK_ARCHIVED),
+        ).fetchone()
+        if existing:
+            return None
+        try:
+            row = conn.execute(
+                """
+                INSERT INTO tasks (branch, work_item, title, body, created_at, updated_at)
+                VALUES (?, ?, ?, ?,
+                        strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+                        strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+                RETURNING *
+                """,
+                (
+                    branch,
+                    work_item,
+                    f"Spec defect: {work_item}",
+                    f"Auto-created from verification failure classified as spec defect.\n\n{failure_detail}",
+                ),
+            ).fetchone()
+            conn.commit()
+        except sqlite3.IntegrityError:
+            return None
+    return _task(row)
+
+
 def handoff_task(
     db_path: str | Path,
     *,

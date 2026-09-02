@@ -118,6 +118,12 @@ For the specifier to turn into Gherkin — not prescriptive of implementation.
 - Pagination: `page` (1-indexed, default 1) and `page_size` (default 20, max 100). Response
   includes the total result count.
 - Default sort order: `title` ascending.
+- The catalog is pre-seeded with three books. In title-ascending order they are:
+  1. Dune (ISBN 978-0-20-163361-0)
+  2. Refactoring (ISBN 978-0-13-468599-1)
+  3. The Hobbit (ISBN 978-3-16-148410-0)
+  Paginated queries reference these positions. For example, page 2 with page_size 1 returns
+  the second entry: Refactoring.
 
 ### CAT-6: Manual stock return endpoint
 - An admin/ops stock-correction tool: lets an operator add N copies to an ISBN's stock

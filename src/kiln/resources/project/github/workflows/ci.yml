@@ -1,0 +1,159 @@
+# Kiln project CI pipeline — re-runs every quality gate on every role branch push.
+#
+# CI re-runs the full gate set from a clean checkout. This catches the "green on
+# the dashboard, red in HEAD" pattern: every gate here runs on the committed code,
+# not on uncommitted worktree state. There is no way to skip CI from a role commit.
+#
+# Each role branch (specifier, coder, reviewer, architect) triggers its own
+# matrix job, matching the gates that role owns in constitution/workflow.md and
+# kiln/project/skill-orchestration.md.
+#
+# The workflow file is committed, not generated. A role cannot change what CI
+# runs because CI reads this file from the shared branch, not from the role's
+# worktree.
+#
+# Modify the per-language stubs below to match your project's toolchain
+# (constitution/engineering.md). The identity checks are language-agnostic
+# and should be kept as-is.
+
+name: Kiln CI
+
+on:
+  push:
+    branches:
+      - '**'     # Every role branch, not just main
+  pull_request:
+    branches:
+      - main    # PRs against the shared branch
+  workflow_dispatch:  # Manual trigger for ad-hoc checks
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Structural identity checks (language-agnostic) ──────────────────────
+  # These run on every branch regardless of role. Keep them as-is.
+
+  identity-checks:
+    name: Identity checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert clean tree matches HEAD
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "::error::Working tree is dirty — gate results cannot be trusted."
+            git diff --stat
+            exit 1
+          fi
+
+      - name: Profile JSON is valid
+        run: |
+          if [ -f "kiln/project/profiles.json" ]; then
+            python3 -c "import json; json.load(open('kiln/project/profiles.json'))"
+            echo "profiles.json is valid"
+          else
+            echo "no project-specific profiles.json; using framework default"
+          fi
+
+  # ── Quality gates ──────────────────────────────────────────────────────
+  # Each gate that a role owns is run here. The commands reference the same
+  # gate names used in the profile's `verify` field (constitution/workflow.md).
+  #
+  # CUSTOMISE for your project's language and toolchain. The engineering rules
+  # in constitution/engineering.md define what tools to use. Replace the stub
+  # commands below with the actual gate commands from your project.
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up project toolchain
+        run: |
+          # TODO: install your language runtime and linter here
+          # Python example: pip install ruff
+          echo "install toolchain — see constitution/engineering.md"
+      - name: Run lint gate
+        run: |
+          # TODO: replace with your project's lint command
+          # This must match the `verify` field in the role profile
+          echo "run lint gate"
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up project toolchain
+        run: |
+          # TODO: install dependencies per engineering.md
+          echo "install test toolchain"
+      - name: Run unit tests
+        run: |
+          # TODO: replace with your project's test command
+          # Must match the profile verify field
+          echo "run unit tests"
+      - name: Run integration tests
+        run: |
+          # TODO: optional integration test gate
+          echo "run integration tests"
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up project toolchain
+        run: |
+          echo "install coverage toolchain"
+      - name: Run coverage gate
+        run: |
+          # TODO: replace with your project's coverage command
+          echo "run coverage gate"
+
+  # ── Baseline-lock check (language-agnostic) ────────────────────────────
+  # Known-failing tests must be tracked in a committed baseline file.
+
+  baseline-check:
+    name: Baseline lock
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check baseline
+        run: |
+          if [ -f ".kiln/test-baseline.txt" ]; then
+            echo "Baseline file found."
+          else
+            echo "No baseline file committed — new failures will not be caught."
+          fi
+
+  # ── Import enforcement (language-specific adapter) ─────────────────────
+  dependency-check:
+    name: Dependency boundaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up project toolchain
+        run: |
+          echo "install dependency checker"
+      - name: Check dependency direction
+        run: |
+          # TODO: replace with your project's import/dependency enforcement
+          echo "check dependency boundaries"
+
+  # ── Mutation testing (language-specific adapter) ───────────────────────
+  mutation:
+    name: Mutation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up project toolchain
+        run: |
+          echo "install mutation testing toolchain"
+      - name: Run mutation gate
+        run: |
+          # TODO: replace with your project's mutation command
+          # Must match the profile verify field for the mutation-owning role
+          echo "run mutation gate"

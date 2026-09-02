@@ -354,6 +354,10 @@ def build_attention(
     Escalation messages in the recent window are folded in as `escalation` rows only when no
     `failed` row already covers the same work item: `_escalate` writes both, and showing them
     twice would double-count the swarm's only genuinely alarming signal.
+
+    **Non-null `messages.error` values are surfaced** (issue #47, finding 10). Every failed
+    message carries an `error` column written by `mark_failed`; showing it on the attention
+    rail means an operator sees *why* a cycle stopped without digging through scheduler logs.
     """
     items = _failed_attention(failed, now_local)
     covered = {row["work_item"] for row in failed if row["work_item"]}
@@ -371,6 +375,9 @@ def _failed_attention(failed: list[dict], now_local: datetime) -> list[dict]:
             "sender": row["sender"],
             "work_item": row["work_item"],
             "summary": row["error"] or "(no reason recorded)",
+            # Surface the error column prominently so the dashboard shows *why* a
+            # cycle stopped without digging through logs (issue #47, finding 10).
+            "error": row.get("error") or None,
             "created_at": row["created_at"],
             "age": _age(row["created_at"], now_local),
             "retryable": True,

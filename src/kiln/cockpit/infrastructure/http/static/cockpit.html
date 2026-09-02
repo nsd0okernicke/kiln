@@ -189,10 +189,26 @@
   .pipeline-stage { min-width: 170px; max-width: 220px; flex: 1 1 170px; padding: 8px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); }
   .pipeline-stage.has-cards { border-color: var(--accent); }
   .pipeline-header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
-  .pipeline-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--dim); }
+  .pipeline-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--dim); cursor: pointer; }
   .pipeline-count { font-size: 11px; font-weight: 700; color: var(--on-accent); background: var(--accent); border-radius: 999px; padding: 0 7px; line-height: 18px; }
-  .pipeline-worktree { font-size: 10px; color: var(--dim); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pipeline-worktree { font-size: 10px; color: var(--dim); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
   .pipeline-arrow { display: flex; align-items: center; justify-content: center; min-width: 24px; color: var(--dim); font-size: 14px; flex: none; padding: 8px 2px; margin-top: 2px; }
+
+  /* Role status badge integrated into the lane header, replacing the old Work Queue row */
+  .role-badge { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 11px; color: var(--dim); cursor: pointer; margin-top: 4px; padding: 4px 6px; border-radius: 5px; background: var(--surface); border: 1px solid transparent; }
+  .role-badge:hover { border-color: var(--line); }
+  .role-badge .state { font-size: 10px; padding: 0 5px; line-height: 16px; }
+  .role-badge .at { color: var(--dim); font-size: 10px; }
+  .role-badge .sep { color: var(--line); }
+  .role-badge .stat { white-space: nowrap; color: var(--dim); }
+  .role-badge .stat b { color: var(--ink); font-weight: 500; }
+  .role-badge .heat { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex: none; }
+  .role-badge .heat.cold { background: var(--chip); }
+  .role-badge .heat.warm { background: var(--warn); box-shadow: var(--dot-glow); }
+  .role-badge .heat.hot { background: var(--hot); box-shadow: var(--dot-glow); }
+  .role-badge-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+  .role-badge-actions button { font-size: 10px; padding: 1px 6px; height: 20px; line-height: 16px; }
+  .role-badge .stall { font-size: 10px; color: var(--bad); }
   .pipeline-cards { display: flex; flex-direction: column; gap: 6px; }
   .pipeline-stage .card { margin-bottom: 0; }
   .pipeline-fallback { padding: 8px 14px; }
@@ -207,6 +223,7 @@
     background: var(--surface); border: 1px solid var(--line);
     border-left: 3px solid var(--accent); border-radius: 6px; padding: 8px 10px;
     margin-bottom: 8px; cursor: pointer; box-shadow: var(--glow);
+    min-width: 0; overflow-wrap: break-word; word-break: break-word;
   }
   .card:hover { border-color: var(--accent); }
   .card.failed { border-left-color: var(--bad); }
@@ -248,8 +265,8 @@
     margin-bottom: 3px; word-break: break-word;
   }
   .card .name { font-weight: 600; word-break: break-word; }
-  .card .meta { color: var(--dim); font-size: 12px; margin-top: 4px; }
-  .card .summary { color: var(--dim); font-size: 12px; margin-top: 6px; }
+  .card .meta { color: var(--dim); font-size: 12px; margin-top: 4px; overflow-wrap: break-word; word-break: break-word; }
+  .card .summary { color: var(--dim); font-size: 12px; margin-top: 6px; overflow-wrap: break-word; word-break: break-word; }
 
   /* Tables */
   table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
@@ -309,8 +326,7 @@
     border-left: 3px solid var(--warn); border-radius: 4px; padding: 6px 9px; margin-bottom: 8px;
   }
   .row-send { padding: 2px 8px; font-size: 12px; }
-  #queue tr.role-row { cursor: pointer; }
-  #queue tr.role-row:hover { background: var(--surface); }
+  /* Legacy selector kept for compatibility with old status files */
   .log-cell { padding: 10px; background: var(--code-bg); }
   .log-toolbar, .detail-toolbar { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
   .log-toolbar button { padding: 2px 8px; font-size: 12px; }
@@ -455,9 +471,9 @@
     <div class="section-panel" id="board-panel" style="padding:0;overflow-x:auto"><div id="lanes"></div></div>
   </section>
 
-  <section data-section="work-queue">
-    <h2><button class="section-toggle" type="button" aria-expanded="true" aria-controls="work-queue-panel">Work queue</button></h2>
-    <div class="section-panel" id="work-queue-panel">
+  <section data-section="composer">
+    <h2><button class="section-toggle" type="button" aria-expanded="true" aria-controls="composer-panel">Send message</button></h2>
+    <div class="section-panel" id="composer-panel">
     <div class="body queue-composer" id="queue-composer">
       <div class="queue-compose-grid">
         <div class="field">
@@ -478,7 +494,6 @@
       <div id="send-warning" class="warn-note" style="display:none"></div>
       <span class="branch" id="send-hint"></span>
     </div>
-    <div class="body" style="padding:0"><table id="queue"></table></div>
     </div>
   </section>
 
@@ -756,7 +771,7 @@ function prefillSend(role, workItem) {
 }
 
 function revealComposer(role, workItem) {
-  expandSection("work-queue");
+  expandSection("composer");
   prefillSend(role, workItem);
   $("queue-composer").scrollIntoView({ block: "nearest" });
   $("send-text").focus();
@@ -883,6 +898,73 @@ function healthAge(isoTimestamp) {
   return Math.round(seconds / 86400) + "d ago";
 }
 
+function findRole(state, laneId) {
+  if (laneId === "intake" || laneId === "review") return state.roles.find((r) => r.role === state.human_role);
+  if (laneId === "done") return null;
+  return state.roles.find((r) => r.role === laneId);
+}
+
+function renderRoleBadge(role, state) {
+  if (!role) return null;
+  const badge = text("div", null, "role-badge");
+  // State pill + stall indicator
+  const statePill = text("span", (role.state || "—") + (role.attempt ? " " + role.attempt : ""), "state " + (role.state || ""));
+  badge.append(statePill);
+  if (role.stalled) badge.append(text("span", "⚠ stalled", "stall"));
+  // Since ago
+  if (role.since_ago) badge.append(text("span", role.since_ago, "at"));
+
+  badge.append(text("span", "·", "sep"));
+
+  // Agent + model. Show model as `agent/model` when present, otherwise just the agent name.
+  const agentEl = text("span", null, "agent agent-" + (role.agent || "unknown"));
+  agentEl.textContent = (role.agent || "—") + (role.model ? "/" + role.model : "");
+  badge.append(agentEl);
+
+  badge.append(text("span", "·", "sep"));
+
+  // Stats: cycles · queue · cost · cache
+  const stats = [];
+  if (role.cycles !== null && role.cycles !== undefined) stats.push(role.cycles + " cycle" + (role.cycles === 1 ? "" : "s"));
+  if (role.queue) stats.push(role.queue + " queued" + (role.wait ? " (" + role.wait + ")" : ""));
+  if (role.cost_usd !== null && role.cost_usd !== undefined) stats.push(money(role.cost_usd));
+  if (role.cache_share !== null && role.cache_share !== undefined) stats.push(Math.round(role.cache_share * 100) + "% cache");
+  if (stats.length) badge.append(text("span", stats.join(" · "), "stat"));
+
+  // Heat dot
+  const heatClass = role.heat === 1 ? "hot" : role.heat === 0.5 ? "warm" : "cold";
+  badge.append(text("span", null, "heat " + heatClass));
+
+  // Actions
+  const actions = text("span", null, "role-badge-actions");
+  const sendBtn = text("button", "Send", "row-send");
+  sendBtn.title = "Send a message to " + role.role;
+  sendBtn.onclick = (event) => { event.stopPropagation(); revealComposer(role.role, role.work_item || ITEM_PENDING); };
+  actions.append(sendBtn);
+  const logsBtn = text("button", "Logs");
+  logsBtn.title = "Logs and metrics for " + role.role;
+  logsBtn.onclick = (event) => {
+    event.stopPropagation();
+    openRoleLogs(role, state);
+  };
+  actions.append(logsBtn);
+  badge.append(actions);
+
+  // Click on badge opens role logs dialog
+  badge.onclick = () => openRoleLogs(role, state);
+  return badge;
+}
+
+function openRoleLogs(role, state) {
+  expandedRole = role.role;
+  logStream = "scheduler";
+  logOffsets.scheduler = logOffsets.worker = 0;
+  logText.scheduler = logText.worker = "";
+  renderRoleDetails(role, state, true, 0);
+  $("role-dialog").showModal();
+  pollLog();
+}
+
 function renderBoard(state) {
   const seqCb = $("sequential-toggle");
   if (seqCb) seqCb.checked = !!state.sequential;
@@ -890,8 +972,6 @@ function renderBoard(state) {
   const humanRole = state.human_role || "human-in-the-loop";
 
   // Build pipeline stages dynamically from board lanes.
-  // Special case: when human-in-the-loop + specifier both exist, split human into
-  // Intake (human-initiated cards) and Review (specifier->human Gherkin approval).
   const hasSpecifier = state.board.lanes.includes("specifier");
   const roleIcon = { "intake": "📋", "specifier": "🔬", "review": "✅", "coder": "⚙️", "reviewer": "🔍", "architect": "🏗️", "game-coder": "⚙️", "game-refactorer": "🔧", "game-reviewer": "🔍", "game-architect": "🏗️", "done": "✅" };
   const roleLabel = { "intake": "Intake", "specifier": "Specifier", "review": "Review", "coder": "Coder", "reviewer": "Reviewer", "architect": "Architect", "game-coder": "Game Coder", "game-refactorer": "Game Refactorer", "game-reviewer": "Game Reviewer", "game-architect": "Game Architect", "done": "Done" };
@@ -899,37 +979,21 @@ function renderBoard(state) {
   const pipeline = [];
   for (const lane of state.board.lanes) {
     if (lane === humanRole && hasSpecifier) {
-      // Split human lane: Intake first (human sends to specifier),
-      // then continue adding other lanes, and Review comes after Specifier.
       pipeline.push({
-        id: "intake",
-        lane: humanRole,
+        id: "intake", lane: humanRole,
         label: (roleIcon["intake"] || "") + " " + (roleLabel["intake"] || "Intake"),
         cardFilter: (c) => c.lane === humanRole && (c.kind === "backlog" || c.sender === humanRole),
       });
-      // Review will be inserted after the specifier lane is encountered
     } else if (lane === "specifier" && hasSpecifier) {
+      pipeline.push({ id: lane, lane, label: (roleIcon[lane] || "") + " " + (roleLabel[lane] || lane), cardFilter: (c) => c.lane === lane });
       pipeline.push({
-        id: lane,
-        lane: lane,
-        label: (roleIcon[lane] || "") + " " + (roleLabel[lane] || lane),
-        cardFilter: (c) => c.lane === lane,
-      });
-      // Insert Review right after Specifier
-      pipeline.push({
-        id: "review",
-        lane: humanRole,
+        id: "review", lane: humanRole,
         label: (roleIcon["review"] || "") + " " + (roleLabel["review"] || "Review"),
         cardFilter: (c) => c.lane === humanRole && c.sender === "specifier",
       });
     } else {
       const label = roleLabel[lane] || lane.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-      pipeline.push({
-        id: lane,
-        lane: lane,
-        label: (roleIcon[lane] || "") + " " + label,
-        cardFilter: (c) => c.lane === lane,
-      });
+      pipeline.push({ id: lane, lane, label: (roleIcon[lane] || "") + " " + label, cardFilter: (c) => c.lane === lane });
     }
   }
 
@@ -947,10 +1011,10 @@ function renderBoard(state) {
       }
     }
     stageCards.sort((a, b) => {
-      const aReview = a.sender === "specifier" && a.target === humanRole;
-      const bReview = b.sender === "specifier" && b.target === humanRole;
-      if (aReview && !bReview) return -1;
-      if (!aReview && bReview) return 1;
+      const aR = a.sender === "specifier" && a.target === humanRole;
+      const bR = b.sender === "specifier" && b.target === humanRole;
+      if (aR && !bR) return -1;
+      if (!aR && bR) return 1;
       return 0;
     });
 
@@ -960,14 +1024,10 @@ function renderBoard(state) {
     if (stageCards.length) headerEl.append(text("span", String(stageCards.length), "pipeline-count"));
     stageEl.append(headerEl);
 
-    // Worktree info
-    if (stage.id === "intake" || stage.id === "review") {
-      const lr = state.roles.find((r) => r.role === humanRole);
-      if (lr && lr.worktree) stageEl.append(text("div", "Worktree: " + lr.worktree, "pipeline-worktree"));
-    } else if (stage.id !== "done") {
-      const lr = state.roles.find((r) => r.role === stage.id);
-      if (lr && lr.worktree) stageEl.append(text("div", "Worktree: " + lr.worktree, "pipeline-worktree"));
-    }
+    // Role status badge (replaces the Work Queue row for this role)
+    const role = findRole(state, stage.id);
+    const badge = renderRoleBadge(role, state);
+    if (badge) stageEl.append(badge);
 
     if (!stageCards.length) {
       stageEl.append(text("div", "—", "empty"));
@@ -1009,71 +1069,7 @@ function renderBoard(state) {
   host.append(pipelineEl);
 }
 
-function renderQueue(state) {
-  const table = $("queue");
-  const oldLog = $("live-log");
-  const wasPinned = !oldLog || oldLog.scrollHeight - oldLog.scrollTop - oldLog.clientHeight < 24;
-  const oldScrollTop = oldLog ? oldLog.scrollTop : 0;
-  table.replaceChildren();
-  const head = table.insertRow();
-  for (const label of ["Role", "Agent / model", "State", "Current work", "Waiting", "In state", "Cost", ""]) {
-    head.append(text("th", label));
-  }
-  for (const role of state.roles) {
-    const row = table.insertRow();
-    row.className = "role-row";
-    row.append(text("td", role.role));
-
-    // Which backend runs this role, and on which model. The agent comes from the sessions
-    // file; the model from the role's own status file, so it is the model the worker was
-    // actually invoked with rather than whatever the profile happened to ask for.
-    const agentCell = text("td", null, "agent-cell");
-    agentCell.append(text("span", role.agent || "—", "agent agent-" + (role.agent || "unknown")));
-    // `—` until the role reports for the first time; "(CLI default)" is a real, meaningful
-    // answer for copilot/codex/grok/pi and is passed through as the scheduler wrote it.
-    agentCell.append(text("span", role.model || "—", "model"));
-    row.append(agentCell);
-
-    const stateCell = text("td");
-    stateCell.append(text("span", (role.state || "—") + (role.attempt ? " " + role.attempt : ""), "state " + (role.state || "")));
-    row.append(stateCell);
-
-    row.append(text("td", role.work_item || "—"));
-    row.append(text(
-      "td", role.queue ? role.queue + (role.wait ? " · " + role.wait : "") : "—", "num",
-    ));
-    const since = text("td", (role.stalled ? "⚠ " : "") + (role.since_ago || "—"));
-    if (role.stalled) since.className = "stall";
-    row.append(since);
-    row.append(text("td", money(role.cost_usd), "num"));
-
-    // The direct path for "restart the specifier with CAT-3": prefill the composer with
-    // this role and whatever it is currently holding.
-    const action = text("td");
-    const send = text("button", "Send", "row-send");
-    send.title = "Send a message to " + role.role;
-    send.onclick = () => {
-      revealComposer(role.role, role.work_item || ITEM_PENDING);
-    };
-    action.append(send);
-    row.append(action);
-    row.onclick = (event) => {
-      if (event.target.closest("button")) return;
-      if (expandedRole === role.role) expandedRole = null;
-      else {
-        expandedRole = role.role;
-        logStream = "scheduler";
-        logOffsets.scheduler = logOffsets.worker = 0;
-        logText.scheduler = logText.worker = "";
-      }
-      renderQueue(state);
-      if (expandedRole && !$("role-dialog").open) $("role-dialog").showModal();
-      pollLog();
-    };
-  }
-  const selected = state.roles.find((role) => role.role === expandedRole);
-  if (selected) renderRoleDetails(selected, state, wasPinned, oldScrollTop);
-}
+/* renderQueue removed — role data now renders in lane headers via renderRoleBadge */
 
 function renderRoleDetails(role, state, wasPinned, oldScrollTop) {
   $("role-title").textContent = role.display_name || role.role;
@@ -1184,7 +1180,6 @@ async function poll() {
     renderHeader(latest);
     renderAttention(latest);
     renderBoard(latest);
-    renderQueue(latest);
     renderActivity(latest);
     renderSend(latest);
     // Sequential toggle click handler

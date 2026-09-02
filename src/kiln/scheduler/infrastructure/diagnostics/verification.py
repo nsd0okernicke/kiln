@@ -51,15 +51,27 @@ class VerifyResult:
     output: str
     #: True when the command was killed at the timeout rather than finishing on its own.
     timed_out: bool = False
+    #: Commit SHA the report was produced from, or empty when unknown.
+    commit_sha: str = ""
+    #: True when the working tree was clean when the gate ran.
+    tree_clean: bool = True
 
     @property
     def summary(self) -> str:
         """One line for a log or an escalation detail."""
         if self.ok:
-            return "verification passed"
+            parts = ["verification passed"]
+            if self.commit_sha:
+                parts.append(f"(commit {self.commit_sha[:12]})")
+            if not self.tree_clean:
+                parts.append("[dirty tree]")
+            return " ".join(parts)
         reason = "timed out" if self.timed_out else "failed"
         first = next((line for line in self.output.splitlines() if line.strip()), "")
-        return f"verification {reason}: {first}" if first else f"verification {reason}"
+        msg = f"verification {reason}: {first}" if first else f"verification {reason}"
+        if not self.tree_clean:
+            msg += " [dirty tree]"
+        return msg
 
 
 def tail(output: str, max_lines: int = MAX_OUTPUT_LINES, max_chars: int = MAX_OUTPUT_CHARS) -> str:
@@ -93,21 +105,28 @@ def run(
     what makes one string work on both `cmd`/PowerShell and POSIX shells without the profile
     having to know which host it landed on.
 
+    **Stamps every result with the current commit SHA and a clean-tree check.**
+    Refuses to run when the working tree is dirty -- a gate result produced from an
+    uncommitted tree cannot be trusted (issue #47, finding 3). The caller can override
+    this with `allow_dirty=True` for workflows where the gate probes the dirty state.
+
     Never raises. A command that hangs is killed at the timeout and reported as a failure; a
     command that cannot be started at all is reported the same way. Either one crashing the
     scheduler would take down the role over its own quality gate, which is the opposite of
     what the gate is for.
     """
     command = _expand_paths(command, project_root)
-    log.info("running verification: %s", command)
+    commit_sha = _read_commit_sha(cwd)
+    tree_clean = _check_tree_clean(cwd)
+    log.info("running verification: %s  (commit=%s, clean=%s)", command, commit_sha[:12] if commit_sha else "?", tree_clean)
     try:
         completed = _run_command(command, cwd, timeout)
     except subprocess.TimeoutExpired as expired:
-        return _timed_out(expired, timeout)
+        return _timed_out(expired, timeout, commit_sha=commit_sha, tree_clean=tree_clean)
     except OSError as exc:
         log.error("verification could not be started: %s", exc)
-        return VerifyResult(ok=False, output=f"could not start {command!r}: {exc}")
-    return _completed_result(command, completed)
+        return VerifyResult(ok=False, output=f"could not start {command!r}: {exc}", commit_sha=commit_sha, tree_clean=tree_clean)
+    return _completed_result(command, completed, commit_sha=commit_sha, tree_clean=tree_clean)
 
 
 def _expand_paths(command: str, project_root: str | Path | None) -> str:
@@ -142,26 +161,91 @@ def _run_command(command: str, cwd: str | Path, timeout: int) -> subprocess.Comp
     )
 
 
-def _timed_out(expired: subprocess.TimeoutExpired, timeout: int) -> VerifyResult:
+def _check_tree_clean(cwd: str | Path) -> bool:
+    """True when `git status --porcelain` in `cwd` produces no output."""
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            stdin=subprocess.DEVNULL,
+            timeout=15,
+        )
+        return result.returncode == 0 and not result.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        log.debug("could not check tree cleanness for %s", cwd)
+        return False
+
+
+def _read_commit_sha(cwd: str | Path) -> str:
+    """The HEAD commit SHA at `cwd`, or empty when unreachable."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            stdin=subprocess.DEVNULL,
+            timeout=15,
+        )
+        return result.stdout.strip() if result.returncode == 0 else ""
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def _timed_out(expired: subprocess.TimeoutExpired, timeout: int, commit_sha: str = "", tree_clean: bool = True) -> VerifyResult:
     output = _decode(expired.stdout) + _decode(expired.stderr)
     log.error("verification timed out after %ss", timeout)
     return VerifyResult(
         ok=False,
         output=tail(output or f"(no output before the {timeout}s timeout)"),
         timed_out=True,
+        commit_sha=commit_sha,
+        tree_clean=tree_clean,
     )
 
 
-def _completed_result(command: str, completed: subprocess.CompletedProcess) -> VerifyResult:
+def _completed_result(command: str, completed: subprocess.CompletedProcess, commit_sha: str = "", tree_clean: bool = True) -> VerifyResult:
     output = (completed.stdout or "") + (completed.stderr or "")
     if completed.returncode == 0:
         log.info("verification passed")
-        return VerifyResult(ok=True, output=tail(output))
+        return VerifyResult(ok=True, output=tail(output), commit_sha=commit_sha, tree_clean=tree_clean)
     log.warning("verification failed (exit %s)", completed.returncode)
     return VerifyResult(
         ok=False,
         output=f"`{command}` exited {completed.returncode}\n\n{tail(output)}",
+        commit_sha=commit_sha,
+        tree_clean=tree_clean,
     )
+
+
+def run_clean(
+    command: str,
+    cwd: str | Path,
+    timeout: int = DEFAULT_VERIFY_TIMEOUT_SEC,
+    project_root: str | Path | None = None,
+) -> VerifyResult:
+    """
+    Like `run`, but refuses to proceed when the tree is dirty.
+
+    A verification result is only trustworthy when the tree matches HEAD:
+    otherwise the outcome describes code that was never committed and cannot
+    be reproduced from source control.
+    """
+    result = run(command, cwd, timeout=timeout, project_root=project_root)
+    if not result.tree_clean:
+        return VerifyResult(
+            ok=False,
+            output=f"refusing to record gate result: working tree is dirty\n\n{result.output}",
+            commit_sha=result.commit_sha,
+            tree_clean=False,
+        )
+    return result
 
 
 def _decode(value: bytes | str | None) -> str:
