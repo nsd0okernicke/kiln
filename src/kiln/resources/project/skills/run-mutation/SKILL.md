@@ -13,54 +13,69 @@ Mutation testing validates that your test suite can detect changes (mutations) t
 
 ## Protocol
 
-### 1. Sequential Per-File Mutation
+### 1. Scope to Changed Files First
 
-Run mutation tests **one file at a time**, not on the entire codebase:
+Before running any mutation, determine which files actually changed:
 
 ```bash
-<mutation-tool> --scan <file>  # Count mutation sites in the file
-<mutation-tool> --mutate <file> --manifest mutations.xml  # Run mutations
+git diff --name-only main...HEAD -- catalog/domain/ catalog/application/
 ```
 
-**Why**: 
-- Faster feedback for changes in specific modules
-- Easier to split large modules before handoff
-- Prevents cascading failures across the codebase
+- **Only domain/application files changed** → mutate those files only
+- **Only infrastructure, tests, or feature files changed** → **skip mutation entirely** (infra is excluded from mutation by config; unit tests mock ports and acceptance tests are too slow)
+- **No relevant files changed at all** → skip mutation, report "no domain/application changes to mutate"
 
-### 2. Differential Manifest
+### 2. Create a Scoped Config
 
-Use the **differential mode** to avoid re-testing every mutation:
+Create a mutation config scoped to the changed files rather than the whole module:
 
-```bash
-<mutation-tool> --mutate <file> --manifest mutations.xml --differential
+```toml
+[cosmic-ray]
+module-path = "changed/file.py"
+timeout = 60.0
+excluded-modules = []
+test-command = "pytest tests/unit -x -q"
+
+[cosmic-ray.distributor]
+name = "multiprocessing"
+workers = 4
 ```
 
-This compares the current run against the persisted manifest and only reports new survivors or fixed mutants.
+### 3. Run Differential (cr-filter-git)
 
-### 3. Parallelization
-
-Use `--max-workers 8` (or your system's core count) to parallelize mutation execution:
+After `cosmic-ray init`, filter the session to only sites in code this cycle touched:
 
 ```bash
-<mutation-tool> --mutate <file> --manifest mutations.xml --max-workers 8
+cosmic-ray init mutation.toml mutation.sqlite
+cr-filter-git mutation.sqlite          # Drop sites not touched by this cycle
+cosmic-ray exec mutation.toml mutation.sqlite  # Resumable: re-run continues where it stopped
 ```
 
-### 4. Verbose and Progress Output
+This avoids re-testing mutations in code that didn't change — the single biggest speedup.
 
-Enable progress reporting so long-running tests remain observable:
+### 4. Parallel Execution
 
-```bash
-<mutation-tool> --mutate <file> --manifest mutations.xml --max-workers 8 --verbose --progress
+Always use `--max-workers` or the `multiprocessing` distributor:
+
+```toml
+[cosmic-ray.distributor]
+name = "multiprocessing"
+workers = 4
 ```
 
-Expected output: Progress marker every 10-20 mutations, survivor count update.
+On a 4-8 core machine this gives 2-4× speedup.
 
-### 5. Survivor Analysis
-
-After the run, extract and categorize surviving mutants:
+### 5. Verbose and Progress Output
 
 ```bash
-<mutation-tool> --report survivors.txt --manifest mutations.xml
+cosmic-ray exec mutation.toml mutation.sqlite --verbose
+```
+
+### 6. Survivor Analysis
+
+```bash
+cr-rate mutation.sqlite                          # survival rate
+cr-report --surviving-only mutation.sqlite       # the survivors themselves
 ```
 
 **Analysis steps**:
@@ -77,7 +92,7 @@ If a single file has > 100 mutation sites (reported by `--scan`):
 <mutation-tool> --scan <file>  # Reports: "120 mutation sites"
 ```
 
-**Action**: Coordinate with the refactorer to split the module into smaller units before the next mutation run. Large modules are hard to test comprehensively and produce too many survivors to act on.
+**Action**: Coordinate with the coder or reviewer to split the module into smaller units before the next mutation run. Large modules are hard to test comprehensively and produce too many survivors to act on.
 
 ## Example Workflow
 
@@ -92,7 +107,8 @@ excluded-modules = []
 test-command = "pytest tests/unit -x -q"
 
 [cosmic-ray.distributor]
-name = "local"
+name = "multiprocessing"
+workers = 4
 TOML
 
 # Step 2: Enumerate every mutation site into a session database
@@ -125,7 +141,7 @@ Adapt the flags and output parsing to your tool, but follow the protocol: sequen
 ## Integration with Roles
 
 This skill is referenced by:
-- **`architect.md`**: Runs mutation on every completed coder/refactorer handoff; verifies all test suites catch intentional code changes.
+- **`architect.md`**: Runs mutation on every completed coder/reviewer handoff; verifies all test suites catch intentional code changes.
 
 ---
 

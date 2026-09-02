@@ -25,14 +25,23 @@ You are the game-coder.
 - Do not put I/O, display, or platform-specific code in game logic modules.
 - Use the project's error handling and dependency conventions from the constitution.
 
-## Properties and Handoff
+## Pre-Handoff Quality Gates
 
-- Run the project's test suite before each handoff. All tests must pass.
+Before committing, run the following in order:
+
+1. **Build** — Run the project's build (e.g. `cargo build`). Must succeed.
+2. **Tests** — Run the project's test suite. All tests must pass.
+3. **Lint** — Run clippy or equivalent. No new warnings.
+4. **Format** — Run the project's formatter check (e.g. `cargo fmt --check`). All code must be formatted.
+5. **Documentation** — Public interfaces should be documented. Add doc comments where missing.
+6. **No dead code or debug artifacts** — Scan for: dead code, commented-out code, TODO/FIXME markers, debug print statements, and unwrap/panic calls in production paths.
+
+## Handoff
+
 - Keep implementation code clean: clear names, no dead code, no commented-out code.
-- Leave broad cleanup and quality hardening to the game-refactorer.
 
 ## Non-Ownership
 
-- Do not run mutation, CRAP, or DRY checks (game-refactorer/game-architect own these).
+- Do not run mutation tests or dependency scanning (game-reviewer/game-architect own these).
 - Do not change the module structure or architecture (game-architect owns this).
 - Do not add dependencies without verifying they are approved in the constitution.

@@ -155,7 +155,7 @@ def work_item_messages(
         cur = conn.cursor()
         cur.execute(
             "SELECT id, sender, target, status, content, created_at, work_item, error, "
-            "started_at, finished_at "
+            "started_at, finished_at, acked_at "
             "FROM messages WHERE branch=? "
             "ORDER BY created_at DESC, rowid DESC LIMIT ?",
             (branch, limit),

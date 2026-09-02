@@ -42,3 +42,11 @@ tmp/
 
 # GitHub agent definitions are generated, but repository workflows are source.
 .github/agents/
+
+.kiln
+.github/
+.claude/settings.json
+.claude/skills
+.agents/skills
+.grok/agents/*-worker.md
+.pi/agents/*-worker.md

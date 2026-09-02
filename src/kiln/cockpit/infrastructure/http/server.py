@@ -51,11 +51,13 @@ from ...application import test_metrics as test_metrics_builder
 from ...application.actions import (
     ActionContext,
     ActionError,
+    approve_gherkin,
     archive_task,
     chat,
     check_confirmation,
     create_task,
     handoff_task,
+    reject_gherkin,
     retry_message,
     send_to,
     teardown,
@@ -282,6 +284,8 @@ class CockpitHandler(BaseHTTPRequestHandler):
         dynamic = (
             ("/api/retry/", lambda identifier: lambda body: self._retry(identifier, body)),
             ("/api/ack/", lambda identifier: lambda _body: self._ack(identifier)),
+            ("/api/gherkin-approve/", lambda identifier: lambda _body: self._approve_gherkin(identifier)),
+            ("/api/gherkin-reject/", lambda identifier: lambda body: self._reject_gherkin(identifier, body)),
         )
         for prefix, factory in dynamic:
             if path.startswith(prefix):
@@ -362,6 +366,22 @@ class CockpitHandler(BaseHTTPRequestHandler):
         if row is None:
             raise ActionError("that message is not awaiting acknowledgement")
         return {"acknowledged": True, "message_id": message_id}
+
+    def _approve_gherkin(self, message_id: str) -> dict:
+        """Approve a Gherkin review: forward to coder."""
+        return approve_gherkin(
+            self.config.actions,
+            message_id=message_id,
+        )
+
+    def _reject_gherkin(self, message_id: str, body: dict) -> dict:
+        """Reject a Gherkin review: send back to specifier with revision notes."""
+        notes = str(body.get("notes") or "")
+        return reject_gherkin(
+            self.config.actions,
+            message_id=message_id,
+            notes=notes,
+        )
 
     def _sequential(self, body: dict) -> dict:
         return toggle_sequential(

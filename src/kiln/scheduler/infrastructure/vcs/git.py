@@ -32,6 +32,11 @@ GENERATED_WORKTREE_PATHS = (
     ".mcp.json",
     "CLAUDE.md",
     "AGENTS.md",
+    # Windows reserved device name: some bash commands redirect `> nul` thinking it is the
+    # null device, which creates a literal file called `nul`. Git cannot add it to the index
+    # because Windows reserves the name at the filesystem level. Ignore to prevent squash
+    # failures.
+    "nul",
 )
 
 _UNTRACKED_BLOCKER = "untracked working tree files would be overwritten"

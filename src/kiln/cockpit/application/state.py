@@ -265,25 +265,25 @@ def activity_heat(status: dict | None, queue_depth: int) -> float:
     return 0.5 if queue_depth else 0.0
 
 
-def lane_for(row: dict) -> str:
+def lane_for(row: dict, human_role: str = "human-in-the-loop") -> str:
     """
     Which swimlane one work item's latest message puts it in.
 
-    Three cases, and they are exhaustive because a message has exactly one status:
+    Four cases:
 
     * `failed` — the cycle escalated. The card stays in the lane of the role that failed,
       because that is where a retry sends it back to; the Attention rail is what shouts.
-    * `processed` — the receiving role has consumed the message and queued nothing after it
-      (any handoff it sent would itself be the latest message and would be examined
-      instead). Nothing holds the item, so it is done.
+    * `processed` with `acked_at` set — the receiving role acknowledged the message and
+      nothing followed. Nothing holds the item, so it is done.
+    * `processed` without `acked_at`, targeting the human role — the inbox auto-processed
+      the message but the human has not acknowledged it yet. It stays in the human's lane
+      so the board shows work awaiting review, not "done".
     * anything else (`queued`, `delivered`, `processing`) — the target holds it.
-
-    Deliberately no role names appear here. The rule "done when architect -> human closed the
-    cycle" is true of the shipped `full` profile and false of every profile with a different
-    shape; "done when the last message was consumed and nothing followed" is true of all of
-    them and needs no routing table to evaluate.
     """
     if row["status"] == MessageStatus.PROCESSED:
+        # Keep in human's lane only for Gherkin review (from specifier, not acknowledged)
+        if row["target"] == human_role and not row.get("acked_at") and row.get("sender") == "specifier":
+            return row["target"]
         return LANE_DONE
     return row["target"]
 
@@ -309,7 +309,7 @@ def build_board(
         _backlog_card(task, now_local, human_role) for task in tasks if task["status"] == "backlog"
     ]
     cards += [
-        _card(row, cycles, now_local, task_titles, cycle_durations)
+        _card(row, cycles, now_local, task_titles, cycle_durations, human_role=human_role)
         for row in _latest_per_work_item(work_items)
     ]
     order = _board_lane_order(lanes, cards, human_role)
@@ -515,10 +515,11 @@ def _card(
     now_local: datetime,
     task_titles: dict[str, str],
     cycle_durations: dict[str, str],
+    human_role: str = "human-in-the-loop",
 ) -> dict:
     work_item = named_work_item(row)
     summary = extract_summary(row["content"], CARD_SUMMARY_CHARS)
-    lane = lane_for(row)
+    lane = lane_for(row, human_role=human_role)
     return {
         "work_item": work_item,
         "title": _card_title(work_item, summary, task_titles),

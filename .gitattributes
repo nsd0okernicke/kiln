@@ -17,3 +17,5 @@
 
 # Binary assets must never be line-ending converted.
 *.png binary
+
+logbook.md merge=union

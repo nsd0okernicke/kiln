@@ -23,6 +23,9 @@ class KilnActionGateway:
     def message(self, db_path: Path, message_id: str) -> dict | None:
         return db.get_message(db_path, message_id)
 
+    def acknowledge(self, db_path: Path, message_id: str, role: str, branch: str) -> dict | None:
+        return db.acknowledge_message(db_path, message_id, role, branch)
+
     def failed_messages(self, db_path: Path, branch: str) -> list[dict]:
         return db.failed_messages(db_path, branch)
 

@@ -257,6 +257,72 @@ def teardown(ctx: ActionContext, *, confirm: str) -> dict:
     return {"stopped": len(pids), "pids": pids}
 
 
+def approve_gherkin(ctx: ActionContext, *, message_id: str) -> dict:
+    """
+    Approve a Gherkin review: fetch the specifier's message and forward it to the coder.
+
+    The message is acknowledged, then re-queued with target=coder and sender=human-in-the-loop
+    so the coder knows it has human approval.
+    """
+    message_id = _resolve_message_id(ctx, message_id)
+    row = ctx.gateway.message(ctx.db_path, message_id)
+    if row is None:
+        raise ActionError(f"message {message_id[:8]} not found")
+    if row["target"] != ctx.human_role:
+        raise ActionError(f"message {message_id[:8]} is not addressed to {ctx.human_role}")
+
+    # Acknowledge the original message so it drops from attention
+    ctx.gateway.acknowledge(ctx.db_path, message_id, ctx.human_role, ctx.branch)
+
+    # Forward to coder with the same work item and summary
+    new_id = ctx.gateway.send(
+        db_path=ctx.db_path,
+        sender=ctx.human_role,
+        target="coder",
+        summary=row["content"],
+        branch=ctx.branch,
+        handoff_name=row.get("work_item") or PENDING_HANDOFF,
+    )
+    log.info("cockpit approved Gherkin %s -> coder (id=%s)", message_id[:8], new_id[:8])
+    return {"message_id": new_id, "target": "coder"}
+
+
+def reject_gherkin(ctx: ActionContext, *, message_id: str, notes: str = "") -> dict:
+    """
+    Reject a Gherkin review: send the message back to specifier with revision notes.
+
+    The original message is acknowledged and a new message is queued for the specifier
+    containing the human's review notes.
+    """
+    message_id = _resolve_message_id(ctx, message_id)
+    row = ctx.gateway.message(ctx.db_path, message_id)
+    if row is None:
+        raise ActionError(f"message {message_id[:8]} not found")
+    if row["target"] != ctx.human_role:
+        raise ActionError(f"message {message_id[:8]} is not addressed to {ctx.human_role}")
+
+    # Acknowledge the original message
+    ctx.gateway.acknowledge(ctx.db_path, message_id, ctx.human_role, ctx.branch)
+
+    summary = notes.strip() or "Gherkin needs revision — see review notes above."
+    review_body = (
+        f"Gherkin review: REJECTED\n\n"
+        f"Notes: {summary}\n\n"
+        f"Original message: {row.get('work_item') or 'unnamed'}"
+    )
+
+    new_id = ctx.gateway.send(
+        db_path=ctx.db_path,
+        sender=ctx.human_role,
+        target="specifier",
+        summary=review_body,
+        branch=ctx.branch,
+        handoff_name=row.get("work_item") or PENDING_HANDOFF,
+    )
+    log.info("cockpit rejected Gherkin %s -> specifier (id=%s)", message_id[:8], new_id[:8])
+    return {"message_id": new_id, "target": "specifier"}
+
+
 def _resolve_message_id(ctx: ActionContext, prefix: str) -> str:
     """
     Accept the eight-character id the UI shows as well as the full one.

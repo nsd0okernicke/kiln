@@ -4,7 +4,7 @@
   "default": "full",
   "profiles": {
     "full": {
-      "description": "New feature, spec-first. Human-guided intake feeding the full autonomous swarm: specifier -> coder -> refactorer -> architect, on the deterministic scheduler, plus a dashboard tab and the local web kiln.cockpit.",
+      "description": "New feature, spec-first. Human-guided intake with Gherkin approval gate: specifier -> human (approve Gherkin) -> coder -> reviewer -> architect, on the deterministic scheduler, plus a dashboard tab and the local web kiln.cockpit.",
       "defaults": {
         "agent": "pi",
         "model": "igate/coder"
@@ -44,9 +44,9 @@
           "workerIdleTimeout": 1800
         },
         {
-          "role": "refactorer",
-          "worktree": "refactorer",
-          "title": "Kiln Refactorer",
+          "role": "reviewer",
+          "worktree": "reviewer",
+          "title": "Kiln Reviewer",
           "mode": "auto",
           "scheduler": "python",
           "workerTimeout": 1800
@@ -77,13 +77,10 @@
       ],
       "routing": {
         "human-in-the-loop": "specifier",
-        "specifier": {
-          "default": "coder",
-          "architect": "human-in-the-loop"
-        },
-        "coder": "refactorer",
-        "refactorer": "architect",
-        "architect": "specifier"
+        "specifier": "human-in-the-loop",
+        "coder": "reviewer",
+        "reviewer": "architect",
+        "architect": "human-in-the-loop"
       },
       "layout": {
         "tabs": [
@@ -112,7 +109,7 @@
                 "role": "coder"
               },
               {
-                "role": "refactorer"
+                "role": "reviewer"
               },
               {
                 "role": "architect"
@@ -304,7 +301,7 @@
       }
     },
     "harden": {
-      "description": "Point it at code that already exists. Coverage, CRAP, mutation and boundary review, with no new behaviour and no specifier. The only profile that offers anything on a codebase Kiln did not write.",
+      "description": "Point it at code that already exists. Coverage, DRY, property tests, mutation, import enforcement and SAST, with no new behaviour and no specifier. The only profile that offers anything on a codebase Kiln did not write.",
       "defaults": {
         "agent": "pi",
         "model": "igate/coder"
@@ -326,9 +323,9 @@
           "watches": "human-in-the-loop"
         },
         {
-          "role": "refactorer",
-          "worktree": "refactorer",
-          "title": "Kiln Refactorer",
+          "role": "coder",
+          "worktree": "coder",
+          "title": "Kiln Coder",
           "mode": "auto",
           "scheduler": "python",
           "workerTimeout": 1800
@@ -351,8 +348,8 @@
         }
       ],
       "routing": {
-        "human-in-the-loop": "refactorer",
-        "refactorer": "architect",
+        "human-in-the-loop": "coder",
+        "coder": "architect",
         "architect": "human-in-the-loop"
       },
       "layout": {
@@ -374,7 +371,7 @@
             "title": "Autonomous Swarm",
             "panes": [
               {
-                "role": "refactorer"
+                "role": "coder"
               },
               {
                 "role": "architect"
@@ -393,7 +390,7 @@
       }
     },
     "game-dev": {
-      "description": "From-scratch game development. No specifier, no mutation per-cycle. Linear pipeline: game-coder -> game-refactorer -> game-reviewer -> game-architect, with Rust-specific verify gates and extended timeouts for compilation.",
+      "description": "From-scratch game development. No specifier, no mutation per-cycle. Linear pipeline: game-coder -> game-reviewer -> game-architect, with Rust-specific verify gates and extended timeouts for compilation.",
       "defaults": {
         "agent": "pi",
         "model": "igate/coder"
@@ -422,16 +419,6 @@
           "scheduler": "python",
           "workerTimeout": 1800,
           "verify": "cargo build && cargo test --all-targets && cargo clippy --all-targets -- -D warnings",
-          "verifyTimeout": 900
-        },
-        {
-          "role": "game-refactorer",
-          "worktree": "game-refactorer",
-          "title": "Kiln Game Refactorer",
-          "mode": "auto",
-          "scheduler": "python",
-          "workerTimeout": 1800,
-          "verify": "cargo test --all-targets && cargo clippy --all-targets -- -D warnings",
           "verifyTimeout": 900
         },
         {
@@ -472,8 +459,7 @@
       ],
       "routing": {
         "human-in-the-loop": "game-coder",
-        "game-coder": "game-refactorer",
-        "game-refactorer": "game-reviewer",
+        "game-coder": "game-reviewer",
         "game-reviewer": "game-architect",
         "game-architect": "human-in-the-loop"
       },
@@ -494,14 +480,11 @@
           },
           {
             "title": "Autonomous Swarm",
-            "gridRows": 2,
-            "gridCols": 2,
+            "gridRows": 1,
+            "gridCols": 3,
             "panes": [
               {
                 "role": "game-coder"
-              },
-              {
-                "role": "game-refactorer"
               },
               {
                 "role": "game-reviewer"
@@ -531,7 +514,7 @@
       }
     },
     "dry-run": {
-      "description": "Every role manual, so a human approves each hop. For learning or demonstrating the flow: same shape as `full`, but nothing advances without you. Wrapper mode throughout, so the kiln-db and kiln-channel MCP servers must be installed.",
+      "description": "Every role manual, so a human approves each hop. For learning or demonstrating the flow: same shape as `full` (specifier -> human approve Gherkin -> coder -> reviewer -> architect), but nothing advances without you. Wrapper mode throughout, so the kiln-db and kiln-channel MCP servers must be installed.",
       "defaults": {
         "agent": "pi",
         "model": "igate/coder"
@@ -565,9 +548,9 @@
           "mode": "manual"
         },
         {
-          "role": "refactorer",
-          "worktree": "refactorer",
-          "title": "Kiln Refactorer",
+          "role": "reviewer",
+          "worktree": "reviewer",
+          "title": "Kiln Reviewer",
           "mode": "manual"
         },
         {
@@ -586,13 +569,10 @@
       ],
       "routing": {
         "human-in-the-loop": "specifier",
-        "specifier": {
-          "default": "coder",
-          "architect": "human-in-the-loop"
-        },
-        "coder": "refactorer",
-        "refactorer": "architect",
-        "architect": "specifier"
+        "specifier": "human-in-the-loop",
+        "coder": "reviewer",
+        "reviewer": "architect",
+        "architect": "human-in-the-loop"
       },
       "layout": {
         "tabs": [
@@ -621,7 +601,7 @@
                 "role": "coder"
               },
               {
-                "role": "refactorer"
+                "role": "reviewer"
               },
               {
                 "role": "architect"
@@ -640,7 +620,7 @@
       }
     },
     "mixed-backends": {
-      "description": "Same topology as the default profile, but validates the deterministic scheduler across backends at once: specifier and refactorer run on codex, everything else on claude. Copilot is parked out of scheduler-mode rotation for now -- see github/copilot-cli#4433 (non-interactive sessions silently and permanently lose write permission mid-session).",
+      "description": "Same topology as the default profile, but validates the deterministic scheduler across backends at once: specifier and reviewer run on codex, everything else on claude. Copilot is parked out of scheduler-mode rotation for now -- see github/copilot-cli#4433 (non-interactive sessions silently and permanently lose write permission mid-session).",
       "terminals": [
         {
           "role": "human-in-the-loop",
@@ -680,10 +660,10 @@
           "workerTimeout": 1800
         },
         {
-          "role": "refactorer",
+          "role": "reviewer",
           "agent": "codex",
-          "worktree": "refactorer",
-          "title": "Kiln Refactorer (Codex)",
+          "worktree": "reviewer",
+          "title": "Kiln Reviewer (Codex)",
           "mode": "auto",
           "scheduler": "python",
           "workerDebug": true,
@@ -711,13 +691,10 @@
       ],
       "routing": {
         "human-in-the-loop": "specifier",
-        "specifier": {
-          "default": "coder",
-          "architect": "human-in-the-loop"
-        },
-        "coder": "refactorer",
-        "refactorer": "architect",
-        "architect": "specifier"
+        "specifier": "human-in-the-loop",
+        "coder": "reviewer",
+        "reviewer": "architect",
+        "architect": "human-in-the-loop"
       },
       "layout": {
         "tabs": [
@@ -746,7 +723,7 @@
                 "role": "coder"
               },
               {
-                "role": "refactorer"
+                "role": "reviewer"
               },
               {
                 "role": "architect"

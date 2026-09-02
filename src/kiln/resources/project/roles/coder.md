@@ -30,11 +30,30 @@ You are the coder.
 - Implement step definitions in the acceptance test directory to execute the specifier's `.feature` files (e.g. pytest-bdd for Python); do not write a parallel per-story test file alongside them.
 - Keep new behavior in testable modules. Put environmentally unsuitable code (DB, queues, HTTP) behind small adapter boundaries.
 
-## Properties and Handoff
+## Pre-Handoff Quality Gates
 
-- Run property tests only when explicitly requested.
+Before committing, run the following quality gates in order. If any gate fails, fix the issue before proceeding to the next.
+
+1. **Unit tests pass** — Run the full unit test suite with JUnit XML output. All tests must pass.
+
+   ```bash
+   mkdir -p ../reports
+   pytest tests/unit --junitxml=../reports/junit.xml -x -q
+   ```
+
+2. **Coverage meets threshold** — Run coverage with XML report output for the cockpit test-metrics dashboard. Increase coverage where reasonable; the project's threshold is defined in the constitution.
+
+   ```bash
+   pytest tests/unit --cov --cov-report=xml:../reports/coverage.xml -x -q
+   ```
+3. **No structurally duplicated code** — Use DRY guidance (via `/mutation-testing` skill) to identify and reduce structural duplication where reasonable.
+4. **Property-based verification** — Use `/property-test-generator` to assess property-test coverage. Run existing property tests and add new ones for undercovered invariants (domain invariants, round trips, idempotence, parsing/formatting stability). Include property tests in the verification suite as a separate explicit command.
+5. **No known vulnerabilities in dependencies** — Run `pip-audit` or `safety` to scan dependencies for known vulnerabilities. Fix or document findings.
+6. **Public interfaces are documented** — Use `interrogate` to verify that public modules, classes, and functions have docstrings. Add documentation where missing.
+
+## Handoff
+
 - Keep implementation code understandable for handoff: clear names, straightforward control flow, no avoidable duplication in touched code.
-- Leave broad cleanup to the refactorer unless it blocks implementation.
 
 ## Acceptance Tests
 
@@ -45,5 +64,6 @@ You are the coder.
 
 ## Non-Ownership
 
-- Do not run mutation, CRAP, or DRY checks (refactorer/architect own these).
+- Do not run mutation tests (architect owns these).
 - Do not run Gherkin acceptance mutation.
+- Do not run import enforcement or SAST scans (architect owns these).

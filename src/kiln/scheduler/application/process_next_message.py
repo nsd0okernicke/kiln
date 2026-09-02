@@ -467,7 +467,9 @@ def _hand_off(
     # are the same fact, and the whole point of the column is that it can be trusted to
     # match what a human reads in the message.
     _insert_verified(ctx, target, outbound, work_item=work_item_of(work_item))
-    if target == ESCALATION_TARGET:
+    # Only dispatch the next task on completed cycles (architect→human),
+    # not on mid-cycle Gherkin review (specifier→human).
+    if target == ESCALATION_TARGET and ctx.role != "specifier":
         _auto_dispatch_next(ctx)
     _queue(ctx).mark_processed(message_id)
 
@@ -671,7 +673,8 @@ def _no_op(
         work_item=work_item_of(inbound.handoff),
         priority=INFORMATIONAL_PRIORITY,
     )
-    if routed_target == ESCALATION_TARGET:
+    # Only dispatch on completed cycles, not on Gherkin review hops.
+    if routed_target == ESCALATION_TARGET and ctx.role != "specifier":
         _auto_dispatch_next(ctx)
     _queue(ctx).mark_processed(message_id)
     ctx.set_status("idle")

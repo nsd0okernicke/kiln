@@ -185,6 +185,17 @@
 
   /* Board */
   .lanes { display: flex; gap: 12px; overflow-x: auto; padding: 12px 14px; }
+  .pipeline { display: flex; gap: 0; align-items: flex-start; padding: 8px 0; min-width: fit-content; width: 100%; }
+  .pipeline-stage { min-width: 170px; max-width: 220px; flex: 1 1 170px; padding: 8px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); }
+  .pipeline-stage.has-cards { border-color: var(--accent); }
+  .pipeline-header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .pipeline-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--dim); }
+  .pipeline-count { font-size: 11px; font-weight: 700; color: var(--on-accent); background: var(--accent); border-radius: 999px; padding: 0 7px; line-height: 18px; }
+  .pipeline-worktree { font-size: 10px; color: var(--dim); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pipeline-arrow { display: flex; align-items: center; justify-content: center; min-width: 24px; color: var(--dim); font-size: 14px; flex: none; padding: 8px 2px; margin-top: 2px; }
+  .pipeline-cards { display: flex; flex-direction: column; gap: 6px; }
+  .pipeline-stage .card { margin-bottom: 0; }
+  .pipeline-fallback { padding: 8px 14px; }
   .lane { min-width: 210px; flex: 1 1 210px; }
   .lane > h3 {
     margin: 0 0 10px; color: var(--dim); display: flex; flex-direction: column;
@@ -200,6 +211,8 @@
   .card:hover { border-color: var(--accent); }
   .card.failed { border-left-color: var(--bad); }
   .card.done { border-left-color: var(--ok); opacity: .75; }
+  .card.review { border-left-color: var(--warn); }
+  .card.review .name::after { content: " ⏳"; color: var(--warn); font-weight: 400; }
 
   /* A card whose message is `processing` -- a worker is running on it *right now*. Tied to
      real state rather than sprinkled on every card, so the movement means something: if
@@ -439,7 +452,7 @@
 
   <section data-section="board">
     <h2><button class="section-toggle" type="button" aria-expanded="true" aria-controls="board-panel">Board</button> <label class="toggle-switch" id="sequential-toggle-wrap" title="Batch mode: when a task reaches the human (end of cycle), the next backlog task is automatically dispatched. Each role worktree is reset to the shared branch beforehand, so tasks never accumulate stale state or cause merge conflicts."><input type="checkbox" id="sequential-toggle"><span class="toggle-track"><span class="toggle-knob"></span></span><span class="toggle-label" id="sequential-label">Batch</span></label></h2>
-    <div class="section-panel lanes" id="board-panel"><div id="lanes" style="display:contents"></div></div>
+    <div class="section-panel" id="board-panel" style="padding:0;overflow-x:auto"><div id="lanes"></div></div>
   </section>
 
   <section data-section="work-queue">
@@ -485,6 +498,10 @@
       <span class="spacer"></span>
       <input type="text" id="doc-guidance" placeholder="Guidance for a retry (optional)" style="display:none">
       <button id="doc-retry" style="display:none">Retry</button>
+      <span id="doc-review-buttons" style="display:none">
+        <button id="doc-approve" class="action">Approve Gherkin</button>
+        <button id="doc-reject" class="danger">Reject</button>
+      </span>
     </div>
   </div>
 </dialog>
@@ -867,66 +884,129 @@ function healthAge(isoTimestamp) {
 }
 
 function renderBoard(state) {
-  // Batch mode indicator
   const seqCb = $("sequential-toggle");
-  if (seqCb) {
-    seqCb.checked = !!state.sequential;
+  if (seqCb) seqCb.checked = !!state.sequential;
+
+  const humanRole = state.human_role || "human-in-the-loop";
+
+  // Build pipeline stages dynamically from board lanes.
+  // Special case: when human-in-the-loop + specifier both exist, split human into
+  // Intake (human-initiated cards) and Review (specifier->human Gherkin approval).
+  const hasSpecifier = state.board.lanes.includes("specifier");
+  const roleIcon = { "intake": "📋", "specifier": "🔬", "review": "✅", "coder": "⚙️", "reviewer": "🔍", "architect": "🏗️", "game-coder": "⚙️", "game-refactorer": "🔧", "game-reviewer": "🔍", "game-architect": "🏗️", "done": "✅" };
+  const roleLabel = { "intake": "Intake", "specifier": "Specifier", "review": "Review", "coder": "Coder", "reviewer": "Reviewer", "architect": "Architect", "game-coder": "Game Coder", "game-refactorer": "Game Refactorer", "game-reviewer": "Game Reviewer", "game-architect": "Game Architect", "done": "Done" };
+
+  const pipeline = [];
+  for (const lane of state.board.lanes) {
+    if (lane === humanRole && hasSpecifier) {
+      // Split human lane: Intake first (human sends to specifier),
+      // then continue adding other lanes, and Review comes after Specifier.
+      pipeline.push({
+        id: "intake",
+        lane: humanRole,
+        label: (roleIcon["intake"] || "") + " " + (roleLabel["intake"] || "Intake"),
+        cardFilter: (c) => c.lane === humanRole && (c.kind === "backlog" || c.sender === humanRole),
+      });
+      // Review will be inserted after the specifier lane is encountered
+    } else if (lane === "specifier" && hasSpecifier) {
+      pipeline.push({
+        id: lane,
+        lane: lane,
+        label: (roleIcon[lane] || "") + " " + (roleLabel[lane] || lane),
+        cardFilter: (c) => c.lane === lane,
+      });
+      // Insert Review right after Specifier
+      pipeline.push({
+        id: "review",
+        lane: humanRole,
+        label: (roleIcon["review"] || "") + " " + (roleLabel["review"] || "Review"),
+        cardFilter: (c) => c.lane === humanRole && c.sender === "specifier",
+      });
+    } else {
+      const label = roleLabel[lane] || lane.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+      pipeline.push({
+        id: lane,
+        lane: lane,
+        label: (roleIcon[lane] || "") + " " + label,
+        cardFilter: (c) => c.lane === lane,
+      });
+    }
   }
+
   const host = $("lanes");
   host.replaceChildren();
-  for (const lane of state.board.lanes) {
-    const cards = state.board.cards[lane] || [];
-    const column = text("div", null, "lane");
-    const heading = text("h3");
-    heading.append(text("span", lane));
-    const laneRole = state.roles.find((role) => role.role === lane);
-    const identity = text("span", null, "lane-worktree");
-    if (lane !== "done") {
-      const gitIcon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      gitIcon.setAttribute("class", "icon");
-      const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
-      use.setAttribute("href", "#i-branch");
-      gitIcon.append(use);
-      identity.append(gitIcon, document.createTextNode(
-        " Worktree: " + ((laneRole && laneRole.worktree) || "unknown")
-      ));
+  if (!pipeline.length) { host.append(text("div", "No pipeline stages to display.", "empty")); return; }
+
+  const pipelineEl = text("div", null, "pipeline");
+  for (let i = 0; i < pipeline.length; i++) {
+    const stage = pipeline[i];
+    let stageCards = [];
+    for (const lane of state.board.lanes) {
+      for (const card of (state.board.cards[lane] || [])) {
+        if (stage.cardFilter(card)) stageCards.push(card);
+      }
+    }
+    stageCards.sort((a, b) => {
+      const aReview = a.sender === "specifier" && a.target === humanRole;
+      const bReview = b.sender === "specifier" && b.target === humanRole;
+      if (aReview && !bReview) return -1;
+      if (!aReview && bReview) return 1;
+      return 0;
+    });
+
+    const stageEl = text("div", null, "pipeline-stage" + (stageCards.length ? " has-cards" : ""));
+    const headerEl = text("div", null, "pipeline-header");
+    headerEl.append(text("span", stage.label, "pipeline-label"));
+    if (stageCards.length) headerEl.append(text("span", String(stageCards.length), "pipeline-count"));
+    stageEl.append(headerEl);
+
+    // Worktree info
+    if (stage.id === "intake" || stage.id === "review") {
+      const lr = state.roles.find((r) => r.role === humanRole);
+      if (lr && lr.worktree) stageEl.append(text("div", "Worktree: " + lr.worktree, "pipeline-worktree"));
+    } else if (stage.id !== "done") {
+      const lr = state.roles.find((r) => r.role === stage.id);
+      if (lr && lr.worktree) stageEl.append(text("div", "Worktree: " + lr.worktree, "pipeline-worktree"));
+    }
+
+    if (!stageCards.length) {
+      stageEl.append(text("div", "—", "empty"));
     } else {
-      identity.textContent = "completed work";
+      const cardsEl = text("div", null, "pipeline-cards");
+      for (const card of stageCards) {
+        const isReview = card.sender === "specifier" && card.target === humanRole;
+        const el = text("div", null, "card"
+          + (card.failed ? " failed" : "")
+          + (card.unnamed ? " unnamed" : "")
+          + (card.status === "processing" ? " working" : "")
+          + (stage.id === "done" ? " done" : "")
+          + (isReview ? " review" : ""));
+        if (card.work_item) el.append(text("div", card.work_item, "work-item-id"));
+        el.append(text("div", card.title, "name"));
+        el.append(text(
+          "div",
+          card.kind === "backlog" ? "backlog · " + (card.age || "")
+            : card.sender + " → " + card.target + " · " + (card.age || "")
+              + (card.duration ? " · cycle " + card.duration : ""),
+          "meta",
+        ));
+        if (card.summary && card.summary !== card.title) el.append(text("div", card.summary, "summary"));
+        el.onclick = () => card.kind === "backlog"
+          ? openTaskEditor(card)
+          : openDocument(card.message_id, card.failed, isReview);
+        cardsEl.append(el);
+      }
+      stageEl.append(cardsEl);
     }
-    heading.append(identity);
-    column.append(heading);
-    if (!cards.length) column.append(text("div", "—", "empty"));
-    for (const card of cards) {
-      // `processing` means a worker subprocess is running on this item right now, which is
-      // the one card state worth animating -- see the `.card.working` rule.
-      const el = text("div", null, "card"
-        + (card.failed ? " failed" : "")
-        + (card.unnamed ? " unnamed" : "")
-        + (card.status === "processing" && lane !== "done" ? " working" : "")
-        + (lane === "done" ? " done" : ""));
-      // The task store preserves the real title as the card moves through message lanes.
-      if (card.work_item) el.append(text("div", card.work_item, "work-item-id"));
-      // `title`, not `work_item`: an unnamed request has no work item yet and would render
-      // a blank card, which is what made every new task invisible until the specifier
-      // finished naming it.
-      el.append(text("div", card.title, "name"));
-      el.append(text(
-        "div",
-        card.kind === "backlog" ? "HITL backlog · updated " + (card.age || "")
-          : card.sender + " → " + card.target + " · " + (card.age || "")
-            + (card.duration ? " · cycle " + card.duration : ""),
-        "meta",
-      ));
-      // An unnamed card borrows its title from the summary, so printing both would say the
-      // same sentence twice.
-      if (card.summary && card.summary !== card.title) el.append(text("div", card.summary, "summary"));
-      el.onclick = () => card.kind === "backlog"
-        ? openTaskEditor(card)
-        : openDocument(card.message_id, card.failed);
-      column.append(el);
+    pipelineEl.append(stageEl);
+
+    if (i < pipeline.length - 1) {
+      const arrow = text("div", null, "pipeline-arrow");
+      arrow.textContent = "▶";
+      pipelineEl.append(arrow);
     }
-    host.append(column);
   }
+  host.append(pipelineEl);
 }
 
 function renderQueue(state) {
@@ -1144,7 +1224,7 @@ async function pollTestMetrics() {
   }
 }
 
-async function openDocument(messageId, retryable) {
+async function openDocument(messageId, retryable, gherkinReview) {
   const response = await fetch("/api/messages/" + messageId, { headers: { "X-Kiln-Cockpit": "1" } });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) return toast(payload.error || "could not read that message", true);
@@ -1156,6 +1236,19 @@ async function openDocument(messageId, retryable) {
     retryMessage(messageId, $("doc-guidance").value);
     $("doc-dialog").close();
   };
+  // Gherkin review: show approve/reject buttons in the dialog instead of the attention rail
+  const reviewButtons = $("doc-review-buttons");
+  if (gherkinReview) {
+    reviewButtons.style.display = "";
+    $("doc-approve").onclick = () => { approveGherkin(messageId); $("doc-dialog").close(); };
+    $("doc-reject").onclick = () => {
+      $("doc-dialog").close();
+      // Small delay so the dialog closes before the prompt appears
+      setTimeout(() => rejectGherkin(messageId), 100);
+    };
+  } else {
+    reviewButtons.style.display = "none";
+  }
   $("doc-dialog").showModal();
 }
 
@@ -1171,6 +1264,24 @@ async function acknowledgeMessage(messageId) {
   try {
     await post("/api/ack/" + messageId, {});
     toast("acknowledged");
+    poll();
+  } catch (error) { toast(error.message, true); }
+}
+
+async function approveGherkin(messageId) {
+  try {
+    const result = await post("/api/gherkin-approve/" + messageId, {});
+    toast("Gherkin approved — forwarded to " + result.target);
+    poll();
+  } catch (error) { toast(error.message, true); }
+}
+
+async function rejectGherkin(messageId) {
+  const notes = prompt("Revision notes for the specifier (what needs to change):");
+  if (notes === null) return; // cancelled
+  try {
+    const result = await post("/api/gherkin-reject/" + messageId, { notes: notes || "" });
+    toast("Gherkin rejected — sent back to " + result.target + " with notes");
     poll();
   } catch (error) { toast(error.message, true); }
 }
