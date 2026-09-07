@@ -18,6 +18,7 @@ deliberately and say so in the handoff (see constitution/engineering.md).
 
 from __future__ import annotations
 
+import importlib.util
 import subprocess
 import sys
 import tomllib
@@ -108,6 +109,38 @@ def test_interrogate_fail_under_90() -> None:
     fail_under = _tool("interrogate").get("fail-under", 0)
     assert fail_under >= 90, (
         f"[tool.interrogate] fail-under is {fail_under}, expected >= 90"
+    )
+
+
+def test_seed_fixture_matches_the_requirements() -> None:
+    """The pinned catalog seed values must not be substituted.
+
+    The requirements choose these values so a filter term matches at most one book. Swapping in
+    others — "Science Fiction" for "Sci-Fi", say — re-opens the substring ambiguity they were
+    chosen to close, and it surfaces only as an acceptance failure the coder cannot fix, because
+    the feature file is specifier-owned.
+    """
+    fixture = PROJECT_ROOT / "tests" / "fixtures" / "catalog_seed.py"
+    if not fixture.is_file():
+        pytest.skip("seed fixture not created yet")
+
+    # Load by path rather than by import: the fixture must be checkable however pytest was
+    # invoked, and its own docstring legitimately names the values it warns against.
+    spec = importlib.util.spec_from_file_location("_catalog_seed", fixture)
+    assert spec is not None and spec.loader is not None, f"could not load {fixture}"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    actual = {(b.isbn, b.title, b.author, b.genre) for b in module.SEED_BOOKS}
+    expected = {
+        ("978-0-20-163361-0", "Dune", "Frank Herbert", "Sci-Fi"),
+        ("978-0-13-468599-1", "Refactoring", "Martin Fowler", "Software"),
+        ("978-3-16-148410-0", "The Hobbit", "J.R.R. Tolkien", "Fantasy"),
+    }
+    assert actual == expected, (
+        f"seed books are {sorted(actual)}, expected {sorted(expected)}. These values are pinned "
+        "in the requirements so a filter term matches at most one book; substituting others "
+        "re-opens the substring ambiguity they were chosen to close."
     )
 
 

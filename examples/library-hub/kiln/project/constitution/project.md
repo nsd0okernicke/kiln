@@ -146,6 +146,12 @@ features/           ← Gherkin specs (do not modify; owned by specifier)
   - An in-process broker is acceptable as the transport while no real adapter exists, provided
     it is shared across both apps. A publisher that accepts and drops the event is not: with a
     no-op publisher on one side, the scenario proves nothing about the path.
+- **Seed the catalog from `tests/fixtures/catalog_seed.py`, never from repeated literals.** The
+  three books are pinned in the requirements because their titles, authors and genres are chosen
+  so a filter term matches at most one of them. That property is easy to break by retyping the
+  values, and the breakage surfaces only as an acceptance failure the coder cannot fix. Import
+  `SEED_BOOKS`; a feature file's `Background` table must match it exactly. The scaffolded
+  `tests/unit/test_gate_config.py` asserts the fixture still holds the pinned values.
 - **Prohibited patterns**:
   - Flat `tests/test_<story>.py` files (group by layer, not by story)
   - In-memory SQLite as a substitute for Testcontainers in acceptance tests

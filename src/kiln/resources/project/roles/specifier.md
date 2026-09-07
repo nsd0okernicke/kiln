@@ -22,6 +22,17 @@ prose and your own Examples table is not a defect the coder can fix — it stall
 it returns to you. This is historically the most expensive defect this pipeline produces. Check
 each of these explicitly before handing off:
 
+0. **Parse the feature files you just wrote, before anything else.** A Gherkin syntax error — a
+   data table placed outside any step, a stray `Examples:` with no scenario outline — is invisible
+   on reading and stops the coder dead, because the file is yours and only you may fix it. Run the
+   project's own parser over `features/*.feature` and fix what it reports:
+
+   ```
+   python -m pytest --collect-only tests/acceptance   # or the project's equivalent
+   ```
+
+   Observed live: a seed table one indent level outside its `Background` cost a blocked cycle and
+   47 minutes of an unattended run. The check takes seconds.
 1. **Re-derive every expected value from the prose, ignoring the table you wrote.** Read the
    rule, work out what it implies for that row's inputs, then compare with the value you put
    there. Re-reading the table and asking "does this look right" only re-reads your original

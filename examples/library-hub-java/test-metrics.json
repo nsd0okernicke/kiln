@@ -1,0 +1,11 @@
+{
+  "framework": "junit",
+  "command": "./mvnw -B clean verify",
+  "verificationRole": "architect",
+  "reports": {
+    "junit": "target/test-reports",
+    "coverage": "target/site/jacoco-aggregate/cobertura.xml",
+    "lint": "target/spotbugs.sarif"
+  },
+  "maxAgeMinutes": 30
+}

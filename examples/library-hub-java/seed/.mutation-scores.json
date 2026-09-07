@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "updated": "",
+  "notes": "PIT mutation scores from the committed pitest configuration, updated by the architect every cycle. The threshold is a floor, not a target: a score that falls while staying above it is a regression and must be reported in the handoff. Equivalent mutants belong in known_equivalent with an explanation, and in PIT's excludedMethods/avoidCallsTo configuration - never removed by editing the production code they land on (see constitution/engineering.md).",
+  "threshold": 80.0,
+  "scores": {
+    "catalog-service": {
+      "target": 80.0,
+      "last_score": null,
+      "mutants": null,
+      "survivors": null,
+      "known_equivalent": 0,
+      "known_equivalent_detail": "",
+      "last_run": null
+    },
+    "loans-service": {
+      "target": 80.0,
+      "last_score": null,
+      "mutants": null,
+      "survivors": null,
+      "known_equivalent": 0,
+      "known_equivalent_detail": "",
+      "last_run": null
+    }
+  }
+}

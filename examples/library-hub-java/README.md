@@ -98,6 +98,85 @@ Owns user accounts and loan records with deadlines and overdue tracking. When a 
 - **LOAN-4**: Return book
 - **LOAN-5**: View overdue loans (admin)
 
+## User Story Clarifications
+
+Ambiguities resolved during a human-in-the-loop clarification pass over the user stories above.
+For the specifier to turn into Gherkin — not prescriptive of implementation.
+
+### CAT-3: Create new book
+- Required fields: `isbn` (unique, validated format), `title`, `author`, `genre`,
+  `initialStock` (integer >= 0). `description` is optional.
+- Creating a book with an ISBN that already exists returns 409 Conflict.
+
+### CAT-2 vs. CAT-5 (availability vs. retrieve by ISBN)
+- CAT-5 (`GET /books/{isbn}`) returns full book metadata plus the current available stock
+  count.
+- CAT-2 remains a separate, lightweight endpoint returning just `{isbn, availableCount}`, for
+  cheap availability checks (e.g. from the Loan Service).
+
+### CAT-1: Search books
+- `title`, `author`, `genre` are independent optional query parameters, each doing
+  case-insensitive substring matching; when more than one is supplied they combine with AND.
+- Pagination: `page` (1-indexed, default 1) and `pageSize` (default 20, max 100). Response
+  includes the total result count.
+- Default sort order: `title` ascending, tie-broken by `isbn` ascending.
+- The catalog is pre-seeded with exactly these three books, to be used verbatim. In
+  title-ascending order:
+
+  | # | Title       | Author         | Genre    | ISBN              |
+  |---|-------------|----------------|----------|-------------------|
+  | 1 | Dune        | Frank Herbert  | Sci-Fi   | 978-0-20-163361-0 |
+  | 2 | Refactoring | Martin Fowler  | Software | 978-0-13-468599-1 |
+  | 3 | The Hobbit  | J.R.R. Tolkien | Fantasy  | 978-3-16-148410-0 |
+
+  Paginated queries reference these positions. For example, page 2 with pageSize 1 returns the
+  second entry: Refactoring.
+
+  The seed values are chosen so a filter term matches at most one book: titles and genres share
+  no common substring, and authors share none of three characters or more. Author filters must
+  therefore use at least three characters ("her", "fow", "tol"); "er" and "rt" each match two
+  authors.
+
+  If a scenario deliberately uses a term that matches more than one book, put the true higher
+  total in the Examples row. Never adjust the seed data to make a smaller total correct.
+
+### CAT-6: Manual stock return endpoint
+- An admin/ops stock-correction tool: lets an operator add N copies to an ISBN's stock directly
+  (drift correction, new acquisitions, recovering from a missed `BookReturned` event).
+- Independent of any specific loan record — not a duplicate of the user-facing return flow.
+
+### LOAN-0: Create user account
+- Required fields: `name`, `email` (unique). The system generates a `userId`, which identifies
+  the user on all subsequent loan calls. No password or authentication.
+
+### LOAN-1: Borrow book
+- If the catalog reservation result is REJECTED, the loan record persists in REJECTED status
+  and stays queryable via LOAN-2/LOAN-3 rather than being deleted.
+- No limit on concurrent active loans per user, and no restriction on requesting an ISBN the
+  user already holds an active loan for.
+- The loan due date term (default 28 days) is a single global configuration value; it is not
+  overridable per borrow request.
+
+### LOAN-3: View all loans for a user
+- Paginated with the same `page`/`pageSize` scheme as CAT-1 (default 20, max 100), sorted by
+  `createdAt` descending (newest first), tie-broken by `loanId` ascending. Loans created in the
+  same transaction can share a `createdAt`, so the tie-break determines their order.
+
+### LOAN-4: Return book
+- Only an ACTIVE loan can be returned. Attempting to return a PENDING, REJECTED, or
+  already-RETURNED loan returns 409 Conflict.
+- Returning does not check overdue status for any penalty (no payment system in MVP) — it
+  transitions the loan to RETURNED and publishes `BookReturned` regardless of due date.
+
+### LOAN-5: View overdue loans (admin)
+- "Admin" means a separate, unauthenticated endpoint — no access control in MVP, consistent
+  with "Authentication: Not required for MVP" under Non-Functional Requirements.
+- Overdue = loan is ACTIVE and `dueDate < now`. A loan whose `dueDate` is exactly `now` is not
+  overdue.
+- Sorted by `dueDate` ascending — the longest-overdue loan first — tie-broken by `loanId`
+  ascending.
+- Paginated with the same `page`/`pageSize` scheme as CAT-1.
+
 ## Architecture
 
 ```mermaid

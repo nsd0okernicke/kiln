@@ -67,6 +67,9 @@ class SchedulerContext:
     queue_label: str = ""
     clock: Callable[[], datetime] = lambda: datetime.now(UTC)
     set_status: Callable[..., None] = lambda _state, **_kwargs: None
+    #: Called with (role, work_item, detail) each time a cycle escalates, so infrastructure can
+    #: leave a record somewhere an operator returning to an unattended run will actually look.
+    record_blocked: Callable[[str, str, str], None] = lambda _role, _item, _detail: None
     max_attempts: int = 2
     escalation_limit: int = 3
     max_cycles: int | None = None
@@ -804,6 +807,19 @@ def _forward_ping(
     return CycleResult(PING_FORWARDED, message_id=message_id, target=target)
 
 
+def _record_blocked_work(
+    ctx: SchedulerContext, inbound: handoff.InboundHandoff, detail: str
+) -> None:
+    """Report a blocked work item to whatever the host wired up.
+
+    An escalation already reaches the human-in-the-loop queue and the role's status pane, but
+    both are live views: on an unattended run nobody is watching either, and the operator returns
+    to a finished-looking swarm with the block visible only in a database column. One run lost
+    3 h 19 m of an 11 h night to two blocks that were diagnosed correctly and then simply waited.
+    """
+    ctx.record_blocked(ctx.role, work_item_of(inbound.handoff) or inbound.handoff, detail)
+
+
 def _escalate(
     ctx: SchedulerContext,
     state: SchedulerState,
@@ -835,6 +851,7 @@ def _escalate(
     _insert_verified(ctx, ESCALATION_TARGET, outbound, work_item=work_item_of(inbound.handoff))
     # Keep the row addressable by `kiln retry` but out of normal delivery.
     _queue(ctx).mark_failed(message_id, detail)
+    _record_blocked_work(ctx, inbound, detail)
 
     state.consecutive_escalations += 1
     ctx.set_status("blocked")

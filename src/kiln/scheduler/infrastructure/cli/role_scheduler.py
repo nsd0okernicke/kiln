@@ -107,6 +107,47 @@ def persist_inbound(worktree: str | Path, content: str) -> Path | None:
     return GitWorktree(worktree).persist_inbound(content)
 
 
+#: Plain-text log of blocked work items, written next to the message database.
+BLOCKED_LOG_NAME = "BLOCKED.md"
+
+BLOCKED_LOG_HEADER = (
+    "# Blocked work\n\n"
+    "Work items that stopped and are waiting on a human. Each needs a decision and then\n"
+    "`kiln retry`. Delete this file once they are all resolved.\n\n"
+)
+
+
+def make_blocked_recorder(state_dir: Path) -> Callable[[str, str, str], None]:
+    """Return a callback appending one entry per blocked work item to `<state_dir>/BLOCKED.md`.
+
+    The escalation itself already reaches the human-in-the-loop queue and the role's status pane,
+    but both are live views. On an unattended run nobody is watching either, so the block is left
+    recorded only in a database column and the operator returns to a swarm that looks finished.
+    A file on disk is what they actually find.
+    """
+
+    def record(role: str, work_item: str, detail: str) -> None:
+        target = state_dir / BLOCKED_LOG_NAME
+        try:
+            state_dir.mkdir(parents=True, exist_ok=True)
+            new = not target.exists()
+            with target.open("a", encoding="utf-8") as handle:
+                if new:
+                    handle.write(BLOCKED_LOG_HEADER)
+                handle.write(f"- **{_utc_now()}** | `{role}` | {work_item}\n  - {detail}\n")
+        except OSError as error:  # a marker file must never take the scheduler down
+            log.warning("could not write %s: %s", target, error)
+
+    return record
+
+
+def _utc_now() -> str:
+    """Timestamp for the blocked log, matching the queue's ISO-8601 Z form."""
+    from datetime import UTC, datetime
+
+    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
 def make_status_writer(
     role: str,
     script: Path | None,
@@ -346,6 +387,7 @@ def build_context(args: argparse.Namespace) -> SchedulerContext:
             worker_timeout=args.worker_timeout,
             model=model,
         ),
+        record_blocked=make_blocked_recorder(Path(args.db_path).parent),
         max_attempts=args.max_attempts,
         escalation_limit=args.escalation_limit,
         max_cycles=args.max_cycles,

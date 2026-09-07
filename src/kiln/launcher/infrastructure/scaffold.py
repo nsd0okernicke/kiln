@@ -263,26 +263,30 @@ def copy_example(paths: KilnPaths, example: str, result: ScaffoldResult) -> None
         result.note(f"seeded {seeded} gate artifact(s) from {example}")
 
 
-#: Files an example seeds into the project verbatim, keeping their relative path.
+#: Directory in an example whose contents are copied into the project root verbatim,
+#: preserving relative paths — `examples/<name>/seed/tests/x.py` becomes `<project>/tests/x.py`.
 #:
-#: These carry the gates themselves rather than advice about them, so the scaffold ships
-#: them and a regenerating agent cannot quietly drop them. Every entry has been lost at
-#: least once by living only in the generated project: a rule in the constitution survives
-#: a run, a file the agents rewrite does not.
-EXAMPLE_SEED_FILES = (
-    "tests/unit/test_gate_config.py",
-    ".mutation-scores.json",
-)
+#: These carry the gates themselves rather than advice about them, so the scaffold ships them
+#: and a regenerating agent cannot quietly drop them. Every file placed here has been lost at
+#: least once by living only in the generated project: a rule in the constitution survives a
+#: run, a file the agents rewrite does not.
+#:
+#: A directory rather than a fixed list because the paths are language-specific — a Python
+#: example seeds `tests/unit/test_gate_config.py`, a Java one
+#: `catalog-service/src/test/java/.../GateConfigTest.java`.
+EXAMPLE_SEED_DIR = "seed"
 
 
 def _copy_example_seed_files(example_dir: Path, project_root: Path) -> int:
-    """Copy each EXAMPLE_SEED_FILES entry the example provides, preserving its path."""
+    """Copy everything under the example's seed/ directory, preserving relative paths."""
+    seed_root = example_dir / EXAMPLE_SEED_DIR
+    if not seed_root.is_dir():
+        return 0
     copied = 0
-    for relative in EXAMPLE_SEED_FILES:
-        source = example_dir / relative
+    for source in sorted(seed_root.rglob("*")):
         if not source.is_file():
             continue
-        target = project_root / relative
+        target = project_root / source.relative_to(seed_root)
         target.parent.mkdir(parents=True, exist_ok=True)
         workspace.copy_template_file(source, target)
         copied += 1
