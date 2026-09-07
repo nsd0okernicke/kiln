@@ -183,6 +183,7 @@ def build_panes(
     branch: str,
     backend: str,
     proxy_url: str | None = None,
+    auto_approve_spec: bool = False,
 ) -> list[PaneSpec]:
     """
     Resolve every role into a launch-ready pane.
@@ -195,7 +196,10 @@ def build_panes(
     panes: list[PaneSpec] = []
     for role in profile.roles:
         worktree = workspace.worktree_for(role, paths)
-        command = build_agent_command(role, paths, branch, proxy_url=proxy_url, profile=profile)
+        command = build_agent_command(
+            role, paths, branch, proxy_url=proxy_url, profile=profile,
+            auto_approve_spec=auto_approve_spec,
+        )
         panes.append(
             PaneSpec(
                 role=role.role,
@@ -535,7 +539,11 @@ def run_launch(args: argparse.Namespace) -> int:
 
     proxy_url = _capture_url(args, paths, profile)
 
-    panes = build_panes(profile, paths, branch, backend, proxy_url=proxy_url)
+    panes = build_panes(
+        profile, paths, branch, backend,
+        proxy_url=proxy_url,
+        auto_approve_spec=args.auto_approve_spec,
+    )
     _log_role_kinds(profile)
 
     command = launch_terminal(
@@ -780,6 +788,16 @@ def build_parser() -> argparse.ArgumentParser:
         default="metadata",
         help="proxy capture depth: 'metadata' records sizes/model/usage, "
         "'full' also stores request and response bodies",
+    )
+    parser.add_argument(
+        "--auto-approve-spec",
+        dest="auto_approve_spec",
+        action="store_true",
+        help=(
+            "for test runs: automatically forward specifier feature files "
+            "to coder without waiting for manual human approval. "
+            "Only affects the human-in-the-loop role."
+        ),
     )
     parser.add_argument(
         "--version",

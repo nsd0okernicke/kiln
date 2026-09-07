@@ -32,6 +32,9 @@ class MessageQueue(Protocol):
         self, identifier: str, branch: str, sender: str, target: str
     ) -> str: ...
 
+    # Skip-record audit (issue #47, finding 5) -------------------------------------
+    def messages_for_work_item(self, work_item: str, limit: int = 20) -> list[QueueMessage]: ...
+
     # Spec-defect tracking (issue #47, finding 9) -----------------------------------
     def create_spec_defect_task(
         self, branch: str, work_item: str, failure_detail: str

@@ -1,0 +1,14 @@
+[cosmic-ray]
+module-path = "catalog"
+timeout = 60.0
+# Glob must be recursive: 'catalog/infrastructure/*' only matches direct children,
+# which let nested infra modules slip into the mutation run (observed live, CAT-3).
+excluded-modules = ["catalog/infrastructure/**", "catalog/domain/ports.py"]
+# Venv interpreter named by path — no shell state, no reliance on PATH.
+test-command = 'python -m pytest tests/unit -x -q'
+
+# cosmic-ray 8.7.0 ships no 'multiprocessing' driver (checked via stevedore:
+# only 'local' and 'http-workers' exist). Staying on the native local driver
+# rather than switching execution environments (CAT-2 cycle, verified 2026-09-03).
+[cosmic-ray.distributor]
+name = "local"

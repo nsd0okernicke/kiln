@@ -1,0 +1,25 @@
+# Mutation testing for catalog domain modules — >=80% kill rate target.
+#
+# Run from repo root:
+#   cosmic-ray init tests/mutation/catalog-domains.toml .kiln-mutation/catalog.sqlite
+#   cosmic-ray exec tests/mutation/catalog-domains.toml .kiln-mutation/catalog.sqlite
+#   cr-rate .kiln-mutation/catalog.sqlite
+#
+# CATALOG OTHER IMPORTANT THINGS:
+# - catalog/infrastructure/* is excluded via module-path = "catalog/domain"
+#   so infrastructure code is not mutated. That is deliberate: acceptance tests
+#   exercise infra, but mutation requires unit-speed runs.
+# - If you need to add a file under catalog/domain/ that is NOT pure domain logic
+#   (e.g. a CLI adapter), exclude it here via excluded-modules.
+
+[cosmic-ray]
+module-path = "catalog/domain"
+timeout = 60.0
+excluded-modules = ["**/__init__.py"]
+test-command = "python -m pytest tests/unit/catalog/domain -x -q"
+
+[cosmic-ray.distributor]
+name = "local"
+
+[cosmic-ray.distributor.local]
+worker-type = "subprocess"

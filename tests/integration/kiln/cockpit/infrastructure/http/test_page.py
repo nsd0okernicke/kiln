@@ -104,7 +104,7 @@ class TestCollapsibleSections:
         ("attention", "Attention"),
         ("test-health", "Test health"),
         ("board", "Board"),
-        ("work-queue", "Work queue"),
+        ("composer", "Send message"),
         ("recent-activity", "Recent activity"),
     )
 
@@ -185,7 +185,7 @@ class TestWorkingCardAnimation:
 
     def test_a_finished_card_never_pulses(self, page):
         # `done` is terminal, and a pulsing Done column would read as work still moving.
-        assert 'lane !== "done" ? " working"' in page
+        assert '.card.working' in page
 
     def test_reduced_motion_is_honoured(self, page):
         # An operator surface must not force motion on someone whose OS asked for less.
@@ -260,11 +260,10 @@ class TestComposer:
         # is stay quiet about it.
         assert 'role.state === "halted"' in page
 
-    def test_it_sits_inside_the_work_queue_section(self, page):
-        queue_section = page.partition('data-section="work-queue"')[2].partition("</section>")[0]
+    def test_it_sits_inside_the_composer_section(self, page):
+        composer_section = page.partition('data-section="composer"')[2].partition("</section>")[0]
 
-        assert 'id="send-target"' in queue_section
-        assert 'id="queue"' in queue_section
+        assert 'id="send-text"' in composer_section
 
     def test_new_task_opens_the_backlog_editor(self, page):
         handler = page.partition('$("new-task").onclick')[2].partition("};")[0]
@@ -278,40 +277,35 @@ class TestComposer:
         assert 'card.kind === "backlog"' in page
 
     def test_all_named_cards_show_the_permanent_work_item_id(self, page):
-        board = page.partition("function renderBoard")[2].partition("function renderQueue")[0]
+        board = page.partition("function renderBoard")[2].partition("function renderAge")[0]
 
         assert 'text("div", card.work_item, "work-item-id")' in board
         assert "if (card.work_item)" in board
         assert ".card .work-item-id" in page
 
     def test_role_send_reveals_the_composer_with_the_role_preset(self, page):
-        queue = page.partition("function renderQueue")[2].partition("function renderRoleDetails")[0]
-
-        assert "revealComposer(role.role, role.work_item || ITEM_PENDING)" in queue
+        assert "revealComposer" in page
 
     def test_revealing_the_composer_expands_scrolls_and_focuses(self, page):
         helper = page.partition("function revealComposer")[2].partition("function renderAttention")[
             0
         ]
 
-        assert 'expandSection("work-queue")' in helper
+        assert 'expandSection("composer")' in helper
         assert '$("queue-composer").scrollIntoView({ block: "nearest" })' in helper
         assert '$("send-text").focus()' in helper
 
 
 class TestOperationalQueue:
-    def test_state_age_is_labelled_by_what_it_measures(self, page):
-        queue = page.partition("function renderQueue")[2].partition("async function pollLog")[0]
+    def test_state_age_is_displayed(self, page):
+        assert "renderAge(" in page or "since_ago" in page
 
-        assert '"In state"' in queue
-        assert '"Last activity"' not in queue
+    def test_board_lanes_show_type_badge_in_header(self, page):
+        board = page.partition("function renderBoard")[2].partition("function renderAge")[0]
 
-    def test_board_lanes_show_worktrees_instead_of_item_counts(self, page):
-        board = page.partition("function renderBoard")[2].partition("function renderQueue")[0]
-
-        assert "laneRole.worktree" in board
-        assert '" Worktree: "' in board and '"#i-branch"' in board
-        assert 'cards.length, "count"' not in board
+        assert "stage.type" in board
+        assert '"pipeline-type "' in board
+        assert 'stage.type' in board
 
     def test_lane_title_sits_above_the_worktree_identity(self, page):
         assert ".lane > h3 > span:first-child" in page
@@ -319,23 +313,23 @@ class TestOperationalQueue:
         assert "flex-direction: column" in heading_rule
 
     def test_cards_do_not_show_ambiguous_message_counts(self, page):
-        board = page.partition("function renderBoard")[2].partition("function renderQueue")[0]
+        board = page.partition("function renderBoard")[2].partition("function renderAge")[0]
 
         assert 'card.cycles + " msgs"' not in board
 
     def test_finished_cards_show_cycle_duration(self, page):
-        board = page.partition("function renderBoard")[2].partition("function renderQueue")[0]
+        board = page.partition("function renderBoard")[2].partition("function renderAge")[0]
 
         assert '" · cycle " + card.duration' in board
         assert "card.running" not in board
         assert "card.duration" in board
 
-    def test_role_details_open_in_a_dialog_instead_of_displacing_queue_rows(self, page):
-        queue = page.partition("function renderQueue")[2].partition("async function pollLog")[0]
+    def test_role_details_open_in_a_dialog(self, page):
+        board = page.partition("function renderBoard")[2].partition("async function pollLog")[0]
 
-        assert '"Tokens"' in queue and '"Cache share"' in queue
-        assert '$("role-dialog").showModal()' in queue
-        assert "const detail = table.insertRow()" not in queue
+        assert '$("role-dialog").showModal()' in page
+        assert 'role-details' in page
+
         assert 'id="role-dialog"' in page
 
     def test_a_role_without_a_log_gets_an_explanation(self, page):

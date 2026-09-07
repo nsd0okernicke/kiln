@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import threading
 import os
 import threading
 import webbrowser
@@ -628,6 +629,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--traffic-db", default=None)
     parser.add_argument("--log-file", default=None)
     parser.add_argument(
+        "--auto-approve-spec",
+        action="store_true",
+        help="auto-forward specifier Gherkin to coder without manual approval",
+    )
+    parser.add_argument(
         "--no-browser",
         action="store_true",
         help=f"do not open a browser tab (or set {NO_BROWSER_ENV})",
@@ -690,9 +696,63 @@ def config_from_args(args: argparse.Namespace) -> CockpitConfig:
     )
 
 
+def _start_auto_approver(db_path: Path) -> None:
+    """Start a background thread that auto-forwards specifier→human to coder."""
+    import sqlite3
+    from contextlib import closing
+    from datetime import datetime, timezone
+
+    def _poll() -> None:
+        while True:
+            try:
+                with closing(sqlite3.connect(str(db_path))) as conn:
+                    cur = conn.cursor()
+                    cur.execute(
+                        "SELECT id, work_item FROM messages "
+                        "WHERE sender='specifier' AND target='human-in-the-loop' "
+                        "AND acked_at IS NULL "
+                        "AND (status = 'processed' OR status = 'queued' OR status = 'delivered') "
+                        "ORDER BY created_at ASC"
+                    )
+                    for msg_id, work_item in cur.fetchall():
+                        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                        wi = work_item or "unknown"
+                        approval = (
+                            f"Sender: human-in-the-loop\n"
+                            f"Handoff: {wi}\n"
+                            f"Branch: main\n"
+                            f"Commit: \n\n"
+                            f"Auto-approved (--auto-approve-spec mode).\n"
+                            f"Next role: coder\n"
+                        )
+                        cur.execute(
+                            "INSERT INTO messages (sender, target, priority, status, content, "
+                            "created_at, work_item, branch) "
+                            "VALUES (?, ?, 50, 'queued', ?, ?, ?, 'main')",
+                            ("human-in-the-loop", "coder", approval, now, wi),
+                        )
+                        cur.execute(
+                            "UPDATE messages SET acked_at=? WHERE id=? AND acked_at IS NULL",
+                            (now, msg_id),
+                        )
+                        conn.commit()
+                        log.info("auto-approved %s (message %s) → coder", wi, msg_id[:8])
+            except Exception as exc:
+                log.warning("auto-approve: %s", exc)
+            import time
+            time.sleep(5.0)
+
+    thread = threading.Thread(target=_poll, daemon=True, name="auto-approve")
+    thread.start()
+    log.info("auto-approve-spec: forwarding specifier→coder without human review")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     configure_logging(args.log_file, label="kiln-cockpit")
+
+    if args.auto_approve_spec:
+        _start_auto_approver(Path(args.db_path))
 
     port = args.port if args.port == 0 else find_free_port(args.port)
     server = serve(config_from_args(args), port=port)

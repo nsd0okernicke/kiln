@@ -241,7 +241,9 @@ def _verification_options(role: RoleConfig) -> list[str]:
 
 
 def _scheduler_command(
-    role: RoleConfig, paths: KilnPaths, branch: str, profile: Profile | None = None
+    role: RoleConfig, paths: KilnPaths, branch: str,
+    profile: Profile | None = None,
+    auto_approve_spec: bool = False,
 ) -> AgentCommand:
     """
     Launch the deterministic scheduler instead of an LLM wrapper session.
@@ -286,6 +288,9 @@ def _scheduler_command(
     status_script = paths.state_tools_dir / "set-status.py"
     argv += ["--status-script", str(status_script)]
     argv += ["--log-file", str(paths.scheduler_log(role.role))]
+
+    if auto_approve_spec and role.role == "human-in-the-loop":
+        argv += ["--auto-approve-spec"]
 
     return AgentCommand(
         argv=argv,
@@ -393,7 +398,8 @@ def _dashboard_command(role: RoleConfig, paths: KilnPaths, branch: str) -> Agent
 
 
 def _cockpit_command(
-    role: RoleConfig, paths: KilnPaths, branch: str, profile: Profile | None
+    role: RoleConfig, paths: KilnPaths, branch: str, profile: Profile | None,
+    auto_approve_spec: bool = False,
 ) -> AgentCommand:
     """
     Launch the local web cockpit pane (issue #22).
@@ -456,6 +462,8 @@ def _cockpit_command(
     )
     if not role.open_browser:
         argv.append("--no-browser")
+    if auto_approve_spec and role.role == "human-in-the-loop":
+        argv.append("--auto-approve-spec")
     return AgentCommand(
         argv=argv,
         env={
@@ -509,6 +517,7 @@ def build_agent_command(
     branch: str,
     proxy_url: str | None = None,
     profile: Profile | None = None,
+    auto_approve_spec: bool = False,
 ) -> AgentCommand:
     """
     Build the pane command for one role.
@@ -524,7 +533,7 @@ def build_agent_command(
     current_path = os.environ.get("PATH", "")
     path_env = f"{kiln_bin}{os.pathsep}{current_path}"
     env = {"PATH": path_env, "KILN_BIN": kiln_bin, "KILN_ROLE": role.role}
-    special = _special_role_command(role, paths, branch, profile, proxy_url)
+    special = _special_role_command(role, paths, branch, profile, proxy_url, auto_approve_spec)
     if special is not None:
         return special.with_env(**env)
     return _direct_agent_command(role, paths, proxy_url).with_env(**env)
@@ -536,15 +545,16 @@ def _special_role_command(
     branch: str,
     profile: Profile | None,
     proxy_url: str | None,
+    auto_approve_spec: bool = False,
 ) -> AgentCommand | None:
     if role.is_inbox:
         return _inbox_command(role, paths, branch)
     if role.is_dashboard:
         return _dashboard_command(role, paths, branch)
     if role.is_cockpit:
-        return _cockpit_command(role, paths, branch, profile)
+        return _cockpit_command(role, paths, branch, profile, auto_approve_spec)
     if role.uses_scheduler:
-        return _scheduler_command(role, paths, branch, profile).with_env(
+        return _scheduler_command(role, paths, branch, profile, auto_approve_spec).with_env(
             **proxy_env(role, proxy_url)
         )
     return None

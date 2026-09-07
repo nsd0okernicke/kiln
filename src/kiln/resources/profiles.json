@@ -57,7 +57,7 @@
           "title": "Kiln Architect",
           "mode": "auto",
           "scheduler": "python",
-          "workerTimeout": 2400,
+          "workerTimeout": 4200,
           "workerIdleTimeout": 900
         },
         {
@@ -171,7 +171,7 @@
           "title": "Kiln Architect",
           "mode": "auto",
           "scheduler": "python",
-          "workerTimeout": 2400,
+          "workerTimeout": 4200,
           "workerIdleTimeout": 900
         },
         {
@@ -336,7 +336,7 @@
           "title": "Kiln Architect",
           "mode": "auto",
           "scheduler": "python",
-          "workerTimeout": 2400,
+          "workerTimeout": 4200,
           "workerIdleTimeout": 900
         },
         {
@@ -557,7 +557,8 @@
           "role": "architect",
           "worktree": "architect",
           "title": "Kiln Architect",
-          "mode": "manual"
+          "mode": "manual",
+          "workerTimeout": 4200
         },
         {
           "role": "dashboard",
@@ -678,7 +679,7 @@
           "model": "claude-sonnet-5",
           "scheduler": "python",
           "workerDebug": true,
-          "workerTimeout": 2400,
+          "workerTimeout": 4200,
           "workerIdleTimeout": 900
         },
         {

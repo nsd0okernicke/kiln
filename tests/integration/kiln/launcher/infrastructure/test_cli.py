@@ -194,9 +194,11 @@ class TestScaffold:
         project_md = target / "kiln" / "project" / "constitution" / "project.md"
         assert "Demo project rules" in project_md.read_text(encoding="utf-8")
 
-    def test_unknown_example_warns_without_failing(self, tmp_path, framework):
-        result = scaffold.scaffold(tmp_path / "proj", framework, example="nope")
-        assert any("not found" in warning for warning in result.warnings)
+    def test_unknown_example_raises_without_proceeding(self, tmp_path, framework):
+        import pytest
+        from kiln.launcher.infrastructure.scaffold import ScaffoldError
+        with pytest.raises(ScaffoldError, match="not found under examples/"):
+            scaffold.scaffold(tmp_path / "proj", framework, example="nope")
 
     def test_is_idempotent(self, tmp_path, framework):
         target = tmp_path / "proj"

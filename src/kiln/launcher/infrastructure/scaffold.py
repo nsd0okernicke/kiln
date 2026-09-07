@@ -138,17 +138,28 @@ def copy_skills(paths: KilnPaths, result: ScaffoldResult) -> None:
     result.note(f"copied {count} skill(s)")
 
 
-def copy_ci_workflow(paths: KilnPaths, result: ScaffoldResult) -> None:
+def copy_ci_workflow(paths: KilnPaths, result: ScaffoldResult, example: str = "") -> None:
     """
     Copy the CI workflow template into the project's `.github/workflows/`.
 
-    The CI pipeline runs every quality gate from a clean checkout on every role
-    branch push. This is the durable record that gates actually ran, rather than
-    relying on self-reported pass/fail in commit messages (issue #47, finding 1).
+    When an example is specified, prefers the example's own CI workflow over
+    the generic language-agnostic template. An example at
+    ``examples/<name>/.github/workflows/ci.yml`` replaces the stubbed default
+    with project-specific gate commands.
 
     `.github/workflows/ci.yml` is deliberately tracked (not gitignored) so a role
     cannot change what CI runs — CI reads this file from the shared branch.
     """
+    # Check for an example-specific CI workflow first
+    if example:
+        example_source = paths.framework_root / "examples" / example / ".github" / "workflows" / "ci.yml"
+        if example_source.is_file():
+            target = paths.project_root / CI_WORKFLOW_TARGET
+            target.parent.mkdir(parents=True, exist_ok=True)
+            workspace.copy_template_file(example_source, target)
+            result.note(f"created .github/workflows/ci.yml (from {example} example)")
+            return
+
     source = paths.scaffold_resources_dir / CI_WORKFLOW_SOURCE
     if not source.is_file():
         result.warn(f"CI workflow template not found at {source}")
@@ -212,8 +223,11 @@ def copy_example(paths: KilnPaths, example: str, result: ScaffoldResult) -> None
         return
     example_dir = paths.framework_root / "examples" / example
     if not example_dir.is_dir():
-        result.warn(f"example {example!r} not found under examples/; skipping")
-        return
+        known = sorted(p.name for p in (paths.framework_root / "examples").iterdir() if p.is_dir())
+        raise ScaffoldError(
+            f"example {example!r} not found under examples/. "
+            f"Available examples: {', '.join(known)}"
+        )
 
     readme = example_dir / "README.md"
     if readme.is_file():
@@ -243,6 +257,36 @@ def copy_example(paths: KilnPaths, example: str, result: ScaffoldResult) -> None
         workspace.copy_template_file(asset, paths.project_root / asset.name)
     if extra_assets:
         result.note(f"copied {len(extra_assets)} example asset file(s)")
+
+    seeded = _copy_example_seed_files(example_dir, paths.project_root)
+    if seeded:
+        result.note(f"seeded {seeded} gate artifact(s) from {example}")
+
+
+#: Files an example seeds into the project verbatim, keeping their relative path.
+#:
+#: These carry the gates themselves rather than advice about them, so the scaffold ships
+#: them and a regenerating agent cannot quietly drop them. Every entry has been lost at
+#: least once by living only in the generated project: a rule in the constitution survives
+#: a run, a file the agents rewrite does not.
+EXAMPLE_SEED_FILES = (
+    "tests/unit/test_gate_config.py",
+    ".mutation-scores.json",
+)
+
+
+def _copy_example_seed_files(example_dir: Path, project_root: Path) -> int:
+    """Copy each EXAMPLE_SEED_FILES entry the example provides, preserving its path."""
+    copied = 0
+    for relative in EXAMPLE_SEED_FILES:
+        source = example_dir / relative
+        if not source.is_file():
+            continue
+        target = project_root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        workspace.copy_template_file(source, target)
+        copied += 1
+    return copied
 
 
 def _copy_constitution_overrides(source_dir: Path, target_dir: Path) -> int:
@@ -317,7 +361,7 @@ def scaffold(
     copy_roles(paths, result)
     copy_skills(paths, result)
     copy_knowledge_catalog(paths, result)
-    copy_ci_workflow(paths, result)
+    copy_ci_workflow(paths, result, example=example)
     write_initial_mcp_json(paths, result)
     write_claude_settings(paths, result)
     copy_example(paths, example, result)

@@ -191,6 +191,9 @@
   .pipeline-header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
   .pipeline-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--dim); cursor: pointer; }
   .pipeline-count { font-size: 11px; font-weight: 700; color: var(--on-accent); background: var(--accent); border-radius: 999px; padding: 0 7px; line-height: 18px; }
+  .pipeline-type { font-size: 9px; font-weight: 600; border-radius: 999px; padding: 0 6px; line-height: 15px; letter-spacing: .02em; }
+  .pipeline-type.human { color: var(--ok); border: 1px solid var(--ok); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+  .pipeline-type.auto { color: var(--accent); border: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
   .pipeline-worktree { font-size: 10px; color: var(--dim); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
   .pipeline-arrow { display: flex; align-items: center; justify-content: center; min-width: 24px; color: var(--dim); font-size: 14px; flex: none; padding: 8px 2px; margin-top: 2px; }
 
@@ -514,7 +517,7 @@
       <input type="text" id="doc-guidance" placeholder="Guidance for a retry (optional)" style="display:none">
       <button id="doc-retry" style="display:none">Retry</button>
       <span id="doc-review-buttons" style="display:none">
-        <button id="doc-approve" class="action">Approve Gherkin</button>
+        <button id="doc-approve" class="action">Approve Spec</button>
         <button id="doc-reject" class="danger">Reject</button>
       </span>
     </div>
@@ -983,17 +986,20 @@ function renderBoard(state) {
         id: "intake", lane: humanRole,
         label: (roleIcon["intake"] || "") + " " + (roleLabel["intake"] || "Intake"),
         cardFilter: (c) => c.lane === humanRole && (c.kind === "backlog" || c.sender === humanRole),
+        type: "human",
       });
     } else if (lane === "specifier" && hasSpecifier) {
-      pipeline.push({ id: lane, lane, label: (roleIcon[lane] || "") + " " + (roleLabel[lane] || lane), cardFilter: (c) => c.lane === lane });
+      pipeline.push({ id: lane, lane, label: (roleIcon[lane] || "") + " " + (roleLabel[lane] || lane), cardFilter: (c) => c.lane === lane, type: "auto" });
       pipeline.push({
         id: "review", lane: humanRole,
         label: (roleIcon["review"] || "") + " " + (roleLabel["review"] || "Review"),
         cardFilter: (c) => c.lane === humanRole && c.sender === "specifier",
+        type: "human",
       });
     } else {
       const label = roleLabel[lane] || lane.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-      pipeline.push({ id: lane, lane, label: (roleIcon[lane] || "") + " " + label, cardFilter: (c) => c.lane === lane });
+      const type = lane === "done" ? "" : "auto";
+      pipeline.push({ id: lane, lane, label: (roleIcon[lane] || "") + " " + label, cardFilter: (c) => c.lane === lane, type });
     }
   }
 
@@ -1021,6 +1027,10 @@ function renderBoard(state) {
     const stageEl = text("div", null, "pipeline-stage" + (stageCards.length ? " has-cards" : ""));
     const headerEl = text("div", null, "pipeline-header");
     headerEl.append(text("span", stage.label, "pipeline-label"));
+    if (stage.type) {
+      const typeEl = text("span", stage.type === "human" ? "🟢 Human" : "🤖 Auto", "pipeline-type " + stage.type);
+      headerEl.append(typeEl);
+    }
     if (stageCards.length) headerEl.append(text("span", String(stageCards.length), "pipeline-count"));
     stageEl.append(headerEl);
 
@@ -1266,7 +1276,7 @@ async function acknowledgeMessage(messageId) {
 async function approveGherkin(messageId) {
   try {
     const result = await post("/api/gherkin-approve/" + messageId, {});
-    toast("Gherkin approved — forwarded to " + result.target);
+    toast("Spec approved — forwarded to " + result.target);
     poll();
   } catch (error) { toast(error.message, true); }
 }
@@ -1276,7 +1286,7 @@ async function rejectGherkin(messageId) {
   if (notes === null) return; // cancelled
   try {
     const result = await post("/api/gherkin-reject/" + messageId, { notes: notes || "" });
-    toast("Gherkin rejected — sent back to " + result.target + " with notes");
+    toast("Spec rejected — sent back to " + result.target + " with notes");
     poll();
   } catch (error) { toast(error.message, true); }
 }

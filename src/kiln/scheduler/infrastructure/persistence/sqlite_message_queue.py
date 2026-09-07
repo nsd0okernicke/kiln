@@ -34,6 +34,9 @@ class SQLiteMessageQueue:
     def count_arrivals(self, work_item: str, branch: str, target: str) -> int:
         return count_work_item_arrivals(self.path, work_item, branch, target)
 
+    def messages_for_work_item(self, work_item: str, limit: int = 20) -> list[QueueMessage]:
+        return queue_queries.messages_for_work_item(self.path, work_item, limit)
+
     def insert(
         self,
         sender: str,

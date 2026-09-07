@@ -51,9 +51,37 @@ mkdir -p ../reports
 bandit --format sarif --output ../reports/lint.sarif <changed-files>
 ```
 
-### Step 5: Soft Gherkin acceptance mutation
+### Step 5: Static analysis (lint, types, docs)
 
-**Skip this step if container startup exceeds the provider's tool timeout.** Acceptance tests use Testcontainers and can take longer than the bash tool's hard timeout (typically 420 seconds). Validate step definitions by inspection instead. Never pipe test output through `tail` or any buffering command.
+Run the CI static-analysis commands on changed files and fix any issues. These gates are not
+owned by any single role — every handoff must leave them passing.
+
+```bash
+ruff check <changed-files-or-dirs>
+mypy <changed-modules>
+interrogate <changed-modules>
+```
+
+Fix findings before moving on. CI runs these exact commands on every push, so skipping them
+means the next push will fail.
+
+
+### Step 6: Run acceptance tests
+
+Run the acceptance suite against the committed code. All scenarios must pass before handoff.
+
+If infrastructure dependencies (containers, databases) cannot start within the provider's tool
+timeout, skip with a machine-readable GATE_SKIP record documenting the reason.
+
+  GATE_SKIP format (one line in your handoff message):
+    GATE_SKIP: gate=<gate-name> reason=<reason-code> detail=<optional explanation>
+
+  Reason codes: container_unavailable, no_mutation_targets, infrastructure_only, tool_unavailable
+  Example: GATE_SKIP: gate=mutation reason=no_mutation_targets detail=infra-only change
+
+  Validate step definitions by inspection. Do not skip the same gate twice in a row
+  without a new reason — the scheduler refuses handoff when a (gate, reason) pair
+  appears more than twice consecutively.
 
 Fix any issues each step finds before running the next.
 

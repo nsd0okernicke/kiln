@@ -182,3 +182,23 @@ def pending_for_role(db_path: str | Path, branch: str, role: str) -> list[QueueM
             (branch, role, STATUS_QUEUED, STATUS_DELIVERED, STATUS_PROCESSED),
         )
         return [_message(row) for row in cur.fetchall()]
+
+
+def messages_for_work_item(
+    db_path: str | Path, work_item: str, limit: int = 20
+) -> list[QueueMessage]:
+    """
+    Return the most recent messages for a given work item, newest first.
+
+    Used by skip-record audit (issue #47, finding 5) to count how many consecutive
+    cycles a gate has been skipped for the same reason.
+    """
+    with closing(connect(db_path)) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, sender, target, status, content, created_at, work_item, error "
+            "FROM messages WHERE work_item=? "
+            "ORDER BY created_at DESC, rowid DESC LIMIT ?",
+            (work_item, limit),
+        )
+        return [_message(row) for row in cur.fetchall()]

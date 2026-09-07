@@ -8,7 +8,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
-from ..domain import handoff, policies, status_contract
+from ..domain import handoff, policies, skip_record, status_contract
 from ..domain.models import (
     DEFAULT_PRIORITY,
     InboundMessage,
@@ -528,6 +528,69 @@ def work_item_of(name: str) -> str | None:
     return None if not name or is_pending(name) else name
 
 
+def _collect_skip_records(output: str, history: list | None = None) -> list:
+    """Parse GATE_SKIP lines from output and optionally from historical messages."""
+    skips = []
+    for line in output.split("\n"):
+        record = skip_record.parse_skip_line(line)
+        if record is not None:
+            skips.append(record)
+    if history:
+        for msg in history:
+            content = msg.get("content", "") or ""
+            if isinstance(content, str):
+                for line in content.split("\n"):
+                    record = skip_record.parse_skip_line(line)
+                    if record is not None:
+                        skips.append(record)
+    return skips
+
+
+def _check_skip_budget(ctx: SchedulerContext, attempts: _Attempts) -> None:
+    """
+    Check the worker output for gate skip records and enforce the skip budget.
+
+    If the same (gate, reason) has been skipped more times than the budget allows
+    across consecutive cycles of this work item, the handoff is blocked and the
+    attempt is treated as a verification failure (issue #47, finding 5).
+    """
+    output = attempts.last.result.summary or ""
+    if "GATE_SKIP:" not in output:
+        return
+
+    skips = _collect_skip_records(output)
+    if not skips:
+        return
+
+    # Combine current skip records with historical ones for this work item.
+    work_item = attempts.last.result.handoff_name or ""
+    if work_item:
+        try:
+            history = _queue(ctx).messages_for_work_item(work_item, limit=20)
+            skips = _collect_skip_records(output, history)
+        except Exception:
+            log.warning("skip-budget: could not query history for %s", work_item, exc_info=True)
+
+    exceeded = skip_record.skip_budget_exceeded(skips)
+    if exceeded:
+        detail = "; ".join(exceeded)
+        log.warning(
+            f"{ICON_BLOCKED} skip budget exceeded for %s: %s",
+            work_item, detail,
+        )
+        failed = attempts.last
+        attempts.invocations[-1] = replace(
+            failed,
+            result=status_contract.WorkerResult(
+                status=status_contract.STATUS_BLOCKED,
+                summary=f"Skip budget exceeded for: {detail}. "
+                        f"The same gate has been skipped too many times. "
+                        f"Address the underlying issue or override the skip budget.",
+                sentinel_found=failed.result.sentinel_found,
+            ),
+        )
+
+
 def _apply_verification(ctx: SchedulerContext, attempts: _Attempts) -> None:
     """
     Run the role's verify command and, if it fails, rewrite the attempt as a failed one.
@@ -549,6 +612,8 @@ def _apply_verification(ctx: SchedulerContext, attempts: _Attempts) -> None:
     result = ctx.run_verify()
     if result.ok:
         log.info(f"{ICON_DONE} %s", result.summary)
+        # Check for gate skip records and enforce budget (issue #47, finding 5).
+        _check_skip_budget(ctx, attempts)
         return
 
     log.warning(f"{ICON_BLOCKED} %s", result.summary)

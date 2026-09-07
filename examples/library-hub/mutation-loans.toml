@@ -1,0 +1,13 @@
+[cosmic-ray]
+module-path = "loans"
+timeout = 60.0
+# Glob must be recursive: 'loans/infrastructure/*' only matches direct children
+# (same lesson as mutation-catalog.toml, CAT-3).
+excluded-modules = ["loans/infrastructure/**"]
+# Venv interpreter named by path — no shell state, no reliance on PATH.
+test-command = 'python -m pytest tests/unit -x -q'
+
+# cosmic-ray 8.7.0 ships no 'multiprocessing' driver (verified 2026-09-03,
+# see mutation-catalog.toml). Staying on the native local driver.
+[cosmic-ray.distributor]
+name = "local"

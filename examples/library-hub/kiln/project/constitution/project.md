@@ -55,6 +55,41 @@ The project root holds no business logic — it is orchestration and configurati
 Dependency direction: `infrastructure` → `application` → `domain`. Never the reverse.
 Domain classes are pure Python dataclasses — no SQLAlchemy or Pydantic imports allowed.
 
+**The bounded contexts are independent services.** They share no code and no database; they
+communicate only by publishing and consuming events. `import-linter` must enforce both halves of
+that — the layering *within* each context and the isolation *between* them:
+
+```toml
+[[tool.importlinter.contracts]]
+name = "catalog domain does not import application or infrastructure"
+type = "forbidden"
+source_modules = ["catalog.domain"]
+forbidden_modules = ["catalog.application", "catalog.infrastructure"]
+
+[[tool.importlinter.contracts]]
+name = "catalog application does not import infrastructure"
+type = "forbidden"
+source_modules = ["catalog.application"]
+forbidden_modules = ["catalog.infrastructure"]
+
+# ...the same two for loans, plus both directions of context isolation:
+
+[[tool.importlinter.contracts]]
+name = "catalog does not import loans"
+type = "forbidden"
+source_modules = ["catalog"]
+forbidden_modules = ["loans"]
+
+[[tool.importlinter.contracts]]
+name = "loans does not import catalog"
+type = "forbidden"
+source_modules = ["loans"]
+forbidden_modules = ["catalog"]
+```
+
+Six contracts, not four. Without the last two nothing stops one context importing the other's
+domain directly, which is the failure the whole architecture exists to prevent.
+
 ## Test Layout
 
 All tests live under a single root `tests/` directory:
@@ -93,10 +128,30 @@ features/           ← Gherkin specs (do not modify; owned by specifier)
 - **Unit tests** (`tests/unit/`): pure Python, mock all ports (repositories, publishers), no I/O, no DB.
 - **Acceptance tests** (`tests/acceptance/steps/`): pytest-bdd step implementations that execute the `.feature` files. Use Testcontainers for PostgreSQL and RabbitMQ — do NOT use in-memory SQLite for acceptance tests.
 - **Acceptance step files must execute the feature files.** Each step file in `tests/acceptance/steps/` must call `scenarios("features/<file>.feature")` (or `@scenario(...)` per test function) so pytest actually runs the Gherkin scenarios as test cases. Step files without this call leave the feature files as dead documentation.
+- **One PostgreSQL container per bounded context.** `tests/acceptance/conftest.py` provisions a
+  separate session-scoped `PostgresContainer` for catalog and for loans — `catalog_postgres` and
+  `loans_postgres`, not one shared `postgres_container` both engines connect to. The contexts are
+  independent services that must be able to run against independent databases, and a single
+  shared container means the suite never demonstrates that. Disjoint SQLAlchemy metadata is not
+  a substitute: it hides a cross-context foreign key or a table-name collision instead of
+  failing on it.
+- **A cross-context event must be tested across the contexts, in one scenario.** At least one
+  acceptance scenario has to publish from the producing context and observe the effect in the
+  consuming one — for `BookReturned`: loans returns a book, and the catalog's stock goes up.
+  Wire both apps to the *same* broker instance in the fixture so the event actually travels.
+  - Testing the two halves separately does not count. A loans test that asserts against a
+    recording publisher, plus a catalog test that hand-constructs a message and feeds the
+    consumer directly, leaves the join between them — the part most likely to be wrong —
+    untested by both.
+  - An in-process broker is acceptable as the transport while no real adapter exists, provided
+    it is shared across both apps. A publisher that accepts and drops the event is not: with a
+    no-op publisher on one side, the scenario proves nothing about the path.
 - **Prohibited patterns**:
   - Flat `tests/test_<story>.py` files (group by layer, not by story)
   - In-memory SQLite as a substitute for Testcontainers in acceptance tests
   - A step file with `@given`/`@when`/`@then` but no `scenarios(...)` / `@scenario(...)` call
+  - One database container shared between both bounded contexts
+  - A no-op publisher standing in for the producing half of a cross-context event test
 
 ## pyproject.toml Requirements
 
@@ -111,6 +166,9 @@ hypothesis>=6.0
 cosmic-ray>=8.3
 mypy>=1.5
 ruff>=0.1
+bandit[sarif]>=1.7
+radon>=6.0
+pip-audit>=2.7
 ```
 
 ## Runtime Prerequisites
@@ -160,19 +218,67 @@ mutation site counts, never runs the full suite (see `constitution/roles/coder.m
   [cosmic-ray]
   module-path = "catalog"
   timeout = 60.0
-  excluded-modules = ["catalog/infrastructure/*"]
-  test-command = "python -m pytest tests/unit -x -q"
+  excluded-modules = ["catalog/infrastructure/**/*.py"]
+  # test-command must be `uv run python -m pytest`. Not a .venv path (absolute or
+  # relative): it encodes one machine into a committed file. Not a bare `python`
+  # either: that resolves to the host's default interpreter, which lacks the project
+  # dependencies, so every mutant dies of the same collection error and the score
+  # comes back a perfect 100%. `uv run` resolves the project environment from the
+  # config's own directory and needs no shell state.
+  test-command = "uv run python -m pytest tests/unit -x -q"
 
   [cosmic-ray.distributor]
   name = "local"
   ```
 
   ```bash
-  .venv\Scripts\cosmic-ray init mutation-catalog.toml mutation-catalog.sqlite
-  .venv\Scripts\cosmic-ray exec mutation-catalog.toml mutation-catalog.sqlite
-  .venv\Scripts\cr-rate --fail-over 20 mutation-catalog.sqlite   # survival ≤ 20% == score ≥ 80%
+  uv run cosmic-ray init mutation-catalog.toml mutation-catalog.sqlite
+  uv run cosmic-ray exec mutation-catalog.toml mutation-catalog.sqlite
+  uv run cr-rate --fail-over 20 mutation-catalog.sqlite   # survival ≤ 20% == score ≥ 80%
   ```
 
-- Coverage ≥ 90%: `python -m pytest --cov=catalog --cov=loans --cov-report=term-missing`
-- Type checking: `python -m mypy catalog/ loans/ --strict`
-- Lint: `python -m ruff check . && python -m ruff format --check .`
+  Record each run's score in `.mutation-scores.json` (see below). The gate is a floor, not a
+  target: a score that falls while staying above 80% is a regression and must be reported.
+
+  A per-cycle scoped config (`mutation-<work-item>-scoped.toml`) is encouraged and **must be
+  committed** if its score is quoted in a handoff. A number nobody else can re-run is not
+  evidence.
+
+- Coverage ≥ 90%: `uv run python -m pytest --cov=catalog --cov=loans --cov-report=term-missing --cov-fail-under=90`
+- Type checking: `uv run python -m mypy catalog/ loans/ --strict`  (also set `files = ["catalog", "loans"]` in `[tool.mypy]` so bare `mypy` works)
+- Lint: `uv run python -m ruff check . && uv run python -m ruff format --check .`
+
+  **`[tool.ruff.lint]` must set `select = ["E", "F", "I", "UP", "B"]`.** Ruff's default rule set
+  is far narrower (`E4`, `E7`, `E9`, `F`) and omitting `select` silently drops import ordering,
+  pyupgrade and bugbear — the gate still reports "All checks passed!" while checking much less.
+  Do not narrow this list; if a specific rule is genuinely wrong for this project, disable that
+  rule by name in `ignore` with a comment saying why.
+
+- Docstring coverage ≥ 90%: `uv run interrogate catalog loans` with `fail-under = 90` in
+  `[tool.interrogate]`.
+
+- **Do not add entries to `[tool.coverage.run] omit`.** The acceptance suite runs against real
+  containers and covers the infrastructure adapters, so they need no exemption; an `omit` entry
+  removes a file from the denominator rather than testing it. If a module genuinely cannot be
+  covered, say so in the handoff instead.
+
+### `.mutation-scores.json`
+
+Committed at the project root; the architect updates it every cycle:
+
+```json
+{
+  "version": 1,
+  "updated": "YYYY-MM-DD",
+  "threshold": 80.0,
+  "scores": {
+    "catalog": {"last_score": 0.0, "mutants": 0, "survivors": 0,
+                "known_equivalent": 0, "known_equivalent_detail": "", "last_run": ""},
+    "loans":   {"last_score": 0.0, "mutants": 0, "survivors": 0,
+                "known_equivalent": 0, "known_equivalent_detail": "", "last_run": ""}
+  }
+}
+```
+
+`known_equivalent` and its detail field are where equivalent mutants are accounted for — in the
+record, not by editing the code they land on (see `engineering.md`, "A gate measures the code").

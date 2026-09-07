@@ -117,13 +117,26 @@ For the specifier to turn into Gherkin — not prescriptive of implementation.
   case-insensitive substring matching; when more than one is supplied they combine with AND.
 - Pagination: `page` (1-indexed, default 1) and `page_size` (default 20, max 100). Response
   includes the total result count.
-- Default sort order: `title` ascending.
-- The catalog is pre-seeded with three books. In title-ascending order they are:
-  1. Dune (ISBN 978-0-20-163361-0)
-  2. Refactoring (ISBN 978-0-13-468599-1)
-  3. The Hobbit (ISBN 978-3-16-148410-0)
+- Default sort order: `title` ascending, tie-broken by `isbn` ascending.
+- The catalog is pre-seeded with exactly these three books, to be used verbatim. In
+  title-ascending order:
+
+  | # | Title       | Author         | Genre    | ISBN              |
+  |---|-------------|----------------|----------|-------------------|
+  | 1 | Dune        | Frank Herbert  | Sci-Fi   | 978-0-20-163361-0 |
+  | 2 | Refactoring | Martin Fowler  | Software | 978-0-13-468599-1 |
+  | 3 | The Hobbit  | J.R.R. Tolkien | Fantasy  | 978-3-16-148410-0 |
+
   Paginated queries reference these positions. For example, page 2 with page_size 1 returns
   the second entry: Refactoring.
+
+  The seed values are chosen so a filter term matches at most one book: titles and genres
+  share no common substring, and authors share none of three characters or more. Author
+  filters must therefore use at least three characters ("her", "fow", "tol"); "er" and "rt"
+  each match two authors.
+
+  If a scenario deliberately uses a term that matches more than one book, put the true higher
+  total in the Examples row. Never adjust the seed data to make a smaller total correct.
 
 ### CAT-6: Manual stock return endpoint
 - An admin/ops stock-correction tool: lets an operator add N copies to an ISBN's stock
@@ -145,7 +158,8 @@ For the specifier to turn into Gherkin — not prescriptive of implementation.
 
 ### LOAN-3: View all loans for a user
 - Paginated with the same `page`/`page_size` scheme as CAT-1 (default 20, max 100), sorted by
-  `created_at` descending (newest first).
+  `created_at` descending (newest first), tie-broken by `loan_id` ascending. Loans created in
+  the same transaction can share a `created_at`, so the tie-break determines their order.
 
 ### LOAN-4: Return book
 - Only an ACTIVE loan can be returned. Attempting to return a PENDING, REJECTED, or
@@ -156,7 +170,11 @@ For the specifier to turn into Gherkin — not prescriptive of implementation.
 ### LOAN-5: View overdue loans (admin)
 - "Admin" means a separate, unauthenticated endpoint — no access control in MVP, consistent
   with "Authentication: Not required for MVP" under Non-Functional Requirements.
-- Overdue = loan is ACTIVE and `due_date < now`.
+- Overdue = loan is ACTIVE and `due_date < now`. A loan whose `due_date` is exactly `now` is
+  not overdue.
+- Sorted by `due_date` ascending — the longest-overdue loan first — tie-broken by `loan_id`
+  ascending.
+- Paginated with the same `page`/`page_size` scheme as CAT-1.
 
 ## Architecture
 

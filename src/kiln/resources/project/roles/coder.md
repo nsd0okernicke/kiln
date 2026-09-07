@@ -57,10 +57,13 @@ Before committing, run the following quality gates in order. If any gate fails, 
 
 ## Acceptance Tests
 
-- Acceptance tests use Testcontainers or similar container-based fixtures, and the agent provider's bash tool has a hard timeout (typically 420 seconds). Container startup alone often exceeds this.
-- Write step definitions for all Gherkin scenarios. Validate correctness by **inspecting the step implementation** — check that each step references production code through port interfaces.
-- Skip running the full acceptance test suite if container startup exceeds the tool timeout. Note "acceptance tests skipped (container startup exceeds provider tool timeout)" in the handoff.
-- Run unit tests and coverage as primary verification. Never pipe test output through `tail` or any buffering command.
+- Write step definitions for all Gherkin scenarios. Validate correctness by **running the acceptance suite**.
+- Acceptance is the primary spec-conformance gate. All scenarios must pass before handoff.
+- If container startup exceeds the provider's tool timeout, skip with a machine-readable GATE_SKIP record (one line in your handoff):
+  GATE_SKIP: gate=<gate-name> reason=<reason-code> detail=<optional explanation>
+  Example: GATE_SKIP: gate=acceptance reason=container_unavailable detail=postgres failed
+Do not skip the same gate twice in a row without a new reason.
+- Run unit tests and coverage as primary verification.
 
 ## Non-Ownership
 

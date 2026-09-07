@@ -1,0 +1,18 @@
+# Mutation testing for loans domain modules — >=80% kill rate target.
+#
+# Run from repo root:
+#   cosmic-ray init tests/mutation/loans-domains.toml .kiln-mutation/loans.sqlite
+#   cosmic-ray exec tests/mutation/loans-domains.toml .kiln-mutation/loans.sqlite
+#   cr-rate .kiln-mutation/loans.sqlite
+
+[cosmic-ray]
+module-path = "loans/domain"
+timeout = 60.0
+excluded-modules = ["**/__init__.py"]
+test-command = "python -m pytest tests/unit/loans/domain -x -q"
+
+[cosmic-ray.distributor]
+name = "local"
+
+[cosmic-ray.distributor.local]
+worker-type = "subprocess"

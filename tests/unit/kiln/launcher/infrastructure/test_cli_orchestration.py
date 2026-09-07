@@ -139,6 +139,7 @@ class TestRunLaunch:
             dry_run=False,
             proxy_port=8787,
             capture="metadata",
+            auto_approve_spec=False,
         )
         values.update(overrides)
         return SimpleNamespace(**values)

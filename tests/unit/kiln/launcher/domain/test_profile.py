@@ -861,7 +861,9 @@ class TestWorkflowShapedProfiles:
     def test_the_architect_row_that_could_not_coexist(self, shipped):
         # In one shared table these are the same (role, when_sender) key, and the second is
         # a hard parse failure that takes down every profile -- not a quiet misroute.
-        assert parse_profile(shipped, "full").routing.resolve("architect") == "specifier"
+        assert parse_profile(shipped, "full").routing.resolve("architect") == (
+            "human-in-the-loop"
+        )
         assert parse_profile(shipped, "harden").routing.resolve("architect") == (
             "human-in-the-loop"
         )
@@ -872,11 +874,12 @@ class TestWorkflowShapedProfiles:
             assert parse_profile(shipped, name).routing.rules, name
 
     def test_the_full_cycle_still_closes_back_to_the_human(self, shipped):
-        # The conditional row that stops an architect's completed-cycle report looping
-        # round to the coder forever.
+        # Every routing path eventually reaches the human.
         routing = parse_profile(shipped, "full").routing
-        assert routing.resolve("specifier") == "coder"
-        assert routing.resolve("specifier", "architect") == "human-in-the-loop"
+        # Specifier routes to human for Gherkin review.
+        assert routing.resolve("specifier") == "human-in-the-loop"
+        # Architect routes to human (completed-cycle report).
+        assert routing.resolve("architect") == "human-in-the-loop"
 
     @pytest.mark.parametrize("name", ["fix", "spike", "harden"])
     def test_a_reshaped_profile_routes_back_to_the_human(self, shipped, name):

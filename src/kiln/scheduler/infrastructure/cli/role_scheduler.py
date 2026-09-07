@@ -16,6 +16,7 @@ import argparse
 import logging
 import subprocess
 import sys
+import threading
 import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -463,6 +464,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="do not reserve the pane's bottom row for the live status bar",
     )
+    parser.add_argument(
+        "--auto-approve-spec",
+        action="store_true",
+        help=(
+            "for human-in-the-loop role only: automatically forward specifier feature files "
+            "to coder without waiting for manual human approval. Intended for unattended "
+            "test runs where no human is watching the cockpit."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -537,6 +547,61 @@ def _record_cycle(bar: pane_status.StatusBar, result: CycleResult) -> None:
     )
 
 
+def _start_auto_approver(db_path: str | Path) -> threading.Thread | None:
+    """
+    Start a background thread that auto-forwards specifier→human messages to coder.
+
+    Used during unattended test runs when --auto-approve-spec is set on the
+    human-in-the-loop scheduler. Polls every 5 seconds.
+    """
+    import sqlite3
+    from contextlib import closing
+    from datetime import datetime, timezone
+
+    def _poll() -> None:
+        while True:
+            try:
+                with closing(sqlite3.connect(str(db_path))) as conn:
+                    cur = conn.cursor()
+                    cur.execute(
+                        "SELECT id, work_item FROM messages "
+                        "WHERE sender='specifier' AND target='human-in-the-loop' "
+                        "AND acked_at IS NULL "
+                        "AND (status = 'processed' OR status = 'queued' OR status = 'delivered') "
+                        "ORDER BY created_at ASC"
+                    )
+                    for msg_id, work_item in cur.fetchall():
+                        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                        wi = work_item or "unknown"
+                        approval = (
+                            f"Sender: human-in-the-loop\n"
+                            f"Handoff: {wi}\n"
+                            f"Branch: main\n"
+                            f"Commit: \n\n"
+                            f"Auto-approved (--auto-approve-spec mode).\n"
+                            f"Next role: coder\n"
+                        )
+                        cur.execute(
+                            "INSERT INTO messages "
+                            "(sender, target, priority, status, content, created_at, work_item, branch) "
+                            "VALUES (?, ?, 50, 'queued', ?, ?, ?, 'main')",
+                            ("human-in-the-loop", "coder", approval, now, wi),
+                        )
+                        cur.execute(
+                            "UPDATE messages SET acked_at=? WHERE id=? AND acked_at IS NULL",
+                            (now, msg_id),
+                        )
+                        conn.commit()
+                        log.info("auto-approved %s (message %s) → coder", wi, msg_id[:8])
+            except Exception:
+                pass  # DB locked or busy; retry on next poll.
+            _sleep(5.0)
+
+    thread = threading.Thread(target=_poll, daemon=True, name="auto-approve")
+    thread.start()
+    return thread
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     enable_unicode_output()
@@ -558,6 +623,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     # Also protect schedulers started without the launcher.
     _worktree(ctx).ensure_generated_ignored()
+
+    if args.auto_approve_spec and ctx.role == "human-in-the-loop":
+        log.info("auto-approve-spec enabled; forwarding specifier→coder without human review")
+        _start_auto_approver(args.db_path)
 
     try:
         recover_stale_messages(ctx)
