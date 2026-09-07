@@ -51,10 +51,22 @@ REQUIRED_GITIGNORE_ENTRIES = (
     "reports/",
 )
 
+#: Generated output and dependency caches, for every language Kiln scaffolds.
+#:
+#: The dependency-cache entries matter more than they look. `engineering.md` tells roles to
+#: relocate caches into the worktree when a shared one causes lock contention between parallel
+#: agents, and the handoff then commits the result with `git add -A`. Observed live: a Maven
+#: repository relocated to `.mvn/repository/` put 363 jars into a merge commit on `main`, and
+#: removing it later does not shrink the repository — the objects stay in history.
+#:
+#: `.mvn/repository/` is deliberately narrow: `.mvn/` would also ignore
+#: `.mvn/wrapper/maven-wrapper.properties`, which is the Maven version pin and must stay
+#: committed.
 BASE_GITIGNORE = (
     ".DS_Store\n.env\n.env.local\n*.pyc\n__pycache__/\n*.egg-info/\ndist/\nbuild/\n"
     ".pytest_cache/\n.coverage\nhtmlcov/\n.mypy_cache/\n.ruff_cache/\n.venv/\nvenv/\n"
     ".idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+    "target/\n.mvn/repository/\n.gradle/\nnode_modules/\n"
 )
 
 PRE_PUSH_HOOK = """\

@@ -17,6 +17,14 @@ from a system install.
   only to bootstrap the wrapper).
 - **Always invoke Maven via the wrapper**: `./mvnw <goal>` (Unix) / `.\mvnw.cmd <goal>`
   (Windows) — never a bare `mvn` command.
+- **The one exception is `.kiln/test-metrics.json`**, whose `command` is run by the scheduler
+  through `subprocess(shell=True)` — `cmd.exe` on Windows, `sh` elsewhere. No single wrapper
+  invocation works in both: `./mvnw` is not valid `cmd` syntax, and a bare `mvnw` fails whenever
+  `NoDefaultCurrentDirectoryInExePath=1` is set, which Git for Windows sets by default. That
+  command therefore uses a PATH-resolved `mvn`, exactly as the Python example uses a
+  PATH-resolved `uv`. Do not "fix" it back to the wrapper — it will fail on Windows with
+  *"Der Befehl '.' ist entweder falsch geschrieben"* / *"'.' is not recognized"*, and the
+  failure is reported as a verification failure rather than a configuration error.
 - Verify JDK 21+ is on `PATH` (`java -version`) before running any Maven goal.
 - **Do NOT create a second Maven wrapper or root `pom.xml`** — the multi-module build is defined
   once at project root.

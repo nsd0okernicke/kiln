@@ -40,7 +40,7 @@
           "title": "Kiln Coder",
           "mode": "auto",
           "scheduler": "python",
-          "workerTimeout": 3600,
+          "workerTimeout": 7200,
           "workerIdleTimeout": 1800
         },
         {
@@ -57,7 +57,7 @@
           "title": "Kiln Architect",
           "mode": "auto",
           "scheduler": "python",
-          "workerTimeout": 4200,
+          "workerTimeout": 7200,
           "workerIdleTimeout": 900
         },
         {

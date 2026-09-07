@@ -1,6 +1,6 @@
 {
   "framework": "junit",
-  "command": "./mvnw -B clean verify",
+  "command": "mvn -B clean verify",
   "verificationRole": "architect",
   "reports": {
     "junit": "target/test-reports",
