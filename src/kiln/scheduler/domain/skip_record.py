@@ -26,6 +26,11 @@ REASON_FILE_NOT_FOUND = "file_not_found"
 REASON_TOOL_UNAVAILABLE = "tool_unavailable"
 
 
+def _now_iso() -> str:
+    """UTC timestamp in the ISO-8601 Z form the queue and handoffs already use."""
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
 @dataclass(frozen=True)
 class SkipRecord:
     """One instance of a gate being skipped rather than run."""
@@ -37,7 +42,7 @@ class SkipRecord:
     #: Human-readable explanation (optional).
     detail: str = ""
     #: When the skip was recorded.
-    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat().replace("+00:00", "Z"))
+    timestamp: str = field(default_factory=lambda: _now_iso())
     #: The role that skipped the gate.
     role: str = ""
 
@@ -49,7 +54,10 @@ class SkipRecord:
 
 def format_skip_record(skip: SkipRecord) -> str:
     """One machine-readable line for handoff prose or a DB column."""
-    return f"GATE_SKIP: gate={skip.gate} reason={skip.reason} role={skip.role} detail={skip.detail or '-'}"
+    return (
+        f"GATE_SKIP: gate={skip.gate} reason={skip.reason} "
+        f"role={skip.role} detail={skip.detail or '-'}"
+    )
 
 
 def parse_skip_line(line: str) -> SkipRecord | None:
@@ -71,7 +79,9 @@ def parse_skip_line(line: str) -> SkipRecord | None:
     )
 
 
-def skip_budget_exceeded(skip_records: list[SkipRecord], budget: int = DEFAULT_SKIP_BUDGET) -> list[str]:
+def skip_budget_exceeded(
+    skip_records: list[SkipRecord], budget: int = DEFAULT_SKIP_BUDGET
+) -> list[str]:
     """
     Return the keys of (gate, reason) pairs that exceed the skip budget.
 

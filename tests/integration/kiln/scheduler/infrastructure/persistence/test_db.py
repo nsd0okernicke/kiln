@@ -187,6 +187,31 @@ class TestWorkItemMessages:
         assert messages[-1]["content"] == "1"
 
 
+
+class TestQueuePortDelegation:
+    """
+    Every port method must actually reach its query module.
+
+    `messages_for_work_item` shipped calling `queue_queries.messages_for_work_item` while only
+    the sibling `count_work_item_arrivals` was imported, so the module name was never bound and
+    the call raised NameError. Nothing caught it: the only caller is the skip-budget guard,
+    which wraps the lookup in a broad `except` and degrades to "no history" -- so the budget
+    silently could never be exceeded. Calling each method once is what makes a missing import a
+    failure rather than a quiet behaviour change.
+    """
+
+    def test_messages_for_work_item_reaches_the_query_module(self, db_path, add_message):
+        add_message(target="coder", content="first", work_item="cat-1-search")
+
+        queue = SQLiteMessageQueue(db_path)
+        messages = queue.messages_for_work_item("cat-1-search", limit=20)
+
+        assert [m["content"] for m in messages] == ["first"]
+
+    def test_an_unknown_work_item_reads_as_no_history(self, db_path):
+        assert SQLiteMessageQueue(db_path).messages_for_work_item("never-existed") == []
+
+
 class TestStatusTransitions:
     def test_names_the_initial_inbound_after_the_specifier_names_work(
         self, db_path, add_message, read_message

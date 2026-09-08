@@ -5,7 +5,7 @@ from pathlib import Path
 
 from ...application.ports import QueueAccessError
 from ...domain.models import DEFAULT_PRIORITY, InboundMessage, QueueMessage
-from . import queue_commands, task_store
+from . import queue_commands, queue_queries, task_store
 from .queue_queries import count_work_item_arrivals
 
 

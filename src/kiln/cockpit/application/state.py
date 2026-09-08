@@ -282,7 +282,8 @@ def lane_for(row: dict, human_role: str = "human-in-the-loop") -> str:
     """
     if row["status"] == MessageStatus.PROCESSED:
         # Keep in human's lane only for Gherkin review (from specifier, not acknowledged)
-        if row["target"] == human_role and not row.get("acked_at") and row.get("sender") == "specifier":
+        awaiting_review = not row.get("acked_at") and row.get("sender") == "specifier"
+        if row["target"] == human_role and awaiting_review:
             return row["target"]
         return LANE_DONE
     return row["target"]

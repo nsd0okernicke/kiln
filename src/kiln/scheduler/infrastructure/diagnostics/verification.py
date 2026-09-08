@@ -58,20 +58,56 @@ class VerifyResult:
 
     @property
     def summary(self) -> str:
-        """One line for a log or an escalation detail."""
-        if self.ok:
-            parts = ["verification passed"]
-            if self.commit_sha:
-                parts.append(f"(commit {self.commit_sha[:12]})")
-            if not self.tree_clean:
-                parts.append("[dirty tree]")
-            return " ".join(parts)
+        """One line for a log or an escalation detail.
+
+        A dirty tree is marked whichever way the run went: it qualifies a pass as much as a
+        failure, because a result measured on an uncommitted tree is not about the commit.
+        """
+        body = self._passed_summary() if self.ok else self._failed_summary()
+        return body if self.tree_clean else f"{body} [dirty tree]"
+
+    def _passed_summary(self) -> str:
+        """A pass, naming the commit it was measured on when that is known."""
+        if not self.commit_sha:
+            return "verification passed"
+        return f"verification passed (commit {self.commit_sha[:12]})"
+
+    def _failed_summary(self) -> str:
+        """A failure, quoting the command's first non-blank line of output."""
         reason = "timed out" if self.timed_out else "failed"
         first = next((line for line in self.output.splitlines() if line.strip()), "")
-        msg = f"verification {reason}: {first}" if first else f"verification {reason}"
-        if not self.tree_clean:
-            msg += " [dirty tree]"
-        return msg
+        return f"verification {reason}: {first}" if first else f"verification {reason}"
+
+
+@dataclass(frozen=True)
+class Provenance:
+    """What a gate result was measured on: which commit, and whether the tree matched it.
+
+    The pair travels together through every code path here and is never read apart, so it is
+    one value rather than two parameters threaded side by side. `VerifyResult` still exposes
+    the fields individually, because that is what its readers use.
+    """
+
+    commit_sha: str = ""
+    tree_clean: bool = True
+
+    @property
+    def short_sha(self) -> str:
+        """Abbreviated SHA for a log line, or '?' when the commit could not be read."""
+        return self.commit_sha[:12] if self.commit_sha else "?"
+
+
+def _result(
+    ok: bool, output: str, provenance: Provenance, *, timed_out: bool = False
+) -> VerifyResult:
+    """A result stamped with the provenance every path has to carry."""
+    return VerifyResult(
+        ok=ok,
+        output=output,
+        timed_out=timed_out,
+        commit_sha=provenance.commit_sha,
+        tree_clean=provenance.tree_clean,
+    )
 
 
 def tail(output: str, max_lines: int = MAX_OUTPUT_LINES, max_chars: int = MAX_OUTPUT_CHARS) -> str:
@@ -116,17 +152,21 @@ def run(
     what the gate is for.
     """
     command = _expand_paths(command, project_root)
-    commit_sha = _read_commit_sha(cwd)
-    tree_clean = _check_tree_clean(cwd)
-    log.info("running verification: %s  (commit=%s, clean=%s)", command, commit_sha[:12] if commit_sha else "?", tree_clean)
+    provenance = Provenance(commit_sha=_read_commit_sha(cwd), tree_clean=_check_tree_clean(cwd))
+    log.info(
+        "running verification: %s  (commit=%s, clean=%s)",
+        command,
+        provenance.short_sha,
+        provenance.tree_clean,
+    )
     try:
         completed = _run_command(command, cwd, timeout)
     except subprocess.TimeoutExpired as expired:
-        return _timed_out(expired, timeout, commit_sha=commit_sha, tree_clean=tree_clean)
+        return _timed_out(expired, timeout, provenance)
     except OSError as exc:
         log.error("verification could not be started: %s", exc)
-        return VerifyResult(ok=False, output=f"could not start {command!r}: {exc}", commit_sha=commit_sha, tree_clean=tree_clean)
-    return _completed_result(command, completed, commit_sha=commit_sha, tree_clean=tree_clean)
+        return _result(False, f"could not start {command!r}: {exc}", provenance)
+    return _completed_result(command, completed, provenance)
 
 
 def _expand_paths(command: str, project_root: str | Path | None) -> str:
@@ -198,30 +238,25 @@ def _read_commit_sha(cwd: str | Path) -> str:
         return ""
 
 
-def _timed_out(expired: subprocess.TimeoutExpired, timeout: int, commit_sha: str = "", tree_clean: bool = True) -> VerifyResult:
+def _timed_out(
+    expired: subprocess.TimeoutExpired, timeout: int, provenance: Provenance
+) -> VerifyResult:
     output = _decode(expired.stdout) + _decode(expired.stderr)
     log.error("verification timed out after %ss", timeout)
-    return VerifyResult(
-        ok=False,
-        output=tail(output or f"(no output before the {timeout}s timeout)"),
-        timed_out=True,
-        commit_sha=commit_sha,
-        tree_clean=tree_clean,
-    )
+    text = tail(output or f"(no output before the {timeout}s timeout)")
+    return _result(False, text, provenance, timed_out=True)
 
 
-def _completed_result(command: str, completed: subprocess.CompletedProcess, commit_sha: str = "", tree_clean: bool = True) -> VerifyResult:
+def _completed_result(
+    command: str, completed: subprocess.CompletedProcess, provenance: Provenance
+) -> VerifyResult:
     output = (completed.stdout or "") + (completed.stderr or "")
     if completed.returncode == 0:
         log.info("verification passed")
-        return VerifyResult(ok=True, output=tail(output), commit_sha=commit_sha, tree_clean=tree_clean)
+        return _result(True, tail(output), provenance)
     log.warning("verification failed (exit %s)", completed.returncode)
-    return VerifyResult(
-        ok=False,
-        output=f"`{command}` exited {completed.returncode}\n\n{tail(output)}",
-        commit_sha=commit_sha,
-        tree_clean=tree_clean,
-    )
+    failure = f"`{command}` exited {completed.returncode}\n\n{tail(output)}"
+    return _result(False, failure, provenance)
 
 
 def run_clean(

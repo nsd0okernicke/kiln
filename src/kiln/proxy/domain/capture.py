@@ -18,6 +18,7 @@ can be tested without a socket and audited in one place. Three rules shape the m
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -360,6 +361,15 @@ def _usage_from_sse(body: str) -> TokenUsage | None:
     return tracker.usage
 
 
+#: Exact event types carrying usage, mapped to the method that reads them. The
+#: `response.*` family is matched by prefix instead - see `_reader_for`.
+_EVENT_READERS = {
+    "message_start": "_consume_message_start",
+    "message_delta": "_consume_message_delta",
+    "result": "_consume_copilot_result",
+}
+
+
 class StreamingUsageTracker:
     """
     Pulls usage out of an SSE stream chunk by chunk, in constant memory.
@@ -404,16 +414,20 @@ class StreamingUsageTracker:
             event = _jsonl_event(line)
         if event is None:
             return
+        reader = self._reader_for(event.get("type"))
+        if reader is not None:
+            reader(event)
 
-        kind = event.get("type")
-        if kind == "message_start":
-            self._consume_message_start(event)
-        elif kind == "message_delta":
-            self._consume_message_delta(event)
-        elif isinstance(kind, str) and kind.startswith("response."):
-            self._consume_response(event)
-        elif kind == "result":
-            self._consume_copilot_result(event)
+    def _reader_for(self, kind: object) -> Callable[[dict], None] | None:
+        """The method that reads usage out of this event type, or None to ignore it.
+
+        `response.*` is a family rather than one name — completed, incomplete and failed all
+        carry usage — so it is matched by prefix; every other type is an exact name.
+        """
+        if isinstance(kind, str) and kind.startswith("response."):
+            return self._consume_response
+        method = _EVENT_READERS.get(kind) if isinstance(kind, str) else None
+        return getattr(self, method) if method else None
 
     def _consume_message_start(self, event: dict) -> None:
         message = event.get("message")
@@ -446,13 +460,20 @@ class StreamingUsageTracker:
 
     @property
     def usage(self) -> TokenUsage | None:
-        """Usage so far, or None when the stream reported none."""
-        if self._complete is not None:
-            return self._complete
-        if self._copilot_usage is not None:
-            return self._copilot_usage
+        """Usage so far, or None when the stream reported none.
+
+        A final total wins outright; otherwise the running figures from `message_start` and
+        `message_delta` are combined, which is all a stream that was cut short ever provides.
+        """
+        final = self._complete if self._complete is not None else self._copilot_usage
+        if final is not None:
+            return final
         if self._started is None and not self._output_tokens:
             return None
+        return self._running_usage()
+
+    def _running_usage(self) -> TokenUsage:
+        """The start-of-message figures, with the latest output count layered over them."""
         base = self._started or TokenUsage()
         return TokenUsage(
             input_tokens=base.input_tokens,

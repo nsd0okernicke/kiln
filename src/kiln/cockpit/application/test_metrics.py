@@ -207,6 +207,64 @@ def parse_cobertura(text: str) -> dict | None:
     }
 
 
+def parse_jacoco(text: str) -> dict | None:
+    """
+    Coverage from a JaCoCo XML report, in the same shape `parse_cobertura` returns.
+
+    JaCoCo is the JVM default and does not write Cobertura: it reports `<counter>` elements
+    carrying `covered`/`missed` pairs rather than the summary ratios Cobertura puts on the root.
+    Without this the coverage panel is blank for every JVM project, which is what it was through
+    a whole Java run.
+
+    Only the report-level counters are read -- the last `<counter>` children of the root -- so
+    the totals come from JaCoCo's own aggregation rather than from summing packages here.
+
+    Returns None when no LINE counter is present, so an unrecognised document reads as *unknown
+    coverage* rather than as zero, exactly as the Cobertura reader does.
+    """
+    root = ET.fromstring(text)  # nosec B314
+    counters = {
+        counter.get("type"): counter
+        for counter in root.findall("counter")  # direct children only: the report totals
+    }
+    if "LINE" not in counters:
+        return None
+    covered, valid = _counter_totals(counters["LINE"])
+    return {
+        "line_percent": _ratio_percent(covered, valid),
+        "lines_covered": covered,
+        "lines_valid": valid,
+        **_jacoco_branches(counters.get("BRANCH")),
+    }
+
+
+def _jacoco_branches(counter: ET.Element | None) -> dict:
+    """Branch figures from JaCoCo's BRANCH counter, or None for each when it measured nothing."""
+    if counter is None:
+        return dict.fromkeys(_BRANCH_KEYS)
+    covered, valid = _counter_totals(counter)
+    if valid <= 0:
+        return dict.fromkeys(_BRANCH_KEYS)
+    return {
+        "branch_percent": _ratio_percent(covered, valid),
+        "branches_covered": covered,
+        "branches_valid": valid,
+    }
+
+
+def _counter_totals(counter: ET.Element) -> tuple[int, int]:
+    """A JaCoCo counter as (covered, total); it reports covered and missed, not a total."""
+    covered = _attr_int(counter, "covered")
+    return covered, covered + _attr_int(counter, "missed")
+
+
+def _ratio_percent(covered: int, valid: int) -> float:
+    """Percent from a covered/total pair, with nothing-to-cover reading as full coverage."""
+    if valid <= 0:
+        return 0.0
+    return round(covered / valid * 100, 2)
+
+
 #: Branch figures, absent together. Branch coverage is opt-in in most tools, so all three read
 #: None when it was not measured rather than being reported as zeroes.
 _BRANCH_KEYS = ("branch_percent", "branches_covered", "branches_valid")

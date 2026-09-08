@@ -1,11 +1,11 @@
 {
   "framework": "junit",
-  "command": "mvn -B clean verify",
+  "command": "mvn -B -o clean verify -Daggregate.reports={reports}/surefire",
   "verificationRole": "architect",
   "reports": {
-    "junit": "target/test-reports",
-    "coverage": "target/site/jacoco-aggregate/cobertura.xml",
-    "lint": "target/spotbugs.sarif"
+    "junit": "reports/surefire",
+    "coverage": "reports/jacoco.xml",
+    "lint": "reports/spotbugs.sarif"
   },
   "maxAgeMinutes": 30
 }

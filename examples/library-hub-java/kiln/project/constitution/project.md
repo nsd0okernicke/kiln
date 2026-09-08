@@ -119,6 +119,29 @@ Same structure repeats under `loans-service/src/test/java/com/libraryhub/loans/`
 - **Unit tests** (`unit/`): pure Java, Mockito-mock all ports (repositories, publishers), no I/O, no DB.
 - **Acceptance tests** (`acceptance/steps/`): Cucumber-JVM step definitions that execute the `.feature` files. Use Testcontainers (`postgresql`, `rabbitmq` modules) for PostgreSQL and RabbitMQ — do NOT use an embedded/in-memory database as a substitute for Testcontainers in acceptance tests.
 - **Every feature file must have a wired runner.** `CucumberTest.java` must exist per module with `@IncludeEngines("cucumber")` and point at that module's `src/test/resources/features/` — a feature file with no runner picking it up leaves it as dead documentation.
+- **A specified-but-unimplemented feature is tagged `@pending`, and the runner excludes it.**
+  Cucumber selects every `.feature` on the classpath, so the moment the specifier commits a file
+  the build fails for everyone with *"The step … is undefined"* until the coder implements it —
+  and the specifier always runs a cycle ahead of the coder. Tagging makes "specified, not yet
+  built" an honest, non-breaking state instead of a red build nobody can act on.
+
+  ```java
+  @Suite
+  @IncludeEngines("cucumber")
+  @SelectClasspathResource("features")
+  @ConfigurationParameter(key = "cucumber.filter.tags", value = "not @pending")
+  class CucumberTest { }
+  ```
+
+  - The **specifier** puts `@pending` on the first line of every new feature file.
+  - The **coder** removes it as the last step of implementing that story — the story is not done
+    while the tag is still there.
+  - Tagged scenarios report as *skipped*, so they stay visible in the test counts rather than
+    disappearing. A story whose tag is never removed shows up as a permanent skip, which is the
+    intended signal.
+  - Never use `@pending` to park a failing scenario. It is for work not yet started, not for
+    work that does not pass; silencing a red test is covered by "narrowing a gate is a change to
+    the gate" in `engineering.md`.
 - **One PostgreSQL container per bounded context.** The catalog's and the loans' acceptance
   suites each provision their own `PostgreSQLContainer`, not one shared instance both
   `DataSource`s point at. The contexts are independent services that must be able to run against

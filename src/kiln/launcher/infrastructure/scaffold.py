@@ -152,7 +152,9 @@ def copy_ci_workflow(paths: KilnPaths, result: ScaffoldResult, example: str = ""
     """
     # Check for an example-specific CI workflow first
     if example:
-        example_source = paths.framework_root / "examples" / example / ".github" / "workflows" / "ci.yml"
+        example_source = (
+            paths.framework_root / "examples" / example / ".github" / "workflows" / "ci.yml"
+        )
         if example_source.is_file():
             target = paths.project_root / CI_WORKFLOW_TARGET
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -218,49 +220,90 @@ def copy_example(paths: KilnPaths, example: str, result: ScaffoldResult) -> None
 
     Every file the example overrides is copied, not a hardcoded list, so adding a new
     example needs no change here.
+
+    The steps run in order and are independent: each copies what the example provides and
+    returns a note, or None when the example provides nothing of that kind. Adding a new
+    kind of seeded file is a new step in `_EXAMPLE_STEPS`, not another branch here.
     """
     if not example:
         return
+    example_dir = _resolve_example_dir(paths, example)
+    for step in _EXAMPLE_STEPS:
+        note = step(example_dir, paths, example)
+        if note:
+            result.note(note)
+
+
+def _resolve_example_dir(paths: KilnPaths, example: str) -> Path:
+    """The example's directory, or a ScaffoldError naming the ones that do exist."""
     example_dir = paths.framework_root / "examples" / example
-    if not example_dir.is_dir():
-        known = sorted(p.name for p in (paths.framework_root / "examples").iterdir() if p.is_dir())
-        raise ScaffoldError(
-            f"example {example!r} not found under examples/. "
-            f"Available examples: {', '.join(known)}"
-        )
+    if example_dir.is_dir():
+        return example_dir
+    known = sorted(p.name for p in (paths.framework_root / "examples").iterdir() if p.is_dir())
+    raise ScaffoldError(
+        f"example {example!r} not found under examples/. Available examples: {', '.join(known)}"
+    )
 
+
+def _copy_example_readme(example_dir: Path, paths: KilnPaths, example: str) -> str:
+    """The example's brief becomes the project's README."""
     readme = example_dir / "README.md"
-    if readme.is_file():
-        workspace.copy_template_file(readme, paths.project_root / "README.md")
-        result.note(f"copied example brief from {example}")
+    if not readme.is_file():
+        return ""
+    workspace.copy_template_file(readme, paths.project_root / "README.md")
+    return f"copied example brief from {example}"
 
+
+def _copy_example_constitution(example_dir: Path, paths: KilnPaths, example: str) -> str:
+    """Constitution files the example overrides, replacing the framework defaults."""
     overrides = example_dir / "kiln" / "project" / "constitution"
     count = _copy_constitution_overrides(overrides, paths.constitution_dir)
-    if count:
-        result.note(f"applied {count} example constitution override(s)")
+    return f"applied {count} example constitution override(s)" if count else ""
 
+
+def _copy_example_metrics(example_dir: Path, paths: KilnPaths, example: str) -> str:
+    """The example's test-metrics configuration, read by the cockpit."""
     metrics = example_dir / "test-metrics.json"
-    if metrics.is_file():
-        workspace.copy_template_file(metrics, paths.state_dir / "test-metrics.json")
-        result.note(f"configured test metrics for {example}")
+    if not metrics.is_file():
+        return ""
+    workspace.copy_template_file(metrics, paths.state_dir / "test-metrics.json")
+    return f"configured test metrics for {example}"
 
-    # Copy example asset files (zips, pngs, docs, etc.) to the project root.
-    # These are files at the example root that are NOT README.md (already handled
-    # above) and NOT under kiln/ (handled by constitution overrides).
-    extra_assets = [
-        p for p in example_dir.iterdir()
-        if p.is_file()
-        and p.name != "README.md"
-        and p.suffix in (".zip", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".md", ".txt", ".pdf")
-    ]
-    for asset in extra_assets:
+
+#: Asset file types an example may drop at the project root — briefs, diagrams, sprite packs.
+#: README.md is excluded because `_copy_example_readme` has already placed it.
+_ASSET_SUFFIXES = (
+    ".zip", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".md", ".txt", ".pdf",
+)
+
+
+def _is_example_asset(path: Path) -> bool:
+    """A loose file at the example root that belongs in the project root."""
+    return path.is_file() and path.name != "README.md" and path.suffix in _ASSET_SUFFIXES
+
+
+def _copy_example_assets(example_dir: Path, paths: KilnPaths, example: str) -> str:
+    """Loose asset files at the example root, copied to the project root."""
+    assets = [p for p in example_dir.iterdir() if _is_example_asset(p)]
+    for asset in assets:
         workspace.copy_template_file(asset, paths.project_root / asset.name)
-    if extra_assets:
-        result.note(f"copied {len(extra_assets)} example asset file(s)")
+    return f"copied {len(assets)} example asset file(s)" if assets else ""
 
+
+def _copy_example_seed(example_dir: Path, paths: KilnPaths, example: str) -> str:
+    """Gate artifacts the scaffold ships so a regenerating agent cannot drop them."""
     seeded = _copy_example_seed_files(example_dir, paths.project_root)
-    if seeded:
-        result.note(f"seeded {seeded} gate artifact(s) from {example}")
+    return f"seeded {seeded} gate artifact(s) from {example}" if seeded else ""
+
+
+#: Seeding steps, in order. Each returns a note for the scaffold result, or "" for nothing done.
+_EXAMPLE_STEPS = (
+    _copy_example_readme,
+    _copy_example_constitution,
+    _copy_example_metrics,
+    _copy_example_assets,
+    _copy_example_seed,
+)
 
 
 #: Directory in an example whose contents are copied into the project root verbatim,

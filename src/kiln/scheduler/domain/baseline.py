@@ -16,6 +16,11 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 
+def _now_iso() -> str:
+    """UTC timestamp in the ISO-8601 Z form the queue and handoffs already use."""
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
 @dataclass(frozen=True)
 class BaselineEntry:
     """One known-failing test in the baseline."""
@@ -36,7 +41,7 @@ class Baseline:
 
     entries: tuple[BaselineEntry, ...] = ()
     #: ISO timestamp of the last update.
-    updated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat().replace("+00:00", "Z"))
+    updated_at: str = field(default_factory=lambda: _now_iso())
 
     def names(self) -> set[str]:
         return {entry.name for entry in self.entries}
@@ -63,7 +68,12 @@ def _parse_entry_line(line: str) -> BaselineEntry | None:
     name = _field(parts, 0)
     if not name:
         return None
-    return BaselineEntry(name=name, since=_field(parts, 1), reason=_field(parts, 2), backlog_task=_field(parts, 3))
+    return BaselineEntry(
+        name=name,
+        since=_field(parts, 1),
+        reason=_field(parts, 2),
+        backlog_task=_field(parts, 3),
+    )
 
 
 def parse_baseline(content: str) -> Baseline:
@@ -128,7 +138,8 @@ def _baseline_delta_reasons(delta: dict) -> list[str]:
     if delta["new_failures"]:
         reasons.append(f"New failure(s) not in baseline: {', '.join(delta['new_failures'][:5])}")
     if delta["expired_without_backlog"]:
-        reasons.append(f"Baseline failure(s) without backlog task: {', '.join(delta['expired_without_backlog'][:5])}")
+        expired = ", ".join(delta["expired_without_backlog"][:5])
+        reasons.append(f"Baseline failure(s) without backlog task: {expired}")
     return reasons
 
 

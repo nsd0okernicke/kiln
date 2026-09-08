@@ -30,12 +30,12 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import threading
 import os
 import threading
 import webbrowser
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -285,8 +285,14 @@ class CockpitHandler(BaseHTTPRequestHandler):
         dynamic = (
             ("/api/retry/", lambda identifier: lambda body: self._retry(identifier, body)),
             ("/api/ack/", lambda identifier: lambda _body: self._ack(identifier)),
-            ("/api/gherkin-approve/", lambda identifier: lambda _body: self._approve_gherkin(identifier)),
-            ("/api/gherkin-reject/", lambda identifier: lambda body: self._reject_gherkin(identifier, body)),
+            (
+                "/api/gherkin-approve/",
+                lambda identifier: lambda _body: self._approve_gherkin(identifier),
+            ),
+            (
+                "/api/gherkin-reject/",
+                lambda identifier: lambda body: self._reject_gherkin(identifier, body),
+            ),
         )
         for prefix, factory in dynamic:
             if path.startswith(prefix):
@@ -700,7 +706,7 @@ def _start_auto_approver(db_path: Path) -> None:
     """Start a background thread that auto-forwards specifier→human to coder."""
     import sqlite3
     from contextlib import closing
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     def _poll() -> None:
         while True:
@@ -715,7 +721,7 @@ def _start_auto_approver(db_path: Path) -> None:
                         "ORDER BY created_at ASC"
                     )
                     for msg_id, work_item in cur.fetchall():
-                        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                        now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
                         wi = work_item or "unknown"
                         approval = (
                             f"Sender: human-in-the-loop\n"
@@ -758,6 +764,12 @@ def main(argv: list[str] | None = None) -> int:
     server = serve(config_from_args(args), port=port)
     url = f"http://127.0.0.1:{server.server_address[1]}"
 
+    _announce(url, args)
+    return _serve_until_interrupted(server)
+
+
+def _announce(url: str, args: argparse.Namespace) -> None:
+    """Record where the cockpit is listening, say so, and open a browser unless told not to."""
     write_launch_files(
         url,
         Path(args.url_file) if args.url_file else None,
@@ -768,6 +780,9 @@ def main(argv: list[str] | None = None) -> int:
     if not args.no_browser:
         open_browser(url)
 
+
+def _serve_until_interrupted(server: ThreadingHTTPServer) -> int:
+    """Serve until Ctrl-C, always closing the socket. 130 is the shell's SIGINT convention."""
     try:
         server.serve_forever()
     except KeyboardInterrupt:

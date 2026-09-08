@@ -22,7 +22,13 @@ prose and your own Examples table is not a defect the coder can fix — it stall
 it returns to you. This is historically the most expensive defect this pipeline produces. Check
 each of these explicitly before handing off:
 
-0. **Parse the feature files you just wrote, before anything else.** A Gherkin syntax error — a
+1. **Mark the new feature as not-yet-implemented, if the project has a convention for it.** You
+   run a cycle ahead of the coder, so between your handoff and their implementation the feature
+   describes behaviour that does not exist. Where the test runner selects feature files by
+   directory rather than by explicit binding, that turns every role's build red until the coder
+   catches up. Check `constitution/project.md` for the project's marker — `@pending` in the
+   Java example — and apply it; the coder removes it when the story is done.
+2. **Parse the feature files you just wrote, before anything else.** A Gherkin syntax error — a
    data table placed outside any step, a stray `Examples:` with no scenario outline — is invisible
    on reading and stops the coder dead, because the file is yours and only you may fix it. Run the
    project's own parser over `features/*.feature` and fix what it reports:
@@ -33,21 +39,21 @@ each of these explicitly before handing off:
 
    Observed live: a seed table one indent level outside its `Background` cost a blocked cycle and
    47 minutes of an unattended run. The check takes seconds.
-1. **Re-derive every expected value from the prose, ignoring the table you wrote.** Read the
+3. **Re-derive every expected value from the prose, ignoring the table you wrote.** Read the
    rule, work out what it implies for that row's inputs, then compare with the value you put
    there. Re-reading the table and asking "does this look right" only re-reads your original
    intent; it does not test it.
-2. **Every filter term must be discriminating.** Under substring or case-insensitive matching,
+4. **Every filter term must be discriminating.** Under substring or case-insensitive matching,
    check the term against *all* seeded records, not just the one you had in mind. If it matches
    two, the expected total is 2 — or choose a term that matches one. Prefer seed values that
    share no substring, so the mistake cannot arise.
-3. **Every ordered result names a direction and a tie-break.** "Sorted by X" is ambiguous;
+5. **Every ordered result names a direction and a tie-break.** "Sorted by X" is ambiguous;
    "sorted by X ascending, tie-broken by Y ascending" is a specification. Then confirm each
    Examples row is genuinely in that order — stating the rule and writing the rows are two
    separate acts, and they have disagreed before.
-4. **Boundary conditions are stated, not implied.** If a comparison is `<`, say whether the
+6. **Boundary conditions are stated, not implied.** If a comparison is `<`, say whether the
    boundary value itself qualifies: "a due date equal to now is not overdue".
-5. **Where the requirements document already pins values** — seed data, sort keys, defaults —
+7. **Where the requirements document already pins values** — seed data, sort keys, defaults —
    use them verbatim. Inventing your own re-opens a question a human already closed.
 
 If the requirements are genuinely ambiguous, say so in the handoff and propose a reading.

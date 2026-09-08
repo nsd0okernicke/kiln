@@ -197,7 +197,8 @@ def create_spec_defect_task(
                     branch,
                     work_item,
                     f"Spec defect: {work_item}",
-                    f"Auto-created from verification failure classified as spec defect.\n\n{failure_detail}",
+                    "Auto-created from verification failure classified as spec defect."
+                    f"\n\n{failure_detail}",
                 ),
             ).fetchone()
             conn.commit()

@@ -447,23 +447,7 @@ def _cockpit_command(
         "--project-root",
         str(paths.project_root),
     ]
-    lanes = _cockpit_lanes(profile)
-    if lanes:
-        argv += ["--lanes", ",".join(lanes)]
-    intake = profile.routing.resolve(human_role) if profile else None
-    if intake:
-        argv += ["--intake-role", intake]
-    argv += _tuning_args(
-        role,
-        {
-            "--port": role.port,
-            "--activity-limit": role.activity_limit,
-        },
-    )
-    if not role.open_browser:
-        argv.append("--no-browser")
-    if auto_approve_spec and role.role == "human-in-the-loop":
-        argv.append("--auto-approve-spec")
+    argv += _cockpit_optional_args(role, profile, human_role, auto_approve_spec)
     return AgentCommand(
         argv=argv,
         env={
@@ -471,6 +455,39 @@ def _cockpit_command(
             "PYTHONIOENCODING": "utf-8",
         },
     )
+
+
+def _cockpit_optional_args(
+    role: RoleConfig, profile: Profile | None, human_role: str, auto_approve_spec: bool
+) -> list[str]:
+    """Cockpit flags that depend on the profile or on this role's own configuration."""
+    return [
+        *_cockpit_profile_args(profile, human_role),
+        *_tuning_args(role, {"--port": role.port, "--activity-limit": role.activity_limit}),
+        *_cockpit_role_args(role, auto_approve_spec),
+    ]
+
+
+def _cockpit_profile_args(profile: Profile | None, human_role: str) -> list[str]:
+    """Swimlanes and the intake role, both read from the profile's routing table."""
+    argv: list[str] = []
+    lanes = _cockpit_lanes(profile)
+    if lanes:
+        argv += ["--lanes", ",".join(lanes)]
+    intake = profile.routing.resolve(human_role) if profile else None
+    if intake:
+        argv += ["--intake-role", intake]
+    return argv
+
+
+def _cockpit_role_args(role: RoleConfig, auto_approve_spec: bool) -> list[str]:
+    """Switches carried by this role's own configuration rather than by the profile."""
+    argv: list[str] = []
+    if not role.open_browser:
+        argv.append("--no-browser")
+    if auto_approve_spec and role.role == "human-in-the-loop":
+        argv.append("--auto-approve-spec")
+    return argv
 
 
 def _human_role(profile: Profile | None) -> str:

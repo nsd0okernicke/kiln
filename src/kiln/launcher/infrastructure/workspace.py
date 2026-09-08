@@ -138,10 +138,21 @@ def ensure_gitignore(paths: KilnPaths) -> Path:
 
 
 def _ensure_entries(path: Path, required: list[str], *, initial: str) -> None:
+    """Create the file from `initial`, or append whichever required entries it lacks."""
     if not path.exists():
-        if initial:
-            path.write_text(initial, encoding="utf-8")
+        _write_initial(path, initial)
         return
+    _append_missing(path, required)
+
+
+def _write_initial(path: Path, initial: str) -> None:
+    """Seed a file that does not exist yet; nothing to write is a valid initial state."""
+    if initial:
+        path.write_text(initial, encoding="utf-8")
+
+
+def _append_missing(path: Path, required: list[str]) -> None:
+    """Append the required entries the file does not already contain, in the given order."""
     existing = {line.strip() for line in path.read_text(encoding="utf-8").splitlines()}
     missing = [entry for entry in required if entry not in existing]
     if missing:

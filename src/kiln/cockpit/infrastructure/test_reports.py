@@ -212,9 +212,23 @@ def _coverage(paths: list[Path]) -> dict | None:
     if not text:
         return None
     try:
-        return test_metrics.parse_cobertura(text)
+        return _first_recognised_coverage(text)
     except ET.ParseError as error:
         raise ReportError(f"malformed coverage report: {error}") from error
+
+
+#: Coverage dialects, tried in order. Each returns None for a document it does not recognise,
+#: so adding one is adding an entry here rather than teaching the caller about ecosystems.
+_COVERAGE_READERS = (test_metrics.parse_cobertura, test_metrics.parse_jacoco)
+
+
+def _first_recognised_coverage(text: str) -> dict | None:
+    """The first reader that recognises the document, or None when none of them does."""
+    for read in _COVERAGE_READERS:
+        figures = read(text)
+        if figures is not None:
+            return figures
+    return None
 
 
 def _lint_totals(paths: list[Path]) -> dict | None:

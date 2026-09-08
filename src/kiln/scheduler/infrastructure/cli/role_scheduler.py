@@ -19,6 +19,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ...application import process_next_message as scheduler_application
@@ -143,8 +144,6 @@ def make_blocked_recorder(state_dir: Path) -> Callable[[str, str, str], None]:
 
 def _utc_now() -> str:
     """Timestamp for the blocked log, matching the queue's ISO-8601 Z form."""
-    from datetime import UTC, datetime
-
     return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
@@ -598,7 +597,7 @@ def _start_auto_approver(db_path: str | Path) -> threading.Thread | None:
     """
     import sqlite3
     from contextlib import closing
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     def _poll() -> None:
         while True:
@@ -613,7 +612,7 @@ def _start_auto_approver(db_path: str | Path) -> threading.Thread | None:
                         "ORDER BY created_at ASC"
                     )
                     for msg_id, work_item in cur.fetchall():
-                        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                        now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
                         wi = work_item or "unknown"
                         approval = (
                             f"Sender: human-in-the-loop\n"
@@ -625,7 +624,8 @@ def _start_auto_approver(db_path: str | Path) -> threading.Thread | None:
                         )
                         cur.execute(
                             "INSERT INTO messages "
-                            "(sender, target, priority, status, content, created_at, work_item, branch) "
+                            "(sender, target, priority, status, content, "
+                            "created_at, work_item, branch) "
                             "VALUES (?, ?, 50, 'queued', ?, ?, ?, 'main')",
                             ("human-in-the-loop", "coder", approval, now, wi),
                         )

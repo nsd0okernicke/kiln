@@ -58,6 +58,12 @@ Before committing, run the following quality gates in order. If any gate fails, 
 ## Acceptance Tests
 
 - Write step definitions for all Gherkin scenarios. Validate correctness by **running the acceptance suite**.
+- **Remove the not-yet-implemented marker from the feature you just built.** Where the project uses
+  one (`@pending` in the Java example — see `constitution/project.md`), the specifier applies it so
+  an unbuilt story does not redden every role's build. Clearing it is the last step of the story:
+  a feature still carrying the marker reports as *skipped*, so leaving it there means your work is
+  never actually run. Removing the marker and watching those scenarios pass is what "done" means.
+  This is the only edit you may make to a specifier-owned feature file.
 - Acceptance is the primary spec-conformance gate. All scenarios must pass before handoff.
 - If container startup exceeds the provider's tool timeout, skip with a machine-readable GATE_SKIP record (one line in your handoff):
   GATE_SKIP: gate=<gate-name> reason=<reason-code> detail=<optional explanation>

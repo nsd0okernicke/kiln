@@ -49,7 +49,8 @@
           "title": "Kiln Reviewer",
           "mode": "auto",
           "scheduler": "python",
-          "workerTimeout": 1800
+          "workerTimeout": 5400,
+          "workerIdleTimeout": 1200
         },
         {
           "role": "architect",
@@ -57,8 +58,8 @@
           "title": "Kiln Architect",
           "mode": "auto",
           "scheduler": "python",
-          "workerTimeout": 7200,
-          "workerIdleTimeout": 900
+          "workerTimeout": 9000,
+          "workerIdleTimeout": 1200
         },
         {
           "role": "dashboard",
@@ -163,7 +164,8 @@
           "title": "Kiln Coder",
           "mode": "auto",
           "scheduler": "python",
-          "workerTimeout": 1800
+          "workerTimeout": 1800,
+          "workerIdleTimeout": 1200
         },
         {
           "role": "architect",
@@ -172,7 +174,7 @@
           "mode": "auto",
           "scheduler": "python",
           "workerTimeout": 4200,
-          "workerIdleTimeout": 900
+          "workerIdleTimeout": 1200
         },
         {
           "role": "dashboard",
@@ -252,7 +254,8 @@
           "title": "Kiln Coder",
           "mode": "auto",
           "scheduler": "python",
-          "workerTimeout": 1800
+          "workerTimeout": 1800,
+          "workerIdleTimeout": 1200
         },
         {
           "role": "dashboard",
@@ -328,7 +331,8 @@
           "title": "Kiln Coder",
           "mode": "auto",
           "scheduler": "python",
-          "workerTimeout": 1800
+          "workerTimeout": 1800,
+          "workerIdleTimeout": 1200
         },
         {
           "role": "architect",
@@ -337,7 +341,7 @@
           "mode": "auto",
           "scheduler": "python",
           "workerTimeout": 4200,
-          "workerIdleTimeout": 900
+          "workerIdleTimeout": 1200
         },
         {
           "role": "dashboard",
@@ -539,26 +543,30 @@
           "role": "specifier",
           "worktree": "specifier",
           "title": "Kiln Specifier",
-          "mode": "manual"
+          "mode": "manual",
+          "workerIdleTimeout": 1200
         },
         {
           "role": "coder",
           "worktree": "coder",
           "title": "Kiln Coder",
-          "mode": "manual"
+          "mode": "manual",
+          "workerIdleTimeout": 1200
         },
         {
           "role": "reviewer",
           "worktree": "reviewer",
           "title": "Kiln Reviewer",
-          "mode": "manual"
+          "mode": "manual",
+          "workerIdleTimeout": 1200
         },
         {
           "role": "architect",
           "worktree": "architect",
           "title": "Kiln Architect",
           "mode": "manual",
-          "workerTimeout": 4200
+          "workerTimeout": 4200,
+          "workerIdleTimeout": 1200
         },
         {
           "role": "dashboard",
@@ -647,7 +655,8 @@
           "mode": "auto",
           "scheduler": "python",
           "workerDebug": true,
-          "workerTimeout": 1800
+          "workerTimeout": 1800,
+          "workerIdleTimeout": 1200
         },
         {
           "role": "coder",
@@ -658,7 +667,8 @@
           "model": "claude-sonnet-5",
           "scheduler": "python",
           "workerDebug": true,
-          "workerTimeout": 1800
+          "workerTimeout": 1800,
+          "workerIdleTimeout": 1200
         },
         {
           "role": "reviewer",
@@ -668,7 +678,8 @@
           "mode": "auto",
           "scheduler": "python",
           "workerDebug": true,
-          "workerTimeout": 1800
+          "workerTimeout": 5400,
+          "workerIdleTimeout": 1200
         },
         {
           "role": "architect",
@@ -680,7 +691,7 @@
           "scheduler": "python",
           "workerDebug": true,
           "workerTimeout": 4200,
-          "workerIdleTimeout": 900
+          "workerIdleTimeout": 1200
         },
         {
           "role": "dashboard",

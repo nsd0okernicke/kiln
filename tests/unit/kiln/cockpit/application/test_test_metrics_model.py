@@ -184,6 +184,53 @@ JAVA_SARIF = json.dumps(
 )
 
 
+
+#: A JaCoCo report reduced to its report-level counters. Real reports nest package/class/method
+#: counters below these; only the direct children are the totals. Figures are the real ones from
+#: the library-hub-java run's catalog-service, so the expectations are checkable against a build.
+JACOCO = """<?xml version="1.0" encoding="UTF-8"?>
+<report name="catalog-service">
+  <package name="com/libraryhub/catalog">
+    <counter type="LINE" missed="99" covered="99"/>
+  </package>
+  <counter type="INSTRUCTION" missed="7" covered="1343"/>
+  <counter type="BRANCH" missed="2" covered="58"/>
+  <counter type="LINE" missed="2" covered="280"/>
+</report>"""
+
+
+class TestParseJacoco:
+    def test_reads_line_coverage_from_counters(self):
+        """JaCoCo reports covered/missed pairs, not the ratios Cobertura puts on the root."""
+        coverage = test_metrics.parse_jacoco(JACOCO)
+        assert coverage["line_percent"] == 99.29
+        assert coverage["lines_covered"] == 280
+        assert coverage["lines_valid"] == 282
+
+    def test_only_report_level_counters_are_totalled(self):
+        """The nested package counter must not be added to the report total."""
+        assert test_metrics.parse_jacoco(JACOCO)["lines_valid"] == 282
+
+    def test_reads_branch_coverage_when_it_was_measured(self):
+        coverage = test_metrics.parse_jacoco(JACOCO)
+        assert coverage["branch_percent"] == 96.67
+        assert coverage["branches_covered"] == 58
+        assert coverage["branches_valid"] == 60
+
+    def test_absent_line_counter_is_unknown_not_zero(self):
+        """An unrecognised dialect must not be reported as 0% covered."""
+        assert test_metrics.parse_jacoco("<report/>") is None
+
+    def test_unmeasured_branches_are_unknown_not_zero_percent(self):
+        no_branches = JACOCO.replace('<counter type="BRANCH" missed="2" covered="58"/>', "")
+        assert test_metrics.parse_jacoco(no_branches)["branch_percent"] is None
+
+    def test_a_cobertura_document_is_not_claimed(self):
+        """The two readers must not both claim a document, or ordering would decide the answer."""
+        assert test_metrics.parse_jacoco(COBERTURA) is None
+        assert test_metrics.parse_cobertura(JACOCO) is None
+
+
 class TestParseSarif:
     def test_counts_by_level(self):
         lint = test_metrics.parse_sarif(RUFF_SARIF)

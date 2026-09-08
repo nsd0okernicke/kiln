@@ -418,6 +418,34 @@ def _remaining_budget(
     return max(remaining, 0.0)
 
 
+def _named_work_item(
+    ctx: SchedulerContext,
+    message_id: str,
+    inbound: handoff.InboundHandoff,
+    attempts: _Attempts,
+) -> str:
+    """This cycle's work-item name, recorded on the message when the worker chose it."""
+    work_item = resolve_work_item(inbound.handoff, attempts.last.result.handoff_name)
+    if work_item != inbound.handoff:
+        log.info(f"{ICON_HANDOFF} work item named: %s", work_item)
+        _queue(ctx).name_work_item(message_id, work_item)
+    return work_item
+
+
+def _anchor_label(anchor: str) -> str:
+    """Short anchor for the log line, or '(root)' when the branch has no commits yet."""
+    return anchor[:8] if anchor else "(root)"
+
+
+def _completes_a_cycle(ctx: SchedulerContext, target: str) -> bool:
+    """Whether this handoff ends a work item, so the next task may be dispatched.
+
+    A completed cycle is architect→human. The specifier also hands to the human, but for
+    mid-cycle Gherkin review, which is the same work item continuing rather than a new one.
+    """
+    return target == ESCALATION_TARGET and ctx.role != "specifier"
+
+
 def _hand_off(
     ctx: SchedulerContext,
     state: SchedulerState,
@@ -431,27 +459,19 @@ def _hand_off(
     summary = attempts.last.result.summary or "completed cycle"
     log.info(f"{ICON_DONE} worker done: %s", summary)
 
-    work_item = resolve_work_item(inbound.handoff, attempts.last.result.handoff_name)
-    if work_item != inbound.handoff:
-        log.info(f"{ICON_HANDOFF} work item named: %s", work_item)
-        _queue(ctx).name_work_item(message_id, work_item)
+    work_item = _named_work_item(ctx, message_id, inbound, attempts)
 
     if not _produced_work(ctx, anchor):
         return _no_op(ctx, message_id, inbound, summary, attempts)
 
-    log.info(f"{ICON_SQUASH} squashing work since %s", anchor[:8] if anchor else "(root)")
+    log.info(f"{ICON_SQUASH} squashing work since %s", _anchor_label(anchor))
 
     squashed = _worktree(ctx).squash_since(anchor, f"{commit_prefix(ctx.role)} {summary}")
     if not squashed.ok:
         detail = f"squash failed: {squashed.output}"
         log.error(detail)
         return _escalate(
-            ctx,
-            state,
-            message_id,
-            inbound,
-            detail,
-            ESCALATED,
+            ctx, state, message_id, inbound, detail, ESCALATED,
             cost=attempts.cost,
             attempts=len(attempts.invocations),
             tokens=attempts.tokens,
@@ -470,9 +490,7 @@ def _hand_off(
     # are the same fact, and the whole point of the column is that it can be trusted to
     # match what a human reads in the message.
     _insert_verified(ctx, target, outbound, work_item=work_item_of(work_item))
-    # Only dispatch the next task on completed cycles (architect→human),
-    # not on mid-cycle Gherkin review (specifier→human).
-    if target == ESCALATION_TARGET and ctx.role != "specifier":
+    if _completes_a_cycle(ctx, target):
         _auto_dispatch_next(ctx)
     _queue(ctx).mark_processed(message_id)
 
@@ -531,22 +549,22 @@ def work_item_of(name: str) -> str | None:
     return None if not name or is_pending(name) else name
 
 
+def _skips_in(text: str) -> list:
+    """Every GATE_SKIP record in one blob of text, in the order it states them."""
+    parsed = (skip_record.parse_skip_line(line) for line in text.split("\n"))
+    return [record for record in parsed if record is not None]
+
+
+def _message_texts(history: list | None) -> list[str]:
+    """The content of each historical message that carries any."""
+    contents = ((message.get("content") or "") for message in history or [])
+    return [content for content in contents if isinstance(content, str)]
+
+
 def _collect_skip_records(output: str, history: list | None = None) -> list:
     """Parse GATE_SKIP lines from output and optionally from historical messages."""
-    skips = []
-    for line in output.split("\n"):
-        record = skip_record.parse_skip_line(line)
-        if record is not None:
-            skips.append(record)
-    if history:
-        for msg in history:
-            content = msg.get("content", "") or ""
-            if isinstance(content, str):
-                for line in content.split("\n"):
-                    record = skip_record.parse_skip_line(line)
-                    if record is not None:
-                        skips.append(record)
-    return skips
+    texts = [output, *_message_texts(history)]
+    return [record for text in texts for record in _skips_in(text)]
 
 
 def _check_skip_budget(ctx: SchedulerContext, attempts: _Attempts) -> None:
@@ -558,40 +576,51 @@ def _check_skip_budget(ctx: SchedulerContext, attempts: _Attempts) -> None:
     attempt is treated as a verification failure (issue #47, finding 5).
     """
     output = attempts.last.result.summary or ""
-    if "GATE_SKIP:" not in output:
+    if "GATE_SKIP:" not in output or not _collect_skip_records(output):
         return
 
-    skips = _collect_skip_records(output)
-    if not skips:
-        return
-
-    # Combine current skip records with historical ones for this work item.
     work_item = attempts.last.result.handoff_name or ""
-    if work_item:
-        try:
-            history = _queue(ctx).messages_for_work_item(work_item, limit=20)
-            skips = _collect_skip_records(output, history)
-        except Exception:
-            log.warning("skip-budget: could not query history for %s", work_item, exc_info=True)
-
+    skips = _collect_skip_records(output, _skip_history(ctx, work_item))
     exceeded = skip_record.skip_budget_exceeded(skips)
-    if exceeded:
-        detail = "; ".join(exceeded)
-        log.warning(
-            f"{ICON_BLOCKED} skip budget exceeded for %s: %s",
-            work_item, detail,
-        )
-        failed = attempts.last
-        attempts.invocations[-1] = replace(
-            failed,
-            result=status_contract.WorkerResult(
-                status=status_contract.STATUS_BLOCKED,
-                summary=f"Skip budget exceeded for: {detail}. "
-                        f"The same gate has been skipped too many times. "
-                        f"Address the underlying issue or override the skip budget.",
-                sentinel_found=failed.result.sentinel_found,
-            ),
-        )
+    if not exceeded:
+        return
+
+    detail = "; ".join(exceeded)
+    log.warning(f"{ICON_BLOCKED} skip budget exceeded for %s: %s", work_item, detail)
+    _block_attempt(
+        attempts,
+        f"Skip budget exceeded for: {detail}. "
+        f"The same gate has been skipped too many times. "
+        f"Address the underlying issue or override the skip budget.",
+    )
+
+
+def _skip_history(ctx: SchedulerContext, work_item: str) -> list:
+    """Earlier messages for this work item, or nothing when they cannot be read.
+
+    A guard that cannot reach the queue falls back to the current attempt alone rather than
+    taking the cycle down over its own bookkeeping.
+    """
+    if not work_item:
+        return []
+    try:
+        return _queue(ctx).messages_for_work_item(work_item, limit=20)
+    except Exception:
+        log.warning("skip-budget: could not query history for %s", work_item, exc_info=True)
+        return []
+
+
+def _block_attempt(attempts: _Attempts, summary: str) -> None:
+    """Rewrite the last attempt as blocked, keeping whether its sentinel was seen."""
+    failed = attempts.last
+    attempts.invocations[-1] = replace(
+        failed,
+        result=status_contract.WorkerResult(
+            status=status_contract.STATUS_BLOCKED,
+            summary=summary,
+            sentinel_found=failed.result.sentinel_found,
+        ),
+    )
 
 
 def _apply_verification(ctx: SchedulerContext, attempts: _Attempts) -> None:
