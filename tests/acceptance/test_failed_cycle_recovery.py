@@ -5,15 +5,15 @@ from workflow_support import prepare, rows, scheduler, send
 
 
 def test_recovers_a_failed_cycle_with_public_retry(
-    initialized_project, command_runner, fake_claude
+    initialized_project, command_runner, fake_pi
 ):
     prepare(initialized_project, command_runner)
     inbound_id = send(command_runner, initialized_project, "fail then recover")
 
-    scheduler(command_runner, initialized_project, fake_claude, status="blocked")
+    scheduler(command_runner, initialized_project, fake_pi, status="blocked")
     failed = next(row for row in rows(initialized_project) if row["id"].startswith(inbound_id))
     assert failed["status"] == "failed"
-    assert "deterministic worker task" in failed["error"]
+    assert "deterministic Pi worker task" in failed["error"]
 
     retried = command_runner.run(
         console_script("kiln"),
@@ -26,7 +26,7 @@ def test_recovers_a_failed_cycle_with_public_retry(
         cwd=REPO_ROOT,
     )
     assert "resumed" in retried.stdout
-    scheduler(command_runner, initialized_project, fake_claude, status="done")
+    scheduler(command_runner, initialized_project, fake_pi, status="done")
 
     messages = rows(initialized_project)
     original = next(row for row in messages if row["id"].startswith(inbound_id))

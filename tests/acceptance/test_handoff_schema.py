@@ -8,7 +8,7 @@ all routing hops, and no role breaks the chain by producing an unparseable messa
 from workflow_support import prepare, rows, scheduler, send
 
 
-def test_full_role_loop_handoff_contract(initialized_project, command_runner, fake_claude):
+def test_full_role_loop_handoff_contract(initialized_project, command_runner, fake_pi):
     """
     Validate the handoff message schema across the full role loop.
 
@@ -33,8 +33,8 @@ def test_full_role_loop_handoff_contract(initialized_project, command_runner, fa
 
     route = [
         ("specifier", "coder"),
-        ("coder", "refactorer"),
-        ("refactorer", "architect"),
+        ("coder", "reviewer"),
+        ("reviewer", "architect"),
         ("architect", "human-in-the-loop"),
     ]
 
@@ -42,7 +42,7 @@ def test_full_role_loop_handoff_contract(initialized_project, command_runner, fa
         result = scheduler(
             command_runner,
             initialized_project,
-            fake_claude,
+            fake_pi,
             status="done",
             role=role,
             target=target,
@@ -51,8 +51,8 @@ def test_full_role_loop_handoff_contract(initialized_project, command_runner, fa
         assert f"handed off to {target}" in result.stderr
 
     messages = rows(initialized_project)
-    handoffs = [row for row in messages if row["status"] == "queued" or row["status"] == "processed"]
-    assert len(handoffs) >= 5  # specifier -> coder -> refactorer -> architect -> human
+    handoffs = [row for row in messages if row["status"] in ("queued", "processed")]
+    assert len(handoffs) >= 5  # specifier -> coder -> reviewer -> architect -> human
 
     # Validate contract on every handoff
     for handoff in handoffs:

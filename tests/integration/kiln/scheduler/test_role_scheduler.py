@@ -10,6 +10,7 @@ the routing table, the git history and the message formats are all the real ones
 from __future__ import annotations
 
 import itertools
+import logging
 import subprocess
 from datetime import datetime
 
@@ -1277,3 +1278,172 @@ class TestCycleResult:
     def test_result_is_immutable(self):
         with pytest.raises(AttributeError):
             CycleResult(role_scheduler.IDLE).outcome = "x"  # type: ignore[misc]
+
+
+class TestBlockedLog:
+    """
+    `.kiln/BLOCKED.md` — the only record of an escalation that survives an unattended run.
+
+    The queue row and the status pane are both live views: overnight nobody reads either,
+    and the operator comes back to a swarm that looks finished. This file is what they find.
+    """
+
+    def test_the_first_block_writes_a_file_with_its_header(self, tmp_path):
+        record = role_scheduler.make_blocked_recorder(tmp_path / ".kiln")
+
+        record("coder", "CAT-3", "acceptance gate never went green")
+
+        written = (tmp_path / ".kiln" / role_scheduler.BLOCKED_LOG_NAME).read_text(encoding="utf-8")
+        assert written.startswith(role_scheduler.BLOCKED_LOG_HEADER)
+        assert "coder" in written and "CAT-3" in written
+        assert "acceptance gate never went green" in written
+
+    def test_later_blocks_append_rather_than_replace(self, tmp_path):
+        # An overnight run can block more than once, and the earlier entry is the one that
+        # explains how the swarm got here.
+        record = role_scheduler.make_blocked_recorder(tmp_path / ".kiln")
+
+        record("coder", "CAT-3", "first")
+        record("reviewer", "LOAN-5", "second")
+
+        written = (tmp_path / ".kiln" / role_scheduler.BLOCKED_LOG_NAME).read_text(encoding="utf-8")
+        assert written.count(role_scheduler.BLOCKED_LOG_HEADER) == 1
+        assert "CAT-3" in written and "LOAN-5" in written
+        assert written.index("first") < written.index("second")
+
+    def test_the_state_directory_is_created_when_missing(self, tmp_path):
+        record = role_scheduler.make_blocked_recorder(tmp_path / "absent" / "nested")
+
+        record("coder", "CAT-3", "blocked")
+
+        assert (tmp_path / "absent" / "nested" / role_scheduler.BLOCKED_LOG_NAME).is_file()
+
+    def test_every_entry_is_timestamped(self, tmp_path):
+        record = role_scheduler.make_blocked_recorder(tmp_path)
+
+        record("coder", "CAT-3", "blocked")
+
+        written = (tmp_path / role_scheduler.BLOCKED_LOG_NAME).read_text(encoding="utf-8")
+        stamp = written.rsplit("- **", 1)[1].split("**", 1)[0]
+        assert datetime.fromisoformat(stamp.replace("Z", "+00:00")).tzinfo is not None
+
+    def test_an_unwritable_location_does_not_take_the_scheduler_down(self, tmp_path, caplog):
+        # A marker file is a convenience for the operator. Losing it must never cost the run
+        # that produced it, so the failure is logged and swallowed.
+        blocker = tmp_path / "state"
+        blocker.write_text("not a directory", encoding="utf-8")
+
+        with caplog.at_level(logging.WARNING, logger=role_scheduler.log.name):
+            role_scheduler.make_blocked_recorder(blocker / "kiln")("coder", "CAT-3", "blocked")
+
+        assert "could not write" in caplog.text
+
+
+class TestStatusFlags:
+    """
+    The optional `--flag=` arguments. Each is omitted rather than sent as zero: set-status.py
+    writes what it is given straight into the dashboard's JSON, and "$0.00 spent" as a
+    measured fact is worse than no figure at all.
+    """
+
+    @pytest.fixture
+    def sent(self, tmp_path, monkeypatch):
+        script = tmp_path / "set-status.py"
+        script.write_text("import sys\n", encoding="utf-8")
+        calls = {}
+        monkeypatch.setattr(
+            role_scheduler.subprocess,
+            "run",
+            lambda cmd, **kw: calls.setdefault("cmd", cmd) or subprocess.CompletedProcess(cmd, 0),
+        )
+
+        def _run(**kwargs):
+            writer = role_scheduler.make_status_writer(
+                "coder", script, worker_timeout=kwargs.pop("worker_timeout", None)
+            )
+            writer("working", **kwargs)
+            return calls["cmd"]
+
+        return _run
+
+    def test_the_measurements_the_caller_has_are_all_forwarded(self, sent):
+        command = sent(cycles=3, cost_usd=1.25, attempt=2, max_attempts=5, worker_timeout=7200)
+
+        assert "--cycles=3" in command
+        assert "--cost=1.25" in command
+        assert "--attempt=2" in command
+        assert "--max-attempts=5" in command
+        assert "--worker-timeout=7200" in command
+
+    def test_measurements_the_caller_lacks_are_left_out_entirely(self, sent):
+        command = sent()
+
+        assert not any(part.startswith("--") for part in command)
+
+    def test_a_genuine_zero_is_still_reported(self, sent):
+        # Nothing spent is a measurement when the role tracks cost; only `None` means unknown.
+        assert "--cost=0.0" in sent(cost_usd=0.0)
+
+    def test_the_usage_breakdown_goes_over_as_four_scalars(self, sent):
+        command = sent(
+            tokens=TokenUsage(
+                input_tokens=11, output_tokens=22, cache_read_tokens=33, cache_creation_tokens=44
+            )
+        )
+
+        assert "--tokens-in=11" in command
+        assert "--tokens-out=22" in command
+        assert "--tokens-cache-read=33" in command
+        assert "--tokens-cache-write=44" in command
+
+
+class TestWorkerLogRollover:
+    """
+    A worker that streams for hours must not fill the disk. One rollover file is kept, so
+    the tail that matters survives and the total stays bounded.
+    """
+
+    def test_output_is_appended_to_the_log(self, tmp_path):
+        log_file = tmp_path / "logs" / "worker.log"
+
+        emit = role_scheduler._make_worker_output_emitter(log_file)
+        emit("first line")
+        emit("second line")
+
+        assert log_file.read_text(encoding="utf-8") == "first line\nsecond line\n"
+
+    def test_the_log_rolls_over_once_it_passes_the_cap(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(role_scheduler, "WORKER_LOG_MAX_BYTES", 32)
+        log_file = tmp_path / "worker.log"
+
+        emit = role_scheduler._make_worker_output_emitter(log_file)
+        emit("x" * 40)
+        emit("after the rollover")
+
+        assert log_file.read_text(encoding="utf-8") == "after the rollover\n"
+        assert (tmp_path / "worker.log.1").read_text(encoding="utf-8") == "x" * 40 + "\n"
+
+    def test_only_one_generation_is_kept(self, tmp_path, monkeypatch):
+        # Two would double the ceiling this exists to impose; the older one is dropped.
+        monkeypatch.setattr(role_scheduler, "WORKER_LOG_MAX_BYTES", 32)
+        log_file = tmp_path / "worker.log"
+
+        emit = role_scheduler._make_worker_output_emitter(log_file)
+        emit("a" * 40)
+        emit("b" * 40)
+        emit("c")
+
+        assert (tmp_path / "worker.log.1").read_text(encoding="utf-8") == "b" * 40 + "\n"
+        assert not (tmp_path / "worker.log.2").exists()
+
+    def test_a_log_that_cannot_be_written_disables_capture_without_stopping_output(
+        self, tmp_path, capsys
+    ):
+        # The pane is the primary destination; a file that cannot be opened must not cost
+        # the operator the stream they are watching.
+        emit = role_scheduler._make_worker_output_emitter(tmp_path / "wall" / "worker.log")
+        (tmp_path / "wall").write_text("not a directory", encoding="utf-8")
+
+        emit("still printed")
+
+        assert "still printed" in capsys.readouterr().out

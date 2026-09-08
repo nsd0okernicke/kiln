@@ -3,7 +3,7 @@
 from workflow_support import git, prepare, rows, scheduler, send
 
 
-def test_completes_one_verified_handoff(initialized_project, command_runner, fake_claude):
+def test_completes_one_verified_handoff(initialized_project, command_runner, fake_pi):
     prepare(initialized_project, command_runner)
     (initialized_project / "human-input.txt").write_text("incoming work\n", encoding="utf-8")
     git(command_runner, initialized_project, "add", "human-input.txt")
@@ -11,7 +11,7 @@ def test_completes_one_verified_handoff(initialized_project, command_runner, fak
     commit = git(command_runner, initialized_project, "rev-parse", "HEAD").stdout.strip()
     inbound_id = send(command_runner, initialized_project, "implement it", commit=commit)
 
-    result = scheduler(command_runner, initialized_project, fake_claude, status="done")
+    result = scheduler(command_runner, initialized_project, fake_pi, status="done")
 
     assert "handed off to human-in-the-loop" in result.stderr
     assert "verification passed" in result.stderr
@@ -26,4 +26,4 @@ def test_completes_one_verified_handoff(initialized_project, command_runner, fak
     assert outbound["work_item"] == "system-test-task"
     assert "Commit:" in outbound["content"]
     subject = git(command_runner, worktree, "log", "-1", "--format=%s").stdout.strip()
-    assert subject == "[Coder] completed deterministic worker task"
+    assert subject == "[Coder] completed deterministic Pi worker task"

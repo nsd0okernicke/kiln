@@ -22,7 +22,7 @@ def _wait_until(predicate, process: subprocess.Popen, stderr_path, timeout: floa
 
 
 def test_halted_scheduler_resumes_after_public_retry(
-    initialized_project, command_runner, fake_claude
+    initialized_project, command_runner, fake_pi
 ):
     prepare(initialized_project, command_runner)
     inbound_id = send(command_runner, initialized_project, "trip then reset breaker")
@@ -35,7 +35,7 @@ def test_halted_scheduler_resumes_after_public_retry(
         **command_runner.environment,
         **fake_environment(
             command_runner,
-            fake_claude,
+            fake_pi,
             status="blocked",
             sequence_file=sequence,
         ),

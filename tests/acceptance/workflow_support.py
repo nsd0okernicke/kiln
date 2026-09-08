@@ -24,7 +24,7 @@ def prepare(
     runner: CommandRunner,
     *,
     profile: str = "spike",
-    agent_override: str | None = "claude",
+    agent_override: str | None = "pi",
 ) -> None:
     (project / "verify_system.py").write_text(
         "import os\n"
@@ -85,7 +85,7 @@ def scheduler_command(
     max_attempts: int = 1,
     escalation_limit: int = 3,
     once: bool = True,
-    agent: str = "claude",
+    agent: str = "pi",
 ) -> list[str | Path]:
     command: list[str | Path] = [
         console_script("kiln-scheduler"),
@@ -126,23 +126,23 @@ def scheduler_command(
 
 def fake_environment(
     runner: CommandRunner,
-    fake_claude: Path,
+    fake_bin: Path,
     *,
     status: str,
     fake_file: str = "system-worker.txt",
     verification_status: str = "pass",
     sequence_file: Path | None = None,
-    executable: str = "claude",
+    executable: str = "pi",
 ) -> dict[str, str]:
-    path = str(fake_claude) + os.pathsep + runner.environment.get("PATH", "")
+    path = str(fake_bin) + os.pathsep + runner.environment.get("PATH", "")
     resolved = shutil.which(executable, path=path)
-    expected = fake_claude / (f"{executable}.exe" if os.name == "nt" else executable)
+    expected = fake_bin / (f"{executable}.exe" if os.name == "nt" else executable)
     assert resolved and Path(resolved).resolve() == expected.resolve(), (
-        f"refusing to run scheduler: fake Claude did not win PATH resolution ({resolved})"
+        f"refusing to run scheduler: fake {executable} did not win PATH resolution ({resolved})"
     )
     environment = {
         "PATH": path,
-        "PYTHONPATH": str(fake_claude) + os.pathsep + runner.environment.get("PYTHONPATH", ""),
+        "PYTHONPATH": str(fake_bin) + os.pathsep + runner.environment.get("PYTHONPATH", ""),
         "KILN_FAKE_STATUS": status,
         "KILN_FAKE_HANDOFF": "system-test-task",
         "KILN_FAKE_FILE": fake_file,
@@ -157,7 +157,7 @@ def fake_environment(
 def scheduler(
     runner: CommandRunner,
     project: Path,
-    fake_claude: Path,
+    fake_bin: Path,
     *,
     status: str,
     max_attempts: int = 1,
@@ -165,7 +165,7 @@ def scheduler(
     target: str = "human-in-the-loop",
     fake_file: str = "system-worker.txt",
     verification_status: str = "pass",
-    agent: str = "claude",
+    agent: str = "pi",
 ):
     return runner.run(
         *scheduler_command(
@@ -179,7 +179,7 @@ def scheduler(
         cwd=REPO_ROOT,
         env=fake_environment(
             runner,
-            fake_claude,
+            fake_bin,
             status=status,
             fake_file=fake_file,
             verification_status=verification_status,

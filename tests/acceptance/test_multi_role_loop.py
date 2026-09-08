@@ -3,7 +3,7 @@
 from workflow_support import prepare, rows, scheduler, send
 
 
-def test_full_role_loop_preserves_identity(initialized_project, command_runner, fake_claude):
+def test_full_role_loop_preserves_identity(initialized_project, command_runner, fake_pi):
     prepare(initialized_project, command_runner, profile="full")
     send(
         command_runner,
@@ -15,15 +15,15 @@ def test_full_role_loop_preserves_identity(initialized_project, command_runner, 
 
     route = [
         ("specifier", "coder"),
-        ("coder", "refactorer"),
-        ("refactorer", "architect"),
+        ("coder", "reviewer"),
+        ("reviewer", "architect"),
         ("architect", "human-in-the-loop"),
     ]
     for role, target in route:
         result = scheduler(
             command_runner,
             initialized_project,
-            fake_claude,
+            fake_pi,
             status="done",
             role=role,
             target=target,

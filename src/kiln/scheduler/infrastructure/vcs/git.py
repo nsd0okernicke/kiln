@@ -463,7 +463,13 @@ def _main_repo(cwd: str | Path) -> Path | None:
     main = run_git(["rev-parse", "--git-common-dir"], cwd)
     if not main.ok or not main.stdout:
         return None
-    return Path(main.stdout).resolve().parent
+    # Relative when asked from the main repository itself (plain `.git`), absolute when asked
+    # from a linked worktree. Resolving a relative answer straight off would measure it
+    # against this process's working directory, which is not where the repository is.
+    common = Path(main.stdout)
+    if not common.is_absolute():
+        common = Path(cwd) / common
+    return common.resolve().parent
 
 
 def all_worktrees(cwd: str | Path) -> list[Path]:
@@ -508,8 +514,15 @@ def push_branch(branch: str, cwd: str | Path) -> None:
     Used by sequential mode: after one task completes, the current worktree
     pushes its squashed commit to the shared branch so the next task's
     first role picks up the changes when merging that branch.
+
+    Git refuses to update a branch that is checked out in another worktree, which is the
+    normal layout — the project root usually has the shared branch checked out. The refusal
+    is logged rather than raised: the work is already merged by the handoff that ran before
+    this, so a failed push costs the next story a fast start, not the finished one.
     """
-    run_git(["push", ".", f"HEAD:{branch}", "--force"], cwd)
+    result = run_git(["push", ".", f"HEAD:{branch}", "--force"], cwd)
+    if not result.ok:
+        log.warning("could not push HEAD to %s: %s", branch, result.output.strip())
 
 
 def has_pending_changes(cwd: str | Path) -> bool:

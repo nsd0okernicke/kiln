@@ -4,14 +4,14 @@ from conftest import REPO_ROOT, console_script
 from workflow_support import prepare, rows, scheduler, send
 
 
-def test_recovers_after_verification_failure(initialized_project, command_runner, fake_claude):
+def test_recovers_after_verification_failure(initialized_project, command_runner, fake_pi):
     prepare(initialized_project, command_runner)
     inbound_id = send(command_runner, initialized_project, "verify then recover")
 
     failed_run = scheduler(
         command_runner,
         initialized_project,
-        fake_claude,
+        fake_pi,
         status="done",
         verification_status="fail",
     )
@@ -34,7 +34,7 @@ def test_recovers_after_verification_failure(initialized_project, command_runner
     successful_run = scheduler(
         command_runner,
         initialized_project,
-        fake_claude,
+        fake_pi,
         status="done",
         verification_status="pass",
     )

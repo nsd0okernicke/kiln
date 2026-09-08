@@ -439,3 +439,110 @@ class TestTrafficRecord:
 
     def test_a_timestamp_is_stamped_automatically(self):
         assert TrafficRecord(role=None, method="GET", path="/").ts.endswith("Z")
+
+
+def _jsonl(*events):
+    """Copilot's wire format: one JSON object per line, no `data:` prefix and no blank line."""
+    return "".join(f"{json.dumps(event)}\n" for event in events).encode("utf-8")
+
+
+def _copilot_usage(body):
+    tracker = StreamingUsageTracker()
+    tracker.feed(body)
+    return tracker.usage
+
+
+class TestCopilotUsage:
+    """
+    Copilot reports usage in camelCase on a JSONL stream rather than SSE.
+
+    The vendor dispatch has to key on camelCase-only names: `input_tokens` and
+    `output_tokens` are Anthropic's own key names, so keying on those would make every
+    Claude response read as Copilot and silently drop the cache figures the cost line is
+    built from.
+    """
+
+    def test_camel_case_usage_is_read(self):
+        body = _jsonl(
+            {"type": "result", "usage": {"inputTokens": 10, "outputTokens": 4, "cachedTokens": 7}}
+        )
+
+        assert _copilot_usage(body) == TokenUsage(
+            input_tokens=10, output_tokens=4, cache_read_tokens=7
+        )
+
+    def test_usage_nested_under_data_is_found(self):
+        # Some Copilot builds wrap the payload; the figure is the same either way.
+        body = _jsonl({"type": "result", "data": {"usage": {"inputTokens": 5}}})
+
+        assert _copilot_usage(body).input_tokens == 5
+
+    @pytest.mark.parametrize("alias", ["inputTokens", "input_tokens", "promptTokens"])
+    def test_the_input_aliases_are_all_accepted(self, alias):
+        body = _jsonl({"type": "result", "usage": {alias: 12}})
+
+        assert _copilot_usage(body).input_tokens == 12
+
+    @pytest.mark.parametrize(
+        "alias", ["outputTokens", "output_tokens", "completionTokens", "completion_tokens"]
+    )
+    def test_the_output_aliases_are_all_accepted(self, alias):
+        body = _jsonl({"type": "result", "usage": {"inputTokens": 1, alias: 9}})
+
+        assert _copilot_usage(body).output_tokens == 9
+
+    @pytest.mark.parametrize("alias", ["cachedTokens", "cached_tokens", "cacheReadTokens"])
+    def test_the_cache_aliases_are_all_accepted(self, alias):
+        body = _jsonl({"type": "result", "usage": {"inputTokens": 1, alias: 3}})
+
+        assert _copilot_usage(body).cache_read_tokens == 3
+
+    def test_a_boolean_is_not_a_count(self):
+        # `True` is an int in Python. Counting it as one token would put a made-up figure in
+        # the ledger instead of leaving the field unreported.
+        body = _jsonl({"type": "result", "usage": {"inputTokens": True, "outputTokens": 3}})
+
+        assert _copilot_usage(body).input_tokens == 0
+
+    def test_a_missing_field_reads_as_zero_rather_than_failing(self):
+        body = _jsonl({"type": "result", "usage": {"inputTokens": 8}})
+
+        assert _copilot_usage(body).output_tokens == 0
+
+    def test_a_result_event_carrying_no_usage_reports_nothing(self):
+        assert _copilot_usage(_jsonl({"type": "result"})) is None
+
+    def test_anthropic_usage_is_not_mistaken_for_copilot(self):
+        # The reason the dispatch keys on camelCase only: these are Anthropic's names, and
+        # the Copilot reader has nowhere to put `cache_creation_input_tokens`.
+        body = json.dumps(
+            {
+                "usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 4,
+                    "cache_read_input_tokens": 3,
+                    "cache_creation_input_tokens": 2,
+                }
+            }
+        )
+
+        assert extract_usage(body).cache_creation_tokens == 2
+
+
+class TestJsonlParsing:
+    def test_a_line_that_is_not_json_is_skipped(self):
+        # Copilot interleaves progress text with its JSONL; a stray line must not cost the
+        # usage that arrives after it.
+        body = b"starting up\n" + _jsonl({"type": "result", "usage": {"inputTokens": 6}})
+
+        assert _copilot_usage(body).input_tokens == 6
+
+    def test_a_truncated_json_line_is_skipped(self):
+        # A stream cut mid-line is the normal shape of a killed worker.
+        assert _copilot_usage(b'{"type": "result", "usage": {"inputTo\n') is None
+
+    def test_a_json_line_that_is_not_an_object_is_skipped(self):
+        assert _copilot_usage(b"[1, 2, 3]\n") is None
+
+    def test_a_line_that_is_not_a_json_object_at_all_is_skipped(self):
+        assert _copilot_usage(b'"just a string"\n') is None

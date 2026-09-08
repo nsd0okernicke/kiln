@@ -325,8 +325,8 @@ class TestOperationalQueue:
         assert "card.duration" in board
 
     def test_role_details_open_in_a_dialog(self, page):
-        board = page.partition("function renderBoard")[2].partition("async function pollLog")[0]
-
+        # Asserted against the whole page, not just renderBoard: the dialog wiring lives
+        # outside that function, so scoping these to the board body fails.
         assert '$("role-dialog").showModal()' in page
         assert 'role-details' in page
 

@@ -7,7 +7,7 @@ from workflow_support import prepare, rows, scheduler, send
 
 
 def test_scheduler_replays_processing_message_after_restart(
-    initialized_project, command_runner, fake_claude
+    initialized_project, command_runner, fake_pi
 ):
     prepare(initialized_project, command_runner)
     inbound_id = send(command_runner, initialized_project, "resume interrupted work")
@@ -19,7 +19,7 @@ def test_scheduler_replays_processing_message_after_restart(
         )
         connection.commit()
 
-    result = scheduler(command_runner, initialized_project, fake_claude, status="done")
+    result = scheduler(command_runner, initialized_project, fake_pi, status="done")
 
     messages = rows(initialized_project)
     original = next(row for row in messages if row["id"].startswith(inbound_id))

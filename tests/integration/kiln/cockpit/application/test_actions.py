@@ -13,7 +13,7 @@ import pytest
 from kiln.cockpit.application import actions
 from kiln.cockpit.infrastructure import actions_gateway
 from kiln.cockpit.infrastructure.actions_gateway import KilnActionGateway
-from kiln.scheduler.infrastructure.persistence import db
+from kiln.scheduler.infrastructure.persistence import db, task_store
 
 pytestmark = pytest.mark.integration
 
@@ -154,6 +154,20 @@ class TestBacklogTask:
 
         assert archived["status"] == "archived"
 
+    def test_refining_a_task_that_is_gone_is_reported_not_raised_raw(self, ctx):
+        # Two tabs open, one archives while the other saves an edit. The operator gets a
+        # message on screen, so the store's own exception has to be translated on the way out.
+        with pytest.raises(actions.ActionError):
+            actions.update_task(ctx, identifier="404", title="Ghost", body="Ghost")
+
+    def test_archiving_a_task_that_is_gone_is_reported_not_raised_raw(self, ctx):
+        with pytest.raises(actions.ActionError):
+            actions.archive_task(ctx, identifier="404")
+
+    def test_handing_off_a_task_that_is_gone_is_reported_not_raised_raw(self, ctx):
+        with pytest.raises(actions.ActionError):
+            actions.handoff_task(ctx, identifier="404")
+
     def test_invalid_and_duplicate_names_are_refused(self, ctx):
         with pytest.raises(actions.ActionError, match="work-item name"):
             actions.create_task(ctx, work_item="!", title="Bad", body="Bad")
@@ -257,3 +271,138 @@ class TestTeardown:
             actions.check_confirmation("")
 
         assert actions.check_confirmation("TEARDOWN") is None
+
+
+class TestGherkinReview:
+    """
+    The human-in-the-loop gate on a specifier's scenarios: approve forwards, reject returns.
+
+    Both halves acknowledge the original first, so an approved spec cannot also sit in the
+    Attention rail offering to be approved a second time.
+    """
+
+    @pytest.fixture
+    def pending(self, add_message):
+        return add_message(
+            sender="specifier",
+            target="human-in-the-loop",
+            work_item="CAT-3",
+            content="Feature: search by author\n  Scenario: two matches, newest first",
+        )
+
+    def test_approval_forwards_the_scenarios_verbatim_to_the_coder(self, ctx, db_path, pending):
+        # The coder implements against the specifier's text, so approval must not paraphrase
+        # it -- the human is agreeing to those words, not to a summary of them. The handoff
+        # envelope is added around them, as it is for every queued message.
+        result = actions.approve_gherkin(ctx, message_id=pending)
+
+        forwarded = db.get_message(db_path, result["message_id"])
+        assert result["target"] == "coder"
+        assert forwarded["target"] == "coder"
+        assert "Scenario: two matches, newest first" in forwarded["content"]
+
+    def test_approval_carries_the_work_item_so_the_card_keeps_one_identity(
+        self, ctx, db_path, pending
+    ):
+        result = actions.approve_gherkin(ctx, message_id=pending)
+
+        assert db.get_message(db_path, result["message_id"])["work_item"] == "CAT-3"
+
+    def test_the_human_signs_the_approval(self, ctx, db_path, pending):
+        # The coder's brief has to show human approval, not read as though the specifier
+        # dispatched its own scenarios straight through.
+        result = actions.approve_gherkin(ctx, message_id=pending)
+
+        assert db.get_message(db_path, result["message_id"])["sender"] == "human-in-the-loop"
+
+    @pytest.mark.parametrize("review", [actions.approve_gherkin, actions.reject_gherkin])
+    def test_the_original_is_acknowledged_so_it_leaves_the_attention_rail(
+        self, ctx, db_path, pending, review
+    ):
+        # Without this the same spec stays reviewable after the decision, and a second click
+        # would queue the work twice.
+        assert db.get_message(db_path, pending)["acked_at"] is None
+
+        review(ctx, message_id=pending)
+
+        assert db.get_message(db_path, pending)["acked_at"] is not None
+
+    def test_rejection_returns_the_work_to_the_specifier_with_the_notes(
+        self, ctx, db_path, pending
+    ):
+        result = actions.reject_gherkin(ctx, message_id=pending, notes="scenario 2 drops order")
+
+        returned = db.get_message(db_path, result["message_id"])
+        assert result["target"] == "specifier"
+        assert returned["target"] == "specifier"
+        assert "REJECTED" in returned["content"]
+        assert "scenario 2 drops order" in returned["content"]
+
+    def test_rejection_without_notes_still_says_what_happened(self, ctx, db_path, pending):
+        # An operator who clicks reject and types nothing still owes the specifier a brief it
+        # can act on, not an empty message.
+        result = actions.reject_gherkin(ctx, message_id=pending, notes="   ")
+
+        content = db.get_message(db_path, result["message_id"])["content"]
+        assert "REJECTED" in content and "needs revision" in content
+
+    def test_rejection_names_the_work_item_it_is_about(self, ctx, db_path, pending):
+        result = actions.reject_gherkin(ctx, message_id=pending, notes="redo")
+
+        assert "CAT-3" in db.get_message(db_path, result["message_id"])["content"]
+
+    def test_an_unnamed_message_is_described_rather_than_left_blank(
+        self, ctx, db_path, add_message
+    ):
+        unnamed = add_message(sender="specifier", target="human-in-the-loop", content="Feature: x")
+
+        result = actions.reject_gherkin(ctx, message_id=unnamed, notes="redo")
+
+        assert "unnamed" in db.get_message(db_path, result["message_id"])["content"]
+
+    @pytest.mark.parametrize("review", [actions.approve_gherkin, actions.reject_gherkin])
+    def test_a_message_addressed_to_someone_else_cannot_be_reviewed(self, ctx, add_message, review):
+        # Approving the coder's inbound would forward a brief no human ever saw, and would
+        # acknowledge a message the coder is still owed.
+        not_mine = add_message(target="coder", content="Feature: x")
+
+        with pytest.raises(actions.ActionError, match="not addressed to"):
+            review(ctx, message_id=not_mine)
+
+    @pytest.mark.parametrize("review", [actions.approve_gherkin, actions.reject_gherkin])
+    def test_an_unknown_id_is_refused(self, ctx, review):
+        with pytest.raises(actions.ActionError, match="no failed message"):
+            review(ctx, message_id="deadbeef")
+
+    @pytest.mark.parametrize("review", [actions.approve_gherkin, actions.reject_gherkin])
+    def test_an_empty_id_is_refused_before_any_lookup(self, ctx, review):
+        with pytest.raises(actions.ActionError, match="no message id given"):
+            review(ctx, message_id="  ")
+
+
+class TestSequentialMode:
+    """
+    The one-story-at-a-time switch. Reading it must never change it: the cockpit polls this
+    on every refresh, and a read that wrote would flip the swarm's mode under the operator.
+    """
+
+    @pytest.fixture
+    def ctx(self, ctx, db_path):
+        # The launcher writes this row for the branch before any pane starts; the flag lives
+        # on it, so a context-less database is not a state the switch can be reached in.
+        task_store.configure_context(
+            db_path, branch="main", human_role="human-in-the-loop", intake_role="specifier"
+        )
+        return ctx
+
+    def test_it_reports_the_current_state_without_being_told_one(self, ctx):
+        assert actions.toggle_sequential(ctx) == {"sequential": False}
+
+    def test_setting_it_is_visible_to_the_next_read(self, ctx):
+        assert actions.toggle_sequential(ctx, enabled=True) == {"sequential": True}
+        assert actions.toggle_sequential(ctx) == {"sequential": True}
+
+    def test_it_can_be_switched_back_off(self, ctx):
+        actions.toggle_sequential(ctx, enabled=True)
+
+        assert actions.toggle_sequential(ctx, enabled=False) == {"sequential": False}

@@ -196,6 +196,7 @@ class TestScaffold:
 
     def test_unknown_example_raises_without_proceeding(self, tmp_path, framework):
         import pytest
+
         from kiln.launcher.infrastructure.scaffold import ScaffoldError
         with pytest.raises(ScaffoldError, match="not found under examples/"):
             scaffold.scaffold(tmp_path / "proj", framework, example="nope")

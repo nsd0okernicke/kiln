@@ -6,6 +6,8 @@ nothing to squash) must now be handled by code.
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from kiln.scheduler.infrastructure.vcs import git as git_ops
@@ -535,3 +537,117 @@ class TestCommitAll:
         result = git_ops.commit_all("nothing", git_repo)
         assert result.ok
         assert result.stdout == before
+
+
+class TestSharedBranchAndWorktrees:
+    """
+    Sequential mode moves work between worktrees through a local branch, not a remote.
+
+    After a story finishes, the finishing worktree force-pushes HEAD to the shared branch and
+    every other worktree is reset onto it. Before this existed, run 1 advanced main while a
+    role worktree still pointed at an earlier commit, and the next story opened with a merge
+    conflict that had nothing to do with its own work.
+    """
+
+    @pytest.fixture
+    def swarm(self, git_repo, git_cmd, tmp_path):
+        """A main repository with two linked worktrees, as a launched swarm has."""
+        roles = {}
+        for role in ("coder", "reviewer"):
+            path = tmp_path / "worktrees" / role
+            git_cmd(git_repo, "worktree", "add", "-q", "-b", role, str(path))
+            roles[role] = path
+        return git_repo, roles
+
+    def test_linked_worktrees_are_listed(self, swarm):
+        _, roles = swarm
+
+        listed = {p.resolve() for p in git_ops.all_worktrees(roles["coder"])}
+
+        assert listed == {roles["coder"].resolve(), roles["reviewer"].resolve()}
+
+    def test_the_main_repository_is_not_one_of_them(self, swarm):
+        # It is where the shared branch lives. Resetting it as though it were a role
+        # worktree would throw away the very commit that was just pushed.
+        repo, _ = swarm
+
+        assert repo.resolve() not in {p.resolve() for p in git_ops.all_worktrees(repo)}
+
+    def test_a_directory_that_is_not_a_repository_lists_nothing(self, tmp_path):
+        assert git_ops.all_worktrees(tmp_path) == []
+
+    def test_pushing_moves_a_shared_branch_no_worktree_holds(self, swarm, git_cmd):
+        repo, roles = swarm
+        finished = _write_commit(roles["coder"], git_cmd, "f.txt", "done", "coder work")
+
+        git_ops.push_branch("integration", roles["coder"])
+
+        assert git_ops.run_git(["rev-parse", "integration"], repo).stdout == finished
+
+    def test_the_push_is_forced_because_the_shared_branch_may_have_moved(self, swarm, git_cmd):
+        # The squashed commit replaces what is on the branch rather than descending from it,
+        # so a fast-forward-only push would refuse exactly when it is needed.
+        repo, roles = swarm
+        git_cmd(repo, "branch", "integration")
+        _write_commit(repo, git_cmd, "other.txt", "elsewhere", "diverging work")
+        git_cmd(repo, "branch", "-f", "integration", "HEAD")
+        finished = _write_commit(roles["coder"], git_cmd, "f.txt", "done", "coder work")
+
+        git_ops.push_branch("integration", roles["coder"])
+
+        assert git_ops.run_git(["rev-parse", "integration"], repo).stdout == finished
+
+    def test_a_branch_checked_out_elsewhere_is_refused_and_the_refusal_is_logged(
+        self, swarm, git_cmd, caplog
+    ):
+        # The standard layout: the project root has `main` checked out, and git will not let
+        # another worktree move it. The push is best-effort -- the finished work is already
+        # merged by the handoff that ran before this -- but it used to fail with no trace at
+        # all, which made sequential mode look like it had carried the work across when it
+        # had not.
+        repo, roles = swarm
+        before = git_ops.run_git(["rev-parse", "main"], repo).stdout
+        _write_commit(roles["coder"], git_cmd, "f.txt", "done", "coder work")
+
+        with caplog.at_level(logging.WARNING, logger=git_ops.log.name):
+            git_ops.push_branch("main", roles["coder"])
+
+        assert git_ops.run_git(["rev-parse", "main"], repo).stdout == before
+        assert "could not push HEAD to main" in caplog.text
+
+    def test_every_worktree_is_brought_onto_the_shared_branch(self, swarm, git_cmd):
+        repo, roles = swarm
+        shared = _write_commit(repo, git_cmd, "shared.txt", "shared", "shared work")
+
+        git_ops.reset_all_worktrees("main", roles["coder"])
+
+        for path in roles.values():
+            assert git_ops.head_commit(path) == shared
+
+    def test_local_changes_in_a_worktree_are_discarded(self, swarm, git_cmd):
+        # That is the point: whatever a role left behind is stale by definition once the
+        # story it belonged to is finished.
+        repo, roles = swarm
+        _write_commit(repo, git_cmd, "shared.txt", "shared", "shared work")
+        (roles["reviewer"] / "shared.txt").write_text("half-finished edit", encoding="utf-8")
+
+        git_ops.reset_all_worktrees("main", roles["coder"])
+
+        assert (roles["reviewer"] / "shared.txt").read_text(encoding="utf-8") == "shared"
+
+    def test_resetting_outside_a_repository_is_a_no_op(self, tmp_path):
+        git_ops.reset_all_worktrees("main", tmp_path)  # must not raise
+
+
+class TestGeneratedFileRemoval:
+    def test_a_file_that_is_already_gone_is_reported_as_not_removed(self, tmp_path):
+        # Two roles can race on the same generated artifact; the second one to look finds
+        # nothing, which is success for the caller but not a removal it performed.
+        assert git_ops._remove_generated_file(tmp_path / "absent.pyc", "absent.pyc") is False
+
+    def test_a_path_that_cannot_be_unlinked_is_reported_not_raised(self, tmp_path, caplog):
+        # Blocking the merge is what matters; failing to tidy is not worth losing the cycle.
+        directory = tmp_path / "site-packages"
+        directory.mkdir()
+
+        assert git_ops._remove_generated_file(directory, "site-packages") is False
