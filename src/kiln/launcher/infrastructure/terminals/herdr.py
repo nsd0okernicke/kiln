@@ -228,6 +228,8 @@ def _new_tab_with_pane(ws_id: str, pc: int, pane: PaneSpec,
     if pane.name:
         cmd += ["--label", pane.name]
     planned.append(" ".join(cmd))
+    if not dry_run:
+        _run_in_ws(cmd, ws_id)
     pc += 1
     _run_in_pane(ws_id, pane_id(ws_id, pc), pane, planned, dry_run)
     return pc

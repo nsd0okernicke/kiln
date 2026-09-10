@@ -594,6 +594,195 @@ class TestHerdr:
         monkeypatch.setattr(herdr.log, "warning", lambda *a, **kw: None)
         herdr._open_herdr_tui(dry_run=False)  # Should not raise
 
+    # ------------------------------------------------------------------ #
+    # Non-dry-run & error path coverage
+    # ------------------------------------------------------------------ #
+
+    def test_create_workspace_raises_on_failure(self, monkeypatch):
+        monkeypatch.setattr(
+            herdr, "_run",
+            lambda *a: SimpleNamespace(
+                returncode=1, stdout='', stderr='connection refused'
+            ),
+        )
+        with pytest.raises(TerminalError, match="failed to create workspace"):
+            herdr._create_workspace("test", Path("p"), [], dry_run=False)
+
+    def test_create_workspace_raises_on_json_error(self, monkeypatch):
+        monkeypatch.setattr(
+            herdr, "_run",
+            lambda *a: SimpleNamespace(
+                returncode=0,
+                stdout='{"error":{"code":"bad","message":"nope"}}',
+                stderr='',
+            ),
+        )
+        with pytest.raises(TerminalError, match="nope"):
+            herdr._create_workspace("test", Path("p"), [], dry_run=False)
+
+    def test_create_workspace_raises_on_missing_id(self, monkeypatch):
+        monkeypatch.setattr(
+            herdr, "_run",
+            lambda *a: SimpleNamespace(
+                returncode=0,
+                stdout='{"result":{"workspace":{"label":"x"}}}',
+                stderr='',
+            ),
+        )
+        with pytest.raises(TerminalError, match="No workspace_id"):
+            herdr._create_workspace("test", Path("p"), [], dry_run=False)
+
+    def test_non_dry_run_creates_workspace_and_calls_all_herdr(self, monkeypatch):
+        """End-to-end non-dry-run: mock _run/_run_in_ws for workspace create + pane ops."""
+        calls = []
+
+        def fake_run(args: list[str], **kw):
+            calls.append(("run", args, kw))
+            return SimpleNamespace(
+                returncode=0,
+                stdout='{"result":{"workspace":{"workspace_id":"wX"}}}',
+                stderr='',
+            )
+
+        def fake_run_in_ws(args: list[str], ws_id: str):
+            calls.append(("run_in_ws", args, ws_id))
+            return SimpleNamespace(returncode=0, stdout='', stderr='')
+
+        monkeypatch.setattr(herdr, "_run", fake_run)
+        monkeypatch.setattr(herdr, "_run_in_ws", fake_run_in_ws)
+        # Prevent _open_herdr_tui from launching real herdr
+        monkeypatch.setattr(herdr, "_open_herdr_tui", lambda dr: None)
+
+        layout = {
+            "tabs": [
+                {"panes": [{"role": "specifier"}, {"role": "coder"}]},
+                {
+                    "title": "Grid Tab",
+                    "gridRows": 2,
+                    "gridCols": 2,
+                    "panes": [
+                        {"role": "specifier"},
+                        {"role": "reviewer"},
+                        {"role": "coder"},
+                        {"role": "architect"},
+                    ],
+                },
+            ]
+        }
+        panes = [
+            PaneSpec(role="specifier", name="Spec", path="/p", cmd="pi s"),
+            PaneSpec(role="coder", name="Coder", path="/p", cmd="pi c"),
+            PaneSpec(role="reviewer", name="Reviewer", path="/p", cmd="pi r"),
+            PaneSpec(role="architect", name="Arch", path="/p", cmd="pi a"),
+        ]
+
+        result = herdr.launch(panes, layout, Path("proj"), dry_run=False)
+
+        # Should have planned commands AND executed them via _run / _run_in_ws
+        assert result
+        assert any("workspace create" in c for c in result)
+        assert any("pane run" in c for c in result)
+        assert any("report-agent" in c for c in result)
+        # _run called at least for workspace create
+        run_calls = [c for c in calls if c[0] == "run"]
+        assert len(run_calls) >= 1
+        # _run_in_ws called for tab create, pane run, report-agent, splits
+        ws_calls = [c for c in calls if c[0] == "run_in_ws"]
+        assert len(ws_calls) >= 5
+
+    def test_non_dry_run_flat_layout(self, monkeypatch):
+        """No layout: one tab per role (tests _new_tab_with_pane)."""
+        calls = []
+
+        def fake_run(args, **kw):
+            calls.append(("run", args))
+            return SimpleNamespace(
+                returncode=0,
+                stdout='{"result":{"workspace":{"workspace_id":"wX"}}}',
+                stderr='',
+            )
+
+        def fake_run_in_ws(args, ws_id):
+            calls.append(("run_in_ws", args, ws_id))
+            return SimpleNamespace(returncode=0, stdout='', stderr='')
+
+        monkeypatch.setattr(herdr, "_run", fake_run)
+        monkeypatch.setattr(herdr, "_run_in_ws", fake_run_in_ws)
+        monkeypatch.setattr(herdr, "_open_herdr_tui", lambda dr: None)
+
+        planned = herdr.launch(PANES, None, Path("proj"), dry_run=False)
+        # Should have created 2nd tab via tab create
+        tab_creates = [line for line in planned if "tab create" in line]
+        assert len(tab_creates) == 1
+
+    def test_rename_tab_empty_title_returns_early(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(herdr, "_run_in_ws", lambda *a: calls.append(a))
+        herdr._rename_tab("wX", "", [], dry_run=False)
+        assert len(calls) == 0
+
+    def test_rename_tab_logs_failure(self, monkeypatch):
+        warnings = []
+        monkeypatch.setattr(
+            herdr, "_run_in_ws",
+            lambda *a: SimpleNamespace(returncode=1, stderr="not found"),
+        )
+        monkeypatch.setattr(herdr.log, "warning", lambda *a, **kw: warnings.append(a))
+        herdr._rename_tab("wX", "My Tab", [], dry_run=False)
+        assert len(warnings) >= 1
+
+    def test_linear_panes_empty_members(self):
+        pc = herdr._linear_panes("wX", 5, [], [], dry_run=True)
+        assert pc == 5
+
+    def test_grid_panes_empty_members(self):
+        pc = herdr._grid_panes("wX", 5, [], 2, 2, [], dry_run=True)
+        assert pc == 5
+
+    def test_new_tab_with_pane_named(self):
+        planned = []
+        pane = PaneSpec(role="coder", name="Coder", path="/p", cmd="pi")
+        pc = herdr._new_tab_with_pane("wX", 3, pane, planned, dry_run=True)
+        assert pc == 4
+        assert any("Coder" in l for l in planned)
+        assert any("report-agent" in l for l in planned)
+
+    def test_new_tab_with_pane_unnamed(self):
+        planned = []
+        pane = PaneSpec(role="coder", name="", path="/p", cmd="pi")
+        pc = herdr._new_tab_with_pane("wX", 3, pane, planned, dry_run=True)
+        assert pc == 4
+        assert not any("--label" in l for l in planned)
+
+    def test_find_json_error_parse_exception(self):
+        """Non-JSON input triggers except and returns empty string."""
+        assert herdr._find_json_error("{{{not json") == ""
+        assert herdr._find_json_error("None") == ""
+
+    def test_ws_id_from_create_parse_exception(self):
+        assert herdr._ws_id_from_create("{{{not json") == ""
+
+    def test_do_split_non_dry_run_logs_failure(self, monkeypatch):
+        errors = []
+        monkeypatch.setattr(
+            herdr, "_run_in_ws",
+            lambda *a: SimpleNamespace(returncode=1, stderr="no pane"),
+        )
+        monkeypatch.setattr(herdr.log, "error", lambda *a, **kw: errors.append(a))
+        herdr._do_split("wX", "wX:p1", "down", [], dry_run=False)
+        assert len(errors) >= 1
+
+    def test_run_in_pane_non_dry_run_logs_agent_failure(self, monkeypatch):
+        warnings = []
+        monkeypatch.setattr(
+            herdr, "_run_in_ws",
+            lambda *a: SimpleNamespace(returncode=1, stderr="agent fail"),
+        )
+        monkeypatch.setattr(herdr.log, "warning", lambda *a, **kw: warnings.append(a))
+        pane = PaneSpec(role="coder", name="", path="/p", cmd="pi")
+        herdr._run_in_pane("wX", "wX:p1", pane, [], dry_run=False)
+        assert len(warnings) >= 1
+
 
 class TestDispatch:
     @pytest.mark.parametrize("backend", [WEZTERM, WINDOWS_TERMINAL, TMUX, HERDR])

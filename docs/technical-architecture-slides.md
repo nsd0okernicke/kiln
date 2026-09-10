@@ -24,7 +24,7 @@ Technical overview — topology, scheduler/worker delegation, and the handoff cy
 - Gives each role its **own terminal** (tab/pane) and its **own git worktree** — agents never collide on files or branches
 - Wires **inter-agent messaging** through SQLite (`.kiln/messages.db`) — the Python scheduler reads and writes directly, no MCP overhead
 - Injects a layered **constitution** + a **role file** at startup — wrapper roles get `project.md`, `engineering.md` and `workflow.md`; one-shot workers get `project.md` and `engineering.md` only (handoff protocol stays with the scheduler)
-- Cross-platform: one Python implementation, thin PowerShell/POSIX shims; WezTerm on either platform, Windows Terminal or tmux as the fallback
+- Cross-platform: one Python implementation, thin PowerShell/POSIX shims; Herdr on every platform with sidebar agent state, WezTerm, Windows Terminal or tmux as alternatives
 
 ---
 
@@ -121,7 +121,12 @@ Tab 3: every role's state, queue depth, cycles, cost, tokens and cache rate, plu
 
 The local web cockpit is the primary interface beyond Tab 1. The Board shows one lane per role, its worktree in the heading, and a card per work item. The Attention panel (not shown) lists failures, escalations, and results awaiting review. New tasks, handoffs, retries, log inspection, and swarm teardown are all available here.
 
-Available from the Cockpit tab in WezTerm, or at the URL written to `.kiln/cockpit-url`.
+Available from the Cockpit tab in Herdr/WezTerm, or at the URL written to `.kiln/cockpit-url`.
+
+When using Herdr, the sidebar shows every role's live state at a glance — green for
+working, yellow for idle, red for blocked — without switching tabs.
+
+![w:800](images/herdr.png)
 
 ---
 

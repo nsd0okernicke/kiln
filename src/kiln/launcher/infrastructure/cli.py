@@ -693,7 +693,7 @@ def build_parser() -> argparse.ArgumentParser:
         "-Terminal",
         dest="terminal",
         default=None,
-        help=f"terminal backend: {WEZTERM}, wt, {TMUX}, {HERDR} or none",
+        help=f"terminal backend (default: auto-detect — {HERDR} takes priority when installed)",
     )
     parser.add_argument(
         "--agent-override",

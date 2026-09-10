@@ -159,7 +159,10 @@ cockpit provide a swarm-wide view.
   - GitHub Copilot CLI
   - Grok CLI
 - A terminal backend:
-  - WezTerm is recommended on every platform
+  - **Herdr** is recommended on every platform — creates a persistent session with sidebar
+    agent state, survives terminal window closure, and works with any TUI multiplexer
+    ([herdr.dev](https://herdr.dev))
+  - WezTerm is a fully supported alternative
   - Windows Terminal is supported on Windows
   - tmux is supported on Linux and macOS
 
@@ -350,10 +353,12 @@ Day to day you drive Kiln from two places: the **HITL pane** in WezTerm, and the
 your browser. The CLI in [Daily commands](#daily-commands) does the same things, and is there
 for scripting or for when you are working outside the panes — but it is not the main way in.
 
-### The WezTerm window
+### The terminal window
 
-WezTerm is the recommended backend on every platform, because it is the one that lays the swarm
-out for you. Launching the `full` profile gives you a single window with four tabs:
+Herdr is the recommended backend on every platform — it creates a persistent workspace with a
+sidebar that shows every role's agent state at a glance, and the workspace survives closing the
+terminal window so you can reopen it later. Launching the `full` profile gives you a single
+window with four tabs:
 
 | Tab | Contains | You |
 |---|---|---|
@@ -364,6 +369,12 @@ out for you. Launching the `full` profile gives you a single window with four ta
 
 The status bar along the top right shows every role's state — `waiting`, `working` — from
 whichever tab you are on, so you can stay on tab 1 and still see the swarm move.
+
+With the Herdr backend, every agent is also registered in the Herdr sidebar with live
+state dots (green for working, yellow for idle, red for blocked), giving you a swarm
+overview without switching tabs.
+
+![The Herdr sidebar showing all role agents with live state indicators](docs/images/herdr.png)
 
 ![The Human-in-the-Loop tab: the agent session above, the Kiln Inbox pane below, and every role's state in the status bar](docs/images/hitl-pane.png)
 
@@ -650,7 +661,7 @@ Useful options:
 | Option | Purpose |
 |---|---|
 | `--dry-run` | Print resolved commands without launching |
-| `--terminal wezterm\|wt\|tmux\|none` | Select or disable terminal launching |
+| `--terminal herdr\|wezterm\|wt\|tmux\|none` | Terminal backend (auto-detected; herdr has priority when installed) |
 | `--agent-override BACKEND` | Replace every agent backend in the selected profile |
 | `--model-override MODEL` | Model used with an agent override |
 | `--proxy` | Enable local metadata capture for Claude and Codex traffic |
