@@ -24,8 +24,8 @@ from kiln.launcher.infrastructure.terminals import (
     PaneSpec,
     TerminalError,
     detect_backend,
-    launch,
     herdr,
+    launch,
     tmux,
     wezterm,
     windows_terminal,
@@ -63,7 +63,8 @@ FOUR_PANE_GRID = {
     ]
 }
 
-FOUR_PANES = PANES + [
+FOUR_PANES = [
+    *PANES,
     PaneSpec(role="reviewer", name="Reviewer", path="C:/p/.worktrees/reviewer", cmd="pi r"),
     PaneSpec(role="architect", name="Architect", path="C:/p/.worktrees/architect", cmd="pi a"),
 ]
@@ -436,11 +437,10 @@ class TestTmux:
         monkeypatch.setattr(tmux.shutil, "which", lambda name: "tmux")
         monkeypatch.setattr(tmux, "session_exists", lambda role: False)
         calls = []
-        monkeypatch.setattr(
-            tmux,
-            "_run",
-            lambda command: calls.append(command) or type("R", (), {"returncode": 0, "stderr": ""})(),
-        )
+        def _record(command):
+            calls.append(command)
+            return type("R", (), {"returncode": 0, "stderr": ""})()
+        monkeypatch.setattr(tmux, "_run", _record)
 
         tmux.launch(PANES[:1], None, project_dir=Path("my-project"))
 
@@ -499,17 +499,17 @@ class TestHerdr:
 
     def test_dry_run_plans_workspace_and_panes(self):
         planned = herdr.launch(PANES, None, Path("proj"), dry_run=True)
-        assert any("workspace create" in l for l in planned)
-        assert any("pane run" in l for l in planned)
+        assert any("workspace create" in line for line in planned)
+        assert any("pane run" in line for line in planned)
 
     def test_dry_run_workspace_label(self):
         planned = herdr.launch(PANES, {}, Path("my-project"), dry_run=True)
-        assert any("kiln-my-project" in l for l in planned)
+        assert any("kiln-my-project" in line for line in planned)
 
     def test_dry_run_with_grid(self):
         planned = herdr.launch(PANES, GRID_LAYOUT, Path("p"), dry_run=True)
-        assert any("pane split" in l for l in planned)
-        assert any("pane run" in l for l in planned)
+        assert any("pane split" in line for line in planned)
+        assert any("pane run" in line for line in planned)
 
     def test_missing_binary(self, monkeypatch):
         monkeypatch.setattr(herdr.shutil, "which", lambda n: None)
@@ -517,32 +517,34 @@ class TestHerdr:
             herdr.launch(PANES, None, Path("p"))
 
     def test_dry_run_no_real_calls(self, monkeypatch):
-        monkeypatch.setattr(herdr, "_run", lambda c: (_ for _ in ()).throw(RuntimeError("no")))
-        monkeypatch.setattr(herdr, "_run_in_ws", lambda c, w: (_ for _ in ()).throw(RuntimeError("no")))
+        def _raise(*a, **kw):
+            raise RuntimeError("no")
+        monkeypatch.setattr(herdr, "_run", _raise)
+        monkeypatch.setattr(herdr, "_run_in_ws", _raise)
         assert herdr.launch(PANES, {}, Path("p"), dry_run=True)
 
     def test_no_layout_both_roles(self):
         planned = herdr.launch(PANES, None, Path("p"), dry_run=True)
-        reports = [l for l in planned if "report-agent" in l]
+        reports = [line for line in planned if "report-agent" in line]
         assert len(reports) == 2
-        assert any("kiln-specifier" in l for l in reports)
-        assert any("kiln-coder" in l for l in reports)
+        assert any("kiln-specifier" in line for line in reports)
+        assert any("kiln-coder" in line for line in reports)
 
     def test_grid_2x2_3_splits(self):
         planned = herdr.launch(FOUR_PANES, FOUR_PANE_GRID, Path("p"), dry_run=True)
-        assert len([l for l in planned if "pane split" in l]) == 3
-        assert len([l for l in planned if "pane run" in l]) == 4
-        assert len([l for l in planned if "report-agent" in l]) == 4
+        assert len([line for line in planned if "pane split" in line]) == 3
+        assert len([line for line in planned if "pane run" in line]) == 4
+        assert len([line for line in planned if "report-agent" in line]) == 4
 
     def test_grid_2x2_2_panes_1_split(self):
         planned = herdr.launch(PANES, GRID_LAYOUT, Path("p"), dry_run=True)
-        assert len([l for l in planned if "pane split" in l]) == 1
-        assert len([l for l in planned if "pane run" in l]) == 2
+        assert len([line for line in planned if "pane split" in line]) == 1
+        assert len([line for line in planned if "pane run" in line]) == 2
 
     def test_linear_down_split(self):
         layout = {"tabs": [{"panes": [{"role": "specifier"}, {"role": "coder"}]}]}
         planned = herdr.launch(PANES, layout, Path("p"), dry_run=True)
-        assert any("down" in l for l in planned if "pane split" in l)
+        assert any("down" in line for line in planned if "pane split" in line)
 
     def test_kiln_state_mapping(self):
         assert len(herdr.KILN_STATE_TO_HERDR) == 14
@@ -706,6 +708,7 @@ class TestHerdr:
             calls.append(("run_in_ws", args, ws_id))
             return SimpleNamespace(returncode=0, stdout='', stderr='')
 
+        monkeypatch.setattr(herdr.shutil, "which", lambda n: "herdr" if n == "herdr" else None)
         monkeypatch.setattr(herdr, "_run", fake_run)
         monkeypatch.setattr(herdr, "_run_in_ws", fake_run_in_ws)
         monkeypatch.setattr(herdr, "_open_herdr_tui", lambda dr: None)
@@ -744,15 +747,15 @@ class TestHerdr:
         pane = PaneSpec(role="coder", name="Coder", path="/p", cmd="pi")
         pc = herdr._new_tab_with_pane("wX", 3, pane, planned, dry_run=True)
         assert pc == 4
-        assert any("Coder" in l for l in planned)
-        assert any("report-agent" in l for l in planned)
+        assert any("Coder" in line for line in planned)
+        assert any("report-agent" in line for line in planned)
 
     def test_new_tab_with_pane_unnamed(self):
         planned = []
         pane = PaneSpec(role="coder", name="", path="/p", cmd="pi")
         pc = herdr._new_tab_with_pane("wX", 3, pane, planned, dry_run=True)
         assert pc == 4
-        assert not any("--label" in l for l in planned)
+        assert not any("--label" in line for line in planned)
 
     def test_find_json_error_parse_exception(self):
         """Non-JSON input triggers except and returns empty string."""
