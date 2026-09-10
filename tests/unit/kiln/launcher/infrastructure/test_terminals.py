@@ -572,6 +572,28 @@ class TestHerdr:
         assert herdr._find_json_error('{"result":{"ok":true}}') == ""
         assert herdr._find_json_error("") == ""
 
+    def test_open_herdr_tui_skipped_in_dry_run(self, monkeypatch):
+        def _fail(*a, **kw):
+            pytest.fail("called subprocess.run")
+        monkeypatch.setattr(herdr.subprocess, "run", _fail)
+        herdr._open_herdr_tui(dry_run=True)
+
+    def test_open_herdr_tui_calls_run(self, monkeypatch):
+        run_calls = []
+        monkeypatch.setattr(herdr.subprocess, "run", lambda *a, **kw: run_calls.append((a, kw)))
+        herdr._open_herdr_tui(dry_run=False)
+        assert len(run_calls) == 1
+        args, kwargs = run_calls[0]
+        assert args[0] == ["herdr"]
+        assert kwargs.get("check") is False
+
+    def test_open_herdr_tui_swallows_errors(self, monkeypatch):
+        def _throw(*a, **kw):
+            raise RuntimeError("bang")
+        monkeypatch.setattr(herdr.subprocess, "run", _throw)
+        monkeypatch.setattr(herdr.log, "warning", lambda *a, **kw: None)
+        herdr._open_herdr_tui(dry_run=False)  # Should not raise
+
 
 class TestDispatch:
     @pytest.mark.parametrize("backend", [WEZTERM, WINDOWS_TERMINAL, TMUX, HERDR])

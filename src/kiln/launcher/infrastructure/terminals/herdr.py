@@ -53,6 +53,7 @@ def launch(
         pc = _flat_layout(ws_id, panes, pc, planned, dry_run)
 
     log.info("workspace_id=%s worktree=%s", ws_id, label)
+    _open_herdr_tui(dry_run)
     return planned
 
 
@@ -310,6 +311,21 @@ def _find_json_error(output: str) -> str:
     except (json.JSONDecodeError, TypeError, AttributeError):
         pass
     return ""
+
+
+def _open_herdr_tui(dry_run: bool) -> None:
+    """Open the Herdr TUI in the current terminal (blocking until detach).
+
+    After creating the workspace, this hands control to the Herdr TUI so the
+    user sees their workspace immediately. Detaching (Ctrl+B q) returns to the
+    shell.
+    """
+    if dry_run:
+        return
+    try:
+        subprocess.run(["herdr"], check=False)
+    except Exception:
+        log.warning("[herdr] failed to open TUI", exc_info=True)
 
 
 def _run(args: list[str]) -> subprocess.CompletedProcess:

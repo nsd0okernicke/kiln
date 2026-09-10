@@ -4,7 +4,7 @@ Write agent status to both a JSON file and terminal title (OSC 0 escape sequence
 Used by wrapper agents in loop templates to signal state transitions visibly.
 
 When running inside a Herdr pane (``$HERDR_ENV == 1``), also reports the mapped state
-to the Herdr sidebar via ``herdr pane report-state``.
+to the Herdr sidebar via ``herdr pane report-agent``.
 
 Usage: python set-status.py <role> <state> [detail]
   role: agent role name (e.g., "coder", "architect")
@@ -259,11 +259,24 @@ def main():
 
 
 def _report_to_herdr(state: str, detail: str | None) -> None:
-    """Call ``herdr pane report-state`` to update Herdr's sidebar, if inside Herdr."""
+    """Update Herdr's sidebar agent state via ``report-agent``.
+
+    Herdr sets ``$HERDR_PANE_ID`` inside each managed pane — use it together
+    with the role (``sys.argv[1]``) to target the correct agent entry.
+    """
     herdr_state = _kiln_to_herdr_state(state)
     if herdr_state is None:
         return
-    cmd = ["herdr", "pane", "report-state", herdr_state]
+    pane_id = os.environ.get("HERDR_PANE_ID")
+    if not pane_id:
+        return
+    role = sys.argv[1] if len(sys.argv) > 1 else "unknown"
+    cmd = [
+        "herdr", "pane", "report-agent", pane_id,
+        "--source", "kiln",
+        "--agent", f"kiln-{role}",
+        "--state", herdr_state,
+    ]
     if detail:
         cmd += ["--message", detail[:80]]
     with contextlib.suppress(OSError, subprocess.SubprocessError):
