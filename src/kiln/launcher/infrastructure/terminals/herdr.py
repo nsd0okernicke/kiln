@@ -11,7 +11,6 @@ import logging
 import os
 import shutil
 import subprocess
-import time
 from pathlib import Path
 
 from . import PaneSpec, TerminalError
@@ -43,45 +42,67 @@ def launch(
     project_dir: Path,
     dry_run: bool = False,
 ) -> list[str]:
-    """Create a detached Herdr workspace with all role tabs and panes.
-
-    Pane IDs are ``wN:p1``, ``wN:p2`` ... globally sequential. The pane
-    counter starts at 1 (workspace create → p1). Each tab create and each
-    pane split adds one.
-    """
     _require_herdr(dry_run)
     label = workspace_label(project_dir)
     planned: list[str] = []
-
     ws_id, pc = _create_workspace(label, project_dir, planned, dry_run)
 
     if layout and layout.get("tabs"):
-        for tab_index, tab_def in enumerate(layout["tabs"], start=1):
-            members = _tab_members(panes, tab_def)
-            if not members:
-                continue
-            title = _tab_title(tab_def, members)
-            if tab_index == 1:
-                # Rename tab 1 (created by workspace create with default name "1").
-                _rename_tab(ws_id, title, planned, dry_run)
-            else:
-                pc = _create_tab(ws_id, title, planned, dry_run, pc)
-            grid_rows = tab_def.get("gridRows") or 1
-            grid_cols = tab_def.get("gridCols") or 1
-            is_grid = bool(tab_def.get("gridRows") or tab_def.get("gridCols"))
-            if is_grid and grid_rows * grid_cols > 1:
-                pc = _grid_panes(ws_id, pc, members, grid_rows, grid_cols, planned, dry_run)
-            else:
-                pc = _linear_panes(ws_id, pc, members, planned, dry_run)
+        pc = _layout_tabs(ws_id, panes, layout, pc, planned, dry_run)
     else:
-        for idx, pane in enumerate(panes):
-            if idx == 0:
-                _run_in_pane(ws_id, pane_id(ws_id, 1), pane, planned, dry_run)
-            else:
-                pc = _new_tab_with_pane(ws_id, pc, pane, planned, dry_run)
+        pc = _flat_layout(ws_id, panes, pc, planned, dry_run)
 
     log.info("workspace_id=%s worktree=%s", ws_id, label)
     return planned
+
+
+# ---------------------------------------------------------------------------
+# Layout strategies (extracted from launch to reduce its complexity)
+# ---------------------------------------------------------------------------
+
+
+def _layout_tabs(
+    ws_id: str, panes: list[PaneSpec], layout: dict,
+    pc: int, planned: list[str], dry_run: bool,
+) -> int:
+    """Process each tab from the layout. Returns final pane count."""
+    for tab_index, tab_def in enumerate(layout["tabs"], start=1):
+        members = _tab_members(panes, tab_def)
+        if not members:
+            continue
+        title = _tab_title(tab_def, members)
+        if tab_index == 1:
+            _rename_tab(ws_id, title, planned, dry_run)
+        else:
+            pc = _create_tab(ws_id, title, planned, dry_run, pc)
+        pc = _tab_panes(ws_id, tab_def, members, pc, planned, dry_run)
+    return pc
+
+
+def _tab_panes(
+    ws_id: str, tab_def: dict, members: list[PaneSpec],
+    pc: int, planned: list[str], dry_run: bool,
+) -> int:
+    """Create the pane layout for one tab. Returns updated pane count."""
+    grid_rows = tab_def.get("gridRows", 1)
+    grid_cols = tab_def.get("gridCols", 1)
+    is_grid = grid_rows != 1 or grid_cols != 1
+    if is_grid and grid_rows * grid_cols > 1:
+        return _grid_panes(ws_id, pc, members, grid_rows, grid_cols, planned, dry_run)
+    return _linear_panes(ws_id, pc, members, planned, dry_run)
+
+
+def _flat_layout(
+    ws_id: str, panes: list[PaneSpec],
+    pc: int, planned: list[str], dry_run: bool,
+) -> int:
+    """No layout defined: one tab per role. Returns final pane count."""
+    for idx, pane in enumerate(panes):
+        if idx == 0:
+            _run_in_pane(ws_id, pane_id(ws_id, 1), pane, planned, dry_run)
+        else:
+            pc = _new_tab_with_pane(ws_id, pc, pane, planned, dry_run)
+    return pc
 
 
 # ---------------------------------------------------------------------------
@@ -89,20 +110,28 @@ def launch(
 # ---------------------------------------------------------------------------
 
 
-def _create_workspace(label: str, project_dir: Path, planned: list[str], dry_run: bool) -> tuple[str, int]:
+def _create_workspace(
+    label: str, project_dir: Path, planned: list[str], dry_run: bool
+) -> tuple[str, int]:
     cmd = ["herdr", "workspace", "create", "--label", label, "--cwd", str(project_dir)]
     planned.append(" ".join(cmd))
     if dry_run:
         return "dry_run", 1
     result = _run(cmd)
-    error = _find_json_error(result.stdout) or _find_json_error(result.stderr)
-    if result.returncode != 0 or error:
-        raise TerminalError(f"failed to create workspace:\n{error or result.stderr.strip()}")
+    _raise_if_workspace_failed(result)
     ws_id = _ws_id_from_create(result.stdout)
     if not ws_id:
         raise TerminalError(f"No workspace_id:\n{result.stdout.strip()}")
     log.info("workspace %s created (id=%s)", label, ws_id)
     return ws_id, 1
+
+
+def _raise_if_workspace_failed(result: subprocess.CompletedProcess) -> None:
+    error = _find_json_error(result.stdout) or _find_json_error(result.stderr)
+    if result.returncode != 0 or error:
+        raise TerminalError(
+            f"failed to create workspace:\n{error or result.stderr.strip()}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -111,11 +140,6 @@ def _create_workspace(label: str, project_dir: Path, planned: list[str], dry_run
 
 
 def _rename_tab(ws_id: str, title: str, planned: list[str], dry_run: bool) -> None:
-    """Rename tab 1 (created by workspace create with default name "1").
-
-    ``herdr tab rename`` expects the tab's internal ID (``wV:t1``), not the
-    tab number "1". The first tab always gets ``t1`` in the workspace.
-    """
     if not title:
         return
     tab_id = f"{ws_id}:t1"
@@ -129,7 +153,6 @@ def _rename_tab(ws_id: str, title: str, planned: list[str], dry_run: bool) -> No
 
 def _create_tab(ws_id: str, title: str,
                 planned: list[str], dry_run: bool, pc: int) -> int:
-    """Create a new tab. Returns pc+1 (the tab's root pane)."""
     cmd = ["herdr", "tab", "create", "--workspace", ws_id]
     if title:
         cmd += ["--label", title]
@@ -141,7 +164,6 @@ def _create_tab(ws_id: str, title: str,
 
 def _linear_panes(ws_id: str, pc: int, members: list[PaneSpec],
                   planned: list[str], dry_run: bool) -> int:
-    """Linear layout. ``pc`` is the tab's first/root pane. Returns final pc."""
     if not members:
         return pc
     _run_in_pane(ws_id, pane_id(ws_id, pc), members[0], planned, dry_run)
@@ -156,39 +178,44 @@ def _linear_panes(ws_id: str, pc: int, members: list[PaneSpec],
 def _grid_panes(ws_id: str, pc: int, members: list[PaneSpec],
                 grid_rows: int, grid_cols: int,
                 planned: list[str], dry_run: bool) -> int:
-    """Grid layout. ``pc`` is the first pane in this tab. Returns final pc.
-
-    Tracks which pane number occupies each grid cell ``(row, col)`` so that
-    right-splits use the correct source pane (the cell to the left in the
-    same row) rather than guessing from sequential numbering.
-    """
     if not members:
         return pc
-
-    # ``cell[row][col]`` = absolute pane number at that grid position.
     cell: dict[int, dict[int, int]] = {1: {1: pc}}
-
     _run_in_pane(ws_id, pane_id(ws_id, pc), members[0], planned, dry_run)
+    pc = _grid_down_splits(ws_id, pc, members, grid_rows, grid_cols, cell, planned, dry_run)
+    pc = _grid_right_splits(ws_id, pc, members, grid_rows, grid_cols, cell, planned, dry_run)
+    return pc
 
-    # Down splits for rows 2+ (first column)
+
+def _grid_down_splits(
+    ws_id: str, pc: int, members: list[PaneSpec],
+    grid_rows: int, grid_cols: int,
+    cell: dict[int, dict[int, int]],
+    planned: list[str], dry_run: bool,
+) -> int:
     for row in range(2, grid_rows + 1):
         idx = (row - 1) * grid_cols
         if idx < len(members):
             pc += 1
-            src = cell[row - 1][1]
-            _do_split(ws_id, pane_id(ws_id, src), "down", planned, dry_run)
+            _do_split(ws_id, pane_id(ws_id, cell[row - 1][1]), "down", planned, dry_run)
             _run_in_pane(ws_id, pane_id(ws_id, pc), members[idx], planned, dry_run)
             cell[row] = {1: pc}
+    return pc
 
-    # Right splits for remaining columns
+
+def _grid_right_splits(
+    ws_id: str, pc: int, members: list[PaneSpec],
+    grid_rows: int, grid_cols: int,
+    cell: dict[int, dict[int, int]],
+    planned: list[str], dry_run: bool,
+) -> int:
     for col in range(2, grid_cols + 1):
         for row in range(1, grid_rows + 1):
             idx = (row - 1) * grid_cols + (col - 1)
             if idx >= len(members):
                 continue
             pc += 1
-            src = cell[row][col - 1]  # pane to the left in the same row
-            _do_split(ws_id, pane_id(ws_id, src), "right", planned, dry_run)
+            _do_split(ws_id, pane_id(ws_id, cell[row][col - 1]), "right", planned, dry_run)
             _run_in_pane(ws_id, pane_id(ws_id, pc), members[idx], planned, dry_run)
             cell[row][col] = pc
     return pc
@@ -196,7 +223,6 @@ def _grid_panes(ws_id: str, pc: int, members: list[PaneSpec],
 
 def _new_tab_with_pane(ws_id: str, pc: int, pane: PaneSpec,
                        planned: list[str], dry_run: bool) -> int:
-    """Create a tab for a single pane role. Returns pc+1."""
     cmd = ["herdr", "tab", "create", "--workspace", ws_id]
     if pane.name:
         cmd += ["--label", pane.name]
@@ -213,7 +239,6 @@ def _new_tab_with_pane(ws_id: str, pc: int, pane: PaneSpec,
 
 def _run_in_pane(ws_id: str, p_id: str, pane: PaneSpec,
                  planned: list[str], dry_run: bool) -> None:
-    """Run a command in a pane and register it as an agent."""
     run_cmd = ["herdr", "pane", "run", p_id, pane.cmd]
     agent_cmd = ["herdr", "pane", "report-agent", p_id,
                  "--source", "kiln", "--agent", f"kiln-{pane.role}", "--state", "working"]
@@ -245,8 +270,13 @@ def _do_split(ws_id: str, src: str, direction: str,
 
 
 def _tab_members(panes: list[PaneSpec], tab_def: dict) -> list[PaneSpec]:
-    return [p for e in (tab_def.get("panes") or [])
-            for p in [next((x for x in panes if x.role == e.get("role")), None)] if p]
+    by_role = {p.role: p for p in panes}
+    result: list[PaneSpec] = []
+    for entry in (tab_def.get("panes") or []):
+        pane = by_role.get(entry.get("role"))
+        if pane:
+            result.append(pane)
+    return result
 
 
 def _tab_title(tab_def: dict, members: list[PaneSpec]) -> str:
@@ -261,7 +291,8 @@ def _ws_id_from_create(stdout: str) -> str:
     if not stdout:
         return ""
     try:
-        return ((json.loads(stdout).get("result") or {}).get("workspace") or {}).get("workspace_id", "")
+        data = json.loads(stdout)
+        return ((data.get("result") or {}).get("workspace") or {}).get("workspace_id", "")
     except (json.JSONDecodeError, TypeError, AttributeError):
         return ""
 
@@ -282,12 +313,17 @@ def _find_json_error(output: str) -> str:
 
 
 def _run(args: list[str]) -> subprocess.CompletedProcess:
-    return subprocess.run(args, capture_output=True, text=True, stdin=subprocess.DEVNULL, check=False)
+    return subprocess.run(
+        args, capture_output=True, text=True, stdin=subprocess.DEVNULL, check=False
+    )
 
 
 def _run_in_ws(args: list[str], ws_id: str) -> subprocess.CompletedProcess:
     env = {**os.environ, "HERDR_WORKSPACE_ID": ws_id}
-    return subprocess.run(args, capture_output=True, text=True, stdin=subprocess.DEVNULL, check=False, env=env)
+    return subprocess.run(
+        args, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+        check=False, env=env,
+    )
 
 
 def _require_herdr(dry_run: bool) -> None:

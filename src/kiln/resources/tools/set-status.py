@@ -18,6 +18,7 @@ may not be on `sys.path` there, and this file's hyphenated name means it can't b
 either), so the two dicts are kept in sync by hand, guarded by that test rather than code.
 """
 
+import contextlib
 import json
 import os
 import subprocess
@@ -265,10 +266,8 @@ def _report_to_herdr(state: str, detail: str | None) -> None:
     cmd = ["herdr", "pane", "report-state", herdr_state]
     if detail:
         cmd += ["--message", detail[:80]]
-    try:
+    with contextlib.suppress(OSError, subprocess.SubprocessError):
         subprocess.run(cmd, capture_output=True, timeout=5, check=False)
-    except (OSError, subprocess.SubprocessError):
-        pass  # Non-fatal: sidebar state is a nice-to-have.
 
 
 #: Mapping from Kiln's 14 states to Herdr's 5 sidebar states.

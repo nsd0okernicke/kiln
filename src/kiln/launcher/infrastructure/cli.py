@@ -46,7 +46,15 @@ from ..domain.profile import (
     load_profile,
 )
 from . import networking, scaffold, stop, workspace
-from .terminals import HERDR, TMUX, WEZTERM, WINDOWS_TERMINAL, PaneSpec, TerminalError, detect_backend
+from .terminals import (
+    HERDR,
+    TMUX,
+    WEZTERM,
+    WINDOWS_TERMINAL,
+    PaneSpec,
+    TerminalError,
+    detect_backend,
+)
 from .terminals import launch as launch_terminal
 
 log = logging.getLogger("kiln")

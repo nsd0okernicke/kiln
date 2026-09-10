@@ -10,6 +10,7 @@ of the parallel `kiln.ps1` / `kiln.sh` copies this replaces.
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -72,25 +73,40 @@ def detect_backend(requested: str | None = None, env: dict | None = None) -> str
     Priority: explicit request > KILN_TERMINAL > running inside a supported terminal >
     whatever is installed. Mirrors Get-TerminalBackend, plus tmux for Unix.
     """
-    import os
+    return _resolve_backend(requested, env or os.environ)
 
-    environment = env if env is not None else os.environ
 
+def _resolve_backend(requested: str | None, environment: dict) -> str:
     if requested:
         return requested.lower()
-    if environment.get("KILN_TERMINAL"):
-        return environment["KILN_TERMINAL"].lower()
-    # Running inside Herdr or WezTerm: use the same backend so Kiln opens a new workspace
-    # instead of spawning a separate terminal window.
+    kiln_term = environment.get("KILN_TERMINAL")
+    if kiln_term:
+        return kiln_term.lower()
+    running = _detect_running_env(environment)
+    if running:
+        return running
+    return _detect_binary_backend() or _platform_backend(os.name)
+
+
+def _detect_running_env(environment: dict) -> str | None:
     if environment.get(HERDR_ENV_VAR) == "1":
         return HERDR
     if environment.get(WEZTERM_PANE_VAR):
         return WEZTERM
+    return None
+
+
+def _detect_binary_backend() -> str | None:
     if shutil.which("herdr"):
         return HERDR
     if shutil.which("wezterm"):
         return WEZTERM
-    return _platform_backend(os.name)
+    return None
+
+
+def _log_none_backend(panes: list[PaneSpec]) -> None:
+    for pane in panes:
+        log.info("[%s] would run in %s: %s", pane.role, pane.path, pane.cmd)
 
 
 def _platform_backend(os_name: str) -> str:
@@ -123,8 +139,7 @@ def launch(
     if backend == HERDR:
         return herdr.launch(panes, layout, project_dir, dry_run=dry_run)
     if backend == NONE:
-        for pane in panes:
-            log.info("[%s] would run in %s: %s", pane.role, pane.path, pane.cmd)
+        _log_none_backend(panes)
         return []
     raise TerminalError(
         f"unknown terminal backend {backend!r}; expected one of {', '.join(VALID_BACKENDS)}"
