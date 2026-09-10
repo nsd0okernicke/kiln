@@ -650,9 +650,9 @@ class TestHerdr:
             calls.append(("run_in_ws", args, ws_id))
             return SimpleNamespace(returncode=0, stdout='', stderr='')
 
+        monkeypatch.setattr(herdr, "_require_herdr", lambda dr: None)
         monkeypatch.setattr(herdr, "_run", fake_run)
         monkeypatch.setattr(herdr, "_run_in_ws", fake_run_in_ws)
-        # Prevent _open_herdr_tui from launching real herdr
         monkeypatch.setattr(herdr, "_open_herdr_tui", lambda dr: None)
 
         layout = {
@@ -708,7 +708,7 @@ class TestHerdr:
             calls.append(("run_in_ws", args, ws_id))
             return SimpleNamespace(returncode=0, stdout='', stderr='')
 
-        monkeypatch.setattr(herdr.shutil, "which", lambda n: "herdr" if n == "herdr" else None)
+        monkeypatch.setattr(herdr, "_require_herdr", lambda dr: None)
         monkeypatch.setattr(herdr, "_run", fake_run)
         monkeypatch.setattr(herdr, "_run_in_ws", fake_run_in_ws)
         monkeypatch.setattr(herdr, "_open_herdr_tui", lambda dr: None)
