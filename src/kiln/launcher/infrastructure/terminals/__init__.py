@@ -19,9 +19,17 @@ log = logging.getLogger(__name__)
 WEZTERM = "wezterm"
 WINDOWS_TERMINAL = "wt"
 TMUX = "tmux"
+HERDR = "herdr"
 NONE = "none"
 
-VALID_BACKENDS = (WEZTERM, WINDOWS_TERMINAL, TMUX, NONE)
+VALID_BACKENDS = (WEZTERM, WINDOWS_TERMINAL, TMUX, HERDR, NONE)
+
+#: Env var Herdr sets inside its panes. When set to "1", the current process is running
+#: inside a Herdr workspace/pane.
+HERDR_ENV_VAR = "HERDR_ENV"
+
+#: WezTerm sets this inside its panes.
+WEZTERM_PANE_VAR = "WEZTERM_PANE"
 
 
 @dataclass(frozen=True)
@@ -61,8 +69,8 @@ def detect_backend(requested: str | None = None, env: dict | None = None) -> str
     """
     Choose a terminal backend.
 
-    Priority: explicit request > KILN_TERMINAL > running inside WezTerm > whatever is
-    installed. Mirrors Get-TerminalBackend, plus tmux for Unix.
+    Priority: explicit request > KILN_TERMINAL > running inside a supported terminal >
+    whatever is installed. Mirrors Get-TerminalBackend, plus tmux for Unix.
     """
     import os
 
@@ -72,6 +80,14 @@ def detect_backend(requested: str | None = None, env: dict | None = None) -> str
         return requested.lower()
     if environment.get("KILN_TERMINAL"):
         return environment["KILN_TERMINAL"].lower()
+    # Running inside Herdr or WezTerm: use the same backend so Kiln opens a new workspace
+    # instead of spawning a separate terminal window.
+    if environment.get(HERDR_ENV_VAR) == "1":
+        return HERDR
+    if environment.get(WEZTERM_PANE_VAR):
+        return WEZTERM
+    if shutil.which("herdr"):
+        return HERDR
     if shutil.which("wezterm"):
         return WEZTERM
     return _platform_backend(os.name)
@@ -96,14 +112,16 @@ def launch(
     Returns the command that was (or would be) run, so `--dry-run` can show it without
     spawning anything.
     """
-    from . import tmux, wezterm, windows_terminal
+    from . import herdr, tmux, wezterm, windows_terminal
 
     if backend == WEZTERM:
         return wezterm.launch(panes, layout, project_dir, dry_run=dry_run)
     if backend == WINDOWS_TERMINAL:
         return windows_terminal.launch(panes, layout, dry_run=dry_run)
     if backend == TMUX:
-        return tmux.launch(panes, layout, dry_run=dry_run)
+        return tmux.launch(panes, layout, project_dir=project_dir, dry_run=dry_run)
+    if backend == HERDR:
+        return herdr.launch(panes, layout, project_dir, dry_run=dry_run)
     if backend == NONE:
         for pane in panes:
             log.info("[%s] would run in %s: %s", pane.role, pane.path, pane.cmd)

@@ -3,6 +3,9 @@
 Write agent status to both a JSON file and terminal title (OSC 0 escape sequence).
 Used by wrapper agents in loop templates to signal state transitions visibly.
 
+When running inside a Herdr pane (``$HERDR_ENV == 1``), also reports the mapped state
+to the Herdr sidebar via ``herdr pane report-state``.
+
 Usage: python set-status.py <role> <state> [detail]
   role: agent role name (e.g., "coder", "architect")
   state: one of STATE_EMOJIS's keys below
@@ -17,6 +20,7 @@ either), so the two dicts are kept in sync by hand, guarded by that test rather 
 
 import json
 import os
+import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -245,6 +249,51 @@ def main():
     osc_sequence = f"\033]0;{status['title']}\007"
     sys.stdout.buffer.write(osc_sequence.encode("utf-8"))
     sys.stdout.buffer.flush()
+
+    # Herdr sidebar: when running inside a Herdr pane (``HERDR_ENV`` is set to "1"),
+    # report the mapped state so the sidebar icon and status label reflect what Kiln
+    # actually knows.
+    if os.environ.get("HERDR_ENV") == "1":
+        _report_to_herdr(state, detail)
+
+
+def _report_to_herdr(state: str, detail: str | None) -> None:
+    """Call ``herdr pane report-state`` to update Herdr's sidebar, if inside Herdr."""
+    herdr_state = _kiln_to_herdr_state(state)
+    if herdr_state is None:
+        return
+    cmd = ["herdr", "pane", "report-state", herdr_state]
+    if detail:
+        cmd += ["--message", detail[:80]]
+    try:
+        subprocess.run(cmd, capture_output=True, timeout=5, check=False)
+    except (OSError, subprocess.SubprocessError):
+        pass  # Non-fatal: sidebar state is a nice-to-have.
+
+
+#: Mapping from Kiln's 14 states to Herdr's 5 sidebar states.
+#: Herdr sidebar states: idle, working, blocked, done, unknown.
+_KILN_TO_HERDR = {
+    "starting": "working",
+    "waiting": "idle",
+    "idle": "idle",
+    "receiving": "working",
+    "working": "working",
+    "delegating": "working",
+    "verifying": "working",
+    "approval": "working",
+    "retrying": "working",
+    "handoff": "done",
+    "handing-off": "done",
+    "blocked": "blocked",
+    "escalated": "blocked",
+    "halted": "blocked",
+}
+
+
+def _kiln_to_herdr_state(kiln_state: str) -> str | None:
+    """Map a Kiln state to the corresponding Herdr sidebar state."""
+    return _KILN_TO_HERDR.get(kiln_state)
 
 
 if __name__ == "__main__":

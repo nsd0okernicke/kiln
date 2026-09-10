@@ -46,7 +46,7 @@ from ..domain.profile import (
     load_profile,
 )
 from . import networking, scaffold, stop, workspace
-from .terminals import TMUX, WEZTERM, WINDOWS_TERMINAL, PaneSpec, TerminalError, detect_backend
+from .terminals import HERDR, TMUX, WEZTERM, WINDOWS_TERMINAL, PaneSpec, TerminalError, detect_backend
 from .terminals import launch as launch_terminal
 
 log = logging.getLogger("kiln")
@@ -174,6 +174,7 @@ def _hosts_posix_shell(backend: str) -> bool:
         return True
     if backend == WINDOWS_TERMINAL:
         return False
+    # HERDR, WEZTERM and unknown backends follow the host OS.
     return os.name != "nt"
 
 
@@ -192,7 +193,7 @@ def build_panes(
     passes it as `-Command` and does not. Only the former two need the clearing prefix.
     """
     render = render_posix if _hosts_posix_shell(backend) else render_powershell
-    clear = backend in (WEZTERM, TMUX)
+    clear = backend in (WEZTERM, TMUX, HERDR)
     panes: list[PaneSpec] = []
     for role in profile.roles:
         worktree = workspace.worktree_for(role, paths)
@@ -684,7 +685,7 @@ def build_parser() -> argparse.ArgumentParser:
         "-Terminal",
         dest="terminal",
         default=None,
-        help=f"terminal backend: {WEZTERM}, wt, {TMUX} or none",
+        help=f"terminal backend: {WEZTERM}, wt, {TMUX}, {HERDR} or none",
     )
     parser.add_argument(
         "--agent-override",

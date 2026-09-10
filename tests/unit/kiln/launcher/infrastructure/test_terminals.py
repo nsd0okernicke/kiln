@@ -16,6 +16,7 @@ from types import SimpleNamespace
 import pytest
 
 from kiln.launcher.infrastructure.terminals import (
+    HERDR,
     NONE,
     TMUX,
     WEZTERM,
@@ -24,6 +25,7 @@ from kiln.launcher.infrastructure.terminals import (
     TerminalError,
     detect_backend,
     launch,
+    herdr,
     tmux,
     wezterm,
     windows_terminal,
@@ -45,6 +47,27 @@ GRID_LAYOUT = {
     ]
 }
 
+FOUR_PANE_GRID = {
+    "tabs": [
+        {
+            "title": "All Roles",
+            "gridRows": 2,
+            "gridCols": 2,
+            "panes": [
+                {"role": "specifier"},
+                {"role": "coder"},
+                {"role": "reviewer"},
+                {"role": "architect"},
+            ],
+        }
+    ]
+}
+
+FOUR_PANES = PANES + [
+    PaneSpec(role="reviewer", name="Reviewer", path="C:/p/.worktrees/reviewer", cmd="pi r"),
+    PaneSpec(role="architect", name="Architect", path="C:/p/.worktrees/architect", cmd="pi a"),
+]
+
 
 class TestBackendDetection:
     def test_explicit_request_wins(self):
@@ -57,11 +80,17 @@ class TestBackendDetection:
         assert detect_backend("tmux", env={"KILN_TERMINAL": "wt"}) == TMUX
 
     def test_running_inside_wezterm_reuses_it_when_installed(self, monkeypatch):
-        monkeypatch.setattr("shutil.which", lambda name: "wezterm")
+        monkeypatch.setattr("shutil.which", lambda name: "wezterm" if name == "wezterm" else None)
         assert detect_backend(env={"WEZTERM_PANE": "3"}) == WEZTERM
 
+    def test_herdr_is_preferred_over_wezterm_when_installed(self, monkeypatch):
+        monkeypatch.setattr(
+            "shutil.which", lambda name: {"herdr": "herdr", "wezterm": "wezterm"}.get(name)
+        )
+        assert detect_backend(env={}) == HERDR
+
     def test_installed_wezterm_is_preferred_outside_wezterm(self, monkeypatch):
-        monkeypatch.setattr("shutil.which", lambda name: "wezterm")
+        monkeypatch.setattr("shutil.which", lambda name: "wezterm" if name == "wezterm" else None)
         assert detect_backend(env={}) == WEZTERM
 
     def test_windows_terminal_is_the_windows_fallback(self, monkeypatch):
@@ -73,6 +102,21 @@ class TestBackendDetection:
         monkeypatch.setattr("shutil.which", lambda name: "tmux" if name == "tmux" else None)
         monkeypatch.setattr(os, "name", "posix")
         assert detect_backend(env={}) == TMUX
+
+    def test_running_inside_herdr_prefers_herdr_backend(self, monkeypatch):
+        monkeypatch.setattr("shutil.which", lambda name: None)
+        assert detect_backend(env={"HERDR_ENV": "1"}) == HERDR
+
+    def test_running_inside_herdr_beats_kiln_terminal(self, monkeypatch):
+        monkeypatch.setattr("shutil.which", lambda name: None)
+        # The KILN_TERMINAL env var is checked BEFORE running-inside detection,
+        # so explicit config still wins.
+        assert detect_backend("tmux", env={"HERDR_ENV": "1"}) == TMUX
+
+    def test_herdr_env_not_set_falls_through(self, monkeypatch):
+        monkeypatch.setattr("shutil.which", lambda name: None)
+        monkeypatch.setattr(os, "name", "posix")
+        assert detect_backend(env={"HERDR_ENV": "0"}) == NONE
 
     def test_no_supported_binary_selects_log_only_backend(self, monkeypatch):
         monkeypatch.setattr("shutil.which", lambda name: None)
@@ -347,8 +391,16 @@ class TestWindowsTerminal:
 
 
 class TestTmux:
+    def setup_method(self):
+        tmux._project_name = ""
+
     def test_session_name_is_role_scoped(self):
         assert tmux.session_name("coder") == "kiln-coder"
+
+    def test_session_name_is_project_scoped_when_set(self):
+        # Trigger project-scoped naming.
+        tmux.launch([], None, project_dir=Path("my-project"), dry_run=True)
+        assert tmux.session_name("coder") == "kiln-my-project-coder"
 
     def test_creates_detached_session_then_sends_the_command(self):
         commands = tmux.build_session_commands(PANES[1])
@@ -378,7 +430,22 @@ class TestTmux:
         monkeypatch.setattr(tmux, "session_exists", lambda role: True)
         monkeypatch.setattr(tmux, "_run", lambda command: pytest.fail("ran tmux command"))
 
-        assert tmux.launch(PANES, None) == []
+        assert tmux.launch(PANES, None, dry_run=False) == []
+
+    def test_project_dir_scopes_session_names(self, monkeypatch):
+        monkeypatch.setattr(tmux.shutil, "which", lambda name: "tmux")
+        monkeypatch.setattr(tmux, "session_exists", lambda role: False)
+        calls = []
+        monkeypatch.setattr(
+            tmux,
+            "_run",
+            lambda command: calls.append(command) or type("R", (), {"returncode": 0, "stderr": ""})(),
+        )
+
+        tmux.launch(PANES[:1], None, project_dir=Path("my-project"))
+
+        # Session name should include project dir name.
+        assert any("kiln-my-project-specifier" in c[4] for c in calls)
 
     def test_launch_runs_each_planned_command(self, monkeypatch):
         calls = []
@@ -410,8 +477,104 @@ class TestTmux:
         assert len(calls) == 1
 
 
+class TestHerdr:
+    def test_workspace_label(self):
+        assert herdr.workspace_label(Path("my-project")) == "kiln-my-project"
+        assert herdr.workspace_label(Path("C:/Users/me/proj")) == "kiln-proj"
+
+    def test_pane_id_format(self):
+        assert herdr.pane_id("wN", 1) == "wN:p1"
+        assert herdr.pane_id("wN", 5) == "wN:p5"
+
+    def test_tab_members(self):
+        tab_def = {"panes": [{"role": "specifier"}, {"role": "coder"}]}
+        assert [m.role for m in herdr._tab_members(PANES, tab_def)] == ["specifier", "coder"]
+
+    def test_tab_members_skips_unknown(self):
+        assert herdr._tab_members(PANES, {"panes": [{"role": "ghost"}]}) == []
+
+    def test_tab_title(self):
+        assert herdr._tab_title({"title": "My Tab"}, PANES[:1]) == "My Tab"
+        assert herdr._tab_title({}, PANES) == "Specifier & Coder"
+
+    def test_dry_run_plans_workspace_and_panes(self):
+        planned = herdr.launch(PANES, None, Path("proj"), dry_run=True)
+        assert any("workspace create" in l for l in planned)
+        assert any("pane run" in l for l in planned)
+
+    def test_dry_run_workspace_label(self):
+        planned = herdr.launch(PANES, {}, Path("my-project"), dry_run=True)
+        assert any("kiln-my-project" in l for l in planned)
+
+    def test_dry_run_with_grid(self):
+        planned = herdr.launch(PANES, GRID_LAYOUT, Path("p"), dry_run=True)
+        assert any("pane split" in l for l in planned)
+        assert any("pane run" in l for l in planned)
+
+    def test_missing_binary(self, monkeypatch):
+        monkeypatch.setattr(herdr.shutil, "which", lambda n: None)
+        with pytest.raises(TerminalError, match="herdr not found"):
+            herdr.launch(PANES, None, Path("p"))
+
+    def test_dry_run_no_real_calls(self, monkeypatch):
+        monkeypatch.setattr(herdr, "_run", lambda c: (_ for _ in ()).throw(RuntimeError("no")))
+        monkeypatch.setattr(herdr, "_run_in_ws", lambda c, w: (_ for _ in ()).throw(RuntimeError("no")))
+        assert herdr.launch(PANES, {}, Path("p"), dry_run=True)
+
+    def test_no_layout_both_roles(self):
+        planned = herdr.launch(PANES, None, Path("p"), dry_run=True)
+        reports = [l for l in planned if "report-agent" in l]
+        assert len(reports) == 2
+        assert any("kiln-specifier" in l for l in reports)
+        assert any("kiln-coder" in l for l in reports)
+
+    def test_grid_2x2_3_splits(self):
+        planned = herdr.launch(FOUR_PANES, FOUR_PANE_GRID, Path("p"), dry_run=True)
+        assert len([l for l in planned if "pane split" in l]) == 3
+        assert len([l for l in planned if "pane run" in l]) == 4
+        assert len([l for l in planned if "report-agent" in l]) == 4
+
+    def test_grid_2x2_2_panes_1_split(self):
+        planned = herdr.launch(PANES, GRID_LAYOUT, Path("p"), dry_run=True)
+        assert len([l for l in planned if "pane split" in l]) == 1
+        assert len([l for l in planned if "pane run" in l]) == 2
+
+    def test_linear_down_split(self):
+        layout = {"tabs": [{"panes": [{"role": "specifier"}, {"role": "coder"}]}]}
+        planned = herdr.launch(PANES, layout, Path("p"), dry_run=True)
+        assert any("down" in l for l in planned if "pane split" in l)
+
+    def test_kiln_state_mapping(self):
+        assert len(herdr.KILN_STATE_TO_HERDR) == 14
+        for s in ("blocked", "escalated", "halted"):
+            assert herdr.KILN_STATE_TO_HERDR[s] == "blocked"
+        for s in ("handoff", "handing-off"):
+            assert herdr.KILN_STATE_TO_HERDR[s] == "done"
+        for s in ("idle", "waiting"):
+            assert herdr.KILN_STATE_TO_HERDR[s] == "idle"
+        working = ("starting", "receiving", "working", "delegating",
+                   "verifying", "approval", "retrying")
+        for s in working:
+            assert herdr.KILN_STATE_TO_HERDR[s] == "working"
+
+    def test_herdr_env_var(self):
+        from kiln.launcher.infrastructure.terminals import HERDR_ENV_VAR, WEZTERM_PANE_VAR
+        assert HERDR_ENV_VAR == "HERDR_ENV"
+        assert WEZTERM_PANE_VAR == "WEZTERM_PANE"
+
+    def test_ws_id_from_create(self):
+        assert herdr._ws_id_from_create('{"result":{"workspace":{"workspace_id":"wN"}}}') == "wN"
+        assert herdr._ws_id_from_create("") == ""
+
+    def test_find_json_error(self):
+        assert "not_found" in herdr._find_json_error(
+            '{"error":{"code":"not_found","message":"pane not found"}}')
+        assert herdr._find_json_error('{"result":{"ok":true}}') == ""
+        assert herdr._find_json_error("") == ""
+
+
 class TestDispatch:
-    @pytest.mark.parametrize("backend", [WEZTERM, WINDOWS_TERMINAL, TMUX])
+    @pytest.mark.parametrize("backend", [WEZTERM, WINDOWS_TERMINAL, TMUX, HERDR])
     def test_dry_run_reaches_each_backend(self, backend):
         assert launch(backend, PANES, {}, Path("C:/p"), dry_run=True)
 

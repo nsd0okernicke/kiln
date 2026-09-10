@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import shutil
 import subprocess
+from pathlib import Path
 
 from . import PaneSpec
 
@@ -21,9 +22,17 @@ log = logging.getLogger(__name__)
 
 SESSION_PREFIX = "kiln"
 
+#: Scoped by project to avoid multi-instance collision (Finding 4 in issue #46).
+#: The original ``kiln-<role>`` format matched the first project's session when two
+#: Kiln instances ran in different directories.
+#: Set by ``launch()`` on first call; tests that call ``launch()`` without a
+#: ``project_dir`` keep the legacy ``kiln`` prefix.
+_project_name: str = ""
+
 
 def session_name(role: str) -> str:
-    return f"{SESSION_PREFIX}-{role}"
+    prefix = _project_name if _project_name else SESSION_PREFIX
+    return f"{prefix}-{role}"
 
 
 def _run(args: list[str]) -> subprocess.CompletedProcess:
@@ -52,11 +61,27 @@ def build_session_commands(pane: PaneSpec) -> list[list[str]]:
     ]
 
 
-def launch(panes: list[PaneSpec], layout: dict | None, dry_run: bool = False) -> list[str]:
-    """Create one detached session per role. Existing sessions are left untouched."""
+def launch(
+    panes: list[PaneSpec],
+    layout: dict | None,
+    project_dir: Path | None = None,
+    dry_run: bool = False,
+) -> list[str]:
+    """Create one detached session per role. Existing sessions are left untouched.
+
+    ``project_dir`` scopes session names by project name to avoid multi-instance
+    collision (Finding 4 in issue #46). Tests that omit it keep the legacy ``kiln``
+    prefix for backward compatibility.
+    """
     planned: list[str] = []
 
     _require_tmux(dry_run)
+
+    global _project_name
+    if project_dir is not None:
+        _project_name = f"{SESSION_PREFIX}-{project_dir.name}"
+    else:
+        _project_name = SESSION_PREFIX
 
     for pane in panes:
         if not dry_run and session_exists(pane.role):
