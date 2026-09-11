@@ -248,9 +248,34 @@ def _read_pids(checkout_path: Path) -> dict[str, int]:
         return {}
 
 
+def _container_from_run_json(checkout_path: Path) -> str | None:
+    """Read run.json and return container_id if executor.kind is docker."""
+    run_id = checkout_path.name
+    # Checkout is at <project_root>/.worktrees/<run_id>/, run.json at
+    # <project_root>/.kiln/runs/<run_id>/run.json.
+    for candidate in (
+        checkout_path.parent.parent / ".kiln" / "runs" / run_id / "run.json",
+        checkout_path.parent.parent / ".kiln" / "runs" / run_id / "run.json",
+    ):
+        if candidate.is_file():
+            try:
+                import json
+
+                data = json.loads(candidate.read_text(encoding="utf-8"))
+                executor = data.get("executor") or {}
+                if executor.get("kind") == "docker":
+                    return executor.get("container_id") or None
+            except (json.JSONDecodeError, OSError):
+                return None
+    return None
+
+
 def stop_run(checkout_path: Path, dry_run: bool = False) -> list[int]:
     """
     Stop every Kiln process belonging to one named run.
+
+    **Phase 3 (container) path**: reads ``run.json`` for ``executor.kind == \"docker\"``
+    and uses ``docker stop`` instead of PID-based killing.
 
     **Phase 1 (headless) path**: reads ``pids.json`` for exact PIDs — no command-line
     scanning needed. Also falls back to scanning the process list for the checkout path
@@ -259,6 +284,16 @@ def stop_run(checkout_path: Path, dry_run: bool = False) -> list[int]:
     Both forward- and backslash variants are checked so the fallback match works
     regardless of whether the host OS reports paths with ``/`` or backslashes.
     """
+    # Phase 3: check for container executor.
+    container_id = _container_from_run_json(checkout_path)
+    if container_id:
+        log.info("stopping container %s for run", container_id[:12])
+        if not dry_run:
+            from . import container as container_runner  # noqa: PLC0415
+
+            container_runner.stop_container(container_id)
+        return []
+
     stopped: list[int] = []
     seen: set[int] = set()
 

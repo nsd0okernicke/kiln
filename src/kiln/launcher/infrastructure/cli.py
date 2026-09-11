@@ -651,25 +651,68 @@ def resolve_run_id(args: argparse.Namespace, paths: KilnPaths) -> str | None:
     return None
 
 
-def write_run_index(run_index: RunIndex, paths: KilnPaths) -> None:
-    """Write the immutable run.json identity record."""
+def _write_docker_run_index(
+    run_index: RunIndex,
+    run_id: str,
+    project_root: Path,
+    checkout_path: Path,
+    container_id: str | None,
+    profile_name: str,
+    ref: str,
+    args: argparse.Namespace,
+) -> None:
+    """Write run.json for a Docker containerised run."""
     import json
+    from datetime import datetime, timezone
+
+    run_index.dir.mkdir(parents=True, exist_ok=True)
+    executor: dict = {"kind": "docker"}
+    if container_id:
+        executor["container_id"] = container_id
+    run_index.json.write_text(
+        json.dumps(
+            {
+                "run_id": run_id,
+                "profile": profile_name,
+                "branch": ref,
+                "project_root": str(project_root),
+                "checkout_path": str(checkout_path),
+                "executor": executor,
+                "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def write_run_index(
+    run_index: RunIndex,
+    paths: KilnPaths,
+    executor: dict | None = None,
+    profile_name: str = "",
+    branch: str = "",
+) -> None:
+    """Write the immutable run.json identity record.
+
+    ``executor`` describes how the run is launched: ``{"kind": "local"}``
+    (default) or ``{"kind": "docker", "container_id": "..."}`` for containerised runs.
+    """
+    import json
+    from datetime import datetime, timezone
 
     run_index.dir.mkdir(parents=True, exist_ok=True)
     run_index.json.write_text(
         json.dumps(
             {
                 "run_id": run_index.run_id,
-                "profile": "",
-                "branch": "",
+                "profile": profile_name,
+                "branch": branch,
                 "project_root": str(run_index.original_root),
                 "checkout_path": str(paths.project_root),
-                "executor": {"kind": "local"},
-                "created_at": __import__("datetime").datetime.now(
-                    __import__("datetime").timezone.utc
-                )
-                .isoformat()
-                .replace("+00:00", "Z"),
+                "executor": executor or {"kind": "local"},
+                "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             },
             indent=2,
         )
@@ -690,6 +733,52 @@ def run_launch(args: argparse.Namespace) -> int:
     run_id = resolve_run_id(args, original_paths)
     run_index: RunIndex | None = None
     paths = original_paths
+
+    # Phase 3: Docker containerised run.
+    docker_mode = getattr(args, "docker", False)
+    container_id: str | None = None
+    if run_id and docker_mode:
+        from . import container as container_runner
+
+        ref = args.ref or workspace.current_branch(original_paths)
+        profile_name = args.profile or ""
+
+        run_index = RunIndex.create(project_root, run_id)
+        run_dir = run_index.dir
+        checkout_path = run_dir / "workspace"
+
+        # Build the image if needed.
+        dockerfile_dir = original_paths.framework_root / "docker"
+        if not (dockerfile_dir / "Dockerfile").is_file():
+            log.warning(
+                "Dockerfile not found at %s; the image must already exist",
+                dockerfile_dir / "Dockerfile",
+            )
+        elif not args.dry_run:
+            container_runner.build_image(dockerfile_dir, dry_run=args.dry_run)
+
+        # Seed host credentials into the run dir.
+        container_runner.seed_credentials(run_dir)
+
+        # Start the container.
+        container_id = container_runner.start_container(
+            run_id=run_id,
+            project_root=project_root,
+            checkout_path=checkout_path,
+            ref=ref,
+            profile=profile_name,
+            dry_run=args.dry_run,
+        )
+        if container_id is None and not args.dry_run:
+            raise LaunchError(f"could not start container for run {run_id!r}")
+
+        _write_docker_run_index(
+            run_index, run_id, project_root, checkout_path,
+            container_id, profile_name, ref, args,
+        )
+        log.info("run: %s (container: %s)", run_id, (container_id or "dry-run")[:12])
+        return 0
+
     if run_id:
         run_index = RunIndex.create(project_root, run_id)
         paths = workspace.clone_for_run(original_paths, run_id)
@@ -711,9 +800,14 @@ def run_launch(args: argparse.Namespace) -> int:
     branch = prepare(profile, paths)
     log.info("branch: %s", branch)
 
-    # Write the run index entry (only for named runs).
-    if run_index is not None:
-        write_run_index(run_index, paths)
+    # Write the run index entry (only for named runs, non-Docker).
+    if run_index is not None and not docker_mode:
+        write_run_index(
+            run_index,
+            paths,
+            profile_name=profile.name,
+            branch=branch,
+        )
         log.info("run: %s (checkout: %s)", run_index.run_id, paths.project_root)
 
     proxy_url = _capture_url(args, paths, profile)
@@ -1079,6 +1173,28 @@ def build_parser() -> argparse.ArgumentParser:
             "Named runs create a full checkout at .worktrees/<run_id>/ and write an index "
             "entry at .kiln/runs/<run_id>/, allowing multiple swarms in one repository."
         ),
+    )
+    parser.add_argument(
+        "--docker", "-Docker",
+        dest="docker",
+        action="store_true",
+        help=(
+            "run inside a Docker container (Phase 3). Requires --run. "
+            "The container receives the repo read-only at /seed and writes state "
+            "to .kiln/runs/<run_id>/ on the host, observable through the cockpit hub."
+        ),
+    )
+    parser.add_argument(
+        "--ref", "-Ref",
+        dest="ref",
+        default="",
+        help="git ref (branch, tag, commit) to check out inside the container (default: current branch)",
+    )
+    parser.add_argument(
+        "--repo", "-Repo",
+        dest="repo",
+        default="",
+        help="repository URL or path for the container seed mount (default: the working directory)",
     )
     parser.add_argument(
         "--version",
