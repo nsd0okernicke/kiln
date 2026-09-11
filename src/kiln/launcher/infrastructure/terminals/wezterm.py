@@ -375,6 +375,9 @@ def build_environment(panes: list[PaneSpec], layout: dict, project_dir: Path) ->
         ENV_ROLES: build_roles_json(panes),
         # Lua does `project_dir .. '/.kiln/...'`, so forward slashes keep the path valid.
         ENV_PROJECT_DIR: project_dir.as_posix(),
+        # Every backend exports KILN_STATE_DIR so set-status.py can find it without
+        # deriving from KILN_PROJECT_DIR (which only WezTerm historically set).
+        "KILN_STATE_DIR": (project_dir / ".kiln").as_posix(),
         ENV_STATE_COLORS: json.dumps(STATE_COLORS_HEX, separators=(",", ":")),
         "KILN_VERSION": version,
     }

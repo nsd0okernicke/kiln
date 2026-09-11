@@ -741,3 +741,35 @@ def write_sessions_file(profile: Profile, paths: KilnPaths, branch: str = "") ->
 
 def worktree_for(role: RoleConfig, paths: KilnPaths) -> Path:
     return paths.project_root if role.uses_current_dir else paths.worktree_path(role.worktree)
+
+
+def clone_for_run(paths: KilnPaths, run_id: str) -> KilnPaths:
+    """
+    Create a full checkout of the project at ``.worktrees/<run_id>/`` and return a
+    ``KilnPaths`` pointing into it.
+
+    Uses ``git clone --local`` so objects are hardlinked (near-zero disk cost on the
+    same filesystem). The clone has its own ``.git/``, its own ``.kiln/``, and its own
+    role worktrees -- no path collisions with other runs.
+
+    Raises ``WorkspaceError`` if the target directory already exists (previous run)
+    or the clone fails.
+    """
+    target = paths.project_root / ".worktrees" / run_id
+    if target.exists():
+        raise WorkspaceError(
+            f"run checkout already exists at {target}. "
+            f"Remove it first:  kiln runs rm {run_id}"
+        )
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    result = run_git(
+        ["clone", "--local", str(paths.project_root), str(target)],
+        paths.project_root,
+    )
+    if result.returncode != 0:
+        raise WorkspaceError(
+            f"could not clone repository for run {run_id!r}: {result.stderr.strip()}"
+        )
+
+    return KilnPaths.create(target, paths.framework_root)

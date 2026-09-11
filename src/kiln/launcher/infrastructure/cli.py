@@ -36,7 +36,7 @@ from ..application.commands import (
     render_powershell,
 )
 from ..application.templates import TemplateError, check_project_scaffolding, resolve_framework_root
-from ..domain.paths import KilnPaths, python_command
+from ..domain.paths import KilnPaths, RunIndex, python_command, slugify
 from ..domain.profile import (
     Profile,
     ProfileError,
@@ -524,13 +524,63 @@ def _log_role_kinds(profile: Profile) -> None:
         log.info("  %-20s %s", role.role, kind)
 
 
+def resolve_run_id(args: argparse.Namespace, paths: KilnPaths) -> str | None:
+    """
+    Resolve the run identifier from args, or None for an unnamed (default) run.
+
+    An explicit ``--run <name>`` always wins. Without it, no run index is created and
+    the swarm works inside the original project root -- today's behaviour, unchanged.
+
+    Safe against ``SimpleNamespace`` calls from tests that omit ``run_id`` entirely.
+    """
+    raw = getattr(args, "run_id", None)
+    if raw:
+        return slugify(raw)
+    return None
+
+
+def write_run_index(run_index: RunIndex, paths: KilnPaths) -> None:
+    """Write the immutable run.json identity record."""
+    import json
+
+    run_index.dir.mkdir(parents=True, exist_ok=True)
+    run_index.json.write_text(
+        json.dumps(
+            {
+                "run_id": run_index.run_id,
+                "profile": "",
+                "branch": "",
+                "project_root": str(run_index.original_root),
+                "checkout_path": str(paths.project_root),
+                "executor": {"kind": "local"},
+                "created_at": __import__("datetime").datetime.now(
+                    __import__("datetime").timezone.utc
+                )
+                .isoformat()
+                .replace("+00:00", "Z"),
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def run_launch(args: argparse.Namespace) -> int:
     project_root = Path(args.working_dir).expanduser().resolve()
     if not project_root.is_dir():
         raise LaunchError(f"working directory does not exist: {project_root}")
 
-    paths = KilnPaths.create(project_root, resolve_framework_root())
+    original_paths = KilnPaths.create(project_root, resolve_framework_root())
     check_dependencies()
+
+    # Determine run identity and, for named runs, create the checkout before anything else.
+    run_id = resolve_run_id(args, original_paths)
+    run_index: RunIndex | None = None
+    paths = original_paths
+    if run_id:
+        run_index = RunIndex.create(project_root, run_id)
+        paths = workspace.clone_for_run(original_paths, run_id)
 
     profile = _profile_for_launch(
         load_profile(paths.project_root, paths.framework_root, args.profile), args
@@ -545,6 +595,11 @@ def run_launch(args: argparse.Namespace) -> int:
 
     branch = prepare(profile, paths)
     log.info("branch: %s", branch)
+
+    # Write the run index entry (only for named runs).
+    if run_index is not None:
+        write_run_index(run_index, paths)
+        log.info("run: %s (checkout: %s)", run_index.run_id, paths.project_root)
 
     proxy_url = _capture_url(args, paths, profile)
 
@@ -625,6 +680,14 @@ def run_stop(args: argparse.Namespace) -> int:
     project_root = Path(args.working_dir).expanduser().resolve()
     paths = KilnPaths.create(project_root, resolve_framework_root())
 
+    run_id = resolve_run_id(args, paths)
+    if run_id:
+        # Stop only the named run: its processes carry the clone's .kiln/ in argv.
+        checkout_path = paths.worktrees_dir / run_id
+        stopped = stop.stop_run(checkout_path, dry_run=args.dry_run)
+        log.info("stopped %d process(es) for run %s", len(stopped), run_id)
+        return 0
+
     roles: list[str] = []
     if paths.sessions_file.is_file():
         for line in paths.sessions_file.read_text(encoding="utf-8").splitlines():
@@ -663,6 +726,86 @@ def run_list_profiles(args: argparse.Namespace) -> int:
         ) - len(listed)
         if hidden:
             print(f"\n({hidden} test fixture(s) hidden; --all-profiles to show them)")
+    return 0
+
+
+def run_runs_command(argv: list[str]) -> int:
+    """
+    Handle ``kiln runs`` subcommands.
+
+    Usage:
+      kiln runs [--working-dir <dir>]           — list runs
+      kiln runs rm <run_id> [--working-dir <dir>] — remove a run
+    """
+    # Extract --working-dir if present.
+    remaining, working_dir = _extract_working_dir(argv)
+    project_root = Path(working_dir).expanduser().resolve()
+
+    runs_dir = project_root / ".kiln" / "runs"
+
+    if not remaining or remaining[0] != "rm":
+        return _list_runs(runs_dir)
+    if len(remaining) < 2:
+        log.error("Usage: kiln runs rm <run_id>")
+        return 1
+    return _remove_run(runs_dir, remaining[1], project_root)
+
+
+def _list_runs(runs_dir: Path) -> int:
+    """Print a table of known runs."""
+    if not runs_dir.is_dir():
+        print("No runs.")
+        return 0
+
+    import json
+
+    entries = sorted(runs_dir.iterdir())
+    if not entries:
+        print("No runs.")
+        return 0
+
+    print(f"{'Run ID':30} {'Checkout':50} {'Created'}")
+    print("-" * 120)
+    for entry in entries:
+        if not entry.is_dir():
+            continue
+        try:
+            data = json.loads((entry / "run.json").read_text(encoding="utf-8"))
+            print(
+                f"{data.get('run_id', entry.name):30} "
+                f"{data.get('checkout_path', '?'):50} "
+                f"{data.get('created_at', '?')}"
+            )
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            print(f"{entry.name:30} {'(corrupt or missing run.json)':50}")
+    return 0
+
+
+def _remove_run(runs_dir: Path, run_id: str, project_root: Path) -> int:
+    """Remove a run's checkout and index entry."""
+    import shutil
+
+    from .workspace import run_git
+
+    run_id = slugify(run_id)
+    checkout = project_root / ".worktrees" / run_id
+    index_dir = runs_dir / run_id
+
+    if not checkout.exists() and not index_dir.exists():
+        log.error("run %r not found")
+        return 1
+
+    # Remove the checkout (full clone).
+    if checkout.exists():
+        log.info("removing checkout: %s", checkout)
+        shutil.rmtree(checkout, ignore_errors=True)
+
+    # Remove the index entry.
+    if index_dir.exists():
+        log.info("removing index: %s", index_dir)
+        shutil.rmtree(index_dir, ignore_errors=True)
+
+    log.info("run %s removed", run_id)
     return 0
 
 
@@ -809,6 +952,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--run", "-Run",
+        dest="run_id",
+        default=None,
+        help=(
+            "run name (default: slugified current branch, but no run index is created). "
+            "Named runs create a full checkout at .worktrees/<run_id>/ and write an index "
+            "entry at .kiln/runs/<run_id>/, allowing multiple swarms in one repository."
+        ),
+    )
+    parser.add_argument(
         "--version",
         action="version",
         version=f"kiln {kiln_version.resolve_version()}",
@@ -819,7 +972,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 #: Human entry points, delegated to the scheduler package rather than parsed here.
-SUBCOMMANDS = ("send", "inbox", "retry", "task", "knowledge")
+SUBCOMMANDS = ("send", "inbox", "retry", "task", "knowledge", "runs")
 CLI_ERRORS = (
     LaunchError,
     ProfileError,
@@ -892,6 +1045,9 @@ def run_subcommand(name: str, argv: list[str]) -> int:
         from kiln.knowledge.infrastructure import cli as knowledge
 
         return knowledge.main(argv)
+
+    if name == "runs":
+        return run_runs_command(argv)
 
     from kiln.scheduler.infrastructure.cli import inbox, retry, send, task
 

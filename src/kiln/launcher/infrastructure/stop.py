@@ -235,6 +235,31 @@ def kill_tmux_sessions(roles: list[str]) -> int:
     return stopped
 
 
+def stop_run(checkout_path: Path, dry_run: bool = False) -> list[int]:
+    """
+    Stop every Kiln process whose command line contains the run's checkout path.
+
+    Each process in a named run carries the clone's ``.kiln/`` in its argv
+    (e.g. ``--db-path .../.worktrees/<run_id>/.kiln/messages.db``), so matching
+    on the checkout path is precise enough to stop one run without affecting others.
+
+    Both forward- and backslash variants are checked so the match works regardless
+    of whether the host OS reports paths with ``/`` or backslashes.
+    """
+    wanted_posix = checkout_path.resolve().as_posix()
+    wanted_native = checkout_path.resolve().as_posix().replace("/", "\\")
+    found = [
+        (pid, command)
+        for pid, command in find_kiln_processes()
+        if wanted_posix in command or wanted_native in command
+    ]
+    for pid, command in found:
+        log.info("stopping pid %s: %s", pid, command[:100])
+        if not dry_run:
+            kill_process(pid)
+    return [pid for pid, _ in found]
+
+
 def stop_all(roles: list[str] | None = None, dry_run: bool = False) -> list[int]:
     """Stop every Kiln-started process. Returns the pids acted on."""
     found = find_kiln_processes()

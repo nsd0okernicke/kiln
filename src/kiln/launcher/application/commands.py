@@ -542,6 +542,10 @@ def build_agent_command(
     Scheduler-enabled roles bypass the agent CLI entirely — the scheduler invokes the worker
     itself, one shot per handoff.
 
+    ``KILN_STATE_DIR`` points every pane at the run's ``.kiln/`` directory, regardless of
+    terminal backend (fixes F7: previously only WezTerm exported ``KILN_PROJECT_DIR``, so
+    ``set-status.py`` silently failed on tmux and Windows Terminal).
+
     `proxy_url` routes this role's API traffic through the local capture kiln.proxy. It is applied
     to both scheduler and wrapper roles: a scheduler-mode worker is a subprocess of its pane
     and inherits the pane's environment, so setting it once on the pane covers both.
@@ -549,7 +553,12 @@ def build_agent_command(
     kiln_bin = str(paths.framework_root / "bin")
     current_path = os.environ.get("PATH", "")
     path_env = f"{kiln_bin}{os.pathsep}{current_path}"
-    env = {"PATH": path_env, "KILN_BIN": kiln_bin, "KILN_ROLE": role.role}
+    env = {
+        "PATH": path_env,
+        "KILN_BIN": kiln_bin,
+        "KILN_ROLE": role.role,
+        "KILN_STATE_DIR": str(paths.state_dir),
+    }
     special = _special_role_command(role, paths, branch, profile, proxy_url, auto_approve_spec)
     if special is not None:
         return special.with_env(**env)

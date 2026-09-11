@@ -191,24 +191,43 @@ def preserve_state_since(status: dict, status_file: Path) -> None:
         status["since"] = previous["since"]
 
 
-def project_root_from_own_path():
+def resolve_state_dir() -> Path | None:
     """
-    Derive the project root from where this script sits, as a fallback.
+    Resolve the Kiln state directory from environment or script location.
 
-    `KILN_PROJECT_DIR` is exported only by the WezTerm backend, so under tmux or Windows
-    Terminal every call died with "environment variable not set" and `.kiln/status/` stayed
-    empty — taking the dashboard's whole STATE column, the persisted cycle/cost totals, and
-    the "just cat .kiln/status/<role>.json" fallback the README offers non-WezTerm users
-    down with it. Found on Linux, where tmux is the only fallback there is.
+    Priority:
+    1. ``KILN_STATE_DIR`` — the run's own ``.kiln/`` directory (set by the launcher
+       and every terminal backend). This is the most direct path and avoids any
+       derivation being needed.
+    2. ``KILN_PROJECT_DIR`` — the project root; ``.kiln/`` is appended.
+    3. Script location — ``copy_framework_tools()`` always installs this script at
+       ``<state>/.kiln/tools/``, so walking up from ``__file__`` works without any
+       cooperation from the launcher. ``resolve()`` matters because in a worktree
+       ``.kiln`` is a symlink to the real project's, and following it is what makes
+       every role write into the one shared status directory.
 
-    `copy_framework_tools()` always installs this file at `<project>/.kiln/tools/`, so its
-    own location identifies the project without any cooperation from the kiln.launcher. `resolve()`
-    matters: in a worktree `.kiln` is a symlink to the real project's, and following it is
-    what makes every role write into the one shared status directory.
+    ``KILN_PROJECT_DIR`` alone was the original mechanism. Its problem: the WezTerm
+    backend exported it, tmux and Windows Terminal did not, so status files stayed
+    empty on those backends (confirmed on Linux). ``KILN_STATE_DIR`` is the fix:
+    exported by *every* backend, not just WezTerm.
     """
+    state_dir = os.environ.get("KILN_STATE_DIR")
+    if state_dir:
+        return Path(state_dir)
+
+    project_dir = os.environ.get("KILN_PROJECT_DIR")
+    if project_dir:
+        return Path(project_dir) / ".kiln"
+
+    # Fallback: walk up from __file__.
     tools_dir = Path(__file__).resolve().parent
-    if tools_dir.name == "tools" and tools_dir.parent.name == ".kiln":
-        return str(tools_dir.parent.parent)
+    if tools_dir.name == "tools":
+        candidate = tools_dir.parent
+        if candidate.name == ".kiln":
+            return candidate
+        # Nested layout (.kiln/runs/<run_id>/tools/): walk one more level.
+        if candidate.parent.name == "runs" and candidate.parent.parent.name == ".kiln":
+            return candidate.parent.parent
     return None
 
 
@@ -225,12 +244,16 @@ def main():
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    project_dir = os.environ.get("KILN_PROJECT_DIR") or project_root_from_own_path()
-    if not project_dir:
-        print("Error: KILN_PROJECT_DIR environment variable not set", file=sys.stderr)
+    state_dir = resolve_state_dir()
+    if state_dir is None:
+        print(
+            "Error: KILN_STATE_DIR/KILN_PROJECT_DIR not set and cannot derive "
+            "from script location",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
-    status_dir = Path(project_dir) / ".kiln" / "status"
+    status_dir = state_dir / "status"
     status_dir.mkdir(parents=True, exist_ok=True)
 
     status_file = status_dir / f"{role}.json"

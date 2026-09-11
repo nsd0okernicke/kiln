@@ -57,7 +57,7 @@ class KilnPaths:
     # --- project-owned, ephemeral -------------------------------------------------
     @property
     def state_dir(self) -> Path:
-        """`.kiln/` — runtime state, gitignored, symlinked into every worktree."""
+        """.kiln/ -- runtime state, gitignored, symlinked into every worktree."""
         return self.project_root / ".kiln"
 
     @property
@@ -79,22 +79,22 @@ class KilnPaths:
     @property
     def traffic_db(self) -> Path:
         """
-        `.kiln/traffic.db` — the proxy's capture store.
+        .kiln/traffic.db -- the proxy's capture store.
 
-        Deliberately not `messages.db`: that file is live swarm state, queried by the
-        dashboard, the inbox and the `kiln-db` MCP server, and small enough to open in a
+        Deliberately not messages.db: that file is live swarm state, queried by the
+        dashboard, the inbox and the kiln-db MCP server, and small enough to open in a
         SQLite browser. Captured request bodies are orders of magnitude larger.
         """
         return self.state_dir / "traffic.db"
 
     @property
     def status_dir(self) -> Path:
-        """Per-role `<role>.json` read by the WezTerm status bar."""
+        """Per-role <role>.json read by the WezTerm status bar."""
         return self.state_dir / "status"
 
     @property
     def state_tools_dir(self) -> Path:
-        """`.kiln/tools/` — framework tools copied in fresh on every launch."""
+        """.kiln/tools/ -- framework tools copied in fresh on every launch."""
         return self.state_dir / "tools"
 
     @property
@@ -104,7 +104,7 @@ class KilnPaths:
     @property
     def cockpit_url_file(self) -> Path:
         """
-        `.kiln/cockpit-url` — where the running cockpit says it ended up.
+        .kiln/cockpit-url -- where the running cockpit says it ended up.
 
         Written because the port is not fixed: the cockpit probes upward when its preferred
         one is taken, so a second project's cockpit is somewhere the operator did not choose.
@@ -115,9 +115,9 @@ class KilnPaths:
     @property
     def cockpit_pid_file(self) -> Path:
         """
-        `.kiln/kiln.cockpit.pid` — a courtesy, not the way the cockpit is stopped.
+        .kiln/kiln.cockpit.pid -- a courtesy, not the way the cockpit is stopped.
 
-        `kiln --stop` finds it by command line like every other Kiln process, so a stale or
+        kiln --stop finds it by command line like every other Kiln process, so a stale or
         missing pid file changes nothing about teardown.
         """
         return self.state_dir / "kiln.cockpit.pid"
@@ -129,7 +129,7 @@ class KilnPaths:
     # --- project-owned, version-controlled ----------------------------------------
     @property
     def kiln_dir(self) -> Path:
-        """`kiln/` — version-controlled, NOT to be blanket-gitignored."""
+        """kiln/ -- version-controlled, NOT to be blanket-gitignored."""
         return self.project_root / "kiln"
 
     @property
@@ -171,7 +171,7 @@ class KilnPaths:
 
     @property
     def scaffold_resources_dir(self) -> Path:
-        """Bundled defaults copied into a project's editable ``kiln/project`` directory."""
+        """Bundled defaults copied into a project's editable kiln/project directory."""
         return self.resources_dir / "project"
 
     @property
@@ -188,12 +188,12 @@ class KilnPaths:
 
     @property
     def channel_script(self) -> Path:
-        """Referenced by absolute path in generated .mcp.json — never copied."""
+        """Referenced by absolute path in generated .mcp.json -- never copied."""
         return self.package_dir / "mcp_server" / "channel.py"
 
     @property
     def python_package_root(self) -> Path:
-        """Goes on PYTHONPATH so the namespaced `kiln` package is importable."""
+        """Goes on PYTHONPATH so the namespaced kiln package is importable."""
         return self.source_dir
 
     @property
@@ -209,10 +209,10 @@ class KilnPaths:
 
     def agent_debug_log(self, role: str, agent: str = "claude") -> Path:
         """
-        Where a wrapper-mode CLI writes its own internal trace (`--debug-file`).
+        Where a wrapper-mode CLI writes its own internal trace (--debug-file).
 
-        Named for the backend, not hardcoded to `claude`: `grok` takes the same flag, and a
-        grok role writing to `claude-debug-<role>.log` would send anyone diagnosing a stall
+        Named for the backend, not hardcoded to claude: grok takes the same flag, and a
+        grok role writing to claude-debug-<role>.log would send anyone diagnosing a stall
         (README's troubleshooting steps name this file by path) to a log for the wrong CLI.
         The default keeps every existing Claude path and filename unchanged.
         """
@@ -241,3 +241,82 @@ class KilnPaths:
         if agent == "pi":
             return self.project_root / ".pi" / "agents" / f"{role}-worker.md"
         return self.project_root / ".claude" / "agents" / f"{role}-worker.md"
+
+
+@dataclass(frozen=True)
+class RunIndex:
+    """
+    Index entry in the original project root pointing to one run's clone.
+
+    ``RunIndex`` lives in the **original** repo (before cloning) and is the only
+    thing in ``.kiln/runs/<run_id>/`` -- ``run.json`` (immutable identity), ``state.json``
+    (mutable liveness). ``KilnPaths`` is unchanged and points into the clone instead.
+
+    This separation is what makes "no-op strangler" nearly free: without ``--run``,
+    no ``RunIndex`` is ever created and existing code paths are unchanged.
+    """
+
+    original_root: Path
+    run_id: str
+
+    @property
+    def dir(self) -> Path:
+        """.kiln/runs/<run_id>/ -- the run's index directory."""
+        return self.original_root / ".kiln" / "runs" / self.run_id
+
+    @property
+    def json(self) -> Path:
+        """run.json -- written once at launch, never modified afterwards."""
+        return self.dir / "run.json"
+
+    @property
+    def state_json(self) -> Path:
+        """state.json -- written by the run periodically, mutable."""
+        return self.dir / "state.json"
+
+    @classmethod
+    def create(cls, original_root: str | Path, run_id: str) -> RunIndex:
+        return cls(
+            original_root=Path(original_root).expanduser().resolve(),
+            run_id=slugify(run_id),
+        )
+
+    @classmethod
+    def from_run_dir(cls, run_dir: Path) -> RunIndex:
+        """
+        Reconstruct from an existing ``.kiln/runs/<run_id>/`` path.
+
+        Assumes the path ends with ``.kiln/runs/<run_id>``. Used by ``kiln runs``
+        and discovery -- never on a happy launch path.
+        """
+        run_id = run_dir.name
+        original_root = run_dir.parent.parent.parent
+        return cls(original_root=original_root, run_id=run_id)
+
+
+#: Characters replaced in slugify.
+SLUGIFY_CHARS = str.maketrans(
+    {
+        "/": "-",
+        "\\": "-",
+        " ": "-",
+        ".": "-",
+        "#": "-",
+        "_": "-",
+    }
+)
+
+
+def slugify(name: str) -> str:
+    """
+    Turn a git branch name into a filesystem-safe identifier.
+
+    ``feature/auth`` -> ``feature-auth``. Replaces non-alphanumeric characters
+    that are not already a hyphen with a hyphen. Lowercased so a filesystem's
+    case-sensitivity cannot surprise: ``Feature/Auth`` and ``feature/auth``
+    are the same run on a case-insensitive FS.
+    """
+    result = name.lower()
+    result = result.translate(SLUGIFY_CHARS)
+    # Strip any remaining non-alphanumeric, non-hyphen characters.
+    return "".join(c for c in result if c.isalnum() or c == "-")

@@ -1,5 +1,6 @@
 """Unit coverage for platform process-list parsing and stop orchestration."""
 
+from pathlib import Path
 from types import SimpleNamespace
 
 from kiln.launcher.infrastructure import stop
@@ -144,6 +145,61 @@ def test_find_kiln_processes_matches_on_state_directory_as_well_as_markers(monke
     assert stop.find_kiln_processes() == [
         (2, "python -m proxy.server --db-path /w/app/.kiln/traffic.db")
     ]
+
+
+def test_stop_run_filters_by_checkout_path(monkeypatch, tmp_path):
+    monkeypatch.setattr(stop.os, "name", "posix")
+    checkout = tmp_path / ".worktrees" / "exp-auth"
+    checkout.mkdir(parents=True)
+    monkeypatch.setattr(
+        stop,
+        "_posix_matches",
+        lambda: [
+            # Inside the run's checkout — should be matched.
+            (1, f"python -m role_scheduler --db-path {checkout.as_posix()}/.kiln/messages.db"),
+            # Inside the original repo — should NOT be matched.
+            (2, f"python -m inbox --db-path {tmp_path.as_posix()}/.kiln/messages.db"),
+            # Unrelated process.
+            (3, "python unrelated.py"),
+        ],
+    )
+
+    stopped = stop.stop_run(checkout, dry_run=True)
+
+    assert stopped == [1]
+
+
+def test_stop_run_dry_run_reports_pids_without_killing(monkeypatch, tmp_path):
+    monkeypatch.setattr(stop.os, "name", "posix")
+    checkout = tmp_path / ".worktrees" / "run-x"
+    checkout.mkdir(parents=True)
+    monkeypatch.setattr(
+        stop,
+        "_posix_matches",
+        lambda: [
+            (42, f"python -m role_scheduler --db-path {checkout.as_posix()}/.kiln/db"),
+        ],
+    )
+    killed = []
+    monkeypatch.setattr(stop, "kill_process", lambda pid: killed.append(pid) or True)
+
+    result = stop.stop_run(checkout, dry_run=True)
+
+    assert result == [42]
+    assert killed == [], "dry_run should not call kill_process"
+
+
+def test_stop_run_empty_when_no_process_matches(monkeypatch, tmp_path):
+    monkeypatch.setattr(stop.os, "name", "posix")
+    checkout = tmp_path / ".worktrees" / "run-y"
+    checkout.mkdir(parents=True)
+    monkeypatch.setattr(
+        stop, "_posix_matches", lambda: [(1, f"python -m other --db-path {tmp_path.as_posix()}/.kiln/db")]
+    )
+
+    result = stop.stop_run(checkout, dry_run=True)
+
+    assert result == []
 
 
 def test_module_argument_reads_the_dash_m_token_only():

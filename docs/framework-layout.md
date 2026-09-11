@@ -70,4 +70,29 @@ surface, but its contents are copied freshly into `.kiln/tools/` on every launch
 
 Kiln deliberately treats `.kiln/` as **ephemeral coordination state**, not durable execution history. The SQLite queue, status snapshots, logs, session records, and in-memory scheduler budgets belong to one local swarm run. They may be deleted and recreated when a schema changes; they are not a backup, audit log, or source for resuming a project after `.kiln/` is removed. Git commits and handoff summaries are the durable record.
 
-One scheduler process consumes messages for each `(role, branch)` pair. Startup recovery relies on that invariant when it returns rows left in `processing` to `delivered`; running two consumers for the same pair is unsupported. Supporting parallel consumers or durable history later requires ordered migrations, transactional message claiming, persisted budgets, retention, and export/backup as one coherent change.
+One scheduler process consumes messages for each `(run, role, branch)` triple. Startup recovery relies on that invariant when it returns rows left in `processing` to `delivered`; running two consumers for the same triple is unsupported. Supporting parallel consumers or durable history later requires ordered migrations, transactional message claiming, persisted budgets, retention, and export/backup as one coherent change.
+
+### Runs
+
+A **run** is a named swarm instance created with ``kiln --run <name>``. Each named run gets its own full repository checkout at ``.worktrees/<run_id>/`` (via ``git clone --local``), with an index entry at ``.kiln/runs/<run_id>/run.json`` in the original project root. The checkout has its own ``.kiln/``, its own role worktrees, and its own branches -- no path collisions with other runs.
+
+``KILN_STATE_DIR`` (``.kiln/``) is exported by every terminal backend and is the preferred way for ``set-status.py`` and other tools to locate runtime state, replacing the WezTerm-only ``KILN_PROJECT_DIR``.
+
+``.kiln/runs/`` is the discovery index: each directory there is a run, and ``run.json`` holds identity, checkout path, and executor metadata. Use ``kiln runs`` to list, and ``kiln runs rm <id>`` to remove a run and its checkout.
+
+```text
+.kiln/
+  runs/                        # Run index (discovery only)
+    exp-auth/
+      run.json                 # Immutable identity record
+      state.json               # Mutable liveness indicator
+    feature-auth/
+    ...
+.worktrees/                    # Per-run checkouts (git clone --local)
+  exp-auth/
+    .git/                      # Real git directory, NOT a linked worktree
+    .kiln/                     # This run's full state: messages.db, status/, logs/...
+    .worktrees/coder/          # Role worktrees (standard per-swarm layout)
+    .worktrees/reviewer/
+    ...
+```
