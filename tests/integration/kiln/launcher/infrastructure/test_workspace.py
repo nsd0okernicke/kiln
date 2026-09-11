@@ -1041,3 +1041,67 @@ class TestExecutableBit:
 
         hook = workspace.install_git_hooks(paths)
         assert hook is not None and hook.is_file()
+
+
+class TestCloneForRun:
+    """Integration: ``clone_for_run`` creates a real checkout with the expected structure."""
+
+    def test_clone_creates_full_git_directory(self, repo):
+        # Simulate a normal launch's state preparation.
+        workspace.prepare_state_dirs(repo)
+        workspace.prepare_worktrees(PROFILE, repo, "main")
+
+        clone_paths = workspace.clone_for_run(repo, "run-a")
+
+        clone_root = clone_paths.project_root
+        assert clone_root.is_dir()
+        # The clone has a real .git/ directory, NOT a linked-worktree gitdir.
+        assert (clone_root / ".git").is_dir()
+        assert (clone_root / ".git" / "HEAD").is_file()
+        # The clone carries the repo's content.
+        assert (clone_root / "README.md").is_file()
+        # Git configured user info is inherited by --local clones.
+        log = workspace.run_git(["log", "--oneline", "-1"], clone_root)
+        assert log.returncode == 0
+
+    def test_clone_writes_kiln_state_dirs(self, repo):
+        workspace.prepare_state_dirs(repo)
+        workspace.prepare_worktrees(PROFILE, repo, "main")
+
+        clone_paths = workspace.clone_for_run(repo, "run-b")
+
+        # KilnPaths now points at the clone.
+        assert clone_paths.project_root != repo.project_root
+        assert clone_paths.state_dir == clone_paths.project_root / ".kiln"
+        assert clone_paths.worktrees_dir == clone_paths.project_root / ".worktrees"
+
+    def test_two_clones_have_distinct_paths(self, repo):
+        workspace.prepare_state_dirs(repo)
+        workspace.prepare_worktrees(PROFILE, repo, "main")
+
+        paths_a = workspace.clone_for_run(repo, "run-x")
+        paths_b = workspace.clone_for_run(repo, "run-y")
+
+        assert paths_a.project_root != paths_b.project_root
+        assert not str(paths_a.project_root).startswith(str(paths_b.project_root))
+        assert not str(paths_b.project_root).startswith(str(paths_a.project_root))
+
+    def test_clone_is_usable_by_prepare(self, repo):
+        """The clone should be a valid project root that prepare() accepts."""
+        workspace.prepare_state_dirs(repo)
+        workspace.prepare_worktrees(PROFILE, repo, "main")
+
+        clone_paths = workspace.clone_for_run(repo, "run-c")
+        # prepare_state_dirs should work inside the clone.
+        workspace.prepare_state_dirs(clone_paths)
+        assert clone_paths.logs_dir.is_dir()
+        assert clone_paths.status_dir.is_dir()
+        # prepare_worktrees should work inside the clone.
+        created = workspace.prepare_worktrees(PROFILE, clone_paths, "main")
+        assert len(created) == 1
+        assert (clone_paths.worktrees_dir / "coder").is_dir()
+
+    def test_clone_already_exists_raises(self, repo):
+        workspace.clone_for_run(repo, "run-d")
+        with pytest.raises(workspace.WorkspaceError, match="already exists"):
+            workspace.clone_for_run(repo, "run-d")
