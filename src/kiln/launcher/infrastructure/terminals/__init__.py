@@ -21,9 +21,10 @@ WEZTERM = "wezterm"
 WINDOWS_TERMINAL = "wt"
 TMUX = "tmux"
 HERDR = "herdr"
+HEADLESS = "headless"
 NONE = "none"
 
-VALID_BACKENDS = (WEZTERM, WINDOWS_TERMINAL, TMUX, HERDR, NONE)
+VALID_BACKENDS = (WEZTERM, WINDOWS_TERMINAL, TMUX, HERDR, HEADLESS, NONE)
 
 #: Env var Herdr sets inside its panes. When set to "1", the current process is running
 #: inside a Herdr workspace/pane.
@@ -112,7 +113,11 @@ def _log_none_backend(panes: list[PaneSpec]) -> None:
 def _platform_backend(os_name: str) -> str:
     if os_name == "nt":
         return WINDOWS_TERMINAL
-    return TMUX if shutil.which("tmux") else NONE
+    if shutil.which("tmux"):
+        return TMUX
+    # When no multiplexer is available, headless is better than ``none`` (which only logs):
+    # it actually starts the swarm as detached subprocesses.
+    return HEADLESS
 
 
 def launch(
@@ -128,7 +133,7 @@ def launch(
     Returns the command that was (or would be) run, so `--dry-run` can show it without
     spawning anything.
     """
-    from . import herdr, tmux, wezterm, windows_terminal
+    from . import headless, herdr, tmux, wezterm, windows_terminal
 
     if backend == WEZTERM:
         return wezterm.launch(panes, layout, project_dir, dry_run=dry_run)
@@ -138,6 +143,8 @@ def launch(
         return tmux.launch(panes, layout, project_dir=project_dir, dry_run=dry_run)
     if backend == HERDR:
         return herdr.launch(panes, layout, project_dir, dry_run=dry_run)
+    if backend == HEADLESS:
+        return headless.launch(panes, layout, project_dir, dry_run=dry_run)
     if backend == NONE:
         _log_none_backend(panes)
         return []

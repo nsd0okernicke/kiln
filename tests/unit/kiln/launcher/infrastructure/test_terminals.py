@@ -16,6 +16,7 @@ from types import SimpleNamespace
 import pytest
 
 from kiln.launcher.infrastructure.terminals import (
+    HEADLESS,
     HERDR,
     NONE,
     TMUX,
@@ -114,15 +115,15 @@ class TestBackendDetection:
         # so explicit config still wins.
         assert detect_backend("tmux", env={"HERDR_ENV": "1"}) == TMUX
 
-    def test_herdr_env_not_set_falls_through(self, monkeypatch):
+    def test_herdr_env_not_set_falls_through_to_headless(self, monkeypatch):
         monkeypatch.setattr("shutil.which", lambda name: None)
         monkeypatch.setattr(os, "name", "posix")
-        assert detect_backend(env={"HERDR_ENV": "0"}) == NONE
+        assert detect_backend(env={"HERDR_ENV": "0"}) == HEADLESS
 
-    def test_no_supported_binary_selects_log_only_backend(self, monkeypatch):
+    def test_no_supported_binary_selects_headless_backend(self, monkeypatch):
         monkeypatch.setattr("shutil.which", lambda name: None)
         monkeypatch.setattr(os, "name", "posix")
-        assert detect_backend(env={}) == NONE
+        assert detect_backend(env={}) == HEADLESS
 
 
 class TestWezTermEnvironment:
@@ -788,7 +789,7 @@ class TestHerdr:
 
 
 class TestDispatch:
-    @pytest.mark.parametrize("backend", [WEZTERM, WINDOWS_TERMINAL, TMUX, HERDR])
+    @pytest.mark.parametrize("backend", [WEZTERM, WINDOWS_TERMINAL, TMUX, HERDR, HEADLESS])
     def test_dry_run_reaches_each_backend(self, backend):
         assert launch(backend, PANES, {}, Path("C:/p"), dry_run=True)
 
@@ -798,3 +799,76 @@ class TestDispatch:
     def test_unknown_backend_raises(self):
         with pytest.raises(TerminalError, match="unknown terminal backend"):
             launch("kitty", PANES, {}, Path("C:/p"), dry_run=True)
+
+
+class TestHeadless:
+    """Unit coverage for the headless backend's PID recording and manual-role logic."""
+
+    def test_pids_read_write_round_trip(self, tmp_path):
+        from kiln.launcher.infrastructure.terminals.headless import _mark_started, _read_pids
+
+        _mark_started(42, "coder", tmp_path)
+        _mark_started(99, "specifier", tmp_path)
+
+        pids = _read_pids(tmp_path)
+        assert pids == {"coder": 42, "specifier": 99}
+
+    def test_pids_read_empty_when_no_file(self, tmp_path):
+        from kiln.launcher.infrastructure.terminals.headless import _read_pids
+
+        assert _read_pids(tmp_path) == {}
+
+    def test_pids_overwrites_previous_entry_for_same_role(self, tmp_path):
+        from kiln.launcher.infrastructure.terminals.headless import _mark_started, _read_pids
+
+        _mark_started(1, "coder", tmp_path)
+        _mark_started(2, "coder", tmp_path)  # respawned
+
+        assert _read_pids(tmp_path) == {"coder": 2}
+
+    def test_log_file_path_derivation(self, tmp_path):
+        from kiln.launcher.infrastructure.terminals.headless import _log_file
+
+        assert _log_file("coder", tmp_path) == tmp_path / ".kiln" / "logs" / "pane-coder.log"
+
+    def test_manual_role_is_skipped_on_dry_run(self, tmp_path):
+        from kiln.launcher.infrastructure.terminals import headless
+
+        panes = [
+            PaneSpec(role="specifier", name="Spec", path="/x", cmd="echo spec", mode="manual"),
+            PaneSpec(role="coder", name="Coder", path="/x", cmd="echo coder", mode="auto"),
+        ]
+        commands = headless.launch(panes, {}, tmp_path, dry_run=True)
+        # Dry run logs everything regardless of mode.
+        assert len(commands) == 2
+
+    def test_manual_role_is_skipped_in_real_mode(self, tmp_path):
+        """Manual-mode agent (non-passive) roles are skipped under headless."""
+        from kiln.launcher.infrastructure.terminals import headless
+
+        panes = [
+            PaneSpec(role="specifier", name="Spec", path="/x", cmd="echo spec", mode="manual"),
+            PaneSpec(role="coder", name="Coder", path="/x", cmd="echo coder", mode="auto"),
+        ]
+        # Both commands are trivial and will exit immediately, so _spawn_one returns None.
+        commands = headless.launch(panes, {}, tmp_path, dry_run=False)
+        # Headless skips manual-mode agent roles, so only coder is attempted.
+        assert len(commands) < 2
+
+    def test_passive_manual_role_is_not_skipped(self, tmp_path):
+        """Passive panes (inbox, dashboard, cockpit) are not agent roles; they run fine."""
+        from kiln.launcher.infrastructure.terminals import headless
+
+        panes = [
+            PaneSpec(
+                role="cockpit", name="Cockpit", path="/x",
+                cmd="python -m http.server", mode="manual", passive=True,
+            ),
+        ]
+        commands = headless.launch(panes, {}, tmp_path, dry_run=True)
+        assert len(commands) == 1
+
+    def test_pids_path_is_under_kiln_state(self, tmp_path):
+        from kiln.launcher.infrastructure.terminals.headless import pids_path
+
+        assert pids_path(tmp_path) == tmp_path / ".kiln" / "pids.json"

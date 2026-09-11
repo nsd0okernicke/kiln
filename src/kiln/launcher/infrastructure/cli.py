@@ -47,6 +47,7 @@ from ..domain.profile import (
 )
 from . import networking, scaffold, stop, workspace
 from .terminals import (
+    HEADLESS,
     HERDR,
     TMUX,
     WEZTERM,
@@ -524,6 +525,31 @@ def _log_role_kinds(profile: Profile) -> None:
         log.info("  %-20s %s", role.role, kind)
 
 
+def _warn_headless_manual_roles(profile: Profile) -> None:
+    """
+    Warn about manual-mode agent roles under the headless backend.
+
+    Manual agent roles (wrapper-mode, human-in-the-loop) are interactive LLM sessions
+    that need a terminal to hold the conversation. Under headless they cannot receive
+    handoffs or input, so the headless backend itself skips them at launch. The cockpit
+    is the operator's intended intake surface, or use ``--auto-approve-spec`` to make the
+    human-in-the-loop scheduler forward automatically.
+    """
+    manual = [
+        role for role in profile.roles
+        if role.mode == "manual" and not role.is_passive
+    ]
+    if not manual:
+        return
+    log.warning(
+        "headless backend: %d manual-mode agent role(s) will be skipped: %s. "
+        "These roles are interactive and have no meaning without a terminal. "
+        "The cockpit or --auto-approve-spec replaces manual intake.",
+        len(manual),
+        ", ".join(role.role for role in manual),
+    )
+
+
 def resolve_run_id(args: argparse.Namespace, paths: KilnPaths) -> str | None:
     """
     Resolve the run identifier from args, or None for an unnamed (default) run.
@@ -592,6 +618,9 @@ def run_launch(args: argparse.Namespace) -> int:
 
     backend = detect_backend(args.terminal)
     log.info("terminal backend: %s", backend)
+
+    if backend == HEADLESS:
+        _warn_headless_manual_roles(profile)
 
     branch = prepare(profile, paths)
     log.info("branch: %s", branch)

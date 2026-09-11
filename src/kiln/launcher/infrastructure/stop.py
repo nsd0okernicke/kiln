@@ -235,29 +235,57 @@ def kill_tmux_sessions(roles: list[str]) -> int:
     return stopped
 
 
+def _read_pids(checkout_path: Path) -> dict[str, int]:
+    """Read ``pids.json`` from the run's state directory, or return empty dict."""
+    pids_file = checkout_path / ".kiln" / "pids.json"
+    if not pids_file.is_file():
+        return {}
+    try:
+        import json
+
+        return dict(json.loads(pids_file.read_text(encoding="utf-8")))
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
 def stop_run(checkout_path: Path, dry_run: bool = False) -> list[int]:
     """
-    Stop every Kiln process whose command line contains the run's checkout path.
+    Stop every Kiln process belonging to one named run.
 
-    Each process in a named run carries the clone's ``.kiln/`` in its argv
-    (e.g. ``--db-path .../.worktrees/<run_id>/.kiln/messages.db``), so matching
-    on the checkout path is precise enough to stop one run without affecting others.
+    **Phase 1 (headless) path**: reads ``pids.json`` for exact PIDs — no command-line
+    scanning needed. Also falls back to scanning the process list for the checkout path
+    in argv, which catches processes that were started outside the headless backend.
 
-    Both forward- and backslash variants are checked so the match works regardless
-    of whether the host OS reports paths with ``/`` or backslashes.
+    Both forward- and backslash variants are checked so the fallback match works
+    regardless of whether the host OS reports paths with ``/`` or backslashes.
     """
-    wanted_posix = checkout_path.resolve().as_posix()
-    wanted_native = checkout_path.resolve().as_posix().replace("/", "\\")
-    found = [
-        (pid, command)
-        for pid, command in find_kiln_processes()
-        if wanted_posix in command or wanted_native in command
-    ]
-    for pid, command in found:
-        log.info("stopping pid %s: %s", pid, command[:100])
+    stopped: list[int] = []
+    seen: set[int] = set()
+
+    # Phase 1: PID-exact from pids.json.
+    for role, pid in _read_pids(checkout_path).items():
+        if pid in seen:
+            continue
+        seen.add(pid)
+        log.info("[%s] stopping pid %s (from pids.json)", role, pid)
         if not dry_run:
             kill_process(pid)
-    return [pid for pid, _ in found]
+        stopped.append(pid)
+
+    # Fallback: command-line scan for the checkout path in argv.
+    wanted_posix = checkout_path.resolve().as_posix()
+    wanted_native = wanted_posix.replace("/", "\\")
+    for pid, command in find_kiln_processes():
+        if pid in seen:
+            continue
+        if wanted_posix in command or wanted_native in command:
+            seen.add(pid)
+            log.info("stopping pid %s: %s", pid, command[:100])
+            if not dry_run:
+                kill_process(pid)
+            stopped.append(pid)
+
+    return stopped
 
 
 def stop_all(roles: list[str] | None = None, dry_run: bool = False) -> list[int]:

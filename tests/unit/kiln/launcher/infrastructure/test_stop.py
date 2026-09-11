@@ -202,6 +202,53 @@ def test_stop_run_empty_when_no_process_matches(monkeypatch, tmp_path):
     assert result == []
 
 
+def test_stop_run_reads_pids_json_first(monkeypatch, tmp_path):
+    """stop_run reads pids.json for PID-exact stop instead of scanning the process list."""
+    import json
+
+    monkeypatch.setattr(stop.os, "name", "posix")
+    checkout = tmp_path / ".worktrees" / "run-z"
+    checkout.mkdir(parents=True)
+    # Write pids.json.
+    pids_file = checkout / ".kiln" / "pids.json"
+    pids_file.parent.mkdir(parents=True)
+    pids_file.write_text(json.dumps({"coder": 42, "specifier": 99}), encoding="utf-8")
+
+    killed = []
+    monkeypatch.setattr(stop, "kill_process", lambda pid: killed.append(pid) or True)
+    # The process list is empty but pids.json still provides PIDs.
+    monkeypatch.setattr(stop, "_posix_matches", lambda: [])
+
+    result = stop.stop_run(checkout, dry_run=False)
+
+    assert sorted(result) == [42, 99]
+    assert sorted(killed) == [42, 99]
+
+
+def test_stop_run_skips_duplicate_pids(monkeypatch, tmp_path):
+    """A PID from pids.json that also appears in the process list is only killed once."""
+    import json
+
+    monkeypatch.setattr(stop.os, "name", "posix")
+    checkout = tmp_path / ".worktrees" / "run-w"
+    checkout.mkdir(parents=True)
+    pids_file = checkout / ".kiln" / "pids.json"
+    pids_file.parent.mkdir(parents=True)
+    pids_file.write_text(json.dumps({"coder": 42}), encoding="utf-8")
+
+    monkeypatch.setattr(
+        stop, "_posix_matches",
+        lambda: [(42, f"python -m role --db-path {checkout.as_posix()}/.kiln/db")],
+    )
+    killed = []
+    monkeypatch.setattr(stop, "kill_process", lambda pid: killed.append(pid) or True)
+
+    result = stop.stop_run(checkout, dry_run=False)
+
+    assert result == [42]
+    assert killed == [42]
+
+
 def test_module_argument_reads_the_dash_m_token_only():
     assert stop._module_argument("python -m kiln.proxy.infrastructure.http.server --port 1") == (
         "kiln.proxy.infrastructure.http.server"
