@@ -550,6 +550,92 @@ def _warn_headless_manual_roles(profile: Profile) -> None:
     )
 
 
+def _attach_or_start_hub(
+    panes: list[PaneSpec],
+    run_index: RunIndex,
+    paths: KilnPaths,
+    args: argparse.Namespace,
+) -> list[PaneSpec]:
+    """
+    Probe for an existing hub cockpit and attach, or start a new one with ``--registry-path``.
+
+    When a hub already answers on the default cockpit port, this run registers with it
+    and the cockpit pane is replaced with a notice. Otherwise, the cockpit is started with
+    ``--registry-path`` so it serves multiple runs.
+    """
+    import socket
+
+    hub_port = getattr(args, "proxy_port", 8765)  # same port the cockpit would use
+    hub_alive = _probe_hub(hub_port)
+
+    updated: list[PaneSpec] = []
+    for pane in panes:
+        if pane.role != "cockpit":
+            updated.append(pane)
+            continue
+
+        if hub_alive:
+            # Attach: replace cockpit pane with a one-line notice.
+            notice = (
+                f"Run {run_index.run_id!r} is registered with the hub at "
+                f"http://127.0.0.1:{hub_port}/api/runs/{run_index.run_id}/state"
+            )
+            log.info(notice)
+            updated.append(
+                PaneSpec(
+                    role=pane.role,
+                    name="cockpit (hub-attached)",
+                    path=pane.path,
+                    cmd=f"echo '{notice}'",
+                    mode=pane.mode,
+                    agent=pane.agent,
+                    passive=True,
+                )
+            )
+        else:
+            # Start hub: add --registry-path so it discovers all runs.
+            from kiln.cockpit.infrastructure.http.server import (  # noqa: PLC0415
+                build_parser as cockpit_parser,
+            )
+
+            cockpit_args = cockpit_parser().parse_args(pane.cmd.split())
+            # Rebuild with --registry-path pointing at the original project root.
+            registry_flag = f" --registry-path {run_index.original_root.as_posix()}"
+            updated.append(
+                PaneSpec(
+                    role=pane.role,
+                    name=pane.name,
+                    path=pane.path,
+                    cmd=pane.cmd + registry_flag,
+                    mode=pane.mode,
+                    agent=pane.agent,
+                    passive=pane.passive,
+                )
+            )
+            log.info(
+                "starting hub cockpit with --registry-path %s",
+                run_index.original_root,
+            )
+
+    return updated
+
+
+def _probe_hub(port: int, timeout: float = 1.0) -> bool:
+    """
+    Check whether a hub cockpit is already listening on ``port``.
+
+    Attempts a TCP connection to ``127.0.0.1:<port>``. A successful connection means
+    something is listening there -- we assume it is a Kiln cockpit.
+    """
+    import socket
+
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=timeout):
+            return True
+    except (OSError, socket.timeout):
+        return False
+
+
 def resolve_run_id(args: argparse.Namespace, paths: KilnPaths) -> str | None:
     """
     Resolve the run identifier from args, or None for an unnamed (default) run.
@@ -638,6 +724,10 @@ def run_launch(args: argparse.Namespace) -> int:
         auto_approve_spec=args.auto_approve_spec,
     )
     _log_role_kinds(profile)
+
+    # Hub attach-or-start: when running a named run, probe for an existing hub cockpit.
+    if run_index is not None:
+        panes = _attach_or_start_hub(panes, run_index, paths, args)
 
     command = launch_terminal(
         backend, panes, profile.layout, paths.project_root, dry_run=args.dry_run

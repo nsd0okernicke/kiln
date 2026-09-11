@@ -64,6 +64,7 @@ from ...application.actions import (
     toggle_sequential,
     update_task,
 )
+from .. import registry as run_registry
 from .. import test_reports
 from ..actions_gateway import KilnActionGateway
 
@@ -129,10 +130,18 @@ class CockpitConfig:
     #: cockpit. Loading it once at startup meant a config written a minute after launch was
     #: invisible until the whole swarm came down, which reads as the feature being broken.
     test_metrics_path: Path = Path()
+    #: Hub-only: the original project root where ``.kiln/runs/`` lives. When set, the
+    #: cockpit serves multiple runs from the registry.
+    registry_path: Path | None = None
 
     @property
     def status_dir(self) -> Path:
         return self.dashboard.status_dir
+
+    @property
+    def is_hub(self) -> bool:
+        """Whether this cockpit serves multiple runs (hub mode)."""
+        return self.registry_path is not None
 
 
 def gather_state(config: CockpitConfig) -> dict:
@@ -200,6 +209,72 @@ DOCUMENT_ROUTES: dict[str, Callable[[CockpitConfig], dict]] = {
 }
 
 
+def run_config_from_registry(run_id: str, config: CockpitConfig) -> run_registry.RunConfig | None:
+    """Look up one run by ID from the registry."""
+    if not config.registry_path:
+        return None
+    return run_registry._find_run(config.registry_path, run_id)
+
+
+def _gather_run_state(run: run_registry.RunConfig, config: CockpitConfig) -> dict:
+    """
+    Gather the full ``/api/state`` document for one specific run.
+
+    Builds a temporary ``CockpitConfig`` pointing at the run's checkout paths and
+    delegates to the standard ``gather_state``. Each poll re-reads the registry, so
+    newly launched runs are picked up within one poll cycle.
+    """
+    dashboard_ctx = DashboardContext(
+        db_path=run.db_path,
+        branch=run.branch,
+        status_dir=run.status_dir,
+        sessions_file=run.sessions_file,
+        project_name=run.run_id,
+        traffic_db=run.traffic_db if run.traffic_db.is_file() else None,
+    )
+    cockpit_ctx = state_builder.CockpitContext(
+        project_name=run.run_id,
+        version=config.cockpit.version,
+        branch=run.branch,
+        lanes=config.cockpit.lanes,
+        human_role=config.cockpit.human_role,
+    )
+    run_config = CockpitConfig(
+        project_root=run.checkout_path,
+        dashboard=dashboard_ctx,
+        cockpit=cockpit_ctx,
+        actions=ActionContext(
+            db_path=run.db_path,
+            branch=run.branch,
+            human_role=config.cockpit.human_role,
+            intake_role=config.cockpit.intake_role,
+            sessions_file=run.sessions_file,
+            gateway=KilnActionGateway(),
+        ),
+        activity_limit=config.activity_limit,
+    )
+    return gather_state(run_config)
+
+
+def _list_runs_json(config: CockpitConfig) -> dict:
+    """Build the ``/api/runs`` response: a list of known runs with their identity."""
+    if not config.registry_path:
+        return {"runs": []}
+    runs = run_registry.discover_runs(config.registry_path)
+    return {
+        "runs": [
+            {
+                "run_id": r.run_id,
+                "branch": r.branch,
+                "profile": r.profile,
+                "checkout_path": str(r.checkout_path),
+                "alive": r.is_alive(),
+            }
+            for r in runs
+        ]
+    }
+
+
 def _log_query(query: dict[str, list[str]]) -> tuple[str, int] | str:
     stream = (query.get("stream") or ["scheduler"])[0]
     if stream not in {"scheduler", "worker"}:
@@ -240,6 +315,13 @@ class CockpitHandler(BaseHTTPRequestHandler):
     def _get_handler(self, path: str, query: str) -> Callable[[], None] | None:
         if path == "/":
             return self._send_page
+
+        # Hub routes first — they take priority over the legacy single-run routes.
+        if path == "/api/runs":
+            return lambda: self._send_json(200, _list_runs_json(self.config))
+        if path.startswith("/api/runs/"):
+            return self._hub_get_handler(path, query)
+
         document = DOCUMENT_ROUTES.get(path)
         if document is not None:
             return lambda: self._send_json(200, document(self.config))
@@ -251,6 +333,75 @@ class CockpitHandler(BaseHTTPRequestHandler):
         if path.startswith("/api/logs/"):
             return lambda: self._send_log(identifier, parse_qs(query))
         return None
+
+    def _hub_get_handler(self, path: str, query: str) -> Callable[[], None] | None:
+        """Handle a ``/api/runs/<run_id>/...`` GET route."""
+        parts = path.split("/")
+        if len(parts) < 4:
+            return None
+        run_id = unquote(parts[3])
+        sub_path = "/" + "/".join(parts[4:]) if len(parts) > 4 else ""
+
+        if sub_path == "/state" or sub_path == "":
+            return lambda: self._send_run_state(run_id)
+        if sub_path.startswith("/status/"):
+            role = unquote(parts[5]) if len(parts) > 5 else ""
+            return lambda: self._send_run_status(run_id, role)
+        if sub_path.startswith("/logs/"):
+            role = unquote(parts[5]) if len(parts) > 5 else ""
+            return lambda: self._send_run_log(run_id, role, parse_qs(query))
+        return None
+
+    def _send_run_state(self, run_id: str) -> None:
+        """Serve ``/api/runs/<run_id>/state``."""
+        run = run_config_from_registry(run_id, self.config)
+        if run is None:
+            return self._send_json(404, {"error": f"run {run_id!r} not found"})
+        try:
+            state = _gather_run_state(run, self.config)
+            self._send_json(200, state)
+        except Exception as exc:
+            log.exception("could not gather state for run %s", run_id)
+            self._send_json(503, {"error": f"run {run_id!r} unreachable: {exc}", "run_id": run_id})
+
+    def _send_run_status(self, run_id: str, role: str) -> None:
+        """Serve ``/api/runs/<run_id>/status/<role>``."""
+        run = run_config_from_registry(run_id, self.config)
+        if run is None:
+            return self._send_json(404, {"error": f"run {run_id!r} not found"})
+        status = dashboard.read_status(run.status_dir, role)
+        if status is None:
+            return self._send_json(404, {"error": f"{role} has not reported status yet"})
+        self._send_json(200, status)
+
+    def _send_run_log(self, run_id: str, role: str, query: dict) -> None:
+        """Serve ``/api/runs/<run_id>/logs/<role>``."""
+        run = run_config_from_registry(run_id, self.config)
+        if run is None:
+            return self._send_json(404, {"error": f"run {run_id!r} not found"})
+        parsed = _log_query(query)
+        if isinstance(parsed, str):
+            return self._send_json(400, {"error": parsed})
+        stream, after = parsed
+        log_path = run.logs_dir / f"{stream}-{role}.log"
+        if not log_path.is_file():
+            return self._send_json(
+                200, {"role": role, "stream": stream, "offset": 0, "lines": [], "truncated": False}
+            )
+        start, truncated = _log_start(log_path.stat().st_size, after)
+        with log_path.open("rb") as handle:
+            handle.seek(start)
+            raw = handle.read()
+        self._send_json(
+            200,
+            {
+                "role": role,
+                "stream": stream,
+                "offset": start + len(raw),
+                "lines": raw.decode("utf-8", errors="replace").splitlines(),
+                "truncated": truncated,
+            },
+        )
 
     def do_POST(self) -> None:
         path = self.path.split("?", 1)[0].rstrip("/") or "/"
@@ -281,6 +432,15 @@ class CockpitHandler(BaseHTTPRequestHandler):
         handler = routes.get(path)
         if handler is not None:
             return handler
+
+        # Hub route: POST /api/runs/<run_id>/teardown
+        if path.startswith("/api/runs/"):
+            parts = path.split("/")
+            if len(parts) == 5 and parts[4] == "teardown":
+                run_id = unquote(parts[3])
+                return self._teardown_run(run_id)
+            return None
+
         dynamic = (
             ("/api/retry/", lambda identifier: lambda body: self._retry(identifier, body)),
             ("/api/ack/", lambda identifier: lambda _body: self._ack(identifier)),
@@ -415,6 +575,28 @@ class CockpitHandler(BaseHTTPRequestHandler):
         timer.daemon = True
         timer.start()
         return {"stopping": True, "in_seconds": TEARDOWN_DELAY_SEC}
+
+    def _teardown_run(self, run_id: str) -> Callable[[dict], dict]:
+        """
+        Teardown a specific run from the hub -- does NOT stop the hub itself.
+
+        ``POST /api/runs/<id>/teardown``. Resolves the run from the registry and
+        calls ``stop_run`` on its checkout path.
+        """
+        def handler(body: dict) -> dict:
+            confirm = str(body.get("confirm") or "")
+            check_confirmation(confirm)
+
+            run = run_config_from_registry(run_id, self.config)
+            if run is None:
+                return {"error": f"run {run_id!r} not found"}
+
+            from kiln.launcher.infrastructure import stop
+
+            stopped = stop.stop_run(run.checkout_path)
+            return {"stopping": True, "run_id": run_id, "pids": stopped}
+
+        return handler
 
     def _send_page(self) -> None:
         page = STATIC_DIR / "cockpit.html"
@@ -621,6 +803,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="root that relative test-report paths resolve from (default: cwd)",
     )
     parser.add_argument(
+        "--registry-path",
+        default=None,
+        help=(
+            "hub mode: path to the project root containing .kiln/runs/. "
+            "When set, the cockpit serves multiple runs from the registry "
+            "and exposes /api/runs/<id>/state endpoints."
+        ),
+    )
+    parser.add_argument(
         "--test-metrics",
         default="",
         help=(
@@ -669,9 +860,11 @@ def config_from_args(args: argparse.Namespace) -> CockpitConfig:
     sessions_file = Path(args.sessions_file)
     project_root = _project_root(args)
     version = _cockpit_version()
+    registry_path = Path(args.registry_path).resolve() if args.registry_path else None
     return CockpitConfig(
         project_root=project_root,
         test_metrics_path=_test_metrics_path(args, project_root),
+        registry_path=registry_path,
         dashboard=DashboardContext(
             db_path=db_path,
             branch=args.branch,

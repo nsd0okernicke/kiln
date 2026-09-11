@@ -494,3 +494,68 @@ class TestPortSelection:
         # cockpit dead while its URL file still named a port — one that belongs to the
         # *other* project's swarm.
         assert find_free_port(client.port, attempts=5) != client.port
+
+
+class TestHubRoutes:
+    """Hub routes: /api/runs list and /api/runs/<id>/state."""
+
+    def test_api_runs_empty_when_no_registry(self, client):
+        status, payload = client.get("/api/runs")
+        assert status == 200
+        assert payload == {"runs": []}
+
+    def test_api_runs_with_registry_path(self, swarm, tmp_path):
+        """When CockpitConfig has a registry_path, /api/runs lists discovered runs."""
+        import json
+
+        from kiln.cockpit.infrastructure.http.server import CockpitConfig, serve
+        from kiln.scheduler.infrastructure.cli.dashboard import DashboardContext
+
+        # Create a run index entry.
+        runs_dir = tmp_path / ".kiln" / "runs"
+        run_dir = runs_dir / "exp-auth"
+        run_dir.mkdir(parents=True)
+        checkout = tmp_path / ".worktrees" / "exp-auth"
+        checkout.mkdir(parents=True)
+        (run_dir / "run.json").write_text(
+            json.dumps({"run_id": "exp-auth", "checkout_path": str(checkout)}),
+            encoding="utf-8",
+        )
+
+        hub_config = CockpitConfig(
+            registry_path=tmp_path,
+            dashboard=DashboardContext(
+                db_path=swarm["db_path"],
+                branch="main",
+                status_dir=swarm["status_dir"],
+                sessions_file=swarm["sessions"],
+                project_name="hub",
+            ),
+            cockpit=cockpit_state.CockpitContext(project_name="hub", branch="main"),
+            actions=actions.ActionContext(
+                db_path=swarm["db_path"],
+                branch="main",
+                human_role="human-in-the-loop",
+                intake_role="specifier",
+                sessions_file=swarm["sessions"],
+                gateway=KilnActionGateway(),
+            ),
+        )
+        server = serve(hub_config, port=0)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        conn = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=5)
+        conn.request("GET", "/api/runs")
+        response = conn.getresponse()
+        payload = json.loads(response.read())
+        conn.close()
+        server.shutdown()
+
+        assert response.status == 200
+        assert len(payload["runs"]) == 1
+        assert payload["runs"][0]["run_id"] == "exp-auth"
+
+    def test_api_runs_state_returns_404_for_unknown_run(self, client):
+        status, payload = client.get("/api/runs/nonexistent/state")
+        assert status == 404

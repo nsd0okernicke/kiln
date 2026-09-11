@@ -319,7 +319,7 @@ class TestMainInProcess:
         tool.parent.mkdir(parents=True)
         tool.touch()
         monkeypatch.setattr(set_status, "__file__", str(tool))
-        assert set_status.project_root_from_own_path() == str(tmp_path)
+        assert set_status.resolve_state_dir() == tmp_path / ".kiln"
 
     def test_project_root_is_not_guessed_from_an_unexpected_path(
         self, set_status, tmp_path, monkeypatch
@@ -328,7 +328,7 @@ class TestMainInProcess:
         tool.parent.mkdir()
         tool.touch()
         monkeypatch.setattr(set_status, "__file__", str(tool))
-        assert set_status.project_root_from_own_path() is None
+        assert set_status.resolve_state_dir() is None
 
     def test_writes_status_and_terminal_title(self, set_status, tmp_path, monkeypatch):
         monkeypatch.setenv("KILN_PROJECT_DIR", str(tmp_path))
@@ -392,7 +392,7 @@ class TestMainInProcess:
         self, set_status, monkeypatch, capsys
     ):
         monkeypatch.delenv("KILN_PROJECT_DIR", raising=False)
-        monkeypatch.setattr(set_status, "project_root_from_own_path", lambda: None)
+        monkeypatch.setattr(set_status, "resolve_state_dir", lambda: None)
         monkeypatch.setattr(set_status.sys, "argv", ["set-status.py", "coder", "working"])
         with pytest.raises(SystemExit) as caught:
             set_status.main()

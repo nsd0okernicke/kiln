@@ -90,6 +90,9 @@
     color: var(--dim); background: var(--chip); border: 1px solid var(--line);
     border-radius: 999px; padding: 3px 10px; max-width: 34ch;
   }
+  .run-chip { cursor: pointer; transition: border-color .15s, background .15s; }
+  .run-chip:hover { border-color: var(--accent); }
+  .run-chip.active { background: var(--chip-active); border-color: var(--accent); color: var(--accent); }
   .chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #branch-chip { color: var(--accent); }
   #version-header { color: var(--dim); font-size: 12px; font-weight: 500; margin-left: 6px; }
@@ -445,6 +448,7 @@
   <span class="chip" id="branch-chip" title="Branch these messages are scoped to">
     <svg class="icon" aria-hidden="true"><use href="#i-branch"/></svg><span id="branch"></span>
   </span>
+  <span id="run-chips"></span>
   <span class="live"><span class="dot" id="dot"></span><span id="updated">connecting…</span></span>
   <span class="spacer"></span>
   <span class="totals" id="totals"></span>
@@ -568,6 +572,8 @@ let latest = null;
 let expandedRole = null;
 let editingTask = null;
 let logStream = "scheduler";
+let selectedRunId = null;
+let knownRuns = [];
 const logOffsets = { scheduler: 0, worker: 0 };
 const logText = { scheduler: "", worker: "" };
 
@@ -682,6 +688,28 @@ function text(tag, value, className) {
 function money(value) { return value === null || value === undefined ? "—" : "$" + value.toFixed(2); }
 function count(value) { return value === null || value === undefined ? "—" : value.toLocaleString(); }
 function ratioPercent(value) { return value === null || value === undefined ? "—" : Math.round(value * 100) + "%"; }
+
+function renderRunChips() {
+  var container = $("run-chips");
+  container.replaceChildren();
+  if (knownRuns.length < 2) { container.style.display = "none"; return; }
+  container.style.display = "inline-flex";
+  container.style.alignItems = "center";
+  container.style.gap = "4px";
+  knownRuns.forEach(function(run) {
+    var chip = document.createElement("span");
+    chip.className = "chip run-chip" + (run.run_id === selectedRunId ? " active" : "");
+    chip.title = "Run: " + run.run_id + (run.alive ? "" : " (unreachable)");
+    chip.textContent = run.run_id;
+    if (!run.alive) chip.style.opacity = "0.5";
+    chip.onclick = function() {
+      if (run.run_id === selectedRunId) return;
+      selectedRunId = run.run_id;
+      renderRunChips();
+    };
+    container.appendChild(chip);
+  });
+}
 
 function renderHeader(state) {
   // Project and branch are the two facts an operator re-checks constantly -- "am I looking
@@ -1182,7 +1210,23 @@ applyTheme(document.documentElement.dataset.theme || "dark");
 
 async function poll() {
   try {
-    const response = await fetch("/api/state", { headers: { "X-Kiln-Cockpit": "1" } });
+    // Hub discovery: fetch /api/runs to find available runs.
+    let stateUrl = "/api/state";
+    try {
+      const runsResp = await fetch("/api/runs", { headers: { "X-Kiln-Cockpit": "1" } });
+      if (runsResp.ok) {
+        const runsData = await runsResp.json();
+        knownRuns = runsData.runs || [];
+        renderRunChips();
+        if (selectedRunId && knownRuns.some(function(r) { return r.run_id === selectedRunId; })) {
+          stateUrl = "/api/runs/" + encodeURIComponent(selectedRunId) + "/state";
+        } else if (knownRuns.length > 0) {
+          selectedRunId = knownRuns[0].run_id;
+          stateUrl = "/api/runs/" + encodeURIComponent(selectedRunId) + "/state";
+        }
+      }
+    } catch (e) { /* not a hub; use default /api/state */ }
+    const response = await fetch(stateUrl, { headers: { "X-Kiln-Cockpit": "1" } });
     if (!response.ok) throw new Error(response.statusText);
     latest = await response.json();
     $("dot").className = "dot";
@@ -1384,13 +1428,21 @@ $("send-go").onclick = async () => {
 };
 
 $("teardown").onclick = async () => {
-  // Typed confirmation, matching what the endpoint itself demands: this stops every Kiln
-  // process on the machine, agent panes included.
-  if (prompt("This stops every Kiln process on this machine. Type TEARDOWN to confirm.") !== "TEARDOWN") return;
-  try {
-    await post("/api/teardown", { confirm: "TEARDOWN" });
-    toast("stopping the swarm…");
-  } catch (error) { toast(error.message, true); }
+  if (selectedRunId) {
+    // Hub mode: stop only the selected run.
+    if (prompt("This stops the run \"" + selectedRunId + "\". Type TEARDOWN to confirm.") !== "TEARDOWN") return;
+    try {
+      await post("/api/runs/" + encodeURIComponent(selectedRunId) + "/teardown", { confirm: "TEARDOWN" });
+      toast("stopping run " + selectedRunId + "…");
+    } catch (error) { toast(error.message, true); }
+  } else {
+    // Single-run mode: this stops every Kiln process on the machine, agent panes included.
+    if (prompt("This stops every Kiln process on this machine. Type TEARDOWN to confirm.") !== "TEARDOWN") return;
+    try {
+      await post("/api/teardown", { confirm: "TEARDOWN" });
+      toast("stopping the swarm…");
+    } catch (error) { toast(error.message, true); }
+  }
 };
 
 $("doc-close").onclick = () => $("doc-dialog").close();
