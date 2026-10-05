@@ -18,7 +18,7 @@ description = "A local, role-based agent orchestration framework"
 readme = "README.md"
 license = { text = "UNLICENSED" }
 requires-python = ">=3.11"
-dependencies = ["pypdf>=5.0"]
+dependencies = []
 
 [project.optional-dependencies]
 dev = [

@@ -1,4 +1,5 @@
 {
-  "version": 1,
-  "sources": []
+  "version": 2,
+  "vault": "C:/CDB/Contact Software Knowledge",
+  "exclude": ["00 Context", "01 Inbox", "05 Daily Notes", "07 Attachments", "Clippings"]
 }

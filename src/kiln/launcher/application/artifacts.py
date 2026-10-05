@@ -57,11 +57,12 @@ DEFAULT_HANDOFF_TARGET = "specifier"
 KNOWLEDGE_INSTRUCTION = """## Project Knowledge
 
 When domain, product, architectural, operational, or external constraints matter, search the
-approved project knowledge with `kiln knowledge search "<query>"`. Use
-`kiln knowledge show <document-id>` for the complete indexed document. Cite the returned path,
-heading, or PDF page in decisions and handoffs. Knowledge is supporting evidence; if it
-conflicts with the constitution, surface the conflict instead of overriding the constitution.
-Autonomous roles must not add or remove knowledge sources.
+project knowledge with `kiln knowledge search "<query>"`. Use `kiln knowledge show
+<document-id>` for the complete indexed note. Cite the returned note path and heading in
+decisions and handoffs. Knowledge is supporting evidence; if it conflicts with the
+constitution, surface the conflict instead of overriding the constitution. The index comes
+from the project's Obsidian vault; autonomous roles must never write into the vault or edit
+its notes — knowledge gaps and corrections flow back via handoff reports.
 """
 
 COMMIT_FORMATS = {

@@ -183,7 +183,7 @@ def copy_knowledge_catalog(paths: KilnPaths, result: ScaffoldResult) -> None:
     source = paths.scaffold_resources_dir / "knowledge.json"
     if source.is_file() and not paths.knowledge_manifest.exists():
         workspace.copy_template_file(source, paths.knowledge_manifest)
-        result.note("created knowledge source catalog")
+        result.note("created knowledge vault config")
 
 
 def write_initial_mcp_json(paths: KilnPaths, result: ScaffoldResult) -> None:

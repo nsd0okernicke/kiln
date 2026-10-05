@@ -35,10 +35,13 @@ import threading
 import webbrowser
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
+from kiln.knowledge.domain.models import KnowledgeError
+from kiln.knowledge.infrastructure.factory import knowledge_service
 from kiln.launcher.application import version as kiln_version
 from kiln.launcher.infrastructure import networking
 from kiln.scheduler.infrastructure.cli import dashboard
@@ -46,6 +49,7 @@ from kiln.scheduler.infrastructure.cli.dashboard import DashboardContext
 from kiln.scheduler.infrastructure.persistence import db, spec_approval, task_store
 from kiln.scheduler.infrastructure.runtime import configure_logging
 
+from ...application import knowledge as knowledge_builder
 from ...application import state as state_builder
 from ...application import test_metrics as test_metrics_builder
 from ...application.actions import (
@@ -191,12 +195,35 @@ def gather_test_metrics(config: CockpitConfig) -> dict:
     return test_reports.collect(metrics_config, root=config.project_root)
 
 
+def gather_knowledge(config: CockpitConfig) -> dict:
+    """
+    Read the vault config and the knowledge index and assemble `/api/knowledge`.
+
+    Deliberately its own endpoint rather than a key inside `/api/state`, for the same reason
+    the test reports are: a project with no vault configured is ordinary state, and folding
+    it into the board's document would put a permanent "not configured" on the path of the
+    lanes, the queue and the attention rail. The panel is the only thing a missing vault
+    can spoil.
+
+    The index is asked with `status()`, whose `overview()` is side-effect free -- a project
+    that has never synced must not have a database created by asking about one. An unreadable
+    config degrades this panel alone, same as a broken test-report config does.
+    """
+    try:
+        with knowledge_service(config.project_root) as service:
+            payload = service.status()
+    except KnowledgeError as error:
+        return knowledge_builder.unavailable(str(error))
+    return knowledge_builder.build_knowledge(payload, now_local=datetime.now())
+
+
 #: Exact-match GET routes, each a builder that reads every source afresh on the request.
 #: A table rather than one `if` apiece: the prefix routes need the trailing identifier and
-#: cannot join it, but these two were only ever growing a branch each.
+#: cannot join it, but these were only ever growing a branch each.
 DOCUMENT_ROUTES: dict[str, Callable[[CockpitConfig], dict]] = {
     "/api/state": gather_state,
     "/api/test-metrics": gather_test_metrics,
+    "/api/knowledge": gather_knowledge,
 }
 
 

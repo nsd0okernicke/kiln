@@ -94,16 +94,24 @@ def test_knowledge_is_layered_like_every_other_feature_package():
 
 def test_knowledge_domain_does_not_touch_storage_transport_or_the_filesystem():
     """
-    Catalog rules and text chunking are decidable from a payload and a string. Keeping the
-    filesystem out is what lets a symlink escape or an oversized section be tested without
-    writing one.
+    Config rules, frontmatter and text chunking are decidable from a payload and a string.
+    Keeping the filesystem out is what lets an oversized section be tested without writing
+    one, and keeping the network out is what keeps a note indexable without a socket.
     """
     for path in (ROOT / "knowledge" / "domain").glob("*.py"):
-        assert not imports(path) & {"argparse", "http", "pypdf", "sqlite3", "subprocess"}, path.name
+        assert not imports(path) & {
+            "argparse",
+            "http",
+            "socket",
+            "sqlite3",
+            "subprocess",
+            "urllib",
+        }, path.name
         assert not called_attributes(path) & {
             "read_bytes",
             "read_text",
             "rglob",
+            "urlopen",
             "write_text",
         }, path.name
 
@@ -126,26 +134,18 @@ def test_knowledge_ports_do_not_import_concrete_adapters():
     assert ports.is_file(), "the knowledge use cases declare their outbound needs as ports"
 
 
-def test_only_knowledge_infrastructure_knows_the_database_the_cli_and_the_network():
+def test_only_knowledge_infrastructure_knows_the_database_and_the_cli():
     """
-    One module owns SQLite, one owns argparse, one owns the socket.
-
-    The network rule is the newest and the easiest to lose: url support is only testable
-    without a server for as long as `urllib` stays behind the `WebFetcher` port.
+    One module owns SQLite, one owns argparse. The network is not in the package at all:
+    url sources died with the v1 catalog, so no module imports urllib any more.
     """
     infrastructure = ROOT / "knowledge" / "infrastructure"
     modules = list(infrastructure.glob("*.py"))
     assert {path.name for path in modules if "sqlite3" in imports(path)} == {"sqlite_index.py"}
     assert {path.name for path in modules if "argparse" in imports(path)} == {"cli.py"}
-    assert {path.name for path in modules if "urllib" in imports(path)} == {"http_fetcher.py"}
-
-
-def test_knowledge_domain_url_rules_do_not_reach_the_network():
-    """`urlparse` and an HTML reducer are string work; fetching is not."""
-    web = ROOT / "knowledge" / "domain" / "web.py"
-    assert "urllib.parse" in web.read_text(encoding="utf-8"), "url rules live here"
-    assert not imports(web) & {"urllib.request", "socket", "http"}
-    assert "urlopen" not in called_attributes(web)
+    assert not [path for path in modules if "urllib" in imports(path)], (
+        "the knowledge package has no network: url sources died with the v1 catalog"
+    )
 
 
 def test_scheduler_models_do_not_import_adapters_or_infrastructure():

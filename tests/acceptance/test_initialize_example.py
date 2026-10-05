@@ -26,7 +26,7 @@ def test_initializes_an_example_as_a_launchable_project(tmp_path, command_runner
     assert (project / "kiln" / "project" / "constitution" / "project.md").is_file()
     assert json.loads(
         (project / "kiln" / "project" / "knowledge.json").read_text(encoding="utf-8")
-    ) == {"version": 1, "sources": []}
+    ) == {"version": 2, "vault": "", "exclude": []}
     assert (
         project / "kiln" / "project" / "skills" / "kiln-constitution-setup" / "SKILL.md"
     ).is_file()

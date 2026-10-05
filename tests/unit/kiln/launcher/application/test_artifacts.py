@@ -286,7 +286,7 @@ class TestWorkerFiles:
         assert "# Engineering Rules" in body
         assert "# Project Rules" in body
         assert 'kiln knowledge search "<query>"' in body
-        assert "must not add or remove knowledge sources" in body
+        assert "must never write into the vault" in body
 
     def test_excludes_the_handoff_protocol(self, paths):
         # Messaging is the dispatcher's job; a worker that sends its own handoff would

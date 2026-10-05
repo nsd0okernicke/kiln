@@ -271,14 +271,23 @@ def _sync_knowledge(paths: KilnPaths) -> None:
         return
     try:
         from kiln.knowledge.domain.models import KnowledgeError
-        from kiln.knowledge.infrastructure.factory import knowledge_service
 
-        with knowledge_service(paths.project_root) as service:
-            result = service.sync()
-        for failure in result.failures:
-            log.warning("knowledge source could not be indexed: %s", failure)
+        _sync_project_vault(paths.project_root)
     except (KnowledgeError, OSError) as exc:
         log.warning("knowledge index could not be refreshed: %s", exc)
+
+
+def _sync_project_vault(project_root: Path) -> None:
+    """One incremental sync over a configured vault; unconfigured is ordinary, not a warning."""
+    from kiln.knowledge.infrastructure.factory import knowledge_service, read_config
+
+    config = read_config(project_root)
+    if config is None or not config.configured:
+        return
+    with knowledge_service(project_root) as service:
+        result = service.sync()
+    for failure in result.failures:
+        log.warning("knowledge source could not be indexed: %s", failure)
 
 
 def _prepare_queue(profile: Profile, paths: KilnPaths, branch: str) -> None:

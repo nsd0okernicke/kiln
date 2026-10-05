@@ -5,151 +5,308 @@ from pathlib import Path
 
 import pytest
 
-from kiln.knowledge.application.ports import FetchedResource
-from kiln.knowledge.domain import catalog as catalog_rules
-from kiln.knowledge.domain import documents, web
-from kiln.knowledge.domain.models import KnowledgeError, Source
+from kiln.knowledge.domain import documents, vault
+from kiln.knowledge.domain.models import KnowledgeError
 from kiln.knowledge.infrastructure.factory import build_service, index_path
-from kiln.knowledge.infrastructure.file_documents import FileDocumentSource
+from kiln.knowledge.infrastructure.vault_documents import VaultDocumentSource
 
 
-def catalog(root: Path, sources: list[dict]) -> None:
+def write_config(root: Path, vault_path: str, *exclude: str) -> None:
     path = root / "kiln" / "project" / "knowledge.json"
-    path.parent.mkdir(parents=True)
-    path.write_text(json.dumps({"version": 1, "sources": sources}), encoding="utf-8")
-
-
-def source(source_id: str, path: str, kind: str = "markdown") -> dict:
-    return {"id": source_id, "path": path, "title": source_id.title(), "type": kind, "tags": []}
-
-
-def simple_pdf(text: str) -> bytes:
-    objects = [
-        b"<< /Type /Catalog /Pages 2 0 R >>",
-        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-        (
-            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
-            b"/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>"
-        ),
-        (
-            f"<< /Length {len(text) + 31} >>\nstream\n"
-            f"BT /F1 12 Tf 72 720 Td ({text}) Tj ET\nendstream"
-        ).encode(),
-        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    ]
-    output = bytearray(b"%PDF-1.4\n")
-    offsets = [0]
-    for number, body in enumerate(objects, start=1):
-        offsets.append(len(output))
-        output.extend(f"{number} 0 obj\n".encode() + body + b"\nendobj\n")
-    xref = len(output)
-    output.extend(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode())
-    output.extend(b"".join(f"{offset:010d} 00000 n \n".encode() for offset in offsets[1:]))
-    output.extend(
-        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"version": 2, "vault": vault_path, "exclude": list(exclude)}),
+        encoding="utf-8",
     )
-    return bytes(output)
 
 
-class TestManifest:
-    def test_rejects_duplicate_ids(self, tmp_path):
-        catalog(tmp_path, [source("domain", "a.md"), source("domain", "b.md")])
-        with pytest.raises(KnowledgeError, match="unique"):
-            build_service(tmp_path).sources()
+def make_vault(root: Path, name: str = "vault") -> Path:
+    directory = root / name
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
+def note(vault_root: Path, relative: str, content: str) -> None:
+    path = vault_root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+class TestConfig:
+    def test_parses_a_v2_config(self):
+        config = vault.parse_config(
+            {"version": 2, "vault": "C:/vaults/kb", "exclude": ["01 Inbox"]}
+        )
+
+        assert config.path == "C:/vaults/kb"
+        assert config.exclude == ("01 Inbox",)
+        assert config.configured
+
+    def test_an_empty_vault_is_not_configured(self):
+        assert not vault.parse_config({"version": 2, "vault": "", "exclude": []}).configured
+        assert not vault.parse_config({"version": 2}).configured
+
+    def test_exclude_is_optional(self):
+        assert vault.parse_config({"version": 2, "vault": "kb"}).exclude == ()
+
+    def test_a_v1_catalog_names_the_migration(self):
+        with pytest.raises(KnowledgeError, match="v1 source catalog"):
+            vault.parse_config({"version": 1, "sources": []})
 
     @pytest.mark.parametrize(
-        "entry,error",
+        "payload,error",
         [
-            (source("Bad ID", "docs/a.md"), "invalid"),
-            (source("domain", "../outside.md"), "escapes"),
-            ({**source("domain", "docs/a.md"), "type": "spreadsheet"}, "unsupported"),
+            ("not an object", "must be a JSON object"),
+            ({"version": 3, "vault": "kb"}, "version 2"),
+            ({"version": 2, "vault": 42}, "must be a string path"),
+            ({"version": 2, "vault": "kb", "exclude": "01 Inbox"}, "list of non-empty strings"),
+            ({"version": 2, "vault": "kb", "exclude": [""]}, "list of non-empty strings"),
         ],
     )
-    def test_rejects_invalid_sources(self, tmp_path, entry, error):
-        catalog(tmp_path, [entry])
+    def test_rejects_invalid_configs(self, payload, error):
         with pytest.raises(KnowledgeError, match=error):
-            build_service(tmp_path).sources()
+            vault.parse_config(payload)
 
-    def test_rejects_a_symlink_escape(self, tmp_path):
-        outside = tmp_path.parent / "outside-knowledge.md"
-        outside.write_text("secret", encoding="utf-8")
-        link = tmp_path / "linked.md"
-        try:
-            link.symlink_to(outside)
-        except OSError:
-            pytest.skip("symlink creation is unavailable")
-        catalog(tmp_path, [source("linked", "linked.md")])
-        with pytest.raises(KnowledgeError, match="escapes"):
-            build_service(tmp_path).sources()
+    def test_the_scaffolded_config_is_the_empty_v2_shape(self):
+        assert vault.parse_config(vault.empty_config()) == vault.VaultConfig()
 
 
-class TestExtraction:
-    def test_directory_rejects_a_nested_symlink_escape(self, tmp_path):
-        docs = tmp_path / "docs"
-        docs.mkdir()
-        outside = tmp_path.parent / "outside-nested-knowledge.txt"
-        outside.write_text("secret", encoding="utf-8")
-        try:
-            (docs / "linked.txt").symlink_to(outside)
-        except OSError:
-            pytest.skip("symlink creation is unavailable")
-
-        with pytest.raises(KnowledgeError, match="out-of-project link"):
-            FileDocumentSource(tmp_path).discover(Source("docs", "docs", "Docs", "directory"))
-
-    def test_markdown_preserves_headings_and_splits_large_sections(self, tmp_path):
-        document = tmp_path / "guide.md"
-        document.write_text("# Policy\n" + "word " * 1000, encoding="utf-8")
-        extracted = FileDocumentSource(tmp_path).extract(
-            Source("guide", "guide.md", "Guide", "markdown"), "guide.md"
+class TestFrontmatter:
+    def test_block_list_tags_and_scalar_status(self):
+        meta, body = vault.parse_frontmatter(
+            "---\ntags:\n  - plm\n  - cdb\nstatus: done\n---\n\n# Body\nprose"
         )
-        assert len(extracted.sections) > 1
-        assert {section.heading for section in extracted.sections} == {"Policy"}
+
+        assert vault.frontmatter_tags(meta) == ("plm", "cdb")
+        assert vault.frontmatter_status(meta) == "done"
+        assert body.startswith("\n# Body")
+
+    def test_inline_list_tags_and_a_comma_separated_scalar(self):
+        inline, _ = vault.parse_frontmatter("---\ntags: [plm, cdb]\n---\nbody")
+        comma, _ = vault.parse_frontmatter("---\ntags: plm, cdb\n---\nbody")
+
+        assert vault.frontmatter_tags(inline) == ("plm", "cdb")
+        assert vault.frontmatter_tags(comma) == ("plm", "cdb")
+
+    def test_quoted_values_are_unquoted(self):
+        meta, _ = vault.parse_frontmatter(
+            '---\nstatus: "in progress"\ntitle: ' + "'A: Note'" + "\n---\nbody"
+        )
+
+        assert vault.frontmatter_status(meta) == "in progress"
+        assert vault.frontmatter_title(meta) == "A: Note"
+
+    def test_keys_are_lowercased(self):
+        meta, _ = vault.parse_frontmatter("---\nTags:\n  - plm\n---\nbody")
+
+        assert vault.frontmatter_tags(meta) == ("plm",)
+
+    def test_a_malformed_fence_is_prose_not_an_error(self):
+        """A note that starts with an unclosed fence must stay indexable as a body."""
+        meta, body = vault.parse_frontmatter("---\ntags: plm\nno closing fence")
+
+        assert meta == {}
+        assert "tags" in body
+
+    def test_no_frontmatter_returns_the_content(self):
+        meta, body = vault.parse_frontmatter("# Just a note")
+
+        assert meta == {}
+        assert body == "# Just a note"
+
+    def test_block_items_under_a_scalar_key_become_a_list(self):
+        meta, _ = vault.parse_frontmatter("---\ntags: plm\n  - cdb\n---\nbody")
+
+        assert vault.frontmatter_tags(meta) == ("plm", "cdb")
+
+
+class TestWikilinks:
+    def test_alias_and_heading_are_dropped_and_links_deduplicated(self):
+        content = "See [[xBOMs]] then [[xBOMs#Structure|the structure]] and [[PowerScript]]."
+        links = vault.wikilinks(content)
+
+        assert links == ("xBOMs", "PowerScript")
+
+    def test_a_path_link_keeps_its_path(self):
+        assert vault.wikilinks("[[CONTACT Elements/REST API]]") == ("CONTACT Elements/REST API",)
+
+    def test_no_links_is_empty(self):
+        assert vault.wikilinks("plain text and [markdown](links.md)") == ()
+
+
+class TestExclusion:
+    @pytest.mark.parametrize(
+        "path,exclude,excluded",
+        [
+            ("01 Inbox/2026-10-05.md", ("01 Inbox",), True),
+            ("01 Inbox/2026-10-05.md", ("01 inbox",), True),
+            ("01 Inbox", ("01 Inbox",), True),
+            ("01 Inbox/nested/deep.md", ("01 Inbox",), True),
+            ("04 Resources/xBOMs.md", ("01 Inbox", "05 Daily Notes"), False),
+            ("04 Resources/xBOMs.md", (), False),
+            ("01 Inbox 2/note.md", ("01 Inbox",), False),
+            ("windows\\path\\note.md", ("windows/path",), True),
+        ],
+    )
+    def test_prefix_matching(self, path, exclude, excluded):
+        assert vault.is_excluded(path, exclude) is excluded
+
+
+class TestVaultExtraction:
+    def test_hidden_and_excluded_folders_are_not_discovered(self, tmp_path):
+        vault_root = make_vault(tmp_path)
+        note(vault_root, "04 Resources/xBOMs.md", "# xBOMs")
+        note(vault_root, "01 Inbox/note.md", "inbox")
+        note(vault_root, ".obsidian/plugins/note.md", "config")
+        note(vault_root, ".trash/old.md", "deleted")
+        note(vault_root, "04 Resources/attachment.png", "png")
+
+        discovered = VaultDocumentSource(
+            vault.VaultConfig(str(vault_root), ("01 Inbox",)), tmp_path
+        ).discover()
+
+        assert discovered == ["04 Resources/xBOMs.md"]
+
+    def test_frontmatter_metadata_is_indexed_and_body_preserved(self, tmp_path):
+        vault_root = make_vault(tmp_path)
+        note(
+            vault_root,
+            "xBOMs.md",
+            "---\ntags:\n  - plm\n  - cdb\nstatus: done\n---\n# xBOMs\n"
+            "An assembly BOM lists parts.",
+        )
+        source = VaultDocumentSource(vault.VaultConfig(str(vault_root)), tmp_path)
+
+        extracted = source.extract("xBOMs.md")
+
+        assert extracted.title == "xBOMs"
+        assert extracted.media_type == "markdown"
+        assert extracted.content.startswith("title: xBOMs\ntags: plm, cdb\nstatus: done")
+        assert "---" not in extracted.content, "the frontmatter fence is not indexed"
+        # Headings are provenance, not prose: they name the section, the body carries the text.
+        assert extracted.sections[-1].heading == "xBOMs"
+        assert "An assembly BOM lists parts." in extracted.content
         assert all(len(section.text) <= documents.MAX_CHUNK_CHARS for section in extracted.sections)
 
-    def test_pdf_preserves_page_provenance(self, tmp_path):
-        document = tmp_path / "policy.pdf"
-        document.write_bytes(simple_pdf("Cancellation policy"))
-        extracted = FileDocumentSource(tmp_path).extract(
-            Source("policy", "policy.pdf", "Policy", "pdf"), "policy.pdf"
+    def test_a_frontmatter_title_wins_over_the_stem(self, tmp_path):
+        vault_root = make_vault(tmp_path)
+        note(vault_root, "2026-10-05.md", "---\ntitle: Daily Log\n---\nbody")
+
+        extracted = VaultDocumentSource(vault.VaultConfig(str(vault_root)), tmp_path).extract(
+            "2026-10-05.md"
         )
-        assert extracted.sections[0].page == 1
-        assert "Cancellation policy" in extracted.content
+
+        assert extracted.title == "Daily Log"
+
+    def test_a_large_section_is_split(self, tmp_path):
+        vault_root = make_vault(tmp_path)
+        note(
+            vault_root,
+            "big.md",
+            "# Policy\n" + "word " * 1000,
+        )
+        source = VaultDocumentSource(vault.VaultConfig(str(vault_root)), tmp_path)
+
+        extracted = source.extract("big.md")
+
+        assert len(extracted.sections) > 1
+
+    def test_a_relative_vault_path_resolves_against_the_project(self, tmp_path):
+        note(make_vault(tmp_path / "project" / "docs", "kb"), "a.md", "body")
+
+        source = VaultDocumentSource(vault.VaultConfig("docs/kb"), tmp_path / "project")
+
+        assert source.discover() == ["a.md"]
+
+    def test_a_note_that_is_not_utf8_fails_that_note(self, tmp_path):
+        vault_root = make_vault(tmp_path)
+        (vault_root / "latin.md").write_bytes("ä".encode("latin-1"))
+        source = VaultDocumentSource(vault.VaultConfig(str(vault_root)), tmp_path)
+
+        with pytest.raises(KnowledgeError, match="not UTF-8"):
+            source.extract("latin.md")
+
+    def test_a_key_that_escapes_the_vault_is_refused(self, tmp_path):
+        source = VaultDocumentSource(vault.VaultConfig(str(make_vault(tmp_path))), tmp_path)
+
+        with pytest.raises(KnowledgeError, match="escapes the vault"):
+            source.fingerprint("../outside.md")
+
+
+class TestRelatedNotes:
+    def _source(self, tmp_path):
+        vault_root = make_vault(tmp_path)
+        note(vault_root, "xBOMs.md", "# xBOMs\nSee [[PowerScript]] and [[REST API]].")
+        note(vault_root, "PowerScript.md", "---\ntags: code\n---\nBack to [[xBOMs]].")
+        note(vault_root, "nested/REST API.md", "link to [[xBOMs#Structure|structure]]")
+        note(vault_root, "orphan.md", "links to [[Missing Note]] and [[orphan]]")
+        return vault_root
+
+    def test_links_resolve_by_stem_and_path_case_insensitively(self, tmp_path):
+        self._source(tmp_path)
+        source = VaultDocumentSource(vault.VaultConfig(str(tmp_path / "vault")), tmp_path)
+
+        assert source.related("xBOMs.md") == ["PowerScript.md", "nested/REST API.md"]
+        assert source.related("nested/REST API.md") == ["xBOMs.md"]
+
+    def test_red_links_and_self_links_are_dropped(self, tmp_path):
+        self._source(tmp_path)
+        source = VaultDocumentSource(vault.VaultConfig(str(tmp_path / "vault")), tmp_path)
+
+        assert source.related("orphan.md") == []
+
+    def test_a_missing_note_yields_nothing(self, tmp_path):
+        self._source(tmp_path)
+        source = VaultDocumentSource(vault.VaultConfig(str(tmp_path / "vault")), tmp_path)
+
+        assert source.related("ghost.md") == []
 
 
 class TestKnowledgeService:
-    def test_indexes_searches_and_shows_markdown(self, tmp_path):
-        docs = tmp_path / "docs"
-        docs.mkdir()
-        (docs / "domain.md").write_text(
-            "# Cancellation\nSubscriptions have a fourteen day cooling-off period.",
-            encoding="utf-8",
+    def _service(self, tmp_path, vault_path="vault", *exclude):
+        write_config(tmp_path, vault_path, *exclude)
+        return build_service(tmp_path)
+
+    def test_syncs_searches_and_shows_notes(self, tmp_path):
+        note(
+            make_vault(tmp_path),
+            "04 Resources/xBOMs.md",
+            "# Cancellation\nFourteen days cooling-off.",
         )
-        catalog(tmp_path, [source("domain", "docs/domain.md")])
-        service = build_service(tmp_path)
+        service = self._service(tmp_path)
 
         sync = service.sync()
-        results = service.search("cancellation")
+        results = service.search("cooling-off")
         shown = service.show(results[0].document_id)
 
-        assert sync.updated == 1 and not sync.failures
+        assert sync.updated == 1 and not sync.failures and not sync.deferred
         assert results[0].heading == "Cancellation"
-        assert results[0].path == "docs/domain.md"
+        assert results[0].path == "04 Resources/xBOMs.md"
+        assert results[0].source_id == "vault"
         assert "cooling-off" in shown["content"]
 
-    def test_incremental_sync_updates_and_removes_documents(self, tmp_path):
-        docs = tmp_path / "docs"
-        docs.mkdir()
-        first = docs / "first.txt"
-        second = docs / "second.txt"
-        first.write_text("alpha", encoding="utf-8")
-        second.write_text("beta", encoding="utf-8")
-        catalog(tmp_path, [source("docs", "docs", "directory")])
-        service = build_service(tmp_path)
+    def test_metadata_is_searchable(self, tmp_path):
+        note(
+            make_vault(tmp_path),
+            "note.md",
+            "---\ntags:\n  - plm\nstatus: done\n---\n# Body\nprose",
+        )
+        service = self._service(tmp_path)
+        service.sync()
+
+        results = service.search("plm")
+
+        assert results and results[0].path == "note.md"
+
+    def test_incremental_sync_updates_and_removes_notes(self, tmp_path):
+        vault_root = make_vault(tmp_path)
+        note(vault_root, "first.md", "alpha")
+        note(vault_root, "second.md", "beta")
+        service = self._service(tmp_path)
 
         assert service.sync().updated == 2
-        first.write_text("alpha changed", encoding="utf-8")
-        second.unlink()
+        (vault_root / "first.md").write_text("alpha changed", encoding="utf-8")
+        (vault_root / "second.md").unlink()
         result = service.sync()
 
         assert result.updated == 1
@@ -157,24 +314,47 @@ class TestKnowledgeService:
         assert service.search("changed")
         assert service.search("beta") == []
 
-    def test_failed_source_is_not_served_stale(self, tmp_path):
-        document = tmp_path / "domain.txt"
-        document.write_text("obsolete fact", encoding="utf-8")
-        catalog(tmp_path, [source("domain", "domain.txt", "text")])
-        service = build_service(tmp_path)
+    def test_an_unchanged_vault_is_skipped_wholesale(self, tmp_path):
+        note(make_vault(tmp_path), "a.md", "alpha")
+        service = self._service(tmp_path)
         service.sync()
-        document.unlink()
+
+        result = service.sync()
+
+        assert result.skipped == 1 and result.updated == 0
+
+    def test_a_failing_note_is_not_served_stale(self, tmp_path):
+        vault_root = make_vault(tmp_path)
+        (vault_root / "latin.md").write_bytes("ä".encode("latin-1"))
+        service = self._service(tmp_path)
 
         result = service.sync()
 
         assert result.failures
-        assert service.search("obsolete") == []
+        assert service.search("ä") == []
 
-    def test_deleted_database_is_rebuilt(self, tmp_path):
-        document = tmp_path / "domain.txt"
-        document.write_text("reconstructible knowledge", encoding="utf-8")
-        catalog(tmp_path, [source("domain", "domain.txt", "text")])
+    def test_a_missing_vault_is_deferred_and_stays_searchable(self, tmp_path):
+        note(make_vault(tmp_path), "a.md", "enduring knowledge")
+        service = self._service(tmp_path)
+        service.sync()
+        service.index.close()
+
+        service = self._service(tmp_path, vault_path="elsewhere")
+        result = service.sync()
+
+        assert result.deferred == ["vault"] and not result.failures
+        assert service.search("enduring knowledge"), "the unmounted vault keeps its documents"
+
+    def test_an_unconfigured_vault_refuses_to_sync(self, tmp_path):
+        write_config(tmp_path, "")
         service = build_service(tmp_path)
+
+        with pytest.raises(KnowledgeError, match="not configured"):
+            service.sync()
+
+    def test_a_deleted_database_is_rebuilt(self, tmp_path):
+        note(make_vault(tmp_path), "a.md", "reconstructible knowledge")
+        service = self._service(tmp_path)
         service.sync()
         index_path(tmp_path).unlink()
 
@@ -182,218 +362,61 @@ class TestKnowledgeService:
 
         assert service.search("reconstructible")
 
-
-HTML_PAGE = """<!doctype html>
-<html><head><title>Ignored</title><style>body{color:red}</style></head>
-<body>
-  <nav><a href="/">Home</a></nav>
-  <h1>Rate limits</h1>
-  <p>Requests are capped at 100 per minute.</p>
-  <script>console.log("not content")</script>
-  <h2>Bursts</h2>
-  <p>A burst of 20 is tolerated.</p>
-</body></html>
-"""
-
-
-class FakeFetcher:
-    """A `WebFetcher` that answers from a dict, so the url path needs no socket."""
-
-    available = True
-
-    def __init__(self, pages: dict[str, tuple[bytes, str]]):
-        self.pages = pages
-        self.calls: list[str] = []
-
-    def fetch(self, url: str):
-        self.calls.append(url)
-        if url not in self.pages:
-            raise KnowledgeError(f"could not fetch {url}: not found")
-        content, content_type = self.pages[url]
-        return FetchedResource(url=url, content=content, content_type=content_type)
-
-
-def url_source(source_id: str, url: str) -> dict:
-    return {"id": source_id, "url": url, "title": source_id.title(), "type": "url", "tags": []}
-
-
-class TestUrlCatalogRules:
-    @pytest.mark.parametrize(
-        "value,error",
-        [
-            ("file:///etc/passwd", "must be http"),
-            ("ftp://example.com/doc.txt", "must be http"),
-            ("https://", "no host"),
-            ("https://user:secret@example.com/doc", "credentials"),
-        ],
-    )
-    def test_rejects_unusable_urls(self, value, error):
-        with pytest.raises(KnowledgeError, match=error):
-            web.validate_url(value)
-
-    def test_a_url_source_must_not_also_carry_a_path(self, tmp_path):
-        catalog(tmp_path, [{**url_source("api", "https://example.com/api"), "path": "docs/a.md"}])
-        with pytest.raises(KnowledgeError, match="must not carry a path"):
-            build_service(tmp_path).sources()
-
-    def test_a_local_source_must_not_carry_a_url(self, tmp_path):
-        catalog(tmp_path, [{**source("domain", "docs/a.md"), "url": "https://example.com"}])
-        with pytest.raises(KnowledgeError, match="must not carry a url"):
-            build_service(tmp_path).sources()
-
-    def test_a_url_source_requires_a_url(self, tmp_path):
-        entry = url_source("api", "https://example.com")
-        del entry["url"]
-        catalog(tmp_path, [entry])
-        with pytest.raises(KnowledgeError, match="requires a url"):
-            build_service(tmp_path).sources()
-
-    def test_a_local_catalog_round_trips_without_gaining_a_url_field(self, tmp_path):
-        """Adding the field must not rewrite every existing project's catalog."""
-        entry = catalog_rules.source_dict(Source("domain", "docs/a.md", "Domain", "markdown"))
-        assert "url" not in entry
-        assert catalog_rules.source_dict(
-            Source("api", "", "Api", "url", (), "https://example.com/doc")
-        ).keys() == {"id", "title", "type", "tags", "url"}
-
-
-class TestHtmlExtraction:
-    def test_headings_become_sections_and_chrome_is_dropped(self):
-        sections = web.html_sections(HTML_PAGE)
-        headings = [section.heading for section in sections]
-
-        assert "Rate limits" in headings
-        assert "Bursts" in headings
-        joined = "\n".join(section.text for section in sections)
-        assert "capped at 100 per minute" in joined
-        assert "not content" not in joined, "script bodies are not prose"
-        assert "color:red" not in joined, "style bodies are not prose"
-
-    def test_an_unsupported_content_type_is_named_rather_than_indexed(self):
-        with pytest.raises(KnowledgeError, match="unsupported knowledge content type"):
-            web.media_type_for("application/zip")
-
-    def test_a_title_is_derived_from_the_url_when_none_is_given(self):
-        assert web.default_title("https://example.com/docs/rate-limits.html") == "Rate Limits"
-        assert web.default_title("https://example.com") == "example.com"
-
-
-class TestUrlIndexing:
-    def _service(self, tmp_path, pages, **kwargs):
-        return build_service(tmp_path, fetcher=FakeFetcher(pages), **kwargs)
-
-    def test_indexes_and_searches_a_remote_page(self, tmp_path):
-        catalog(tmp_path, [url_source("api", "https://example.com/limits")])
-        pages = {"https://example.com/limits": (HTML_PAGE.encode(), "text/html; charset=utf-8")}
-        service = self._service(tmp_path, pages)
+    def test_legacy_source_rows_are_cleared_by_a_vault_sync(self, tmp_path):
+        note(make_vault(tmp_path), "a.md", "alpha")
+        service = self._service(tmp_path)
+        service.sync()
+        # Simulate a pre-vault sync: a second source row the vault cannot explain.
+        legacy = type(service.index)(index_path(tmp_path))  # a fresh index over the same database
+        legacy.connection.execute(
+            "INSERT INTO sources(id,title,path,type,tags,status)"
+            " VALUES('old','Old','x','text','','indexed')"
+        )
+        legacy.connection.commit()
+        legacy.close()
 
         result = service.sync()
-        found = service.search("burst tolerated")
 
-        assert result.updated == 1 and not result.failures
-        assert found[0].path == "https://example.com/limits", "a citation must name the url"
-        assert found[0].heading == "Bursts"
+        assert result.updated == 0, "the vault notes are unchanged"
+        assert service.status()["documents"] == 1, "only the vault's notes remain"
 
-    def test_an_unchanged_page_is_skipped_on_the_next_sync(self, tmp_path):
-        catalog(tmp_path, [url_source("api", "https://example.com/limits")])
-        pages = {"https://example.com/limits": (HTML_PAGE.encode(), "text/html")}
-        service = self._service(tmp_path, pages)
+    def test_show_carries_related_notes(self, tmp_path):
+        vault_root = make_vault(tmp_path)
+        note(vault_root, "a.md", "See [[b]].")
+        note(vault_root, "b.md", "Back to [[a]].")
+        service = self._service(tmp_path)
         service.sync()
 
-        assert self._service(tmp_path, pages).sync().skipped == 1
+        shown = service.show(service.search("b")[0].document_id)
 
-    def test_one_sync_fetches_a_url_once(self, tmp_path):
-        """Fingerprint then extract is two asks; it must not be two requests."""
-        catalog(tmp_path, [url_source("api", "https://example.com/limits")])
-        fetcher = FakeFetcher({"https://example.com/limits": (HTML_PAGE.encode(), "text/html")})
+        # Searching "b" finds the note that mentions it (a.md); its link resolves to b.md.
+        assert shown["related"] == ["b.md"]
 
-        build_service(tmp_path, fetcher=fetcher).sync()
+    def test_status_reports_configuration_and_the_last_sync(self, tmp_path):
+        note(make_vault(tmp_path), "a.md", "alpha")
+        service = self._service(tmp_path, "vault", "01 Inbox")
+        service.sync()
 
-        assert fetcher.calls == ["https://example.com/limits"]
+        status = service.status()
 
-    def test_an_unreachable_url_fails_that_source_only(self, tmp_path):
-        docs = tmp_path / "docs"
-        docs.mkdir()
-        (docs / "local.md").write_text("# Local\nstill indexed", encoding="utf-8")
-        catalog(
-            tmp_path,
-            [source("docs", "docs/local.md"), url_source("api", "https://example.com/gone")],
-        )
-        service = self._service(tmp_path, {})
+        assert status["configured"] is True
+        assert status["vault"].endswith("vault")
+        assert status["exclude"] == ["01 Inbox"]
+        assert status["documents"] == 1
+        assert status["last_run"]["updated"] == 1
+        assert status["source"]["status"] == "indexed"
 
-        result = service.sync()
+    def test_status_without_a_config_reports_not_configured(self, tmp_path):
+        service = build_service(tmp_path)
 
-        assert len(result.failures) == 1 and "api" in result.failures[0]
-        assert result.updated == 1, "the local source still indexed"
-        assert service.search("still indexed")
+        status = service.status()
 
-    def test_offline_defers_a_url_and_keeps_what_it_already_indexed(self, tmp_path):
-        """
-        Deferred, not failed. Failing a source drops its documents, so treating "the network
-        is off" as "this source is broken" would empty the index on a train and force a full
-        refetch afterwards.
-        """
-        catalog(tmp_path, [url_source("api", "https://example.com/limits")])
-        pages = {"https://example.com/limits": (HTML_PAGE.encode(), "text/html")}
-        self._service(tmp_path, pages).sync()
+        assert status["configured"] is False
+        assert status["last_run"] is None
+        assert status["documents"] == 0
 
-        result = build_service(tmp_path, offline=True).sync()
+    def test_search_without_an_index_names_the_sync(self, tmp_path):
+        service = build_service(tmp_path)
 
-        assert result.deferred == ["api"]
-        assert not result.failures
-        assert build_service(tmp_path, offline=True).search("burst tolerated"), (
-            "the previously indexed page is still searchable offline"
-        )
-
-
-class TestPdfEdgeCases:
-    def test_a_page_with_no_extractable_text_is_dropped_not_indexed_empty(self, tmp_path):
-        """Scanned or decorative pages produce nothing; an empty chunk would rank as a hit."""
-        document = tmp_path / "mixed.pdf"
-        document.write_bytes(simple_pdf(" "))
-
-        extracted = FileDocumentSource(tmp_path).extract(
-            Source("mixed", "mixed.pdf", "Mixed", "pdf"), "mixed.pdf"
-        )
-
-        assert extracted.sections == ()
-
-    def test_an_unreadable_pdf_is_reported_as_a_knowledge_error(self, tmp_path):
-        """`sync` records `KnowledgeError`; anything else would escape and stop the run."""
-        document = tmp_path / "broken.pdf"
-        document.write_bytes(b"%PDF-1.4\nnot really a pdf")
-
-        with pytest.raises(KnowledgeError, match="could not extract PDF"):
-            FileDocumentSource(tmp_path).extract(
-                Source("broken", "broken.pdf", "Broken", "pdf"), "broken.pdf"
-            )
-
-
-class TestCandidateDiscovery:
-    def test_a_project_without_docs_or_readme_offers_nothing(self, tmp_path):
-        assert FileDocumentSource(tmp_path).candidates(set()) == []
-
-    def test_directories_and_unsupported_files_are_not_offered(self, tmp_path):
-        docs = tmp_path / "docs"
-        (docs / "nested").mkdir(parents=True)
-        (docs / "guide.md").write_text("# Guide", encoding="utf-8")
-        (docs / "diagram.png").write_bytes(b"\x89PNG")
-        (docs / "nested" / "deep.txt").write_text("deep", encoding="utf-8")
-
-        found = FileDocumentSource(tmp_path).candidates(set())
-
-        assert [item["path"] for item in found] == ["docs/guide.md", "docs/nested/deep.txt"]
-
-    def test_an_already_catalogued_file_is_not_offered_again(self, tmp_path):
-        docs = tmp_path / "docs"
-        docs.mkdir()
-        (docs / "guide.md").write_text("# Guide", encoding="utf-8")
-
-        assert FileDocumentSource(tmp_path).candidates({"docs/guide.md"}) == []
-
-    def test_a_readme_at_the_project_root_is_offered(self, tmp_path):
-        (tmp_path / "README.md").write_text("# Project", encoding="utf-8")
-
-        assert FileDocumentSource(tmp_path).candidates(set()) == [
-            {"path": "README.md", "type": "markdown"}
-        ]
+        with pytest.raises(KnowledgeError, match="kiln knowledge sync"):
+            service.search("anything")

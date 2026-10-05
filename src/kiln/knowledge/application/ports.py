@@ -1,10 +1,10 @@
 """
 What the knowledge use cases need from the outside world.
 
-Three protocols rather than one gateway, because the three are independently substitutable and
-have genuinely different lifetimes: the catalog is a committed file, the documents are whatever
-the project happens to have on disk, and the index is a disposable SQLite database that can be
-deleted between calls.
+Two protocols rather than one gateway, because the two have genuinely different lifetimes:
+the documents are whatever the configured vault happens to have on disk, and the index is a
+disposable SQLite database that can be deleted between calls. The config is a plain value
+object parsed in `domain.vault` -- a protocol would give a file-shaped thing nothing to be.
 
 `KnowledgeIndex` owns its own transactions on purpose. The service used to open a connection,
 commit after each source and roll back inside its own error handler, which put SQLite's unit of
@@ -14,75 +14,44 @@ source" a question about the use case rather than about the store.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Protocol
 
 from ..domain.models import ExtractedDocument, SearchResult, Source
 
 
-class CatalogStore(Protocol):
-    """The committed `kiln/project/knowledge.json`."""
-
-    def sources(self) -> list[Source]: ...
-
-    def replace(self, sources: list[Source]) -> None: ...
-
-    #: Put a caller-built source through the catalog's own rules. Separate from `replace` so a
-    #: bad path is rejected before the duplicate-id check reports something less useful.
-    def validate(self, source: Source) -> Source: ...
-
-
 class DocumentSource(Protocol):
     """
-    The documents a catalog source resolves to.
+    The notes of the configured Obsidian vault.
 
-    Addressed by an opaque string key rather than a `Path`. A local source's key is its
-    project-relative path and a remote one's is its URL, and the use case needs the key only to
-    compare fingerprints and to record what it indexed -- so making it a path would have forced
-    every remote source to pretend to be a file.
+    Addressed by an opaque string key rather than a `Path`. A note's key is its vault-relative
+    path and the use case needs the key only to compare fingerprints and to record what it
+    indexed -- so making it a path would have forced the protocol to pretend to know a
+    filesystem.
     """
 
-    def supports(self, source: Source) -> bool:
-        """
-        Whether this source can be read right now.
+    def source(self) -> Source:
+        """The single indexed origin the notes belong to."""
+        ...
 
-        False means *leave it alone* -- not indexed, and not touched. Offline is the case that
-        matters: a remote source that cannot be fetched must keep the documents it already has
-        rather than being treated as broken and emptied.
+    def supports(self) -> bool:
+        """
+        Whether the vault can be read right now.
+
+        False means *leave it alone* -- not indexed, and not touched. A vault on a network
+        drive that is not mounted is the case that matters: it must keep the documents it
+        already has rather than being treated as broken and emptied.
         """
         ...
 
-    def discover(self, source: Source) -> list[str]: ...
+    def discover(self) -> list[str]: ...
 
-    def fingerprint(self, source: Source, key: str) -> str: ...
+    def fingerprint(self, key: str) -> str: ...
 
-    def extract(self, source: Source, key: str) -> ExtractedDocument: ...
+    def extract(self, key: str) -> ExtractedDocument: ...
 
-    def candidates(self, configured: set[str]) -> list[dict]: ...
-
-
-@dataclass(frozen=True)
-class FetchedResource:
-    """One retrieved remote document, as bytes plus the header that says how to read them."""
-
-    url: str
-    content: bytes
-    content_type: str
-
-
-class WebFetcher(Protocol):
-    """
-    Retrieval of a remote source.
-
-    A port rather than a direct `urllib` call inside the adapter, so the whole url path -- the
-    catalog rules, the HTML reduction, the indexing -- is exercised by the test suite without a
-    socket, a server or a network-dependent build.
-    """
-
-    #: False when fetching is disabled, so remote sources are deferred rather than failed.
-    available: bool
-
-    def fetch(self, url: str) -> FetchedResource: ...
+    def related(self, key: str) -> list[str]:
+        """The existing notes `key` links to, resolved. An addition to `show`, never the answer."""
+        ...
 
 
 class KnowledgeIndex(Protocol):
@@ -90,8 +59,8 @@ class KnowledgeIndex(Protocol):
     The disposable search index.
 
     Every method is complete in itself -- it either lands durably or leaves the index as it
-    was. `mark_failed` in particular discards whatever the interrupted source had written and
-    records why, so a failing source can never be served as stale results.
+    was. `mark_failed` in particular discards whatever the interrupted sync had written and
+    records why, so a failing sync can never be served as stale results.
     """
 
     def ready(self) -> bool: ...
@@ -117,5 +86,9 @@ class KnowledgeIndex(Protocol):
     def search(self, query: str, limit: int) -> list[SearchResult]: ...
 
     def document(self, identifier: str) -> dict: ...
+
+    def overview(self) -> dict:
+        """The status payload -- newest sync run, the source row, the document count."""
+        ...
 
     def close(self) -> None: ...

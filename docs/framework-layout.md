@@ -21,7 +21,7 @@ src/kiln/
 ├── cockpit/                 # Browser operations and swarm-state projection
 │   ├── application/
 │   └── infrastructure/
-├── knowledge/               # Curated project knowledge: catalog, extraction and search
+├── knowledge/               # Obsidian vault knowledge: config, notes, search
 │   ├── domain/              # Catalog rules and text chunking
 │   ├── application/         # Use cases and ports
 │   └── infrastructure/      # JSON catalog, file extraction, SQLite FTS index and CLI
@@ -45,9 +45,9 @@ live directly in `scheduler/application/process_next_message.py` and
 `cockpit/application/ports.py`. The launcher's concrete socket probe is infrastructure and lives
 in `launcher/infrastructure/networking.py`, not in an application port module.
 
-Knowledge names its three outbound needs separately in `knowledge/application/ports.py` --
-the committed catalog, the local documents and the disposable index -- because they have
-different lifetimes and are independently substitutable. `knowledge/infrastructure/factory.py`
+Knowledge names its two outbound needs separately in `knowledge/application/ports.py` --
+the configured vault's notes and the disposable index -- because they have different
+lifetimes and are independently substitutable. `knowledge/infrastructure/factory.py`
 is the one module that knows both concrete locations, `kiln/project/knowledge.json` and
 `.kiln/knowledge.db`.
 

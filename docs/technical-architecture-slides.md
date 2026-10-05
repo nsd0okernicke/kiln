@@ -66,15 +66,15 @@ The scheduler's handoff cycle on the left feeds a disposable worker on the right
 
 ## Knowledge Base
 
-Beyond the constitution, every role can search the project's **knowledge base** — an indexed documentation library curated by the human-in-the-loop.
+Beyond the constitution, every role can search the project's **knowledge base** — an Obsidian vault indexed by Kiln, pointed at by the human-in-the-loop.
 
-- **Catalog** (`kiln/project/knowledge.json`) — approved documentation sources, version-controlled
+- **Vault config** (`kiln/project/knowledge.json`) — the v2 pointer: vault path + excluded folders, version-controlled
 - **Index** (`.kiln/knowledge.db`) — disposable search index, rebuilt on every sync or launch
-- **Supported sources** — local Markdown, UTF-8 text, PDFs, directories, and `http(s)` URLs
-- **Search** — any role can retrieve indexed knowledge without loading the entire library into its prompt
-- **Scope** — knowledge supports decisions, never overrides the constitution. Only HITL curates the catalog; autonomous roles may search but never add or remove sources.
+- **Vault adapter** — every Markdown note is indexed; frontmatter (`tags`, `status`) becomes searchable and `[[wikilinks]]` resolve on `show`
+- **Search** — any role can retrieve indexed notes without loading the entire vault into its prompt
+- **Scope** — knowledge supports decisions, never overrides the constitution. Only HITL changes the pointer; the vault stays the user's, autonomous roles may search but never write into it.
 
-Setup: `kiln knowledge add`, `kiln knowledge sync`, then `kiln knowledge search "query"`.
+Setup: set `vault` in `kiln/project/knowledge.json`, run `kiln knowledge sync`, then `kiln knowledge search "query"`.
 
 ---
 

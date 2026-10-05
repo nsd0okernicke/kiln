@@ -179,6 +179,8 @@
   .health.failed .verdict { color: var(--bad); }
   .health.stale .verdict { color: var(--warn); }
   .health.unavailable .verdict { color: var(--dim); }
+  .health.indexed .verdict { color: var(--ok); }
+  .health.never-synced .verdict { color: var(--warn); }
   .health .facts { color: var(--dim); min-width: 0; word-break: break-word; }
   .health .source { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); }
   .health-names { margin-top: 6px; color: var(--bad); font-size: 12px; word-break: break-word; }
@@ -467,6 +469,11 @@
   <section data-section="test-health">
     <h2><button class="section-toggle" type="button" aria-expanded="true" aria-controls="test-health-panel">Test health</button></h2>
     <div class="section-panel body" id="test-health-panel"><div id="test-health"></div></div>
+  </section>
+
+  <section data-section="knowledge">
+    <h2><button class="section-toggle" type="button" aria-expanded="true" aria-controls="knowledge-panel">Knowledge</button></h2>
+    <div class="section-panel body" id="knowledge-panel"><div id="knowledge"></div></div>
   </section>
 
   <section data-section="board">
@@ -901,6 +908,41 @@ function healthAge(isoTimestamp) {
   return Math.round(seconds / 86400) + "d ago";
 }
 
+// The knowledge vault the swarm is grounded in. Not-configured and unavailable are ordinary
+// states and get one quiet line, not a red panel: most projects have no vault, and a panel
+// that shouts about the absence would train operators to ignore it.
+const KNOWLEDGE_VERDICT = {
+  indexed: "grounded",
+  failed: "sync failed",
+  "never-synced": "never synced",
+  "not-configured": "not configured",
+  unavailable: "unavailable",
+};
+
+function renderKnowledge(knowledge) {
+  const host = $("knowledge");
+  host.replaceChildren();
+  if (!knowledge) return;
+
+  if (!knowledge.configured) {
+    host.append(text("div", knowledge.error || "No knowledge vault configured.", "empty"));
+    return;
+  }
+
+  const row = text("div", null, "health " + knowledge.status);
+  row.append(text("span", KNOWLEDGE_VERDICT[knowledge.status] || "—", "verdict"));
+
+  const facts = [];
+  if (knowledge.notes !== null && knowledge.notes !== undefined) {
+    facts.push(knowledge.notes.toLocaleString() + " notes");
+  }
+  if (knowledge.synced_ago) facts.push("synced " + knowledge.synced_ago);
+  if (knowledge.error) facts.push(knowledge.error);
+  row.append(text("span", facts.join(" · "), "facts"));
+  if (knowledge.vault) row.append(text("span", "· " + knowledge.vault, "source"));
+  host.append(row);
+}
+
 function findRole(state, laneId) {
   if (laneId === "intake" || laneId === "review") return state.roles.find((r) => r.role === state.human_role);
   if (laneId === "done") return null;
@@ -1207,6 +1249,7 @@ async function poll() {
       }
     };
     pollTestMetrics();
+    pollKnowledge();
     pollLog();
   } catch (error) {
     // A failed poll marks the page stale rather than blanking it: the last known state is
@@ -1224,6 +1267,17 @@ async function pollTestMetrics() {
     const response = await fetch("/api/test-metrics", { headers: { "X-Kiln-Cockpit": "1" } });
     if (!response.ok) throw new Error(response.statusText);
     renderTestMetrics(await response.json());
+  } catch (error) {
+    /* keep the previous reading */
+  }
+}
+
+// Same tick, same rule: a missing vault or an unreadable config degrades this panel alone.
+async function pollKnowledge() {
+  try {
+    const response = await fetch("/api/knowledge", { headers: { "X-Kiln-Cockpit": "1" } });
+    if (!response.ok) throw new Error(response.statusText);
+    renderKnowledge(await response.json());
   } catch (error) {
     /* keep the previous reading */
   }

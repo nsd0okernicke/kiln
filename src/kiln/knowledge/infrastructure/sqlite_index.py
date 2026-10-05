@@ -278,6 +278,29 @@ class SqliteKnowledgeIndex:
         with closing(self._open()) as connection:
             return self._document(connection, identifier)
 
+    def overview(self) -> dict:
+        """
+        The status payload: newest sync run, the source row, and the document count.
+
+        Read-only and side-effect free: a missing database is "never synced", not a database
+        created by asking about one. `_open()` builds the schema, so the queries run against
+        a plain connection; a file with no schema (deleted mid-write, recreated empty) reads
+        as the same never-synced state, because the index is disposable and `sync` rebuilds
+        it either way.
+        """
+        if not self.path.is_file():
+            return {"last_run": None, "source": None, "documents": 0}
+        try:
+            with closing(sqlite3.connect(self.path)) as connection:
+                connection.row_factory = sqlite3.Row
+                return {
+                    "last_run": _last_run(connection),
+                    "source": _source_state(connection),
+                    "documents": _document_count(connection),
+                }
+        except sqlite3.Error:
+            return {"last_run": None, "source": None, "documents": 0}
+
     def _document(self, connection: sqlite3.Connection, identifier: str) -> dict:
         row = connection.execute(
             """SELECT d.id,d.source_id,s.title AS source_title,d.path,d.title,d.media_type,
@@ -302,6 +325,25 @@ def match_expression(query: str) -> str:
     if not tokens:
         raise KnowledgeError("search query must contain a word")
     return " AND ".join(f'"{token.replace(chr(34), chr(34) * 2)}"' for token in tokens)
+
+
+def _last_run(connection: sqlite3.Connection) -> dict | None:
+    row = connection.execute(
+        "SELECT id,started_at,finished_at,updated,skipped,removed,failed"
+        " FROM sync_runs ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def _source_state(connection: sqlite3.Connection) -> dict | None:
+    row = connection.execute(
+        "SELECT id,title,path,type,tags,status,fingerprint,indexed_at,error FROM sources LIMIT 1"
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def _document_count(connection: sqlite3.Connection) -> int:
+    return int(connection.execute("SELECT COUNT(*) FROM documents").fetchone()[0])
 
 
 def _search_result(row: sqlite3.Row) -> SearchResult:

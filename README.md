@@ -275,32 +275,34 @@ agents need context that is written down somewhere but is too large to carry in 
 In the same HITL pane, ask for the setup skill:
 
 ```text
-Use kiln-knowledge-setup to catalog this project's documentation. Show me the proposed
-sources with what each one is good for before you change knowledge.json.
+Use kiln-vault-setup to point this project's knowledge at my Obsidian vault.
 ```
 
-The skill runs `kiln knowledge setup --json` to discover candidate Markdown, text, and PDF
-files, explains what decisions each can support, and excludes generated reports, dependencies,
-and anything unrelated. It never proposes a URL — a human must name those. Review the proposal,
-approve it, and the skill runs `kiln knowledge add` and `kiln knowledge sync` for you.
+The skill asks which vault to ground the project on, writes the v2 config with the vault path
+and the excluded folders (inbox, daily notes, attachments — churn, not knowledge), and runs
+`kiln knowledge sync` for you.
 
-Doing it by hand is the same three commands:
+Doing it by hand is one file plus one command:
 
 ```bash
-./bin/kiln.sh knowledge add docs/domain.md --id domain --title "Domain model"
+# kiln/project/knowledge.json
+{"version": 2, "vault": "C:/path/to/vault", "exclude": ["01 Inbox", "05 Daily Notes"]}
+```
+
+```bash
 ./bin/kiln.sh knowledge sync
 ./bin/kiln.sh knowledge search "subscription cancellation"
 ```
 
-Two files result, and they are not equal. `kiln/project/knowledge.json` is the approved
-catalog: commit it. `.kiln/knowledge.db` is the generated index: never commit it, and delete
-it freely — the next `knowledge sync` or launch rebuilds it from the catalog. Launch refreshes
-changed sources incrementally, so the index tracks the documents without you thinking about it.
+Two files result, and they are not equal. `kiln/project/knowledge.json` is the vault pointer:
+commit it. `.kiln/knowledge.db` is the generated index: never commit it, and delete it freely —
+the next `knowledge sync` or launch rebuilds it from the vault. Launch refreshes changed notes
+incrementally, so the index tracks the vault without you thinking about it.
 
-Only HITL curates the catalog. Autonomous roles may search it and read indexed documents, but
-cannot add or remove sources. Knowledge supports decisions; it never overrides the
-constitution. See [Search project knowledge](#search-project-knowledge) for the full command
-set and for how URL sources differ from files.
+The vault stays the user's. Only HITL changes the pointer, and autonomous roles may search it
+and read indexed notes but never write into the vault. Knowledge supports decisions; it never
+overrides the constitution. See [Search project knowledge](#search-project-knowledge) for the
+full command set.
 
 ### 5. Review, commit, and restart
 
@@ -715,46 +717,32 @@ Retrying preserves the original work item, history, failure reason, and accumula
 
 ### Search project knowledge
 
-Set the catalog up once, as described in [Build the knowledge base](#4-build-the-knowledge-base).
-Afterwards HITL curates it with:
+Point the project at a vault once, as described in [Build the knowledge base](#4-build-the-knowledge-base).
+Afterwards the swarm searches it with:
 
 ```bash
-./bin/kiln.sh knowledge add docs/domain.md --id domain --title "Domain model"
-./bin/kiln.sh knowledge add docs/manuals --id manuals --title "Product manuals"
-./bin/kiln.sh knowledge add https://docs.example.com/api/rate-limits --id rate-limits
-./bin/kiln.sh knowledge remove domain
-./bin/kiln.sh knowledge sources
+./bin/kiln.sh knowledge status
 ./bin/kiln.sh knowledge sync
-```
-
-Every role may retrieve indexed knowledge without loading the entire library into its prompt:
-
-```bash
 ./bin/kiln.sh knowledge search "subscription cancellation"
 ./bin/kiln.sh knowledge show DOCUMENT_ID
 ```
 
-Supported sources are project-local Markdown, UTF-8 text, PDFs, directories containing those
-files, and `http(s)` URLs serving HTML, Markdown or plain text.
+Every role may retrieve indexed notes without loading the entire vault into its prompt.
 
-URLs are fetched, so they behave differently from files in four ways worth knowing:
+What the index knows, and where it comes from:
 
-- They are only ever added by a human — `knowledge setup` discovers files and never proposes a
-  URL. Only `http`/`https` are accepted, credentials in a URL are refused, and a redirect to
-  another scheme is refused too, so a source cannot be bounced to `file://` and turned into a
-  local read that skips the project-containment rule.
-- HTML is reduced to prose with headings preserved as sections; script, style and navigation
-  are dropped. A citation names the URL and heading, the way a file citation names path and
-  heading.
-- A fetch that fails or times out fails **that source only**, leaving the rest of the sync and
-  the launch to continue. Requests time out after 15s and are capped at 8&nbsp;MB.
-- `knowledge sync --offline` skips URL sources without touching them: their indexed pages stay
-  searchable and the command lists them as `not refreshed`. It is not an error, so the exit
-  code stays 0 — a failed source drops its documents, and being offline is not a broken source.
-
-Remote PDFs are not indexed yet; download the file and catalog it instead. Prefer a versioned
-documentation page over an editable wiki, and copy the document into the repository when the
-decision it supports has to stay reproducible.
+- **The vault is the only source.** Every Markdown note in the vault is indexed — hidden
+  folders (`.obsidian`, `.git`, `.trash`) and the config's `exclude` prefixes are skipped.
+  A note that is deleted from the vault is removed from the index on the next sync.
+- **Frontmatter becomes searchable.** A note's `tags` and `status` (and its title) are
+  indexed with the body, so a tag search finds its note. The note stem is the lookup key;
+  a citation names the vault-relative path and heading.
+- **`[[wikilinks]]` are resolved.** `kiln knowledge show` names the existing notes the note
+  links to, so an agent can follow a topic across the vault. Links to notes that do not
+  exist are dropped — a red link is not knowledge.
+- **A vault that is not mounted is deferred, not failed.** Its indexed notes stay searchable
+  and the sync lists it as `not refreshed` without dropping anything. A failing note marks
+  the sync failed and its stale results are not served.
 
 ### Stop
 
