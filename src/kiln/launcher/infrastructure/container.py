@@ -91,6 +91,11 @@ def _credential_sources() -> dict[str, Path]:
     if grok.is_dir():
         sources["grok"] = grok
 
+    # Pi: ~/.pi/ (config, session, API keys).
+    pi = home / ".pi"
+    if pi.is_dir():
+        sources["pi"] = pi
+
     return sources
 
 
@@ -123,9 +128,12 @@ def start_container(
     run_id: str,
     project_root: Path,
     checkout_path: Path,
+    framework_root: Path | None = None,
     ref: str = "main",
     profile: str = "full",
     image: str = IMAGE_NAME,
+    extra_mounts: list[tuple[str, str]] | None = None,
+    extra_add_hosts: list[str] | None = None,
     dry_run: bool = False,
 ) -> str | None:
     """
@@ -136,29 +144,57 @@ def start_container(
     Mounts:
       - ``<project_root>`` → ``/seed`` (read-only)
       - ``<checkout_path>`` → ``/run`` (read-write)
+      - ``<framework_root>`` → ``/kiln`` (read-only, optional)
+      - ``<extra_mounts>`` → additional host-to-container bind mounts
+
+    Extra:
+      - ``<extra_add_hosts>`` → ``--add-host`` entries (HOSTNAME:IP)
 
     Environment variables set in the container:
       - ``KILN_REF`` — the git ref to check out
       - ``KILN_PROFILE`` — the profile to launch
       - ``KILN_RUN_ID`` — the run identifier
-      - ``KILN_STATE_DIR`` — set to ``/run/.kiln`` so set-status.py can find state
+      - ``KILN_STATE_DIR`` — /run/workspace/.kiln so set-status.py can find state
+      - ``KILN_COCKPIT_BIND`` — set to 0.0.0.0 so Docker port publishing can reach the cockpit
+      - ``PYTHONPATH`` — includes /kiln/src (if framework_root provided) and /run/workspace/src
     """
     if not shutil.which("docker"):
         raise ContainerError("docker not found on PATH.")
 
-    # Ensure the checkout dir exists so Docker can mount it.
     checkout_path.mkdir(parents=True, exist_ok=True)
 
     cmd = [
         "docker", "run", "--detach",
         "--name", f"kiln-{run_id}",
+        "-p", "127.0.0.1:8765:8765",  # cockpit UI
         "--mount", f"type=bind,source={project_root.resolve()},target=/seed,readonly",
         "--mount", f"type=bind,source={checkout_path.resolve()},target=/run",
         "-e", f"KILN_REF={ref}",
         "-e", f"KILN_PROFILE={profile}",
         "-e", f"KILN_RUN_ID={run_id}",
-        "-e", "KILN_STATE_DIR=/run/.kiln",
+        "-e", "KILN_STATE_DIR=/run/workspace/.kiln",
+        "-e", "KILN_COCKPIT_BIND=0.0.0.0",
     ]
+
+    if framework_root:
+        cmd += [
+            "--mount", f"type=bind,source={framework_root.resolve()},target=/kiln,readonly",
+            "-e", "PYTHONPATH=/kiln/src:/run/workspace/src",
+        ]
+    else:
+        cmd += ["-e", "PYTHONPATH=/run/workspace/src"]
+
+    # Add extra user-specified mounts (--docker-mount).  Expand ~ to $HOME and resolve.
+    for host_path, container_path in (extra_mounts or []):
+        expanded = Path(host_path).expanduser().resolve()
+        cmd += [
+            "--mount",
+            f"type=bind,source={expanded},target={container_path}",
+        ]
+
+    # Add extra host entries (--docker-add-host).
+    for entry in (extra_add_hosts or []):
+        cmd += ["--add-host", entry]
 
     # Mount the Docker socket if available (needed for acceptance gates that
     # use testcontainers inside the swarm container).

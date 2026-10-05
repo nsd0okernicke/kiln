@@ -38,7 +38,8 @@ def build_command(*, model: str = "") -> list[str]:
         "--mode",
         "json",
         "--no-session",
-        "--no-approve",
+        "--no-extensions",
+        "--no-skills",
         "--tools",
         PI_TOOLS,
     ]

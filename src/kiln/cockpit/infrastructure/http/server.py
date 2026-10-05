@@ -733,10 +733,16 @@ def serve(config: CockpitConfig, port: int = DEFAULT_PORT) -> ThreadingHTTPServe
     Build a bound server. The caller owns `serve_forever`/`shutdown`.
 
     `port=0` binds an ephemeral port; read it back from `server.server_address[1]`, which is
-    what the tests do. The host is not a parameter — see the module docstring.
+    what the tests do.
+
+    The bind address defaults to ``127.0.0.1`` (loopback‑only, no auth).  When the
+    ``KILN_COCKPIT_BIND`` environment variable is set it overrides the host — use
+    ``0.0.0.0`` when the cockpit runs inside a Docker container whose host needs to
+    reach it through port forwarding or ``--network host``.
     """
+    host = os.environ.get("KILN_COCKPIT_BIND", "127.0.0.1")
     handler = type("ConfiguredCockpitHandler", (CockpitHandler,), {"config": config})
-    return ThreadingHTTPServer(("127.0.0.1", port), handler)
+    return ThreadingHTTPServer((host, port), handler)
 
 
 def write_launch_files(url: str, url_file: Path | None, pid_file: Path | None) -> None:

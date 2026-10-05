@@ -96,3 +96,33 @@ A **run** is a named swarm instance created with ``kiln --run <name>``. Each nam
     .worktrees/reviewer/
     ...
 ```
+
+### Docker (Phase 3)
+
+Use ``--docker`` to run a swarm inside a Docker container:
+
+```bash
+kiln --working-dir <project> --docker --run <name> --ref main --terminal headless
+```
+
+Inside the container the project is mounted read-only at ``/seed``; the run state
+at ``/run`` (writable), and the Kiln framework at ``/kiln`` (read-only).
+
+**Custom image** — ``--docker-image <tag>`` uses a project-specific base image
+extending the default ``kiln-runner``:
+
+```dockerfile
+FROM kiln-runner
+RUN apt-get install -y default-jdk maven
+```
+
+**Extra mounts** — ``--docker-mount HOST:CONTAINER`` adds bind mounts for compiler
+caches or dependencies. Repeatable:
+
+```bash
+kiln --docker --run my-feature \
+  --docker-mount ~/.m2:/root/.m2 \
+  --docker-mount ~/.cargo:/root/.cargo
+```
+
+The cockpit is published at ``127.0.0.1:8765``. Stop with ``docker rm -f kiln-<run>``.

@@ -200,7 +200,12 @@ def build_panes(
 
     WezTerm and tmux type the command into a live prompt, which echoes it; Windows Terminal
     passes it as `-Command` and does not. Only the former two need the clearing prefix.
+
+    For the headless backend, ``raw_argv`` and ``env`` are populated so processes can be
+    spawned directly without a shell (avoiding Windows command-line length limits and
+    PowerShell execution policy issues).
     """
+    use_direct = backend == HEADLESS
     render = render_posix if _hosts_posix_shell(backend) else render_powershell
     clear = backend in (WEZTERM, TMUX, HERDR)
     panes: list[PaneSpec] = []
@@ -219,6 +224,8 @@ def build_panes(
                 mode=role.mode,
                 agent=role.agent,
                 passive=role.is_passive,
+                env=command.env if use_direct else {},
+                raw_argv=list(command.argv) if use_direct else None,
             )
         )
     return panes
@@ -557,15 +564,18 @@ def _attach_or_start_hub(
     args: argparse.Namespace,
 ) -> list[PaneSpec]:
     """
-    Probe for an existing hub cockpit and attach, or start a new one with ``--registry-path``.
+    Probe for an existing hub cockpit and attach, or leave the cockpit pane as-is.
 
-    When a hub already answers on the default cockpit port, this run registers with it
-    and the cockpit pane is replaced with a notice. Otherwise, the cockpit is started with
-    ``--registry-path`` so it serves multiple runs.
+    When a hub already answers on the default cockpit port, the cockpit pane is replaced
+    with a one-line notice that this run is visible in the hub. Otherwise, the cockpit
+    starts normally and serves this run; subsequent runs will find the hub and attach.
+
+    Note: ``--registry-path`` is deliberately NOT appended to the cockpit command here.
+    The rendered pane command is a shell string (powershell or posix), not an argv list,
+    so parsing it as argparse arguments would break. The cockpit in the project root
+    directory can already discover runs through the default ``.kiln/runs/`` path.
     """
-    import socket
-
-    hub_port = getattr(args, "proxy_port", 8765)  # same port the cockpit would use
+    hub_port = getattr(args, "proxy_port", 8765)
     hub_alive = _probe_hub(hub_port)
 
     updated: list[PaneSpec] = []
@@ -575,7 +585,6 @@ def _attach_or_start_hub(
             continue
 
         if hub_alive:
-            # Attach: replace cockpit pane with a one-line notice.
             notice = (
                 f"Run {run_index.run_id!r} is registered with the hub at "
                 f"http://127.0.0.1:{hub_port}/api/runs/{run_index.run_id}/state"
@@ -593,28 +602,14 @@ def _attach_or_start_hub(
                 )
             )
         else:
-            # Start hub: add --registry-path so it discovers all runs.
-            from kiln.cockpit.infrastructure.http.server import (  # noqa: PLC0415
-                build_parser as cockpit_parser,
-            )
-
-            cockpit_args = cockpit_parser().parse_args(pane.cmd.split())
-            # Rebuild with --registry-path pointing at the original project root.
-            registry_flag = f" --registry-path {run_index.original_root.as_posix()}"
-            updated.append(
-                PaneSpec(
-                    role=pane.role,
-                    name=pane.name,
-                    path=pane.path,
-                    cmd=pane.cmd + registry_flag,
-                    mode=pane.mode,
-                    agent=pane.agent,
-                    passive=pane.passive,
-                )
-            )
+            # No hub running yet. Leave this pane as-is — the first run starts the
+            # cockpit normally. Subsequent runs will find it via the probe above.
+            updated.append(pane)
             log.info(
-                "starting hub cockpit with --registry-path %s",
-                run_index.original_root,
+                "no hub found on port %s; cockpit starts locally. "
+                "Run %s will be visible once the cockpit is up.",
+                hub_port,
+                run_index.run_id,
             )
 
     return updated
@@ -747,26 +742,47 @@ def run_launch(args: argparse.Namespace) -> int:
         run_dir = run_index.dir
         checkout_path = run_dir / "workspace"
 
-        # Build the image if needed.
-        dockerfile_dir = original_paths.framework_root / "docker"
-        if not (dockerfile_dir / "Dockerfile").is_file():
-            log.warning(
-                "Dockerfile not found at %s; the image must already exist",
-                dockerfile_dir / "Dockerfile",
-            )
-        elif not args.dry_run:
-            container_runner.build_image(dockerfile_dir, dry_run=args.dry_run)
+        # Pick a custom image if provided, otherwise default.
+        custom_image = getattr(args, "docker_image", "") or ""
+        docker_image = custom_image or container_runner.IMAGE_NAME
 
-        # Seed host credentials into the run dir.
-        container_runner.seed_credentials(run_dir)
+        # Build the default image unless a custom image was specified.
+        if not custom_image or custom_image == container_runner.IMAGE_NAME:
+            dockerfile_dir = original_paths.framework_root / "docker"
+            if not (dockerfile_dir / "Dockerfile").is_file():
+                log.warning(
+                    "Dockerfile not found at %s; the image must already exist",
+                    dockerfile_dir / "Dockerfile",
+                )
+            elif not args.dry_run:
+                container_runner.build_image(dockerfile_dir, dry_run=args.dry_run)
+
+        # Seed host credentials into the checkout path so /run/credentials/ works.
+        container_runner.seed_credentials(checkout_path)
+
+        # Parse extra mounts from --docker-mount.
+        extra_mounts: list[tuple[str, str]] = []
+        for m in getattr(args, "docker_mounts", []):
+            if ":" not in m:
+                log.warning("ignoring invalid --docker-mount %r (expected HOST:CONTAINER)", m)
+                continue
+            parts = m.split(":", 1)
+            extra_mounts.append((parts[0], parts[1]))
+
+        # Parse extra host entries from --docker-add-host.
+        extra_add_hosts: list[str] = getattr(args, "docker_add_hosts", [])
 
         # Start the container.
         container_id = container_runner.start_container(
             run_id=run_id,
             project_root=project_root,
             checkout_path=checkout_path,
+            framework_root=original_paths.framework_root,
             ref=ref,
             profile=profile_name,
+            image=docker_image,
+            extra_mounts=extra_mounts,
+            extra_add_hosts=extra_add_hosts,
             dry_run=args.dry_run,
         )
         if container_id is None and not args.dry_run:
@@ -997,6 +1013,7 @@ def _list_runs(runs_dir: Path) -> int:
 def _remove_run(runs_dir: Path, run_id: str, project_root: Path) -> int:
     """Remove a run's checkout and index entry."""
     import shutil
+    import time
 
     from .workspace import run_git
 
@@ -1005,21 +1022,34 @@ def _remove_run(runs_dir: Path, run_id: str, project_root: Path) -> int:
     index_dir = runs_dir / run_id
 
     if not checkout.exists() and not index_dir.exists():
-        log.error("run %r not found")
+        log.error("run %s not found. Check --working-dir if the project is elsewhere.", run_id)
         return 1
 
-    # Remove the checkout (full clone).
+    # Remove the checkout (full clone) with retry for Windows file locks.
     if checkout.exists():
         log.info("removing checkout: %s", checkout)
-        shutil.rmtree(checkout, ignore_errors=True)
+        for attempt in range(3):
+            shutil.rmtree(checkout, ignore_errors=True)
+            if not checkout.exists():
+                break
+            time.sleep(0.5)
+        if checkout.exists():
+            log.warning(
+                "could not fully remove %s (files may be locked). "
+                "Try closing any file explorer or terminal windows pointing there.",
+                checkout,
+            )
 
     # Remove the index entry.
     if index_dir.exists():
         log.info("removing index: %s", index_dir)
         shutil.rmtree(index_dir, ignore_errors=True)
 
-    log.info("run %s removed", run_id)
-    return 0
+    if not checkout.exists() and not index_dir.exists():
+        log.info("run %s removed", run_id)
+        return 0
+    log.warning("run %s partially removed; some files may remain", run_id)
+    return 1
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1197,6 +1227,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="repository URL or path for the container seed mount (default: the working directory)",
     )
     parser.add_argument(
+        "--docker-image", "-DockerImage",
+        dest="docker_image",
+        default="",
+        help="Docker image tag to use instead of the default kiln-runner",
+    )
+    parser.add_argument(
+        "--docker-mount", "-DockerMount",
+        dest="docker_mounts",
+        action="append",
+        default=[],
+        help=( 
+            "extra bind mount for the container in the form "
+            "HOST_PATH:CONTAINER_PATH (repeatable). "
+            "Example: --docker-mount ~/.m2:/root/.m2"
+        ),
+    )
+    parser.add_argument(
+        "--docker-add-host", "-DockerAddHost",
+        dest="docker_add_hosts",
+        action="append",
+        default=[],
+        help=( 
+            "extra host entry for the container in the form "
+            "HOSTNAME:IP (repeatable). "
+            "Example: --docker-add-host api.internal.corp:10.0.0.1"
+        ),
+    )
+    parser.add_argument(
         "--version",
         action="version",
         version=f"kiln {kiln_version.resolve_version()}",
@@ -1291,11 +1349,37 @@ def run_subcommand(name: str, argv: list[str]) -> int:
 
 
 def _subcommand_result(raw: list[str]) -> int | None:
-    if not raw or raw[0] not in SUBCOMMANDS:
+    """
+    Detect and delegate to a subcommand (``runs``, ``send``, ``inbox``, etc.)
+    anywhere in argv, not just at position 0.
+
+    The subcommand may appear after flag arguments like ``-WorkingDir`` or ``--working-dir``,
+    which puts it past ``raw[0]``. Any ``--working-dir``/``-WorkingDir`` found *before*
+    the subcommand is re-injected into the subcommand's argv so it still takes effect.
+    """
+    subcommand_index = -1
+    subcommand_name = ""
+    for i, arg in enumerate(raw):
+        if arg in SUBCOMMANDS:
+            subcommand_index = i
+            subcommand_name = arg
+            break
+
+    if not subcommand_name:
         return None
+
+    # Re-inject --working-dir / -WorkingDir that appeared before the subcommand.
+    prefix = raw[:subcommand_index]
+    extra_flags: list[str] = []
+    for j, arg in enumerate(prefix):
+        if arg in ("--working-dir", "-WorkingDir") and j + 1 < len(prefix):
+            extra_flags.extend([arg, prefix[j + 1]])
+
+    sub_argv = [*extra_flags, *raw[subcommand_index + 1:]]
+
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     try:
-        return run_subcommand(raw[0], raw[1:])
+        return run_subcommand(subcommand_name, sub_argv)
     except (LaunchError, ProfileError, TemplateError) as exc:
         log.error("Error: %s", exc)
         return 1

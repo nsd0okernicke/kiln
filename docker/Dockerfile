@@ -17,12 +17,20 @@ FROM python:3.11-slim AS base
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PIP_NO_CACHE_DIR=1
 
-# Install system dependencies: git, node (for MCP servers), and ca-certificates.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    curl \
-    ca-certificates \
+# Install system deps: git, xz (for node tarball), ca-certificates.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        git \
+        curl \
+        ca-certificates \
+        xz-utils \
+        build-essential \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 22.x from the official binary (NodeSource doesn't support Trixie).
+ENV NODE_VERSION=22.14.0
+RUN curl -fsSL https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz \
+    | tar -xJ -C /usr/local --strip-components=1
 
 # Kiln itself: pip install the framework from the seed mount at runtime.
 # The framework is installed from /seed (mounted at container start), not baked in,
@@ -53,6 +61,14 @@ RUN if [ "$INSTALL_CODEX" = "1" ]; then \
 
 RUN if [ "$INSTALL_GROK" = "1" ]; then \
         pip install --no-cache-dir grok-cli 2>/dev/null || true; \
+    fi
+
+# Install pi (the defacto agent CLI for Kiln roles) globally via npm.
+ARG INSTALL_PI=1
+RUN if [ "$INSTALL_PI" = "1" ]; then \
+        npm install -g @earendil-works/pi-coding-agent \
+        && echo "pi installed successfully at $(which pi)" \
+        || echo "pi install FAILED"; \
     fi
 
 # Default entrypoint: clone the seed repo, checkout ref, install kiln, launch.

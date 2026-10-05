@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import os
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -49,6 +49,13 @@ class PaneSpec:
     #: was rendered as `waiting` -- the Lua's fallback for a `manual` role with no status
     #: file, and a claim that was simply untrue of a healthy kiln.cockpit.
     passive: bool = False
+    #: Environment variables for direct subprocess spawning (headless backend only).
+    #: Populated from ``AgentCommand.env`` when the headless backend is active.
+    env: dict[str, str] = field(default_factory=dict)
+    #: Raw argv for direct subprocess spawning (headless backend only).
+    #: Populated from ``AgentCommand.argv`` when the headless backend is active.
+    #: When set, the headless backend uses this instead of the rendered ``cmd`` string.
+    raw_argv: list[str] | None = None
 
     def as_role_data(self) -> dict:
         """Shape consumed by the WezTerm Lua config's `KILN_ROLES_JSON`."""

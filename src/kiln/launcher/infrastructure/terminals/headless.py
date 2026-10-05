@@ -24,10 +24,9 @@ import json
 import logging
 import os
 import subprocess
-import sys
 from pathlib import Path
 
-from . import PaneSpec, TerminalError
+from . import PaneSpec
 
 log = logging.getLogger(__name__)
 
@@ -75,42 +74,94 @@ def _read_pids(project_dir: Path) -> dict[str, int]:
         return {}
 
 
+def _write_script(pane: PaneSpec, project_dir: Path) -> Path:
+    """
+    Write the pane command to a temporary script file.
+
+    Only used as a fallback when ``raw_argv`` is not set. The script is written to
+    ``<project_root>/.kiln/scripts/`` so it survives the launcher process exiting.
+    """
+    scripts_dir = project_dir / ".kiln" / "scripts"
+    scripts_dir.mkdir(parents=True, exist_ok=True)
+
+    if os.name == "nt":
+        script = scripts_dir / f"{pane.role}.ps1"
+        script.write_text(pane.cmd, encoding="utf-8")
+    else:
+        script = scripts_dir / f"{pane.role}.sh"
+        script.write_text("#!/bin/sh\n" + pane.cmd, encoding="utf-8")
+        script.chmod(0o755)
+
+    return script
+
+
 def _spawn_one(pane: PaneSpec, log_path: Path, project_dir: Path) -> int | None:
     """
     Spawn one pane's command as a detached subprocess.
 
-    Returns the PID, or None if the process exited immediately (a startup failure).
+    **Direct spawn path** (when ``pane.raw_argv`` is set): runs the command directly
+    with ``pane.env`` merged into the environment. No shell, no script file. This
+    avoids Windows command-line length limits and PowerShell execution policy issues.
+
+    **Fallback path**: writes the rendered command to a temp script and executes it
+    via the appropriate shell (``powershell -File`` on Windows, ``sh`` on POSIX).
+
+    Returns the PID, or None if the process exited immediately.
     """
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     creation_flags = 0
+    startupinfo = None
     if os.name == "nt":
-        creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-
-    # The command is a shell string (e.g. ``$env:VAR = '...'; python -m ...`` on Windows,
-    # or ``clear; export VAR=...; python -m ...`` on POSIX). On Windows we use ``powershell``
-    # as the interpreter; on POSIX we use ``sh``.
-    shell = ["powershell", "-NoProfile", "-NonInteractive", "-Command"] if os.name == "nt" else ["sh", "-c"]
-    argv = [*shell, pane.cmd]
-    # We want shell=True so the shell interprets the command string directly. But we also
-    # want to capture stdout/stderr. With shell=True and a list, the first element is the
-    # shell and the rest are args to the shell.
-    #
-    # Actually, on Windows with powershell -Command, we need to pass the cmd as a single
-    # argument. On POSIX with sh -c, same thing.
-    # Using shell=True with a string is simpler but we need to capture output.
+        creation_flags = subprocess.DETACHED_PROCESS
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
 
     try:
         with log_path.open("ab") as log_file:
-            proc = subprocess.Popen(
-                argv if os.name == "nt" else ["sh", "-c", pane.cmd],
-                stdout=log_file,
-                stderr=subprocess.STDOUT,
-                stdin=subprocess.DEVNULL,
-                cwd=str(pane.path) if pane.path else str(project_dir),
-                creationflags=creation_flags,
-                start_new_session=os.name != "nt",
-            )
+            if pane.raw_argv:
+                # Direct spawn: no shell, no script file.
+                # On Windows, replace python.exe with pythonw.exe to prevent
+                # console windows from appearing for background processes.
+                argv = list(pane.raw_argv)
+                if os.name == "nt" and argv:
+                    name = argv[0].lower()
+                    if name in ("python", "python.exe"):
+                        argv[0] = "pythonw"
+                    elif name.endswith("\\python.exe"):
+                        argv[0] = name[:-4] + "w.exe"
+                env = {**os.environ, **pane.env} if pane.env else None
+                proc = subprocess.Popen(
+                    argv,
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
+                    stdin=subprocess.DEVNULL,
+                    cwd=str(pane.path) if pane.path else str(project_dir),
+                    env=env,
+                    creationflags=creation_flags,
+                    startupinfo=startupinfo,
+                    start_new_session=os.name != "nt",
+                )
+            else:
+                script = _write_script(pane, project_dir)
+                if os.name == "nt":
+                    shell_argv = [
+                        "powershell", "-NoProfile", "-NonInteractive",
+                        "-ExecutionPolicy", "Bypass", "-File", str(script),
+                    ]
+                else:
+                    shell_argv = ["sh", str(script)]
+                proc = subprocess.Popen(
+                    shell_argv,
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
+                    stdin=subprocess.DEVNULL,
+                    cwd=str(pane.path) if pane.path else str(project_dir),
+                    creationflags=creation_flags,
+                    startupinfo=startupinfo,
+                    start_new_session=os.name != "nt",
+                )
     except OSError as exc:
         log.error("[%s] could not start: %s", pane.role, exc)
         return None
@@ -125,7 +176,6 @@ def _spawn_one(pane: PaneSpec, log_path: Path, project_dir: Path) -> int | None:
         )
         return None
     except subprocess.TimeoutExpired:
-        # Process is alive — normal for a long-running agent/scheduler.
         pass
 
     return proc.pid
@@ -138,7 +188,7 @@ def _log_file(role: str, project_dir: Path) -> Path:
 
 def launch(
     panes: list[PaneSpec],
-    layout: dict,  # noqa: ARG001 — not used under headless; each pane is its own process
+    layout: dict,
     project_dir: Path,
     dry_run: bool = False,
 ) -> list[str]:
@@ -153,13 +203,15 @@ def launch(
     """
     if dry_run:
         for pane in panes:
-            log.info("[%s] would spawn: %s", pane.role, pane.cmd[:200])
+            if pane.raw_argv:
+                log.info("[%s] would spawn: %s", pane.role, " ".join(pane.raw_argv[:6]) + "...")
+            else:
+                log.info("[%s] would spawn: %s", pane.role, pane.cmd[:200])
         return [pane.cmd for pane in panes]
 
     skipped: list[str] = []
     spawned: list[str] = []
     for pane in panes:
-        # Manual-mode agent (non-passive) roles are interactive.
         if pane.mode == "manual" and not pane.passive:
             log.warning(
                 "[%s] role %r is in manual mode and cannot run headless; skipping. "
@@ -184,7 +236,6 @@ def launch(
             len(skipped), ", ".join(skipped),
         )
 
-    # Flush log handlers so the recorded PIDs make it to disk before the launcher exits.
     for handler in logging.getLogger().handlers:
         handler.flush()
 
